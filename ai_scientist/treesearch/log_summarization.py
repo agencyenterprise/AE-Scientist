@@ -1,14 +1,16 @@
 import json
 import os
 import sys
+from typing import Any
 
 import openai
+from tqdm import tqdm  # type: ignore[import-untyped]
 
-from .journal import Node, Journal
+from .journal import Journal, Node
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, parent_dir)
-from ai_scientist.llm import get_response_from_llm, extract_json_between_markers
+from ai_scientist.llm import extract_json_between_markers, get_response_from_llm  # noqa: E402
 
 client = openai.OpenAI()
 model = "gpt-4o-2024-08-06"
@@ -109,19 +111,15 @@ Ensure the JSON is valid and properly formatted, as it will be automatically par
 """
 
 
-def get_nodes_infos(nodes):
+def get_nodes_infos(nodes: list[Node]) -> str:
     node_infos = ""
     for n in nodes:
         node_info = f"Node ID: {n.id}\n"
         node_info += (
-            f"Plan: {n.overall_plan}\n"
-            if hasattr(n, "overall_plan")
-            else "Plan: Not available\n"
+            f"Plan: {n.overall_plan}\n" if hasattr(n, "overall_plan") else "Plan: Not available\n"
         )
         node_info += (
-            f"Analysis: {n.analysis}\n"
-            if hasattr(n, "analysis")
-            else "Analysis: Not available\n"
+            f"Analysis: {n.analysis}\n" if hasattr(n, "analysis") else "Analysis: Not available\n"
         )
         node_info += (
             f"Numerical Results: {n.metric}\n"
@@ -138,7 +136,7 @@ def get_nodes_infos(nodes):
     return node_infos
 
 
-def get_summarizer_prompt(journal, stage_name):
+def get_summarizer_prompt(journal: Journal, stage_name: str) -> tuple[str, str]:
     good_leaf_nodes = [n for n in journal.good_nodes if n.is_leaf]
     if not good_leaf_nodes:
         print("NO GOOD LEAF NODES!!!")
@@ -149,14 +147,18 @@ def get_summarizer_prompt(journal, stage_name):
     )
 
 
-def get_stage_summary(journal, stage_name, model, client):
-    sys_msg, prompt = get_summarizer_prompt(journal, stage_name)
-    response = get_response_from_llm(prompt, client, model, sys_msg)
-    summary_json = extract_json_between_markers(response[0])
+def get_stage_summary(
+    journal: Journal, stage_name: str, model: str, client: openai.OpenAI
+) -> dict[str, Any] | None:
+    sys_msg, prompt = get_summarizer_prompt(journal=journal, stage_name=stage_name)
+    response_text, _ = get_response_from_llm(
+        prompt=prompt, client=client, model=model, system_message=sys_msg
+    )
+    summary_json = extract_json_between_markers(response_text)
     return summary_json
 
 
-def get_node_log(node):
+def get_node_log(node: Node) -> dict[str, Any]:
     node_dict = node.to_dict()
     # Only include keys that are relevant for logging/analysis
     keys_to_include = [
@@ -178,53 +180,62 @@ def get_node_log(node):
         if key in node_dict and node_dict[key] is not None
     }
     if "exp_results_dir" in ret:
-        original_dir_path = ret["exp_results_dir"]
-        # Remove leading path segments before "experiment_results"
-        idx = original_dir_path.find("experiment_results")
-        short_dir_path = original_dir_path
-        if idx != -1:
-            short_dir_path = original_dir_path[idx:]
+        original_dir_path_obj = ret["exp_results_dir"]
+        if isinstance(original_dir_path_obj, str):
+            original_dir_path = original_dir_path_obj
+            # Remove leading path segments before "experiment_results"
+            idx = original_dir_path.find("experiment_results")
+            short_dir_path = original_dir_path
+            if idx != -1:
+                short_dir_path = original_dir_path[idx:]
 
-        ret["exp_results_dir"] = short_dir_path
+            ret["exp_results_dir"] = short_dir_path
 
-        if os.path.isdir(original_dir_path):
-            npy_files = [f for f in os.listdir(original_dir_path) if f.endswith(".npy")]
-            # Prepend the shortened path to each .npy filename
-            ret["exp_results_npy_files"] = [
-                os.path.join(short_dir_path, f) for f in npy_files
-            ]
+            if os.path.isdir(original_dir_path):
+                npy_files = [f for f in os.listdir(original_dir_path) if f.endswith(".npy")]
+                # Prepend the shortened path to each .npy filename
+                ret["exp_results_npy_files"] = [os.path.join(short_dir_path, f) for f in npy_files]
+            else:
+                ret["exp_results_npy_files"] = []
         else:
             ret["exp_results_npy_files"] = []
     return ret
 
 
 def update_summary(
-    prev_summary, cur_stage_name, cur_journal, cur_summary, model, client, max_retry=5
-):
-    good_leaf_nodes = [n for n in cur_journal.good_nodes if n.is_leaf]
-    node_infos = get_nodes_infos(good_leaf_nodes)
+    prev_summary: dict[str, Any],
+    cur_stage_name: str,
+    cur_journal: Journal,
+    cur_summary: dict[str, Any],
+    model: str,
+    client: openai.OpenAI,
+    max_retry: int = 5,
+) -> dict[str, Any]:
     prompt = stage_aggregate_prompt.format(
         prev_summary=prev_summary,
         stage_name=cur_stage_name,
         current_summary=cur_summary,
     )
     try:
-        response = get_response_from_llm(
-            prompt, client, model, "You are an expert machine learning researcher."
+        response_text, _ = get_response_from_llm(
+            prompt=prompt,
+            client=client,
+            model=model,
+            system_message="You are an expert machine learning researcher.",
         )
-        summary_json = extract_json_between_markers(response[0])
+        summary_json = extract_json_between_markers(response_text)
         assert summary_json
     except Exception as e:
         if max_retry > 0:
             print(f"Error occurred: {e}. Retrying... ({max_retry} attempts left)")
             return update_summary(
-                prev_summary,
-                cur_stage_name,
-                cur_journal,
-                cur_summary,
-                model,
-                client,
-                max_retry - 1,
+                prev_summary=prev_summary,
+                cur_stage_name=cur_stage_name,
+                cur_journal=cur_journal,
+                cur_summary=cur_summary,
+                model=model,
+                client=client,
+                max_retry=max_retry - 1,
             )
         else:
             print(f"Failed to update summary after multiple attempts. Error: {e}")
@@ -262,25 +273,27 @@ Ensure the JSON is valid and properly formatted, as it will be automatically par
 """
 
 
-def annotate_history(journal):
+def annotate_history(journal: Journal) -> None:
     for node in journal.nodes:
         if node.parent:
             max_retries = 3
             retry_count = 0
             while retry_count < max_retries:
                 try:
-                    response = get_response_from_llm(
-                        overall_plan_summarizer_prompt.format(
+                    response_text, _ = get_response_from_llm(
+                        prompt=overall_plan_summarizer_prompt.format(
                             prev_overall_plan=node.parent.overall_plan,
                             current_plan=node.plan,
                         ),
-                        client,
-                        model,
-                        report_summarizer_sys_msg,
+                        client=client,
+                        model=model,
+                        system_message=report_summarizer_sys_msg,
                     )
-                    node.overall_plan = extract_json_between_markers(response[0])[
-                        "overall_plan"
-                    ]
+                    parsed = extract_json_between_markers(response_text)
+                    if parsed and "overall_plan" in parsed:
+                        node.overall_plan = parsed["overall_plan"]
+                    else:
+                        raise ValueError("LLM did not return overall_plan JSON")
                     break
                 except Exception as e:
                     retry_count += 1
@@ -294,19 +307,21 @@ def annotate_history(journal):
             node.overall_plan = node.plan
 
 
-def overall_summarize(journals):
+def overall_summarize(journals: list[tuple[str, Journal]]) -> tuple[dict[str, Any] | None, ...]:
     from concurrent.futures import ThreadPoolExecutor
 
-    def process_stage(idx, stage_tuple):
+    def process_stage(
+        idx: int, stage_tuple: tuple[str, Journal]
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         stage_name, journal = stage_tuple
         annotate_history(journal)
         if idx in [1, 2]:
             best_node = journal.get_best_node()
             # get multi-seed results and aggregater node
+            if best_node is None:
+                return None
             child_nodes = best_node.children
-            multi_seed_nodes = [
-                n for n in child_nodes if n.is_seed_node and not n.is_seed_agg_node
-            ]
+            multi_seed_nodes = [n for n in child_nodes if n.is_seed_node and not n.is_seed_agg_node]
             agg_node = None
             for n in child_nodes:
                 if n.is_seed_node and n.is_seed_agg_node:
@@ -316,30 +331,21 @@ def overall_summarize(journals):
                 # skip agg node
                 return {
                     "best node": get_node_log(best_node),
-                    "best node with different seeds": [
-                        get_node_log(n) for n in multi_seed_nodes
-                    ],
+                    "best node with different seeds": [get_node_log(n) for n in multi_seed_nodes],
                 }
             else:
                 return {
                     "best node": get_node_log(best_node),
-                    "best node with different seeds": [
-                        get_node_log(n) for n in multi_seed_nodes
-                    ],
-                    "aggregated results of nodes with different seeds": get_node_log(
-                        agg_node
-                    ),
+                    "best node with different seeds": [get_node_log(n) for n in multi_seed_nodes],
+                    "aggregated results of nodes with different seeds": get_node_log(agg_node),
                 }
         elif idx == 3:
-            good_leaf_nodes = [
-                n for n in journal.good_nodes if n.is_leaf and n.ablation_name
-            ]
+            good_leaf_nodes = [n for n in journal.good_nodes if n.is_leaf and n.ablation_name]
             return [get_node_log(n) for n in good_leaf_nodes]
         elif idx == 0:
             summary_json = get_stage_summary(journal, stage_name, model, client)
             return summary_json
-
-    from tqdm import tqdm
+        return None
 
     with ThreadPoolExecutor() as executor:
         results = list(
@@ -349,12 +355,12 @@ def overall_summarize(journals):
                 total=len(list(journals)),
             )
         )
-        
+
         # Handle cases where experiment failed early and doesn't have all 4 stages
         # Pad results with None to ensure we always have 4 values
         while len(results) < 4:
             results.append(None)
-        
+
         draft_summary, baseline_summary, research_summary, ablation_summary = results[:4]
 
     return draft_summary, baseline_summary, research_summary, ablation_summary
@@ -364,7 +370,7 @@ if __name__ == "__main__":
     # Test
     example_path = "logs/247-run"
 
-    def load_stage_folders(base_path):
+    def load_stage_folders(base_path: str) -> list[str]:
         """
         Load the folders that start with 'stage_' followed by a number.
 
@@ -380,7 +386,7 @@ if __name__ == "__main__":
                 stage_folders.append(os.path.join(base_path, folder_name))
         return sorted(stage_folders, key=lambda x: int(x.split("_")[1]))
 
-    def reconstruct_journal(journal_data):
+    def reconstruct_journal(journal_data: dict[str, Any]) -> Journal:
         # Create a mapping of node IDs to Node instances
         id_to_node = {}
         for node_data in journal_data["nodes"]:
@@ -444,7 +450,7 @@ if __name__ == "__main__":
     with open(ablation_summary_path, "w") as ablation_file:
         json.dump(ablation_summary, ablation_file, indent=2)
 
-    print(f"Summary reports written to files:")
+    print("Summary reports written to files:")
     print(f"- Draft summary: {draft_summary_path}")
     print(f"- Baseline summary: {baseline_summary_path}")
     print(f"- Research summary: {research_summary_path}")

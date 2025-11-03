@@ -7,6 +7,7 @@ Supports:
 """
 
 import logging
+import multiprocessing
 import os
 import queue
 import signal
@@ -14,17 +15,20 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass
-import multiprocessing
 from multiprocessing import Queue
+from multiprocessing.context import SpawnProcess
 from pathlib import Path
+from typing import Any
 
 import humanize
+import IPython.core.ultratb
+import shutup  # type: ignore[import-untyped]
 from dataclasses_json import DataClassJsonMixin
 
 logger = logging.getLogger("ai-scientist")
 
 try:
-    multiprocessing.set_start_method('spawn', force=True)
+    multiprocessing.set_start_method("spawn", force=True)
 except RuntimeError:
     pass
 
@@ -43,44 +47,44 @@ class ExecutionResult(DataClassJsonMixin):
     exc_stack: list[tuple] | None = None
 
 
-def exception_summary(e, working_dir, exec_file_name, format_tb_ipython):
+def exception_summary(
+    e: Exception, working_dir: Path, exec_file_name: str, format_tb_ipython: bool
+) -> tuple[str, str, dict[str, Any], list[tuple[str, int, str, str | None]]]:
     """Generates a string that summarizes an exception and its stack trace (either in standard python repl or in IPython format)."""
     if format_tb_ipython:
-        import IPython.core.ultratb
-
         tb = IPython.core.ultratb.VerboseTB(tb_offset=1, color_scheme="NoColor")
         tb_str = str(tb.text(*sys.exc_info()))
     else:
         tb_lines = traceback.format_exception(e)
         # skip parts of stack trace in weflow code
         tb_str = "".join(
-            [l for l in tb_lines if "treesearch/" not in l and "importlib" not in l]
+            [line for line in tb_lines if "treesearch/" not in line and "importlib" not in line]
         )
 
     # replace whole path to file with just filename (to remove agent workspace dir)
     tb_str = tb_str.replace(str(working_dir / exec_file_name), exec_file_name)
 
-    exc_info = {}
+    exc_info: dict[str, Any] = {}
     if hasattr(e, "args"):
         exc_info["args"] = [str(i) for i in e.args]
     for att in ["name", "msg", "obj"]:
         if hasattr(e, att):
             exc_info[att] = str(getattr(e, att))
 
-    tb = traceback.extract_tb(e.__traceback__)
-    exc_stack = [(t.filename, t.lineno, t.name, t.line) for t in tb]
+    tb_stack = traceback.extract_tb(e.__traceback__)
+    exc_stack = [(t.filename, t.lineno or 0, t.name, t.line) for t in tb_stack]
 
     return tb_str, e.__class__.__name__, exc_info, exc_stack
 
 
 class RedirectQueue:
-    def __init__(self, queue):
-        self.queue = queue
+    def __init__(self, queue: Queue[str]) -> None:
+        self.queue: Queue[str] = queue
 
-    def write(self, msg):
+    def write(self, msg: str) -> None:
         self.queue.put(msg)
 
-    def flush(self):
+    def flush(self) -> None:
         pass
 
 
@@ -91,8 +95,8 @@ class Interpreter:
         timeout: int = 3600,
         format_tb_ipython: bool = False,
         agent_file_name: str = "runfile.py",
-        env_vars: dict[str, str] = {},
-    ):
+        env_vars: dict[str, str] | None = None,
+    ) -> None:
         """
         Simulates a standalone Python REPL with an execution time limit.
 
@@ -105,25 +109,29 @@ class Interpreter:
         """
         # this really needs to be a path, otherwise causes issues that don't raise exc
         self.working_dir = Path(working_dir).resolve()
-        assert (
-            self.working_dir.exists()
-        ), f"Working directory {self.working_dir} does not exist"
+        assert self.working_dir.exists(), f"Working directory {self.working_dir} does not exist"
         self.timeout = timeout
         self.format_tb_ipython = format_tb_ipython
         self.agent_file_name = agent_file_name
-        self.process = None  # type: ignore
-        self.env_vars = env_vars
-        self.mp_context = multiprocessing.get_context('spawn')
+        self.process: SpawnProcess | None = None
+        self.env_vars = env_vars or {}
+        self.mp_context = multiprocessing.get_context("spawn")
+        self.code_inq: Queue[str]
+        self.result_outq: Queue[str]
+        self.event_outq: Queue[
+            tuple[
+                str,
+                str | None,
+                dict[str, Any] | None,
+                list[tuple[str, int, str, str | None]] | None,
+            ]
+        ]
 
-    def child_proc_setup(self, result_outq: Queue) -> None:
+    def child_proc_setup(self, result_outq: Queue[str]) -> None:
         # disable all warnings (before importing anything)
-        import shutup
-
         shutup.mute_warnings()
 
         for key, value in self.env_vars.items():
-            if value is None:
-                continue
             os.environ[key] = str(value)
 
         os.chdir(str(self.working_dir))
@@ -133,11 +141,20 @@ class Interpreter:
         sys.path.append(str(self.working_dir))
 
         # capture stdout and stderr
-        # trunk-ignore(mypy/assignment)
-        sys.stdout = sys.stderr = RedirectQueue(result_outq)
+        sys.stdout = sys.stderr = RedirectQueue(result_outq)  # type: ignore[assignment,unused-ignore]
 
     def _run_session(
-        self, code_inq: Queue, result_outq: Queue, event_outq: Queue
+        self,
+        code_inq: Queue[str],
+        result_outq: Queue[str],
+        event_outq: Queue[
+            tuple[
+                str,
+                str | None,
+                dict[str, Any] | None,
+                list[tuple[str, int, str, str | None]] | None,
+            ]
+        ],
     ) -> None:
         self.child_proc_setup(result_outq)
 
@@ -148,16 +165,22 @@ class Interpreter:
             with open(self.agent_file_name, "w") as f:
                 f.write(code)
 
-            event_outq.put(("state:ready",))
+            event_outq.put(("state:ready", None, None, None))
             try:
                 exec(compile(code, self.agent_file_name, "exec"), global_scope)
             except BaseException as e:
-                tb_str, e_cls_name, exc_info, exc_stack = exception_summary(
-                    e,
-                    self.working_dir,
-                    self.agent_file_name,
-                    self.format_tb_ipython,
-                )
+                if isinstance(e, Exception):
+                    tb_str, e_cls_name, exc_info, exc_stack = exception_summary(
+                        e,
+                        self.working_dir,
+                        self.agent_file_name,
+                        self.format_tb_ipython,
+                    )
+                else:
+                    tb_str = str(e)
+                    e_cls_name = e.__class__.__name__
+                    exc_info = {}
+                    exc_stack = []
                 result_outq.put(tb_str)
                 if e_cls_name == "KeyboardInterrupt":
                     e_cls_name = "TimeoutError"
@@ -174,15 +197,16 @@ class Interpreter:
         # - code_inq: send code to child to execute
         # - result_outq: receive stdout/stderr from child
         # - event_outq: receive events from child (e.g. state:ready, state:finished)
-        # trunk-ignore(mypy/var-annotated)
-        self.code_inq, self.result_outq, self.event_outq = self.mp_context.Queue(), self.mp_context.Queue(), self.mp_context.Queue()
+        self.code_inq = self.mp_context.Queue()
+        self.result_outq = self.mp_context.Queue()
+        self.event_outq = self.mp_context.Queue()
         self.process = self.mp_context.Process(
             target=self._run_session,
             args=(self.code_inq, self.result_outq, self.event_outq),
         )
         self.process.start()
 
-    def _drain_queues(self):
+    def _drain_queues(self) -> None:
         """Quickly drain all in-flight messages to prevent blocking."""
         while not self.result_outq.empty():
             try:
@@ -202,7 +226,7 @@ class Interpreter:
             except Exception:
                 break
 
-    def cleanup_session(self):
+    def cleanup_session(self) -> None:
         if self.process is None:
             return
         # give the child process a chance to terminate gracefully
@@ -217,9 +241,9 @@ class Interpreter:
             self.process.join(timeout=2)
         # don't wait for gc, clean up immediately
         self.process.close()
-        self.process = None  # type: ignore
+        self.process = None
 
-    def run(self, code: str, reset_session=True) -> ExecutionResult:
+    def run(self, code: str, reset_session: bool = True) -> ExecutionResult:
         """
         Execute the provided Python command in a separate process and return its output.
 
@@ -241,7 +265,11 @@ class Interpreter:
             self.create_process()
         else:
             # reset_session needs to be True on first exec
-            assert self.process is not None
+            if self.process is None:
+                raise RuntimeError("Process is not initialized")
+
+        if self.process is None:
+            raise RuntimeError("Process is not initialized")
 
         assert self.process.is_alive()
 
@@ -272,32 +300,35 @@ class Interpreter:
                 break
             except queue.Empty:
                 # we haven't heard back from the child -> check if it's still alive (assuming overtime interrupt wasn't sent yet)
-                if not child_in_overtime and not self.process.is_alive():
+                if (
+                    self.process is not None
+                    and not child_in_overtime
+                    and not self.process.is_alive()
+                ):
                     msg = "REPL child process died unexpectedly"
                     logger.critical(msg)
                     while not self.result_outq.empty():
-                        logger.error(
-                            f"REPL output queue dump: {self.result_outq.get()}"
-                        )
+                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
                     raise RuntimeError(msg) from None
 
                 # child is alive and still executing -> check if we should sigint..
                 if self.timeout is None:
-                    continue
+                    continue  # type: ignore[unreachable]
                 running_time = time.time() - start_time
                 if running_time > self.timeout:
                     # [TODO] handle this in a better way
                     assert reset_session, "Timeout ocurred in interactive session"
 
                     # send interrupt to child
-                    os.kill(self.process.pid, signal.SIGINT)  # type: ignore
+                    if self.process is not None and self.process.pid is not None:
+                        os.kill(self.process.pid, signal.SIGINT)
                     child_in_overtime = True
                     # terminate if we're overtime by more than a minute
                     if running_time > self.timeout + 60:
                         logger.warning("Child failed to terminate, killing it..")
                         self.cleanup_session()
 
-                        state = (None, "TimeoutError", {}, [])
+                        state = ("state:finished", "TimeoutError", {}, [])
                         exec_time = self.timeout
                         break
 
@@ -309,7 +340,9 @@ class Interpreter:
             output.append(self.result_outq.get())
         output.pop()  # remove the EOF marker
 
-        e_cls_name, exc_info, exc_stack = state[1:]
+        e_cls_name = state[1] if len(state) > 1 else None
+        exc_info = state[2] if len(state) > 2 else None
+        exc_stack = state[3] if len(state) > 3 else None
 
         if e_cls_name == "TimeoutError":
             output.append(

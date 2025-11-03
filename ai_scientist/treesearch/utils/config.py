@@ -1,24 +1,23 @@
 """configuration and setup utils"""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Hashable, cast, Literal, Optional
+from typing import Hashable, Optional, cast
 
-import coolname
+import coolname  # type: ignore[import-untyped]
 import rich
+import shutup  # type: ignore[import-untyped]
+from dataclasses_json import DataClassJsonMixin
 from omegaconf import OmegaConf
-from rich.syntax import Syntax
-import shutup
 from rich.logging import RichHandler
-import logging
+from rich.syntax import Syntax
 
-from . import tree_export
-from . import copytree, preproc_data, serialize
+from ..journal import Journal
+from . import copytree, preproc_data, serialize, tree_export
 
 shutup.mute_warnings()
-logging.basicConfig(
-    level="WARNING", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
-)
+logging.basicConfig(level="WARNING", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()])
 logger = logging.getLogger("ai-scientist")
 logger.setLevel(logging.WARNING)
 
@@ -143,8 +142,8 @@ def _get_next_logindex(dir: Path) -> int:
 
 
 def _load_cfg(
-    path: Path = Path(__file__).parent / "config.yaml", use_cli_args=False
-) -> Config:
+    path: Path = Path(__file__).parent / "config.yaml", use_cli_args: bool = False
+) -> object:
     cfg = OmegaConf.load(path)
     if use_cli_args:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_cli())
@@ -156,59 +155,61 @@ def load_cfg(path: Path = Path(__file__).parent / "config.yaml") -> Config:
     return prep_cfg(_load_cfg(path))
 
 
-def prep_cfg(cfg: Config):
-    if cfg.data_dir is None:
+def prep_cfg(cfg: object) -> Config:
+    # Merge with structured schema and convert to dataclass instance
+    schema = OmegaConf.structured(Config)
+    merged = OmegaConf.merge(schema, cfg)
+    cfg_obj = cast(Config, OmegaConf.to_object(merged))
+
+    if cfg_obj.data_dir is None:
         raise ValueError("`data_dir` must be provided.")
 
-    if cfg.desc_file is None and cfg.goal is None:
+    if cfg_obj.desc_file is None and cfg_obj.goal is None:
         raise ValueError(
             "You must provide either a description of the task goal (`goal=...`) or a path to a plaintext file containing the description (`desc_file=...`)."
         )
 
-    if cfg.data_dir.startswith("example_tasks/"):
-        cfg.data_dir = Path(__file__).parent.parent / cfg.data_dir
-    cfg.data_dir = Path(cfg.data_dir).resolve()
+    # Normalize and resolve paths
+    data_dir_path = Path(cfg_obj.data_dir)
+    if str(data_dir_path).startswith("example_tasks/"):
+        data_dir_path = Path(__file__).parent.parent / data_dir_path
+    cfg_obj.data_dir = data_dir_path.resolve()
 
-    if cfg.desc_file is not None:
-        cfg.desc_file = Path(cfg.desc_file).resolve()
+    if cfg_obj.desc_file is not None:
+        desc_file_path = Path(cfg_obj.desc_file)
+        cfg_obj.desc_file = desc_file_path.resolve()
 
-    top_log_dir = Path(cfg.log_dir).resolve()
+    top_log_dir = Path(cfg_obj.log_dir).resolve()
     top_log_dir.mkdir(parents=True, exist_ok=True)
 
-    top_workspace_dir = Path(cfg.workspace_dir).resolve()
+    top_workspace_dir = Path(cfg_obj.workspace_dir).resolve()
     top_workspace_dir.mkdir(parents=True, exist_ok=True)
 
     # generate experiment name and prefix with consecutive index
     ind = max(_get_next_logindex(top_log_dir), _get_next_logindex(top_workspace_dir))
-    cfg.exp_name = cfg.exp_name or coolname.generate_slug(3)
-    cfg.exp_name = f"{ind}-{cfg.exp_name}"
+    cfg_obj.exp_name = cfg_obj.exp_name or coolname.generate_slug(3)
+    cfg_obj.exp_name = f"{ind}-{cfg_obj.exp_name}"
 
-    cfg.log_dir = (top_log_dir / cfg.exp_name).resolve()
-    cfg.workspace_dir = (top_workspace_dir / cfg.exp_name).resolve()
+    cfg_obj.log_dir = (top_log_dir / cfg_obj.exp_name).resolve()
+    cfg_obj.workspace_dir = (top_workspace_dir / cfg_obj.exp_name).resolve()
 
-    # validate the config
-    cfg_schema: Config = OmegaConf.structured(Config)
-    cfg = OmegaConf.merge(cfg_schema, cfg)
-
-    if cfg.agent.type not in ["parallel", "sequential"]:
+    if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
 
-    return cast(Config, cfg)
+    return cfg_obj
 
 
 def print_cfg(cfg: Config) -> None:
-    rich.print(Syntax(OmegaConf.to_yaml(cfg), "yaml", theme="paraiso-dark"))
+    rich.print(Syntax(OmegaConf.to_yaml(OmegaConf.structured(cfg)), "yaml", theme="paraiso-dark"))
 
 
-def load_task_desc(cfg: Config):
+def load_task_desc(cfg: Config) -> str | dict:
     """Load task description from markdown file or config str."""
 
     # either load the task description from a file
     if cfg.desc_file is not None:
         if not (cfg.goal is None and cfg.eval is None):
-            logger.warning(
-                "Ignoring goal and eval args because task description file is provided."
-            )
+            logger.warning("Ignoring goal and eval args because task description file is provided.")
 
         with open(cfg.desc_file) as f:
             return f.read()
@@ -226,7 +227,7 @@ def load_task_desc(cfg: Config):
     return task_desc
 
 
-def prep_agent_workspace(cfg: Config):
+def prep_agent_workspace(cfg: Config) -> None:
     """Setup the agent's workspace and preprocess data if necessary."""
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
@@ -236,15 +237,15 @@ def prep_agent_workspace(cfg: Config):
         preproc_data(cfg.workspace_dir / "input")
 
 
-def save_run(cfg: Config, journal, stage_name: str = None):
-    if stage_name is None:
-        stage_name = "NoStageRun"
-    save_dir = cfg.log_dir / stage_name
+def save_run(cfg: Config, journal: Journal, stage_name: str | None = None) -> None:
+    stage = stage_name if stage_name is not None else "NoStageRun"
+    save_dir = cfg.log_dir / stage
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # save journal
     try:
-        serialize.dump_json(journal, save_dir / "journal.json")
+        # Journal is compatible with serialization utilities; cast for typing
+        serialize.dump_json(cast(DataClassJsonMixin, journal), save_dir / "journal.json")
     except Exception as e:
         print(f"Error saving journal: {e}")
         raise

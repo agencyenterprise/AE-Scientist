@@ -9,34 +9,35 @@ import traceback
 import unicodedata
 import uuid
 
+import anthropic
+import openai
+
 from ai_scientist.llm import (
-    get_response_from_llm,
-    extract_json_between_markers,
-    create_client,
     AVAILABLE_LLMS,
+    create_client,
+    extract_json_between_markers,
+    get_response_from_llm,
 )
-
-from ai_scientist.tools.semantic_scholar import search_for_papers
-
 from ai_scientist.perform_vlm_review import generate_vlm_img_review
+from ai_scientist.tools.semantic_scholar import search_for_papers
 from ai_scientist.vlm import create_client as create_vlm_client
 
 
-def remove_accents_and_clean(s):
+def remove_accents_and_clean(s: str) -> str:
     # print("Original:", s)
     # Normalize to separate accents
     nfkd_form = unicodedata.normalize("NFKD", s)
     # Remove non-ASCII characters
     ascii_str = nfkd_form.encode("ASCII", "ignore").decode("ascii")
     # Remove anything but letters, digits, underscores, colons, dashes, @, {, }, and now commas
-    ascii_str = re.sub(r"[^a-zA-Z0-9:_@\{\},-]+", "", ascii_str)
+    ascii_str = re.sub(r"[^a-zA-Z0 - 9:_@\{\},-]+", "", ascii_str)
     # Convert to lowercase
     ascii_str = ascii_str.lower()
     # print("Cleaned: ", ascii_str)
     return ascii_str
 
 
-def compile_latex(cwd, pdf_file, timeout=30):
+def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
     print("=" * 80)
     print("GENERATING LATEX")
     print(f"[DEBUG] cwd (latex folder): {cwd}")
@@ -53,7 +54,7 @@ def compile_latex(cwd, pdf_file, timeout=30):
     ]
 
     for i, command in enumerate(commands):
-        print(f"\n[DEBUG] Running command {i+1}/4: {' '.join(command)}")
+        print(f"\n[DEBUG] Running command {i + 1}/4: {' '.join(command)}")
         try:
             result = subprocess.run(
                 command,
@@ -63,35 +64,37 @@ def compile_latex(cwd, pdf_file, timeout=30):
                 text=True,
                 timeout=timeout,
             )
-            print(f"[DEBUG] Command {i+1} return code: {result.returncode}")
+            print(f"[DEBUG] Command {i + 1} return code: {result.returncode}")
             if result.returncode != 0:
                 print(f"[WARNING] Command failed with return code {result.returncode}")
             # Only show full output for errors or final compile
             if result.returncode != 0 or i == len(commands) - 1:
-                print("Standard Output:\n", result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout)
-                print("Standard Error:\n", result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr)
+                print(
+                    "Standard Output:\n",
+                    result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout,
+                )
+                print(
+                    "Standard Error:\n",
+                    result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr,
+                )
         except subprocess.TimeoutExpired:
-            print(
-                f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds."
-            )
+            print(f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds.")
             print(traceback.format_exc())
         except subprocess.CalledProcessError:
-            print(
-                f"EXCEPTION in compile_latex: Error running command {' '.join(command)}"
-            )
+            print(f"EXCEPTION in compile_latex: Error running command {' '.join(command)}")
             print(traceback.format_exc())
 
     print("\n" + "=" * 80)
     print("FINISHED GENERATING LATEX")
-    
+
     source_pdf = osp.join(cwd, "template.pdf")
     print(f"[DEBUG] Checking for generated PDF at: {source_pdf}")
     print(f"[DEBUG] PDF exists: {osp.exists(source_pdf)}")
-    
+
     if osp.exists(source_pdf):
         pdf_size = osp.getsize(source_pdf)
         print(f"[DEBUG] PDF size: {pdf_size} bytes")
-    
+
     print(f"[DEBUG] Attempting to move to: {pdf_file}")
     print(f"[DEBUG] Target directory exists: {osp.exists(osp.dirname(pdf_file))}")
     print("=" * 80)
@@ -101,13 +104,13 @@ def compile_latex(cwd, pdf_file, timeout=30):
             print(f"[ERROR] Source PDF not found: {source_pdf}")
             print(f"[ERROR] Files in latex dir: {os.listdir(cwd)}")
             return False
-        
+
         # Ensure target directory exists
         target_dir = osp.dirname(pdf_file)
         if not osp.exists(target_dir):
             print(f"[WARNING] Target directory doesn't exist, creating: {target_dir}")
             os.makedirs(target_dir, exist_ok=True)
-        
+
         shutil.move(source_pdf, pdf_file)
         print(f"[SUCCESS] PDF moved to: {pdf_file}")
         print(f"[SUCCESS] Final PDF exists: {osp.exists(pdf_file)}")
@@ -123,7 +126,7 @@ def compile_latex(cwd, pdf_file, timeout=30):
         return False
 
 
-def detect_pages_before_impact(latex_folder, timeout=30):
+def detect_pages_before_impact(latex_folder: str, timeout: int = 30) -> tuple[int, int] | None:
     """
     Temporarily copy the latex folder, compile, and detect on which page
     the phrase "Impact Statement" appears.
@@ -177,7 +180,7 @@ def detect_pages_before_impact(latex_folder, timeout=30):
             )
             if not osp.exists(page_txt):
                 break
-            with open(page_txt, "r", encoding="utf-8", errors="ignore") as fp:
+            with open(page_txt, "r", encoding="utf - 8", errors="ignore") as fp:
                 page_content = fp.read()
             lines = page_content.split("\n")
             for idx, line in enumerate(lines):
@@ -191,10 +194,15 @@ def detect_pages_before_impact(latex_folder, timeout=30):
 
 
 def get_citation_addition(
-    client, model, context, current_round, total_rounds, idea_text
-):
+    client: openai.OpenAI | anthropic.Anthropic,
+    model: str,
+    context: tuple,
+    current_round: int,
+    total_rounds: int,
+    idea_text: str,
+) -> str | None:
     report, citations = context
-    msg_history = []
+    msg_history: list[dict[str, str]] = []
     citation_system_msg_template = """You are an ambitious AI researcher who is looking to publish a paper to a top-tier ML conference that will contribute significantly to the field.
 You have already completed the experiments and now you are looking to collect citations to related papers.
 This phase focuses on collecting references and annotating them to be integrated later.
@@ -289,15 +297,13 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             ),
             client=client,
             model=model,
-            system_message=citation_system_msg_template.format(
-                total_rounds=total_rounds
-            ),
+            system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             msg_history=msg_history,
             print_debug=False,
         )
         if "No more citations needed" in text:
             print("No more citations needed.")
-            return None, True
+            return None
 
         json_output = extract_json_between_markers(text)
         assert json_output is not None, "Failed to extract JSON from LLM output"
@@ -306,11 +312,11 @@ This JSON will be automatically parsed, so ensure the format is precise."""
     except Exception:
         print("EXCEPTION in get_citation_addition (initial search):")
         print(traceback.format_exc())
-        return None, False
+        return None
 
     if papers is None:
         print("No papers found.")
-        return None, False
+        return None
 
     paper_strings = []
     for i, paper in enumerate(papers):
@@ -335,15 +341,13 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             ),
             client=client,
             model=model,
-            system_message=citation_system_msg_template.format(
-                total_rounds=total_rounds
-            ),
+            system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             msg_history=msg_history,
             print_debug=False,
         )
         if "Do not add any" in text:
             print("Do not add any.")
-            return None, False
+            return None
 
         json_output = extract_json_between_markers(text)
         assert json_output is not None, "Failed to extract JSON from LLM output"
@@ -356,9 +360,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
                 x_str = x.strip().strip('"').strip("'")
                 if x_str:
                     selected_indices.append(int(x_str))
-            assert all(
-                [0 <= i < len(papers) for i in selected_indices]
-            ), "Invalid paper index"
+            assert all([0 <= i < len(papers) for i in selected_indices]), "Invalid paper index"
             bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
 
             cleaned_bibtexs = []
@@ -371,18 +373,18 @@ This JSON will be automatically parsed, so ensure the format is precise."""
 
             bibtex_string = "\n".join(bibtexs)
         else:
-            return None, False
+            return None
 
     except Exception:
         print("EXCEPTION in get_citation_addition (selecting papers):")
         print(traceback.format_exc())
-        return None, False
+        return None
 
     references_format = """% {description}
 {bibtex}"""
 
     references_prompt = references_format.format(bibtex=bibtex_string, description=desc)
-    return references_prompt, False
+    return references_prompt
 
 
 # Using a template string to allow injection of the {page_limit} argument
@@ -497,15 +499,15 @@ with "latex" syntax highlighting, like so:
 
 
 def perform_writeup(
-    base_folder,
-    no_writing=False,
-    num_cite_rounds=20,
-    small_model="gpt-4o-2024-05-13",
-    big_model="o1-2024-12-17",
-    n_writeup_reflections=3,
-    page_limit=8,
-    citations_text=None,
-):
+    base_folder: str,
+    no_writing: bool = False,
+    num_cite_rounds: int = 20,
+    small_model: str = "gpt-4o-2024-05-13",
+    big_model: str = "o1-2024-12-17",
+    n_writeup_reflections: int = 3,
+    page_limit: int = 8,
+    citations_text: str | None = None,
+) -> bool:
     print("\n" + "=" * 80)
     print("STARTING PERFORM_WRITEUP")
     print(f"[DEBUG] base_folder: {base_folder}")
@@ -516,11 +518,11 @@ def perform_writeup(
     print(f"[DEBUG] n_writeup_reflections: {n_writeup_reflections}")
     print(f"[DEBUG] citations_text provided: {citations_text is not None}")
     print("=" * 80 + "\n")
-    
+
     compile_attempt = 0
     base_pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}")
     latex_folder = osp.join(base_folder, "latex")
-    
+
     print(f"[DEBUG] base_pdf_file (without extension): {base_pdf_file}")
     print(f"[DEBUG] latex_folder: {latex_folder}")
 
@@ -558,9 +560,7 @@ def perform_writeup(
                     with open(path, "r") as f:
                         loaded_summaries[key] = json.load(f)
                 except json.JSONDecodeError:
-                    print(
-                        f"Warning: {fname} is not valid JSON. Using empty data for {key}."
-                    )
+                    print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
                     loaded_summaries[key] = {}
             else:
                 loaded_summaries[key] = {}
@@ -570,9 +570,7 @@ def perform_writeup(
 
         # Prepare a new fresh latex folder
         if not osp.exists(osp.join(latex_folder, "template.tex")):
-            shutil.copytree(
-                "ai_scientist/blank_icml_latex", latex_folder, dirs_exist_ok=True
-            )
+            shutil.copytree("ai_scientist/blank_icml_latex", latex_folder, dirs_exist_ok=True)
 
         writeup_file = osp.join(latex_folder, "template.tex")
         with open(writeup_file, "r") as f:
@@ -615,7 +613,7 @@ def perform_writeup(
                 citations_text = references_bib.group(1)
                 context_for_citation = (combined_summaries_str, citations_text)
 
-                addition, done = get_citation_addition(
+                addition = get_citation_addition(
                     client,
                     client_model,
                     context_for_citation,
@@ -623,7 +621,7 @@ def perform_writeup(
                     num_cite_rounds,
                     idea_text,
                 )
-                if done:
+                if addition is None:
                     break
 
                 if addition is not None:
@@ -631,9 +629,7 @@ def perform_writeup(
                     title_match = re.search(r" title = {(.*?)}", addition)
                     if title_match:
                         new_title = title_match.group(1).lower()
-                        existing_titles = re.findall(
-                            r" title = {(.*?)}", citations_text
-                        )
+                        existing_titles = re.findall(r" title = {(.*?)}", citations_text)
                         existing_titles = [t.lower() for t in existing_titles]
                         if new_title not in existing_titles:
                             pattern_end = r"\end{filecontents}"
@@ -661,9 +657,7 @@ def perform_writeup(
                 }
                 review_data = generate_vlm_img_review(img_dict, vlm_model, vlm_client)
                 if review_data:
-                    desc_map[pf] = review_data.get(
-                        "Img_description", "No description found"
-                    )
+                    desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
                     desc_map[pf] = "No description found"
 
@@ -679,9 +673,7 @@ def perform_writeup(
             plot_descriptions_str = "No descriptions available."
 
         # Construct final prompt for big model, placing the figure descriptions alongside the plot list
-        big_model_system_message = writeup_system_message_template.format(
-            page_limit=page_limit
-        )
+        big_model_system_message = writeup_system_message_template.format(page_limit=page_limit)
         big_client, big_client_model = create_client(big_model)
         with open(writeup_file, "r") as f:
             writeup_text = f.read()
@@ -700,7 +692,7 @@ def perform_writeup(
         print(f"[DEBUG] Model: {big_client_model}")
         print(f"[DEBUG] Prompt length: {len(combined_prompt)} chars")
         print("=" * 80)
-        
+
         response, msg_history = get_response_from_llm(
             prompt=combined_prompt,
             client=big_client,
@@ -720,11 +712,13 @@ def perform_writeup(
             print(f"[ERROR] Full response (first 2000 chars): {response[:2000]}")
             print("[ERROR] Checking for other code block markers...")
             if "```" in response:
-                print(f"[ERROR] Found code blocks but not ```latex. First block: {response[response.find('```'):response.find('```')+200]}")
+                print(
+                    f"[ERROR] Found code blocks but not ```latex. First block: {response[response.find('```'):response.find('```') + 200]}"
+                )
             else:
                 print("[ERROR] No code blocks found at all in response")
             return False
-        
+
         print(f"[DEBUG] Found LaTeX code block. Length: {len(latex_code_match.group(1))} chars")
         updated_latex_code = latex_code_match.group(1).strip()
         print(f"[DEBUG] Writing LaTeX to: {writeup_file}")
@@ -763,9 +757,7 @@ def perform_writeup(
             else:
                 reflection_page_info = "\nCould not detect 'Impact Statement' page (compilation or detection failed).\n"
 
-            check_output = os.popen(
-                f"chktex {writeup_file} -q -n2 -n24 -n13 -n1"
-            ).read()
+            check_output = os.popen(f"chktex {writeup_file} -q -n2 -n24 -n13 -n1").read()
 
             reflection_prompt = f"""
 Now let's reflect and identify any issues (including but not limited to):
@@ -798,14 +790,10 @@ If you believe you are done, simply say: "I am done".
             )
 
             if "I am done" in reflection_response:
-                print(
-                    "LLM indicated it is done with reflections. Exiting reflection loop."
-                )
+                print("LLM indicated it is done with reflections. Exiting reflection loop.")
                 break
 
-            reflection_code_match = re.search(
-                r"```latex(.*?)```", reflection_response, re.DOTALL
-            )
+            reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
             if reflection_code_match:
                 reflected_latex_code = reflection_code_match.group(1).strip()
                 if reflected_latex_code != current_latex:
@@ -822,19 +810,17 @@ If you believe you are done, simply say: "I am done".
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
-                    compile_latex(
-                        latex_folder, base_pdf_file + f"_{compile_attempt}.pdf"
-                    )
+                    compile_latex(latex_folder, base_pdf_file + f"_{compile_attempt}.pdf")
                     compile_attempt += 1
                     print(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
                 else:
-                    print(f"No changes in reflection step {i+1}.")
+                    print(f"No changes in reflection step {i + 1}.")
                     break
             else:
-                print(f"No valid LaTeX code block found in reflection step {i+1}.")
+                print(f"No valid LaTeX code block found in reflection step {i + 1}.")
                 break
 
-        return osp.exists(base_pdf_file + f"_{compile_attempt-1}.pdf")
+        return osp.exists(base_pdf_file + f"_{compile_attempt - 1}.pdf")
 
     except Exception:
         print("EXCEPTION in perform_writeup:")

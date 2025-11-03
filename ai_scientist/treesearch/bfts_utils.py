@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import shutil
+
 import yaml
 
 
@@ -34,9 +35,11 @@ def idea_to_markdown(data: dict, output_path: str, load_code: str) -> None:
         # Add the code to the markdown file
         if load_code:
             # Assert that the code file exists before trying to open it
-            assert os.path.exists(load_code), f"Code path at {load_code} must exist if using the 'load_code' flag. This is an optional code prompt that you may choose to include; if not, please do not set 'load_code'."
-            f.write(f"## Code To Potentially Use\n\n")
-            f.write(f"Use the following code as context for your experiments:\n\n")
+            assert os.path.exists(
+                load_code
+            ), f"Code path at {load_code} must exist if using the 'load_code' flag. This is an optional code prompt that you may choose to include; if not, please do not set 'load_code'."
+            f.write("## Code To Potentially Use\n\n")
+            f.write("Use the following code as context for your experiments:\n\n")
             with open(load_code, "r") as code_file:
                 code = code_file.read()
                 f.write(f"```python\n{code}\n```\n\n")

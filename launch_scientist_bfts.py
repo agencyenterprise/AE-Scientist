@@ -1,123 +1,129 @@
-import os.path as osp
-import json
 import argparse
-import shutil
-import torch
+import json
 import os
+import os.path as osp
 import re
+import shutil
+import signal
 import sys
-from datetime import datetime
-from ai_scientist.llm import create_client
-
 from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Generator
+
+import psutil
+import torch
+
+from ai_scientist.llm import create_client
+from ai_scientist.perform_icbinb_writeup import gather_citations
+from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
+from ai_scientist.perform_llm_review import load_paper, perform_review
+from ai_scientist.perform_plotting import aggregate_plots
+from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
+from ai_scientist.perform_writeup import perform_writeup
+from ai_scientist.review_context import build_auto_review_context
+from ai_scientist.treesearch.bfts_utils import edit_bfts_config_file, idea_to_markdown
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
 )
-from ai_scientist.treesearch.bfts_utils import (
-    idea_to_markdown,
-    edit_bfts_config_file,
-)
-from ai_scientist.perform_plotting import aggregate_plots
-from ai_scientist.perform_writeup import perform_writeup
-from ai_scientist.perform_icbinb_writeup import (
-    perform_writeup as perform_icbinb_writeup,
-    gather_citations,
-)
-from ai_scientist.perform_llm_review import perform_review, load_paper
-from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.utils.token_tracker import token_tracker
-from ai_scientist.review_context import build_auto_review_context
 
 
-def print_time():
+def print_time() -> None:
     print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
-def save_token_tracker(idea_dir):
+def save_token_tracker(idea_dir: str) -> None:
     with open(osp.join(idea_dir, "token_tracker.json"), "w") as f:
         json.dump(token_tracker.get_summary(), f)
     with open(osp.join(idea_dir, "token_tracker_interactions.json"), "w") as f:
         json.dump(token_tracker.get_interactions(), f)
 
 
-def copy_best_solutions_to_root(idea_dir: str):
+def copy_best_solutions_to_root(idea_dir: str) -> None:
     """
     Copy the best solution code from each stage to the experiment root directory
     for easy access and reproducibility.
     """
     try:
-        from pathlib import Path
         import traceback
-        
+        from pathlib import Path
+
         idea_path = Path(idea_dir)
         logs_dir = idea_path / "logs" / "0-run"
-        
+
         if not logs_dir.exists():
             print("⚠️ No logs directory found, skipping best solution copy")
             return
-        
+
         stage_info = []
         best_solutions_copied = 0
-        
+
         # Find all stage directories
-        stage_dirs = sorted([d for d in logs_dir.iterdir() if d.is_dir() and d.name.startswith("stage_")])
-        
+        stage_dirs = sorted(
+            [d for d in logs_dir.iterdir() if d.is_dir() and d.name.startswith("stage_")]
+        )
+
         for stage_dir in stage_dirs:
             # Look for best_solution files
             best_solution_files = list(stage_dir.glob("best_solution_*.py"))
             best_node_id_file = stage_dir / "best_node_id.txt"
-            
+
             if best_solution_files:
                 # Get stage name and number
                 stage_name = stage_dir.name
-                
+
                 # Read node ID if available
                 node_id = "unknown"
                 if best_node_id_file.exists():
-                    with open(best_node_id_file, 'r') as f:
+                    with open(best_node_id_file, "r") as f:
                         node_id = f.read().strip()
-                
+
                 # Copy the best solution file
                 source_file = best_solution_files[0]
-                
+
                 # Create a clean filename based on stage
                 # Extract stage number (e.g., stage_3_creative_research_1_first_attempt -> 3)
-                stage_num = stage_name.split('_')[1]
+                stage_num = stage_name.split("_")[1]
                 dest_filename = f"best_code_stage_{stage_num}.py"
                 dest_path = idea_path / dest_filename
-                
+
                 # Copy the file
                 shutil.copy2(source_file, dest_path)
                 print(f"✓ Copied {dest_filename} (node: {node_id[:8]}...)")
-                
+
                 best_solutions_copied += 1
-                
+
                 # Store info for README
-                stage_info.append({
-                    "stage_num": stage_num,
-                    "stage_name": stage_name,
-                    "filename": dest_filename,
-                    "node_id": node_id,
-                    "original_path": str(source_file.relative_to(idea_path))
-                })
-        
+                stage_info.append(
+                    {
+                        "stage_num": stage_num,
+                        "stage_name": stage_name,
+                        "filename": dest_filename,
+                        "node_id": node_id,
+                        "original_path": str(source_file.relative_to(idea_path)),
+                    }
+                )
+
         # Create a README explaining the best solutions
         if stage_info:
             readme_path = idea_path / "BEST_SOLUTIONS_README.md"
-            with open(readme_path, 'w') as f:
+            with open(readme_path, "w") as f:
                 f.write("# Best Solution Code for Reproducibility\n\n")
-                f.write("This directory contains the best performing code from each experimental stage.\n")
+                f.write(
+                    "This directory contains the best performing code from each experimental stage.\n"
+                )
                 f.write("Use these files to reproduce the results reported in the paper.\n\n")
-                
+
                 f.write("## Files\n\n")
-                
+
                 stage_descriptions = {
                     "1": "Initial Implementation - First working version of the idea",
                     "2": "Baseline Tuning - Hyperparameter-tuned baseline",
                     "3": "Creative Research - **Main results used in paper**",
-                    "4": "Ablation Studies - Variations for comparison"
+                    "4": "Ablation Studies - Variations for comparison",
                 }
-                
+
                 for info in sorted(stage_info, key=lambda x: int(x["stage_num"])):
                     desc = stage_descriptions.get(info["stage_num"], "Experimental stage")
                     f.write(f"### `{info['filename']}`\n\n")
@@ -125,7 +131,7 @@ def copy_best_solutions_to_root(idea_dir: str):
                     f.write(f"- **Node ID**: `{info['node_id']}`\n")
                     f.write(f"- **Original location**: `{info['original_path']}`\n")
                     f.write(f"- **Stage directory**: `{info['stage_name']}`\n\n")
-                
+
                 f.write("## How to Use\n\n")
                 f.write("For reproducing the main paper results, use **`best_code_stage_3.py`** ")
                 f.write("(Creative Research stage).\n\n")
@@ -133,28 +139,29 @@ def copy_best_solutions_to_root(idea_dir: str):
                 f.write("# Run the best code\n")
                 f.write("python best_code_stage_3.py\n")
                 f.write("```\n\n")
-                
+
                 f.write("## Selection Process\n\n")
                 f.write("The best code for each stage was selected using:\n")
                 f.write("- Performance metrics (validation loss, accuracy, etc.)\n")
                 f.write("- Training dynamics\n")
                 f.write("- Plot quality and experimental evidence\n")
                 f.write("- LLM-based evaluation (GPT-5-mini) considering all factors\n\n")
-                
+
                 f.write("See `logs/0-run/<stage_name>/journal.json` for the complete ")
                 f.write("experimental history and selection reasoning.\n")
-            
-            print(f"✓ Created BEST_SOLUTIONS_README.md")
-        
+
+            print("✓ Created BEST_SOLUTIONS_README.md")
+
         print(f"✓ Copied {best_solutions_copied} best solution file(s) to experiment root")
-        
+
     except Exception as e:
         print(f"⚠️ Error copying best solutions: {e}")
         import traceback
+
         traceback.print_exc()
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run AI scientist experiments")
     parser.add_argument(
         "--writeup-type",
@@ -166,7 +173,6 @@ def parse_arguments():
     parser.add_argument(
         "--load_ideas",
         type=str,
-        default="ideas/i_cant_believe_its_not_better.json",
         help="Path to a JSON file containing pregenerated ideas",
     )
     parser.add_argument(
@@ -240,18 +246,18 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def get_available_gpus(gpu_ids=None):
+def get_available_gpus(gpu_ids: str | None = None) -> list[int]:
     if gpu_ids is not None:
         return [int(gpu_id) for gpu_id in gpu_ids.split(",")]
     return list(range(torch.cuda.device_count()))
 
 
-def find_pdf_path_for_review(idea_dir):
+def find_pdf_path_for_review(idea_dir: str) -> str | None:
     pdf_files = [f for f in os.listdir(idea_dir) if f.endswith(".pdf")]
     reflection_pdfs = [f for f in pdf_files if "reflection" in f]
-    
+
     pdf_path = None  # Initialize to avoid UnboundLocalError
-    
+
     if reflection_pdfs:
         # First check if there's a final version
         final_pdfs = [f for f in reflection_pdfs if "final" in f.lower()]
@@ -276,12 +282,12 @@ def find_pdf_path_for_review(idea_dir):
     elif pdf_files:
         # No reflection PDFs, use any PDF
         pdf_path = osp.join(idea_dir, pdf_files[0])
-    
+
     return pdf_path
 
 
 @contextmanager
-def redirect_stdout_stderr_to_file(log_file_path):
+def redirect_stdout_stderr_to_file(log_file_path: str) -> Generator[None, None, None]:
     original_stdout = sys.stdout
     original_stderr = sys.stderr
     log = open(log_file_path, "a")
@@ -343,7 +349,7 @@ if __name__ == "__main__":
             dataset_ref_code = None
 
     if dataset_ref_code is not None and code is not None:
-        added_code = dataset_ref_code + "\n" + code
+        added_code: str | None = dataset_ref_code + "\n" + code
     elif dataset_ref_code is not None and code is None:
         added_code = dataset_ref_code
     elif dataset_ref_code is None and code is not None:
@@ -369,7 +375,7 @@ if __name__ == "__main__":
         idea_path_json,
     )
 
-    perform_experiments_bfts(idea_config_path)
+    perform_experiments_bfts(Path(idea_config_path))
     experiment_results_dir = osp.join(idea_dir, "logs/0-run/experiment_results")
     if os.path.exists(experiment_results_dir):
         shutil.copytree(
@@ -383,7 +389,7 @@ if __name__ == "__main__":
     shutil.rmtree(osp.join(idea_dir, "experiment_results"))
 
     save_token_tracker(idea_dir)
-    
+
     # Copy best solutions to experiment root for easy access
     print("\n📋 Copying best solutions to experiment root...")
     copy_best_solutions_to_root(idea_dir)
@@ -396,7 +402,7 @@ if __name__ == "__main__":
             small_model=args.model_citation,
         )
         for attempt in range(args.writeup_retries):
-            print(f"Writeup attempt {attempt+1} of {args.writeup_retries}")
+            print(f"Writeup attempt {attempt + 1} of {args.writeup_retries}")
             if args.writeup_type == "normal":
                 writeup_success = perform_writeup(
                     base_folder=idea_dir,
@@ -436,9 +442,7 @@ if __name__ == "__main__":
                 num_reflections=2,
                 temperature=0.55,
             )
-            review_img_cap_ref = perform_imgs_cap_ref_review(
-                client, client_model, pdf_path
-            )
+            review_img_cap_ref = perform_imgs_cap_ref_review(client, client_model, pdf_path)
             with open(osp.join(idea_dir, "review_text.txt"), "w") as f:
                 f.write(json.dumps(review_text, indent=4))
             with open(osp.join(idea_dir, "review_img_cap_ref.json"), "w") as f:
@@ -449,8 +453,6 @@ if __name__ == "__main__":
 
     print("Start cleaning up processes")
     # Kill all mp and torch processes associated with this experiment
-    import psutil
-    import signal
 
     # Get the current process and all its children
     current_process = psutil.Process()

@@ -4,12 +4,12 @@ import re
 import black
 
 
-def wrap_code(code: str, lang="python") -> str:
+def wrap_code(code: str, lang: str = "python") -> str:
     """Wraps code with three backticks."""
     return f"```{lang}\n{code}\n```"
 
 
-def is_valid_python_script(script):
+def is_valid_python_script(script: str) -> bool:
     """Check if a script is a valid Python script."""
     try:
         compile(script, "<string>", "exec")
@@ -18,7 +18,7 @@ def is_valid_python_script(script):
         return False
 
 
-def extract_jsons(text):
+def extract_jsons(text: str) -> list[dict]:
     """Extract all JSON objects from the text. Caveat: This function cannot handle nested JSON objects."""
     json_objects = []
     matches = re.findall(r"\{.*?\}", text, re.DOTALL)
@@ -38,7 +38,7 @@ def extract_jsons(text):
     return json_objects
 
 
-def trim_long_string(string, threshold=5100, k=2500):
+def trim_long_string(string: str, threshold: int = 5100, k: int = 2500) -> str:
     # Check if the length of the string is longer than the threshold
     if len(string) > threshold:
         # Output the first k and last k characters
@@ -52,7 +52,7 @@ def trim_long_string(string, threshold=5100, k=2500):
         return string
 
 
-def extract_code(text):
+def extract_code(text: str) -> str:
     """Extract python code blocks from the text."""
     parsed_codes = []
 
@@ -70,22 +70,20 @@ def extract_code(text):
             parsed_codes.append(code_block)
 
     # validate the parsed codes
-    valid_code_blocks = [
-        format_code(c) for c in parsed_codes if is_valid_python_script(c)
-    ]
+    valid_code_blocks = [format_code(c) for c in parsed_codes if is_valid_python_script(c)]
     return format_code("\n\n".join(valid_code_blocks))
 
 
-def extract_text_up_to_code(s):
+def extract_text_up_to_code(s: str) -> str:
     """Extract (presumed) natural language text up to the start of the first code block."""
     if "```" not in s:
         return ""
     return s[: s.find("```")].strip()
 
 
-def format_code(code) -> str:
+def format_code(code: str) -> str:
     """Format Python code using Black."""
     try:
         return black.format_str(code, mode=black.FileMode())
-    except black.parsing.InvalidInput:  # type: ignore
+    except black.parsing.InvalidInput:
         return code

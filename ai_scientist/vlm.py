@@ -1,10 +1,13 @@
 import base64
-from typing import Any
-import re
 import json
+import re
+from typing import Any, cast
+
+import anthropic
 import backoff
 import openai
 from PIL import Image
+
 from ai_scientist.utils.token_tracker import track_token_usage
 
 MAX_NUM_TOKENS = 4096
@@ -37,14 +40,18 @@ def encode_image_to_base64(image_path: str) -> str:
 
 
 @track_token_usage
-def make_llm_call(client, model, temperature, system_message, prompt):
+def make_llm_call(
+    client: openai.OpenAI | anthropic.Anthropic,
+    model: str,
+    temperature: float,
+    system_message: str,
+    prompt: list[dict[str, Any]],
+) -> Any:  # noqa: ANN401
     if "gpt" in model:
+        assert isinstance(client, openai.OpenAI)
         return client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_message},
-                *prompt,
-            ],
+            messages=cast(Any, [{"role": "system", "content": system_message}] + prompt),
             temperature=temperature,
             max_tokens=MAX_NUM_TOKENS,
             n=1,
@@ -52,12 +59,10 @@ def make_llm_call(client, model, temperature, system_message, prompt):
             seed=0,
         )
     elif "o1" in model or "o3" in model:
+        assert isinstance(client, openai.OpenAI)
         return client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "user", "content": system_message},
-                *prompt,
-            ],
+            messages=cast(Any, [{"role": "user", "content": system_message}] + prompt),
             temperature=1,
             n=1,
             seed=0,
@@ -67,27 +72,29 @@ def make_llm_call(client, model, temperature, system_message, prompt):
 
 
 @track_token_usage
-def make_vlm_call(client, model, temperature, system_message, prompt):
+def make_vlm_call(
+    client: openai.OpenAI | anthropic.Anthropic,
+    model: str,
+    temperature: float,
+    system_message: str,
+    prompt: list[dict[str, Any]],
+) -> Any:  # noqa: ANN401
     if "gpt" in model or model == "gpt-5":
         # GPT-5 uses max_completion_tokens instead of max_tokens
         # and only supports temperature=1
         if model == "gpt-5":
+            assert isinstance(client, openai.OpenAI)
             return client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    *prompt,
-                ],
+                messages=cast(Any, [{"role": "system", "content": system_message}] + prompt),
                 temperature=1,  # GPT-5 only supports temperature=1
                 max_completion_tokens=MAX_NUM_TOKENS,
             )
         else:
+            assert isinstance(client, openai.OpenAI)
             return client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    *prompt,
-                ],
+                messages=cast(Any, [{"role": "system", "content": system_message}] + prompt),
                 temperature=temperature,
                 max_tokens=MAX_NUM_TOKENS,
             )
@@ -95,7 +102,9 @@ def make_vlm_call(client, model, temperature, system_message, prompt):
         raise ValueError(f"Model {model} not supported.")
 
 
-def prepare_vlm_prompt(msg, image_paths, max_images):
+def prepare_vlm_prompt(
+    msg: str, image_paths: str | list[str], max_images: int
+) -> Any:  # noqa: ANN401
     pass
 
 
@@ -109,7 +118,7 @@ def prepare_vlm_prompt(msg, image_paths, max_images):
 def get_response_from_vlm(
     msg: str,
     image_paths: str | list[str],
-    client: Any,
+    client: openai.OpenAI,
     model: str,
     system_message: str,
     print_debug: bool = False,
@@ -127,7 +136,7 @@ def get_response_from_vlm(
             image_paths = [image_paths]
 
         # Create content list starting with the text message
-        content = [{"type": "text", "text": msg}]
+        content: list[dict[str, Any]] = [{"type": "text", "text": msg}]
 
         # Add each image to the content list
         for image_path in image_paths[:max_images]:
@@ -145,31 +154,31 @@ def get_response_from_vlm(
         new_msg_history = msg_history + [{"role": "user", "content": content}]
 
         response = make_vlm_call(
-            client,
-            model,
-            temperature,
+            client=client,
+            model=model,
+            temperature=temperature,
             system_message=system_message,
             prompt=new_msg_history,
         )
 
-        content = response.choices[0].message.content
-        new_msg_history = new_msg_history + [{"role": "assistant", "content": content}]
+        content_str = response.choices[0].message.content or ""
+        new_msg_history = new_msg_history + [{"role": "assistant", "content": content_str}]
     else:
         raise ValueError(f"Model {model} not supported.")
 
     if print_debug:
         print()
         print("*" * 20 + " VLM START " + "*" * 20)
-        for j, msg in enumerate(new_msg_history):
-            print(f'{j}, {msg["role"]}: {msg["content"]}')
-        print(content)
+        for j, message in enumerate(new_msg_history):
+            print(f'{j}, {message["role"]}: {message["content"]}')
+        print(content_str)
         print("*" * 21 + " VLM END " + "*" * 21)
         print()
 
-    return content, new_msg_history
+    return content_str, new_msg_history
 
 
-def create_client(model: str) -> tuple[Any, str]:
+def create_client(model: str) -> tuple[openai.OpenAI, str]:
     """Create client for vision-language model."""
     if model in [
         "gpt-4o-2024-05-13",
@@ -185,7 +194,7 @@ def create_client(model: str) -> tuple[Any, str]:
         raise ValueError(f"Model {model} not supported.")
 
 
-def extract_json_between_markers(llm_output: str) -> dict | None:
+def extract_json_between_markers(llm_output: str) -> dict[Any, Any] | None:
     # Regular expression pattern to find JSON content between ```json and ```
     json_pattern = r"```json(.*?)```"
     matches = re.findall(json_pattern, llm_output, re.DOTALL)
@@ -198,15 +207,17 @@ def extract_json_between_markers(llm_output: str) -> dict | None:
     for json_string in matches:
         json_string = json_string.strip()
         try:
-            parsed_json = json.loads(json_string)
-            return parsed_json
+            parsed_json: dict[Any, Any] | list[Any] = json.loads(json_string)
+            if isinstance(parsed_json, dict):
+                return parsed_json
         except json.JSONDecodeError:
             # Attempt to fix common JSON issues
             try:
                 # Remove invalid control characters
                 json_string_clean = re.sub(r"[\x00-\x1F\x7F]", "", json_string)
                 parsed_json = json.loads(json_string_clean)
-                return parsed_json
+                if isinstance(parsed_json, dict):
+                    return parsed_json
             except json.JSONDecodeError:
                 continue  # Try next match
 
@@ -223,7 +234,7 @@ def extract_json_between_markers(llm_output: str) -> dict | None:
 def get_batch_responses_from_vlm(
     msg: str,
     image_paths: str | list[str],
-    client: Any,
+    client: openai.OpenAI,
     model: str,
     system_message: str,
     print_debug: bool = False,
@@ -264,7 +275,7 @@ def get_batch_responses_from_vlm(
             image_paths = [image_paths]
 
         # Create content list with text and images
-        content = [{"type": "text", "text": msg}]
+        content: list[dict[str, Any]] = [{"type": "text", "text": msg}]
         for image_path in image_paths[:max_images]:
             base64_image = encode_image_to_base64(image_path)
             content.append(
@@ -285,10 +296,9 @@ def get_batch_responses_from_vlm(
         if model == "gpt-5":
             response = client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    *new_msg_history,
-                ],
+                messages=cast(
+                    Any, [{"role": "system", "content": system_message}] + new_msg_history
+                ),
                 temperature=1,  # GPT-5 only supports temperature=1
                 max_completion_tokens=MAX_NUM_TOKENS,
                 n=n_responses,
@@ -297,10 +307,9 @@ def get_batch_responses_from_vlm(
         else:
             response = client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_message},
-                    *new_msg_history,
-                ],
+                messages=cast(
+                    Any, [{"role": "system", "content": system_message}] + new_msg_history
+                ),
                 temperature=temperature,
                 max_tokens=MAX_NUM_TOKENS,
                 n=n_responses,
@@ -308,7 +317,8 @@ def get_batch_responses_from_vlm(
             )
 
         # Extract content from all responses
-        contents = [r.message.content for r in response.choices]
+        contents_raw = [r.message.content for r in response.choices]
+        contents = [c or "" for c in contents_raw]
         new_msg_histories = [
             new_msg_history + [{"role": "assistant", "content": c}] for c in contents
         ]
@@ -319,8 +329,8 @@ def get_batch_responses_from_vlm(
         # Just print the first response
         print()
         print("*" * 20 + " VLM START " + "*" * 20)
-        for j, msg in enumerate(new_msg_histories[0]):
-            print(f'{j}, {msg["role"]}: {msg["content"]}')
+        for j, message in enumerate(new_msg_histories[0]):
+            print(f'{j}, {message["role"]}: {message["content"]}')
         print(contents[0])
         print("*" * 21 + " VLM END " + "*" * 21)
         print()

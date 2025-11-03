@@ -5,44 +5,43 @@ import os.path as osp
 import re
 import shutil
 import subprocess
+import tempfile
 import traceback
 import unicodedata
-import uuid
-import tempfile
+from typing import Any, Dict, List, Optional, Tuple
+
+import anthropic
+import openai
 
 from ai_scientist.llm import (
-    get_response_from_llm,
-    extract_json_between_markers,
-    create_client,
     AVAILABLE_LLMS,
+    create_client,
+    extract_json_between_markers,
+    get_response_from_llm,
 )
-
-from ai_scientist.utils.token_tracker import track_token_usage
-
-from ai_scientist.tools.semantic_scholar import search_for_papers
-
 from ai_scientist.perform_vlm_review import (
+    detect_duplicate_figures,
     generate_vlm_img_review,
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
-    detect_duplicate_figures,
 )
+from ai_scientist.tools.semantic_scholar import search_for_papers
 from ai_scientist.vlm import create_client as create_vlm_client
 
 
-def remove_accents_and_clean(s):
+def remove_accents_and_clean(s: str) -> str:
     # Normalize to separate accents
     nfkd_form = unicodedata.normalize("NFKD", s)
     # Remove non-ASCII characters
     ascii_str = nfkd_form.encode("ASCII", "ignore").decode("ascii")
     # Remove anything but letters, digits, underscores, colons, dashes, @, {, }, and commas
-    ascii_str = re.sub(r"[^a-zA-Z0-9:_@\{\},-]+", "", ascii_str)
+    ascii_str = re.sub(r"[^a-zA-Z0-9:_@{},-]+", "", ascii_str)
     # Convert to lowercase
     ascii_str = ascii_str.lower()
     return ascii_str
 
 
-def compile_latex(cwd, pdf_file, timeout=30):
+def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> None:
     print("GENERATING LATEX")
 
     commands = [
@@ -65,14 +64,10 @@ def compile_latex(cwd, pdf_file, timeout=30):
             print("Standard Output:\n", result.stdout)
             print("Standard Error:\n", result.stderr)
         except subprocess.TimeoutExpired:
-            print(
-                f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds."
-            )
+            print(f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds.")
             print(traceback.format_exc())
         except subprocess.CalledProcessError:
-            print(
-                f"EXCEPTION in compile_latex: Error running command {' '.join(command)}"
-            )
+            print(f"EXCEPTION in compile_latex: Error running command {' '.join(command)}")
             print(traceback.format_exc())
 
     print("FINISHED GENERATING LATEX")
@@ -85,7 +80,7 @@ def compile_latex(cwd, pdf_file, timeout=30):
         print(traceback.format_exc())
 
 
-def is_header_or_footer(line):
+def is_header_or_footer(line: str) -> bool:
     """
     Returns True if the line is likely a header or footer.
     Filters out:
@@ -108,7 +103,7 @@ def is_header_or_footer(line):
     return False
 
 
-def clean_lines(content):
+def clean_lines(content: str) -> List[str]:
     """
     Given raw text content, split it into lines and remove lines that are
     likely headers/footers or otherwise not part of the main content.
@@ -118,7 +113,7 @@ def clean_lines(content):
     return [line for line in lines if not is_header_or_footer(line)]
 
 
-def detect_references_position_clean(pdf_file):
+def detect_references_position_clean(pdf_file: str) -> Optional[Tuple[int, int]]:
     """
     Locate the first occurrence of the word "References" (or variations like
     "R EFERENCES") within the cleaned content extracted from the PDF.
@@ -178,12 +173,12 @@ def detect_references_position_clean(pdf_file):
         cleaned = clean_lines(content)
         for idx, line in enumerate(cleaned):
             if pattern.search(line):
-                # Found "References" on this page at cleaned line number idx+1
+                # Found "References" on this page at cleaned line number idx + 1
                 return (page, idx + 1)
     return None
 
 
-def extract_page_line_counts(pdf_file, first_page, last_page):
+def extract_page_line_counts(pdf_file: str, first_page: int, last_page: int) -> Dict[int, int]:
     """
     Extract the number of cleaned text lines for each page from first_page to last_page.
     This uses pdftotext with layout preservation and the clean_lines helper.
@@ -235,7 +230,9 @@ def extract_page_line_counts(pdf_file, first_page, last_page):
     return page_lines
 
 
-def check_page_limit(pdf_file, page_limit=4, timeout=30):
+def check_page_limit(
+    pdf_file: str, page_limit: int = 4, timeout: int = 30
+) -> Optional[Dict[str, int]]:
     """
     Compile the LaTeX project in a temporary folder, then determine where the
     "References" section begins using cleaned text extraction. Next, count the
@@ -271,9 +268,7 @@ def check_page_limit(pdf_file, page_limit=4, timeout=30):
             return None
 
         # Compute total cleaned lines available in the allowed pages (pages 1 to page_limit)
-        allowed_lines = sum(
-            page_line_counts.get(page, 0) for page in range(1, page_limit + 1)
-        )
+        allowed_lines = sum(page_line_counts.get(page, 0) for page in range(1, page_limit + 1))
 
         # Compute cleaned lines used before "References":
         used_lines = 0
@@ -301,8 +296,8 @@ def check_page_limit(pdf_file, page_limit=4, timeout=30):
         return None
 
 
-def get_reflection_page_info(reflection_pdf, page_limit):
-    info = check_page_limit(reflection_pdf, page_limit)
+def get_reflection_page_info(reflection_pdf: str, page_limit: int) -> str:
+    info = check_page_limit(pdf_file=reflection_pdf, page_limit=page_limit)
     if info is not None:
         if "excess" in info:
             reflection_page_info = (
@@ -335,10 +330,15 @@ def get_reflection_page_info(reflection_pdf, page_limit):
 
 
 def get_citation_addition(
-    client, model, context, current_round, total_rounds, idea_text
-):
+    client: openai.OpenAI | anthropic.Anthropic,
+    model: str,
+    context: Tuple[str, str],
+    current_round: int,
+    total_rounds: int,
+    idea_text: str,
+) -> Tuple[Optional[str], bool]:
     report, citations = context
-    msg_history = []
+    msg_history: List[Dict[str, Any]] = []
     citation_system_msg_template = """You are an ambitious AI researcher who is looking to publish a paper to a workshop at ICLR 2025 that explores real-world pitfalls, failures, and challenges in deep learning.
 You have already completed the experiments and now you are looking to collect citations to related papers.
 This phase focuses on collecting references and annotating them to be integrated later.
@@ -434,9 +434,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             ),
             client=client,
             model=model,
-            system_message=citation_system_msg_template.format(
-                total_rounds=total_rounds
-            ),
+            system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             msg_history=msg_history,
             print_debug=False,
         )
@@ -480,9 +478,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             ),
             client=client,
             model=model,
-            system_message=citation_system_msg_template.format(
-                total_rounds=total_rounds
-            ),
+            system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             msg_history=msg_history,
             print_debug=False,
         )
@@ -501,9 +497,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
                 x_str = x.strip().strip('"').strip("'")
                 if x_str:
                     selected_indices.append(int(x_str))
-            assert all(
-                [0 <= i < len(papers) for i in selected_indices]
-            ), "Invalid paper index"
+            assert all([0 <= i < len(papers) for i in selected_indices]), "Invalid paper index"
             bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
 
             cleaned_bibtexs = []
@@ -592,7 +586,7 @@ Ensure you are always writing good compilable LaTeX code. Common mistakes that s
 - Do not hallucinate new citations or any results not in the logs.
 
 Ensure proper citation usage:
-- Always include references within \begin{{filecontents}}{{references.bib}} ... \end{{filecontents}}, even if they haven't changed from the previous round.
+- Always include references within \\begin{{filecontents}}{{references.bib}} ... \\end{{filecontents}}, even if they haven't changed from the previous round.
 - Use citations from the provided references.bib content.
 - Each section (especially Related Work) should have multiple citations.
 
@@ -645,7 +639,7 @@ with "latex" syntax highlighting, like so:
 """
 
 
-def load_idea_text(base_folder):
+def load_idea_text(base_folder: str) -> str:
     """
     Load the idea text from the base folder.
     """
@@ -662,7 +656,7 @@ def load_idea_text(base_folder):
     return idea_text
 
 
-def load_exp_summaries(base_folder):
+def load_exp_summaries(base_folder: str) -> Dict[str, Any]:
     """
     Load the experiment summaries from the base folder.
     """
@@ -671,7 +665,7 @@ def load_exp_summaries(base_folder):
         ("logs/0-run/research_summary.json", "RESEARCH_SUMMARY"),
         ("logs/0-run/ablation_summary.json", "ABLATION_SUMMARY"),
     ]
-    loaded_summaries = {}
+    loaded_summaries: Dict[str, Any] = {}
     for fname, key in summary_files:
         path = osp.join(base_folder, fname)
         if osp.exists(path):
@@ -679,16 +673,14 @@ def load_exp_summaries(base_folder):
                 with open(path, "r") as f:
                     loaded_summaries[key] = json.load(f)
             except json.JSONDecodeError:
-                print(
-                    f"Warning: {fname} is not valid JSON. Using empty data for {key}."
-                )
+                print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
                 loaded_summaries[key] = {}
         else:
             loaded_summaries[key] = {}
     return loaded_summaries
 
 
-def filter_experiment_summaries(exp_summaries, step_name):
+def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -> Dict[str, Any]:
     if step_name == "citation_gathering":
         node_keys_to_keep = {
             "overall_plan",
@@ -718,7 +710,7 @@ def filter_experiment_summaries(exp_summaries, step_name):
     else:
         raise ValueError(f"Invalid step name: {step_name}")
 
-    filtered_summaries = {}
+    filtered_summaries: Dict[str, Any] = {}
     for stage_name in exp_summaries.keys():
         if stage_name in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
             filtered_summaries[stage_name] = {}
@@ -727,22 +719,26 @@ def filter_experiment_summaries(exp_summaries, step_name):
                     filtered_summaries[stage_name][key] = {}
                     for node_key in exp_summaries[stage_name][key].keys():
                         if node_key in node_keys_to_keep:
-                            filtered_summaries[stage_name][key][node_key] = (
-                                exp_summaries[stage_name][key][node_key]
-                            )
+                            filtered_summaries[stage_name][key][node_key] = exp_summaries[
+                                stage_name
+                            ][key][node_key]
         elif stage_name == "ABLATION_SUMMARY" and step_name == "plot_aggregation":
             filtered_summaries[stage_name] = {}
             for ablation_summary in exp_summaries[stage_name]:
                 filtered_summaries[stage_name][ablation_summary["ablation_name"]] = {}
                 for node_key in ablation_summary.keys():
                     if node_key in node_keys_to_keep:
-                        filtered_summaries[stage_name][
-                            ablation_summary["ablation_name"]
-                        ][node_key] = ablation_summary[node_key]
+                        filtered_summaries[stage_name][ablation_summary["ablation_name"]][
+                            node_key
+                        ] = ablation_summary[node_key]
     return filtered_summaries
 
 
-def gather_citations(base_folder, num_cite_rounds=20, small_model="gpt-4o-2024-05-13"):
+def gather_citations(
+    base_folder: str,
+    num_cite_rounds: int = 20,
+    small_model: str = "gpt-4o-2024-05-13",
+) -> Optional[str]:
     """
     Gather citations for a paper, with ability to resume from previous progress.
 
@@ -818,9 +814,7 @@ def gather_citations(base_folder, num_cite_rounds=20, small_model="gpt-4o-2024-0
                     title_match = re.search(r" title = {(.*?)}", addition)
                     if title_match:
                         new_title = title_match.group(1).lower()
-                        existing_titles = re.findall(
-                            r" title = {(.*?)}", citations_text
-                        )
+                        existing_titles = re.findall(r" title = {(.*?)}", citations_text)
                         existing_titles = [t.lower() for t in existing_titles]
                         if new_title not in existing_titles:
                             citations_text += "\n" + addition
@@ -855,15 +849,15 @@ def gather_citations(base_folder, num_cite_rounds=20, small_model="gpt-4o-2024-0
 
 
 def perform_writeup(
-    base_folder,
-    citations_text=None,
-    no_writing=False,
-    num_cite_rounds=20,
-    small_model="gpt-4o-2024-05-13",
-    big_model="o1-2024-12-17",
-    n_writeup_reflections=3,
-    page_limit=4,
-):
+    base_folder: str,
+    citations_text: Optional[str] = None,
+    no_writing: bool = False,
+    num_cite_rounds: int = 20,
+    small_model: str = "gpt-4o-2024-05-13",
+    big_model: str = "o1-2024-12-17",
+    n_writeup_reflections: int = 3,
+    page_limit: int = 4,
+) -> bool:
     pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}.pdf")
     latex_folder = osp.join(base_folder, "latex")
 
@@ -889,9 +883,7 @@ def perform_writeup(
 
         # Prepare a new fresh latex folder
         if not osp.exists(osp.join(latex_folder, "template.tex")):
-            shutil.copytree(
-                "ai_scientist/blank_icbinb_latex", latex_folder, dirs_exist_ok=True
-            )
+            shutil.copytree("ai_scientist/blank_icbinb_latex", latex_folder, dirs_exist_ok=True)
 
         writeup_file = osp.join(latex_folder, "template.tex")
         with open(writeup_file, "r") as f:
@@ -932,9 +924,7 @@ def perform_writeup(
 
             # If still no citations, gather them
             if not citations_text:
-                citations_text = gather_citations(
-                    base_folder, num_cite_rounds, small_model
-                )
+                citations_text = gather_citations(base_folder, num_cite_rounds, small_model)
                 if citations_text is None:
                     print("Warning: Citation gathering failed")
                     citations_text = ""
@@ -962,9 +952,7 @@ def perform_writeup(
                 }
                 review_data = generate_vlm_img_review(img_dict, vlm_model, vlm_client)
                 if review_data:
-                    desc_map[pf] = review_data.get(
-                        "Img_description", "No description found"
-                    )
+                    desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
                     desc_map[pf] = "No description found"
 
@@ -978,9 +966,7 @@ def perform_writeup(
             print(traceback.format_exc())
             plot_descriptions_str = "No descriptions available."
 
-        big_model_system_message = writeup_system_message_template.format(
-            page_limit=page_limit
-        )
+        big_model_system_message = writeup_system_message_template.format(page_limit=page_limit)
         big_client, big_client_model = create_client(big_model)
         with open(writeup_file, "r") as f:
             writeup_text = f.read()
@@ -1040,15 +1026,13 @@ def perform_writeup(
 
             # Save PDF with reflection trial number
             reflection_pdf = osp.join(
-                base_folder, f"{osp.basename(base_folder)}_reflection{i+1}.pdf"
+                base_folder, f"{osp.basename(base_folder)}_reflection{i + 1}.pdf"
             )
             # Compile current version before reflection
-            print(f"[green]Compiling PDF for reflection {i+1}...[/green]")
+            print(f"[green]Compiling PDF for reflection {i + 1}...[/green]")
             compile_latex(latex_folder, reflection_pdf)
 
-            review_img_cap_ref = perform_imgs_cap_ref_review(
-                vlm_client, vlm_model, reflection_pdf
-            )
+            review_img_cap_ref = perform_imgs_cap_ref_review(vlm_client, vlm_model, reflection_pdf)
 
             # Detect duplicate figures between main text and appendix
             analysis_duplicate_figs = detect_duplicate_figures(
@@ -1093,7 +1077,7 @@ Return the entire file in full, with no unfilled placeholders!
 This must be an acceptable complete LaTeX writeup.
 Do not hallucinate any details!
 Ensure proper citation usage:
-- Always include references within \begin{{filecontents}}{{references.bib}} ... \end{{filecontents}}, even if they haven't changed from the previous round.
+- Always include references within \\begin{{filecontents}}{{references.bib}} ... \\end{{filecontents}}, even if they haven't changed from the previous round.
 - Use citations from the provided references.bib content.
 """
 
@@ -1107,9 +1091,7 @@ Ensure proper citation usage:
             )
 
             # 2nd run:
-            reflection_code_match = re.search(
-                r"```latex(.*?)```", reflection_response, re.DOTALL
-            )
+            reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
             if reflection_code_match:
                 reflected_latex_code = reflection_code_match.group(1).strip()
                 if reflected_latex_code != current_latex:
@@ -1128,10 +1110,10 @@ Ensure proper citation usage:
 
                     compile_latex(latex_folder, reflection_pdf)
                 else:
-                    print(f"No changes in reflection step {i+1}.")
+                    print(f"No changes in reflection step {i + 1}.")
                     break
             else:
-                print(f"No valid LaTeX code block found in reflection step {i+1}.")
+                print(f"No valid LaTeX code block found in reflection step {i + 1}.")
                 break
             # Get new reflection_page_info
             reflection_page_info = get_reflection_page_info(reflection_pdf, page_limit)
@@ -1169,14 +1151,10 @@ If you believe you are done with reflection, simply say: "I am done"."""
             )
 
             if "I am done" in reflection_response:
-                print(
-                    "LLM indicated it is done with reflections. Exiting reflection loop."
-                )
+                print("LLM indicated it is done with reflections. Exiting reflection loop.")
                 break
 
-            reflection_code_match = re.search(
-                r"```latex(.*?)```", reflection_response, re.DOTALL
-            )
+            reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
             if reflection_code_match:
                 reflected_latex_code = reflection_code_match.group(1).strip()
                 if reflected_latex_code != current_latex:
@@ -1195,10 +1173,10 @@ If you believe you are done with reflection, simply say: "I am done"."""
 
                     compile_latex(latex_folder, reflection_pdf)
                 else:
-                    print(f"No changes in reflection step {i+1}.")
+                    print(f"No changes in reflection step {i + 1}.")
                     break
             else:
-                print(f"No valid LaTeX code block found in reflection step {i+1}.")
+                print(f"No valid LaTeX code block found in reflection step {i + 1}.")
                 break
 
         # Final reflection on page limit
@@ -1222,13 +1200,11 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             base_folder, f"{osp.basename(base_folder)}_reflection_final_page_limit.pdf"
         )
         # Compile current version before reflection
-        print(f"[green]Compiling PDF for reflection final page limit...[/green]")
+        print("[green]Compiling PDF for reflection final page limit...[/green]")
 
-        print(f"reflection step {i+1}")
+        print(f"reflection step {i + 1}")
 
-        reflection_code_match = re.search(
-            r"```latex(.*?)```", reflection_response, re.DOTALL
-        )
+        reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
         if reflection_code_match:
             reflected_latex_code = reflection_code_match.group(1).strip()
             if reflected_latex_code != current_latex:
@@ -1247,11 +1223,13 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
 
                 compile_latex(latex_folder, reflection_pdf)
             else:
-                print(f"No changes in reflection page step.")
+                print("No changes in reflection page step.")
         else:
-            print(f"ERROR: No valid LaTeX code block found in final reflection")
+            print("ERROR: No valid LaTeX code block found in final reflection")
             print(f"Response length: {len(reflection_response)} chars")
-            print(f"Response preview: {reflection_response[:500] if len(reflection_response) > 0 else 'Empty'}")
+            print(
+                f"Response preview: {reflection_response[:500] if len(reflection_response) > 0 else 'Empty'}"
+            )
             return False
 
         pdf_exists = osp.exists(reflection_pdf)
