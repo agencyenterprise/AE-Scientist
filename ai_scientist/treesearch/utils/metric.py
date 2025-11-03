@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from functools import total_ordering
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 from dataclasses_json import DataClassJsonMixin
@@ -16,14 +16,12 @@ class MetricValue_old(DataClassJsonMixin):
 
     value: float | int | np.number | np.floating | np.ndarray | dict | None
     maximize: bool | None = field(default=None, kw_only=True)
-    name: str | None = field(
-        default=None, kw_only=True
-    )  # e.g., "accuracy", "loss", "f1_score"
+    name: str | None = field(default=None, kw_only=True)  # e.g., "accuracy", "loss", "f1_score"
     description: str | None = field(
         default=None, kw_only=True
     )  # e.g., "Classification accuracy on validation set"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value is not None:
             if isinstance(self.value, dict):
                 self.value = {k: float(v) for k, v in self.value.items()}
@@ -31,7 +29,7 @@ class MetricValue_old(DataClassJsonMixin):
                 assert isinstance(self.value, (float, int, np.number, np.floating))
                 self.value = float(self.value)
 
-    def __gt__(self, other) -> bool:
+    def __gt__(self, other: Self) -> bool:
         """True if self is a _better_ (not necessarily larger) metric value than other"""
         if self.value is None:
             return False
@@ -42,23 +40,21 @@ class MetricValue_old(DataClassJsonMixin):
 
         # For multi-dataset metrics, use mean for comparison
         self_val = (
-            np.mean(list(self.value.values()))
-            if isinstance(self.value, dict)
-            else self.value
+            np.mean(list(self.value.values())) if isinstance(self.value, dict) else self.value
         )
         other_val = (
-            np.mean(list(other.value.values()))
-            if isinstance(other.value, dict)
-            else other.value
+            np.mean(list(other.value.values())) if isinstance(other.value, dict) else other.value
         )
 
         if self_val == other_val:
             return False
 
-        comp = self_val > other_val
-        return comp if self.maximize else not comp  # type: ignore
+        comp: bool = self_val > other_val
+        return comp if self.maximize else not comp
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, MetricValue):
+            return NotImplemented
         return self.value == other.value
 
     def __repr__(self) -> str:
@@ -80,19 +76,17 @@ class MetricValue_old(DataClassJsonMixin):
             return f"Metric{opt_dir}{metric_name}({self.value_npsafe:.4f})"
 
     @property
-    def is_worst(self):
+    def is_worst(self) -> bool:
         """True if the metric value is the worst possible value."""
         return self.value is None
 
     @property
-    def value_npsafe(self):
+    def value_npsafe(self) -> float | dict[str, Any]:
         if self.value is None:
             return float("nan")
         if isinstance(self.value, dict):
-            return {
-                k: v if v is not None else float("nan") for k, v in self.value.items()
-            }
-        return self.value
+            return {k: v if v is not None else float("nan") for k, v in self.value.items()}
+        return float(self.value)
 
     def get_dataset_value(self, dataset_name: str) -> float | None:
         """Get the metric value for a specific dataset"""
@@ -141,7 +135,7 @@ class MetricValue(DataClassJsonMixin):
     name: str | None = field(default=None, kw_only=True)
     description: str | None = field(default=None, kw_only=True)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.value is not None:
             if isinstance(self.value, dict):
                 # Check if it's the new format with metric_names list
@@ -150,25 +144,20 @@ class MetricValue(DataClassJsonMixin):
                     for metric in self.value["metric_names"]:
                         for data_point in metric["data"]:
                             if data_point["final_value"] is not None:
-                                data_point["final_value"] = float(
-                                    data_point["final_value"]
-                                )
+                                data_point["final_value"] = float(data_point["final_value"])
                             if data_point["best_value"] is not None:
-                                data_point["best_value"] = float(
-                                    data_point["best_value"]
-                                )
+                                data_point["best_value"] = float(data_point["best_value"])
                 else:
                     # Old format - convert to float
                     self.value = {
-                        k: float(v) if v is not None else None
-                        for k, v in self.value.items()
+                        k: float(v) if v is not None else None for k, v in self.value.items()
                     }
             else:
                 # Single value case
                 assert isinstance(self.value, (float, int, np.number, np.floating))
                 self.value = float(self.value)
 
-    def __gt__(self, other) -> bool:
+    def __gt__(self, other: Self) -> bool:
         if self.value is None:
             return False
         if other.value is None:
@@ -185,7 +174,7 @@ class MetricValue(DataClassJsonMixin):
 
         # Determine if we should maximize or minimize
         should_maximize = self._should_maximize()
-        comp = self_val > other_val
+        comp: bool = self_val > other_val
         return comp if should_maximize else not comp
 
     def _should_maximize(self) -> bool:
@@ -198,6 +187,7 @@ class MetricValue(DataClassJsonMixin):
                     return not self.value["metric_names"][0]["lower_is_better"]
                 except Exception as e:
                     print(f"error during metric value: {e}")
+                    return bool(self.maximize)
             # Old format
             return bool(self.maximize)
         # Single value case
@@ -210,9 +200,7 @@ class MetricValue(DataClassJsonMixin):
                 parts = []
                 for metric in self.value["metric_names"]:
                     opt_dir = (
-                        "↓"
-                        if "lower_is_better" in metric and metric["lower_is_better"]
-                        else "↑"
+                        "↓" if "lower_is_better" in metric and metric["lower_is_better"] else "↑"
                     )
                     try:
                         values_str = ", ".join(
@@ -234,10 +222,10 @@ class MetricValue(DataClassJsonMixin):
         metric_name = f"({self.name})" if self.name else ""
         return f"Metric{opt_dir}{metric_name}({self.value_npsafe:.4f})"
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         """Compare equality of metric values"""
         if not isinstance(other, MetricValue):
-            raise NotImplementedError
+            return NotImplemented
         if self.value is None and other.value is None:
             return True
         if self.value is None or other.value is None:
@@ -261,7 +249,7 @@ class MetricValue(DataClassJsonMixin):
         return str(self)
 
     @property
-    def value_npsafe(self):
+    def value_npsafe(self) -> float | dict[str, Any]:
         """Return a NaN-safe version of the value"""
         if self.value is None:
             return float("nan")
@@ -293,11 +281,9 @@ class MetricValue(DataClassJsonMixin):
                     ]
                 }
             # Old format
-            return {
-                k: v if v is not None else float("nan") for k, v in self.value.items()
-            }
+            return {k: v if v is not None else float("nan") for k, v in self.value.items()}
         # Single value case
-        return self.value if self.value is not None else float("nan")
+        return float(self.value)
 
     def get_mean_value(self) -> float:
         """Get the mean value across all metrics and datasets"""
@@ -310,9 +296,7 @@ class MetricValue(DataClassJsonMixin):
                 for metric in self.value["metric_names"]:
                     # Use final_value for comparison
                     values = [
-                        d["final_value"]
-                        for d in metric["data"]
-                        if d["final_value"] is not None
+                        d["final_value"] for d in metric["data"] if d["final_value"] is not None
                     ]
                     if values:
                         all_values.extend(values)
@@ -333,8 +317,8 @@ class WorstMetricValue(MetricValue):
 
     value: None = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return super().__repr__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return super().__str__()

@@ -2,21 +2,18 @@ import argparse
 import json
 import os.path as osp
 import re
-import traceback
-from typing import Any, Dict, List
-
 import sys
+import traceback
+from typing import Dict, List
+
+import anthropic
+import openai
 
 sys.path.append(osp.join(osp.dirname(__file__), ".."))
-from ai_scientist.llm import (
-    AVAILABLE_LLMS,
-    create_client,
-    get_response_from_llm,
-)
-
-from ai_scientist.tools.semantic_scholar import SemanticScholarSearchTool
-from ai_scientist.tools.base_tool import BaseTool
-from ai_scientist.perform_llm_review import load_paper
+from ai_scientist.llm import create_client, get_response_from_llm  # noqa: E402
+from ai_scientist.perform_llm_review import load_paper  # noqa: E402
+from ai_scientist.tools.base_tool import BaseTool  # noqa: E402
+from ai_scientist.tools.semantic_scholar import SemanticScholarSearchTool  # noqa: E402
 
 # Create tool instances
 semantic_scholar_tool = SemanticScholarSearchTool()
@@ -47,14 +44,14 @@ tool_descriptions = "\n\n".join(
     (
         f"- **{tool.name}**: {tool.description}"
         if isinstance(tool, BaseTool)
-        else f"- **{tool['name']}**: {tool['description']}"
+        else f"- **{tool['name']}**: {tool['description']}"  # type: ignore[index]
     )
     for tool in tools
 )
 
 # Extract tool names for the prompt
 tool_names = [
-    f'"{tool.name}"' if isinstance(tool, BaseTool) else f'"{tool["name"]}"'
+    f'"{tool.name}"' if isinstance(tool, BaseTool) else f'"{tool["name"]}"'  # type: ignore[index]
     for tool in tools
 ]
 tool_names_str = ", ".join(tool_names)
@@ -128,7 +125,7 @@ Results from your last action (if any):
 
 def generate_temp_free_idea(
     idea_fname: str,
-    client: Any,
+    client: openai.OpenAI | anthropic.Anthropic,
     model: str,
     workshop_description: str,
     max_num_generations: int = 20,
@@ -154,7 +151,7 @@ def generate_temp_free_idea(
 
             last_tool_results = ""
             idea_finalized = False
-            msg_history = []
+            msg_history: list[dict[str, str]] = []
 
             for reflection_round in range(num_reflections):
                 if reflection_round == 0:
@@ -195,6 +192,8 @@ def generate_temp_free_idea(
                     if not all([action_match, arguments_match]):
                         raise ValueError("Failed to parse the LLM response.")
 
+                    assert action_match is not None
+                    assert arguments_match is not None
                     action = action_match.group(1).strip()
                     arguments_text = arguments_match.group(1).strip()
                     print(f"Action: {action}")
@@ -202,9 +201,8 @@ def generate_temp_free_idea(
 
                     # If arguments are wrapped in ```json blocks, extract the content
                     if arguments_text.startswith("```json"):
-                        arguments_text = re.search(
-                            r"```json\s*(.*?)\s*```", arguments_text, re.DOTALL
-                        ).group(1)
+                        json_match = re.search(r"```json\s*(.*?)\s*```", arguments_text, re.DOTALL)
+                        arguments_text = json_match.group(1) if json_match else arguments_text
 
                     # Process the action and arguments
                     if action in tools_dict:
@@ -223,7 +221,7 @@ def generate_temp_free_idea(
                         try:
                             # Assuming the arguments match the parameters of the tool
                             result = tool.use_tool(**arguments_json)
-                            last_tool_results = result
+                            last_tool_results = str(result) if result else ""
                         except Exception as e:
                             last_tool_results = f"Error using tool {action}: {str(e)}"
                     elif action == "FinalizeIdea":
@@ -245,21 +243,17 @@ def generate_temp_free_idea(
                         except json.JSONDecodeError:
                             raise ValueError("Invalid arguments JSON for FinalizeIdea.")
                     else:
-                        print(
-                            "Invalid action. Please specify one of the available tools."
-                        )
+                        print("Invalid action. Please specify one of the available tools.")
                         print(f"Available actions are: {tool_names_str}")
-                except Exception as e:
-                    print(
-                        f"Failed to parse LLM response. Response text:\n{response_text}"
-                    )
+                except Exception:
+                    print(f"Failed to parse LLM response. Response text:\n{response_text}")
                     traceback.print_exc()
                     break  # Exit the loop if parsing fails
 
             if idea_finalized:
                 continue  # Move to the next idea
 
-        except Exception as e:
+        except Exception:
             print("Failed to generate proposal:")
             traceback.print_exc()
             continue
@@ -274,9 +268,7 @@ def generate_temp_free_idea(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate AI scientist proposals - template free"
-    )
+    parser = argparse.ArgumentParser(description="Generate AI scientist proposals - template free")
     parser.add_argument(
         "--model",
         type=str,
@@ -292,7 +284,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--workshop-file",
         type=str,
-        default="ideas/i_cant_believe_its_not_better.md",
         help="Path to the workshop description file (markdown .md or PDF .pdf).",
     )
     parser.add_argument(
@@ -307,7 +298,7 @@ if __name__ == "__main__":
     client, client_model = create_client(args.model)
 
     # Load workshop description from PDF or markdown
-    if args.workshop_file.endswith('.pdf'):
+    if args.workshop_file.endswith(".pdf"):
         workshop_description = load_paper(args.workshop_file)
         print(f"Loaded full paper from PDF: {args.workshop_file}")
         # Create output filename by replacing .pdf extension with .json
@@ -318,7 +309,7 @@ if __name__ == "__main__":
         print(f"Using workshop description from {args.workshop_file} for idea generation.")
         # Create output filename by replacing .md extension with .json
         idea_fname = args.workshop_file.replace(".md", ".json")
-    
+
     print(f"Workshop description preview (first 500 chars):\n{workshop_description[:500]}...")
     print(f"Total length: {len(workshop_description)} characters")
     print("Starting idea generation for", idea_fname)

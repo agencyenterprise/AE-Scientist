@@ -1,14 +1,13 @@
-from functools import wraps
-from typing import Dict, Optional, List
-import tiktoken
-from collections import defaultdict
 import asyncio
-from datetime import datetime
 import logging
+from collections import defaultdict
+from datetime import datetime
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 
 class TokenTracker:
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Token counts for prompt, completion, reasoning, and cached.
         Reasoning tokens are included in completion tokens.
@@ -17,10 +16,10 @@ class TokenTracker:
         We assume we get these from the LLM response, and we don't count
         the tokens by ourselves.
         """
-        self.token_counts = defaultdict(
+        self.token_counts: dict[str, dict[str, int]] = defaultdict(
             lambda: {"prompt": 0, "completion": 0, "reasoning": 0, "cached": 0}
         )
-        self.interactions = defaultdict(list)
+        self.interactions: dict[str, list] = defaultdict(list)
 
         self.MODEL_PRICES = {
             "gpt-4o-2024-11-20": {
@@ -66,7 +65,7 @@ class TokenTracker:
         completion_tokens: int,
         reasoning_tokens: int,
         cached_tokens: int,
-    ):
+    ) -> None:
         self.token_counts[model]["prompt"] += prompt_tokens
         self.token_counts[model]["completion"] += completion_tokens
         self.token_counts[model]["reasoning"] += reasoning_tokens
@@ -79,7 +78,7 @@ class TokenTracker:
         prompt: str,
         response: str,
         timestamp: datetime,
-    ):
+    ) -> None:
         """Record a single interaction with the model."""
         self.interactions[model].append(
             {
@@ -96,7 +95,7 @@ class TokenTracker:
             return {model: self.interactions[model]}
         return dict(self.interactions)
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset all token counts and interactions."""
         self.token_counts = defaultdict(
             lambda: {"prompt": 0, "completion": 0, "reasoning": 0, "cached": 0}
@@ -124,13 +123,12 @@ class TokenTracker:
 
         return prompt_cost + cached_cost + completion_cost
 
-    def get_summary(self) -> Dict[str, Dict[str, int]]:
-        # return dict(self.token_counts)
+    def get_summary(self) -> dict[str, dict[str, int | float]]:
         """Get summary of token usage and costs for all models."""
-        summary = {}
+        summary: dict[str, dict[str, int | float]] = {}
         for model, tokens in self.token_counts.items():
             summary[model] = {
-                "tokens": tokens.copy(),
+                **{k: v for k, v in tokens.items()},
                 "cost (USD)": self.calculate_cost(model),
             }
         return summary
@@ -140,9 +138,13 @@ class TokenTracker:
 token_tracker = TokenTracker()
 
 
-def track_token_usage(func):
+T = TypeVar("T")
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def track_token_usage(func: F) -> F:
     @wraps(func)
-    async def async_wrapper(*args, **kwargs):
+    async def async_wrapper(*args: str, **kwargs: str) -> object:
         prompt = kwargs.get("prompt")
         system_message = kwargs.get("system_message")
         if not prompt and not system_message:
@@ -172,17 +174,15 @@ def track_token_usage(func):
             # Add interaction details
             token_tracker.add_interaction(
                 model,
-                system_message,
-                prompt,
-                result.choices[
-                    0
-                ].message.content,  # Assumes response is in content field
+                system_message or "",
+                prompt or "",
+                result.choices[0].message.content or "",  # Assumes response is in content field
                 timestamp,
             )
         return result
 
     @wraps(func)
-    def sync_wrapper(*args, **kwargs):
+    def sync_wrapper(*args: str, **kwargs: str) -> object:
         prompt = kwargs.get("prompt")
         system_message = kwargs.get("system_message")
         if not prompt and not system_message:
@@ -210,13 +210,11 @@ def track_token_usage(func):
             # Add interaction details
             token_tracker.add_interaction(
                 model,
-                system_message,
-                prompt,
-                result.choices[
-                    0
-                ].message.content,  # Assumes response is in content field
+                system_message or "",
+                prompt or "",
+                result.choices[0].message.content or "",  # Assumes response is in content field
                 timestamp,
             )
         return result
 
-    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]

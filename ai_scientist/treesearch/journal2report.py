@@ -3,7 +3,7 @@ from .journal import Journal
 from .utils.config import StageConfig
 
 
-def journal2report(journal: Journal, task_desc: dict, rcfg: StageConfig):
+def journal2report(journal: Journal, task_desc: dict, rcfg: StageConfig) -> str | dict:
     """
     Generate a report from a journal, the report will be in markdown format.
     """

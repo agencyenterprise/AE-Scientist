@@ -1,16 +1,19 @@
-import os
 import json
+import os
 from textwrap import dedent
 from typing import Any, Dict, Iterable, List, Optional
 
+import anthropic
 import numpy as np
+import openai
+import pymupdf  # type: ignore[import-untyped]
+import pymupdf4llm  # type: ignore[import-untyped]
 from pypdf import PdfReader
-import pymupdf
-import pymupdf4llm
+
 from ai_scientist.llm import (
-    get_response_from_llm,
-    get_batch_responses_from_llm,
     extract_json_between_markers,
+    get_batch_responses_from_llm,
+    get_response_from_llm,
 )
 
 reviewer_system_prompt_base = (
@@ -151,21 +154,21 @@ def _render_context_block(context: Optional[Dict[str, Any]]) -> str:
 
 
 def perform_review(
-    text,
-    model,
-    client,
+    text: str,
+    model: str,
+    client: openai.OpenAI | anthropic.Anthropic,
     *,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, str] | None = None,
     num_reflections: int = 2,
     num_fs_examples: int = 1,
     num_reviews_ensemble: int = 3,
     temperature: float = 0.55,
-    msg_history=None,
+    msg_history: list[dict[str, Any]] | None = None,
     return_msg_history: bool = False,
     reviewer_system_prompt: str = reviewer_system_prompt_balanced,
     review_instruction_form: str = neurips_form,
     calibration_notes: str = CALIBRATION_GUIDE,
-):
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | dict[str, Any]:
     context_block = _render_context_block(context)
     base_prompt = review_instruction_form
     if calibration_notes:
@@ -273,8 +276,10 @@ REVIEW JSON:
             if "I am done" in reflection_text:
                 break
 
+    if review is None:
+        review = {}
     if return_msg_history:
-        return review, msg_history
+        return review, (msg_history or [])
     return review
 
 
@@ -299,14 +304,15 @@ If there is nothing to improve, simply repeat the previous JSON EXACTLY after th
 ONLY INCLUDE "I am done" IF YOU ARE MAKING NO MORE CHANGES."""
 
 
-def load_paper(pdf_path, num_pages=None, min_size=100):
+def load_paper(pdf_path: str, num_pages: int | None = None, min_size: int = 100) -> str:
     try:
+        text: str
         if num_pages is None:
-            text = pymupdf4llm.to_markdown(pdf_path)
+            text = str(pymupdf4llm.to_markdown(pdf_path))
         else:
             reader = PdfReader(pdf_path)
             min_pages = min(len(reader.pages), num_pages)
-            text = pymupdf4llm.to_markdown(pdf_path, pages=list(range(min_pages)))
+            text = str(pymupdf4llm.to_markdown(pdf_path, pages=list(range(min_pages))))
         if len(text) < min_size:
             raise Exception("Text too short")
     except Exception as e:
@@ -333,10 +339,10 @@ def load_paper(pdf_path, num_pages=None, min_size=100):
     return text
 
 
-def load_review(json_path):
+def load_review(json_path: str) -> str:
     with open(json_path, "r") as json_file:
         loaded = json.load(json_file)
-    return loaded["review"]
+    return str(loaded["review"])
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -354,7 +360,7 @@ fewshot_reviews = [
 ]
 
 
-def get_review_fewshot_examples(num_fs_examples=1):
+def get_review_fewshot_examples(num_fs_examples: int = 1) -> str:
     fewshot_prompt = """
 Below are some sample reviews, copied from previous machine learning conferences.
 Note that while each review is formatted differently according to each reviewer's style, the reviews are well-structured and therefore easy to navigate.
@@ -391,7 +397,12 @@ Your job is to aggregate the reviews into a single meta-review in the same forma
 Be critical and cautious in your decision, find consensus, and respect the opinion of all the reviewers."""
 
 
-def get_meta_review(model, client, temperature, reviews):
+def get_meta_review(
+    model: str,
+    client: openai.OpenAI | anthropic.Anthropic,
+    temperature: float,
+    reviews: list[dict[str, Any]],
+) -> dict[str, Any] | None:
     review_text = ""
     for i, r in enumerate(reviews):
         review_text += f"""

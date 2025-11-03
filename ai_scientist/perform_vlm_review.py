@@ -1,18 +1,17 @@
-import os
-import hashlib
-import pymupdf
-import re
 import base64
-from ai_scientist.vlm import (
-    get_response_from_vlm,
-    get_batch_responses_from_vlm,
-    extract_json_between_markers,
-)
+import hashlib
+import os
+import re
+from typing import Any, Dict, List, Optional, cast
+
+import openai
+import pymupdf  # type: ignore[import-untyped]
 
 from ai_scientist.perform_llm_review import load_paper
+from ai_scientist.vlm import extract_json_between_markers, get_response_from_vlm
 
 
-def encode_image_to_base64(image_data):
+def encode_image_to_base64(image_data: str | list[bytes] | bytes) -> str:
     """Encode image data to base64 string."""
     if isinstance(image_data, str):
         with open(image_data, "rb") as image_file:
@@ -152,12 +151,12 @@ Make sure the JSON is valid and properly formatted, as it will be parsed automat
 
 
 def extract_figure_screenshots(
-    pdf_path,
-    img_folder_path,
-    num_pages=None,
-    min_text_length=50,
-    min_vertical_gap=30,
-):
+    pdf_path: str,
+    img_folder_path: str,
+    num_pages: Optional[int] = None,
+    min_text_length: int = 50,
+    min_vertical_gap: int = 30,
+) -> List[Dict[str, Any]]:
     """
     Extract screenshots for figure captions ("Figure X." or "Figure X:")
     and also gather text blocks (anywhere in the PDF) mentioning that
@@ -166,12 +165,12 @@ def extract_figure_screenshots(
     """
     os.makedirs(img_folder_path, exist_ok=True)
     doc = pymupdf.open(pdf_path)
-    page_range = (
-        range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
-    )
+    page_range = range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
 
     # ---------- (A) EXTRACT ALL TEXT BLOCKS FROM THE DOCUMENT ----------
-    text_blocks = []  # will hold dicts: { 'page': int, 'bbox': Rect, 'text': str }
+    text_blocks: List[Dict[str, Any]] = (
+        []
+    )  # will hold dicts: { 'page': int, 'bbox': Rect, 'text': str }
     for page_num in page_range:
         page = doc[page_num]
         try:
@@ -201,11 +200,11 @@ def extract_figure_screenshots(
     # ---------- (C) DETECT SUB-FIGURE CAPTIONS (e.g. "(a)")  ----------
     subfigure_pattern = re.compile(r"\(\s*[a-zA-Z]\s*\)")
 
-    def is_subfigure_caption(txt):
+    def is_subfigure_caption(txt: str) -> bool:
         return bool(subfigure_pattern.search(txt))
 
     # ---------- (D) MAIN ROUTINE: LOOP OVER PAGES AND CAPTIONS ----------
-    result_pairs = []
+    result_pairs: List[Dict[str, Any]] = []
 
     for page_num in page_range:
         page = doc[page_num]
@@ -235,9 +234,7 @@ def extract_figure_screenshots(
                     # horizontal overlap
                     overlap_x = min(fig_x1, ab["bbox"].x1) - max(fig_x0, ab["bbox"].x0)
                     width_min = min((fig_x1 - fig_x0), (ab["bbox"].x1 - ab["bbox"].x0))
-                    horiz_overlap_ratio = (
-                        overlap_x / float(width_min) if width_min > 0 else 0.0
-                    )
+                    horiz_overlap_ratio = overlap_x / float(width_min) if width_min > 0 else 0.0
 
                     if (
                         len(ab["text"]) >= min_text_length
@@ -268,9 +265,7 @@ def extract_figure_screenshots(
                 fig_hash = hashlib.md5(
                     f"figure_{fig_label_escaped}_{page_num}_{clip_rect}".encode()
                 ).hexdigest()[:10]
-                fig_filename = (
-                    f"figure_{fig_label_escaped}_Page_{page_num+1}_{fig_hash}.png"
-                )
+                fig_filename = f"figure_{fig_label_escaped}_Page_{page_num + 1}_{fig_hash}.png"
                 fig_filepath = os.path.join(img_folder_path, fig_filename)
                 pix.save(fig_filepath)
 
@@ -280,9 +275,9 @@ def extract_figure_screenshots(
                 #     We also ensure we do NOT match if there's a digit/letter
                 #     immediately after fig_label (so "Figure 11" won't match "Figure 1").
                 fig_label_escaped = re.escape(fig_label)
-                # negative lookahead (?![0-9A-Za-z]) ensures no letter/digit follows
+                # negative lookahead (?![0 - 9A-Za-z]) ensures no letter/digit follows
                 main_text_figure_pattern = re.compile(
-                    rf"(?:Fig(?:\.|-\s*ure)?|Figure)\s*{fig_label_escaped}(?![0-9A-Za-z])",
+                    rf"(?:Fig(?:\.|-\s*ure)?|Figure)\s*{fig_label_escaped}(?![0 - 9A-Za-z])",
                     re.IGNORECASE,
                 )
 
@@ -308,7 +303,7 @@ def extract_figure_screenshots(
     return result_pairs
 
 
-def extract_abstract(text):
+def extract_abstract(text: str) -> str:
     # Split text into lines
     lines = text.split("\n")
 
@@ -347,29 +342,43 @@ def extract_abstract(text):
     return abstract_text
 
 
-def generate_vlm_img_cap_ref_review(img, abstract, model, client):
+def generate_vlm_img_cap_ref_review(
+    img: Dict[str, Any], abstract: str, model: str, client: openai.OpenAI
+) -> Dict[str, Any] | None:
     prompt = img_cap_ref_review_prompt.format(
         abstract=abstract,
         caption=img["caption"],
         main_text_figrefs=img["main_text_figrefs"],
     )
     content, _ = get_response_from_vlm(
-        prompt, img["images"], client, model, reviewer_system_prompt_base
+        msg=prompt,
+        image_paths=img["images"],
+        client=client,
+        model=model,
+        system_message=reviewer_system_prompt_base,
     )
     img_cap_ref_review_json = extract_json_between_markers(content)
     return img_cap_ref_review_json
 
 
-def generate_vlm_img_review(img, model, client):
+def generate_vlm_img_review(
+    img: Dict[str, Any], model: str, client: openai.OpenAI
+) -> Dict[str, Any] | None:
     prompt = img_review_prompt
     content, _ = get_response_from_vlm(
-        prompt, img["images"], client, model, reviewer_system_prompt_base
+        msg=prompt,
+        image_paths=img["images"],
+        client=client,
+        model=model,
+        system_message=reviewer_system_prompt_base,
     )
     img_review_json = extract_json_between_markers(content)
     return img_review_json
 
 
-def perform_imgs_cap_ref_review(client, client_model, pdf_path):
+def perform_imgs_cap_ref_review(
+    client: openai.OpenAI, client_model: str, pdf_path: str
+) -> Dict[str, Any]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -378,7 +387,7 @@ def perform_imgs_cap_ref_review(client, client_model, pdf_path):
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
-    img_reviews = {}
+    img_reviews: Dict[str, Any] = {}
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
         review = generate_vlm_img_cap_ref_review(img, abstract, client_model, client)
@@ -386,8 +395,10 @@ def perform_imgs_cap_ref_review(client, client_model, pdf_path):
     return img_reviews
 
 
-def detect_duplicate_figures(client, client_model, pdf_path):
-    paper_txt = load_paper(pdf_path)
+def detect_duplicate_figures(
+    client: openai.OpenAI, client_model: str, pdf_path: str
+) -> str | Dict[str, str]:
+    load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
         f"{os.path.splitext(os.path.basename(pdf_path))[0]}_imgs",
@@ -396,7 +407,7 @@ def detect_duplicate_figures(client, client_model, pdf_path):
         os.makedirs(img_folder_path)
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
 
-    messages = [
+    messages: List[Dict[str, Any]] = [
         {
             "role": "system",
             "content": (
@@ -420,7 +431,8 @@ def detect_duplicate_figures(client, client_model, pdf_path):
 
     # Add images in the correct format
     for img_info in img_pairs:
-        messages[1]["content"].append(
+        content_list = cast(List[Dict[str, Any]], messages[1]["content"])  # second message is user
+        content_list.append(
             {
                 "type": "image_url",
                 "image_url": {
@@ -432,11 +444,11 @@ def detect_duplicate_figures(client, client_model, pdf_path):
     try:
         response = client.chat.completions.create(
             model=client_model,
-            messages=messages,
+            messages=messages,  # type: ignore[arg-type]
             max_tokens=1000,
         )
 
-        analysis = response.choices[0].message.content
+        analysis = response.choices[0].message.content or ""
 
         return analysis
 
@@ -446,8 +458,12 @@ def detect_duplicate_figures(client, client_model, pdf_path):
 
 
 def generate_vlm_img_selection_review(
-    img, abstract, model, client, reflection_page_info
-):
+    img: Dict[str, Any],
+    abstract: str,
+    model: str,
+    client: openai.OpenAI,
+    reflection_page_info: str,
+) -> Dict[str, Any] | None:
     prompt = img_cap_selection_prompt.format(
         abstract=abstract,
         caption=img["caption"],
@@ -455,15 +471,19 @@ def generate_vlm_img_selection_review(
         reflection_page_info=reflection_page_info,
     )
     content, _ = get_response_from_vlm(
-        prompt, img["images"], client, model, reviewer_system_prompt_base
+        msg=prompt,
+        image_paths=img["images"],
+        client=client,
+        model=model,
+        system_message=reviewer_system_prompt_base,
     )
     img_cap_ref_review_json = extract_json_between_markers(content)
     return img_cap_ref_review_json
 
 
 def perform_imgs_cap_ref_review_selection(
-    client, client_model, pdf_path, reflection_page_info
-):
+    client: openai.OpenAI, client_model: str, pdf_path: str, reflection_page_info: str
+) -> Dict[str, Any]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -472,7 +492,7 @@ def perform_imgs_cap_ref_review_selection(
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
-    img_reviews = {}
+    img_reviews: Dict[str, Any] = {}
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
         review = generate_vlm_img_selection_review(

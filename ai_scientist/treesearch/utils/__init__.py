@@ -6,7 +6,7 @@ from pathlib import Path
 logger = logging.getLogger("ai-scientist")
 
 
-def copytree(src: Path, dst: Path, use_symlinks=True):
+def copytree(src: Path, dst: Path, use_symlinks: bool = True) -> None:
     """
     Copy contents of `src` to `dst`. Unlike shutil.copytree, the dst dir can exist and will be merged.
     If src is a file, only that file will be copied. Optionally uses symlinks instead of copying.
@@ -37,7 +37,7 @@ def copytree(src: Path, dst: Path, use_symlinks=True):
             shutil.copyfile(f, dest_f)
 
 
-def clean_up_dataset(path: Path):
+def clean_up_dataset(path: Path) -> None:
     for item in path.rglob("__MACOSX"):
         if item.is_dir():
             shutil.rmtree(item)
@@ -46,7 +46,7 @@ def clean_up_dataset(path: Path):
             item.unlink()
 
 
-def extract_archives(path: Path):
+def extract_archives(path: Path) -> None:
     """
     unzips all .zip files within `path` and cleans up task dir
 
@@ -57,9 +57,7 @@ def extract_archives(path: Path):
 
         # special case: the intended output path already exists (maybe data has already been extracted by user)
         if f_out_dir.exists():
-            logger.debug(
-                f"Skipping {zip_f} as an item with the same name already exists."
-            )
+            logger.debug(f"Skipping {zip_f} as an item with the same name already exists.")
             # if it's a file, it's probably exactly the same as in the zip -> remove the zip
             # [TODO] maybe add an extra check to see if zip file content matches the colliding file
             if f_out_dir.is_file() and f_out_dir.suffix != "":
@@ -95,6 +93,6 @@ def extract_archives(path: Path):
         zip_f.unlink()
 
 
-def preproc_data(path: Path):
+def preproc_data(path: Path) -> None:
     extract_archives(path)
     clean_up_dataset(path)

@@ -6,14 +6,14 @@ import shutil
 import subprocess
 import sys
 import traceback
+
 from rich import print
 
 from ai_scientist.llm import create_client, get_response_from_llm
-from ai_scientist.utils.token_tracker import token_tracker
 from ai_scientist.perform_icbinb_writeup import (
-    load_idea_text,
-    load_exp_summaries,
     filter_experiment_summaries,
+    load_exp_summaries,
+    load_idea_text,
 )
 
 MAX_FIGURES = 12
@@ -49,7 +49,7 @@ Your output should be the entire Python aggregator script in triple backticks.
 """
 
 
-def build_aggregator_prompt(combined_summaries_str, idea_text):
+def build_aggregator_prompt(combined_summaries_str: str, idea_text: str) -> str:
     return f"""
 We have three JSON summaries of scientific experiments: baseline, research, ablation.
 They may contain lists of figure descriptions, code to generate the figures, and paths to the .npy files containing the numerical results.
@@ -93,21 +93,19 @@ def extract_code_snippet(text: str) -> str:
     """
     pattern = r"```(?:python)?(.*?)```"
     matches = re.findall(pattern, text, flags=re.DOTALL)
-    return matches[0].strip() if matches else text.strip()
+    return str(matches[0]).strip() if matches else text.strip()
 
 
 def run_aggregator_script(
-    aggregator_code, aggregator_script_path, base_folder, script_name
-):
+    aggregator_code: str, aggregator_script_path: str, base_folder: str, script_name: str
+) -> str:
     if not aggregator_code.strip():
         print("No aggregator code was provided. Skipping aggregator script run.")
         return ""
     with open(aggregator_script_path, "w") as f:
         f.write(aggregator_code)
 
-    print(
-        f"Aggregator script written to '{aggregator_script_path}'. Attempting to run it..."
-    )
+    print(f"Aggregator script written to '{aggregator_script_path}'. Attempting to run it...")
 
     aggregator_out = ""
     try:
@@ -133,9 +131,7 @@ def run_aggregator_script(
     return aggregator_out
 
 
-def aggregate_plots(
-    base_folder: str, model: str = "o1-2024-12-17", n_reflections: int = 5
-) -> None:
+def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflections: int = 5) -> None:
     filename = "auto_plot_aggregator.py"
     aggregator_script_path = os.path.join(base_folder, filename)
     figures_dir = os.path.join(base_folder, "figures")
@@ -145,7 +141,7 @@ def aggregate_plots(
         os.remove(aggregator_script_path)
     if os.path.exists(figures_dir):
         shutil.rmtree(figures_dir)
-        print(f"Cleaned up previous figures directory")
+        print("Cleaned up previous figures directory")
 
     idea_text = load_idea_text(base_folder)
     exp_summaries = load_exp_summaries(base_folder)
@@ -160,7 +156,8 @@ def aggregate_plots(
 
     # Call LLM
     client, model_name = create_client(model)
-    response, msg_history = None, []
+    response: str | None = None
+    msg_history: list[dict[str, str]] = []
     try:
         response, msg_history = get_response_from_llm(
             prompt=aggregator_prompt,
@@ -177,9 +174,7 @@ def aggregate_plots(
 
     aggregator_code = extract_code_snippet(response)
     if not aggregator_code.strip():
-        print(
-            "No Python code block was found in LLM response. Full response:\n", response
-        )
+        print("No Python code block was found in LLM response. Full response:\n", response)
         return
 
     # First run of aggregator script
@@ -193,11 +188,7 @@ def aggregate_plots(
         figure_count = 0
         if os.path.exists(figures_dir):
             figure_count = len(
-                [
-                    f
-                    for f in os.listdir(figures_dir)
-                    if os.path.isfile(os.path.join(figures_dir, f))
-                ]
+                [f for f in os.listdir(figures_dir) if os.path.isfile(os.path.join(figures_dir, f))]
             )
         print(f"[{i + 1} / {n_reflections}]: Number of figures: {figure_count}")
         # Reflection prompt with reminder for common checks and early exit
@@ -240,21 +231,18 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
         aggregator_new_code = extract_code_snippet(reflection_response)
 
         # If new code is provided and differs, run again
-        if (
-            aggregator_new_code.strip()
-            and aggregator_new_code.strip() != aggregator_code.strip()
-        ):
+        if aggregator_new_code.strip() and aggregator_new_code.strip() != aggregator_code.strip():
             aggregator_code = aggregator_new_code
             aggregator_out = run_aggregator_script(
                 aggregator_code, aggregator_script_path, base_folder, filename
             )
         else:
             print(
-                f"No new aggregator script was provided or it was identical. Reflection step {i+1} complete."
+                f"No new aggregator script was provided or it was identical. Reflection step {i + 1} complete."
             )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate and execute a final plot aggregation script with LLM assistance."
     )
@@ -275,9 +263,7 @@ def main():
         help="Number of reflection steps to attempt (default: 5).",
     )
     args = parser.parse_args()
-    aggregate_plots(
-        base_folder=args.folder, model=args.model, n_reflections=args.reflections
-    )
+    aggregate_plots(base_folder=args.folder, model=args.model, n_reflections=args.reflections)
 
 
 if __name__ == "__main__":

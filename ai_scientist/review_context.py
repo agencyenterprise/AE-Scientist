@@ -39,19 +39,24 @@ def extract_section(text: str, header: str, limit: int = 800) -> str:
     return shorten_text(section_text, limit)
 
 
-def _load_idea_payload(idea_dir: str, idea_json: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _load_idea_payload(
+    idea_dir: str, idea_json: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
     if idea_json:
         return idea_json
     idea_path = Path(idea_dir) / "idea.json"
     if idea_path.exists():
         try:
-            return json.loads(idea_path.read_text())
+            result = json.loads(idea_path.read_text())
+            return result if isinstance(result, dict) else None
         except Exception as exc:
             print(f"Warning: could not read idea.json for review context ({exc})")
     return None
 
 
-def _semantic_scholar_scan(title: Optional[str], abstract: Optional[str], max_results: int = 3):
+def _semantic_scholar_scan(
+    title: Optional[str], abstract: Optional[str], max_results: int = 3
+) -> str:
     if os.getenv("AI_SCIENTIST_DISABLE_SEMANTIC_SCHOLAR", "").lower() in {"1", "true", "yes"}:
         return "Semantic Scholar scan disabled via environment flag."
 
@@ -72,7 +77,7 @@ def _semantic_scholar_scan(title: Optional[str], abstract: Optional[str], max_re
             headers=headers,
             params={
                 "query": query,
-                "limit": max_results,
+                "limit": str(max_results),
                 "fields": "title,authors,year,venue,citationCount,abstract",
             },
             timeout=10,
@@ -97,7 +102,7 @@ def _semantic_scholar_scan(title: Optional[str], abstract: Optional[str], max_re
         formatted.append(
             f"{title_text} ({year_text}, {venue}) — citations: {citations}; lead authors: {authors or 'n/a'}; abstract: {abstract_snip}"
         )
-    return formatted[:max_results]
+    return "\n".join(formatted[:max_results])
 
 
 def build_auto_review_context(
@@ -120,11 +125,22 @@ def build_auto_review_context(
             context["additional_notes"] = f"Idea limitations: {limitations}"
 
     word_count = len(paper_content.split())
-    has_results = bool(re.search(r"^#+\s*(results|evaluation|experiments)", paper_content, re.IGNORECASE | re.MULTILINE))
-    has_limitations_section = bool(
-        re.search(r"^#+\s*(limitations|ethical|broader impacts)", paper_content, re.IGNORECASE | re.MULTILINE)
+    has_results = bool(
+        re.search(
+            r"^#+\s*(results|evaluation|experiments)", paper_content, re.IGNORECASE | re.MULTILINE
+        )
     )
-    has_citations = bool(re.search(r"\[[0-9]{1,3}\]", paper_content) or re.search(r"\(.*?et al\.,?\s*\d{4}\)", paper_content))
+    has_limitations_section = bool(
+        re.search(
+            r"^#+\s*(limitations|ethical|broader impacts)",
+            paper_content,
+            re.IGNORECASE | re.MULTILINE,
+        )
+    )
+    has_citations = bool(
+        re.search(r"\[[0-9]{1,3}\]", paper_content)
+        or re.search(r"\(.*?et al\.,?\s*\d{4}\)", paper_content)
+    )
     mentions_code = "github" in paper_content.lower() or "code" in paper_content.lower()
     mentions_figures = bool(re.search(r"\b(fig(ure)?|table)\b", paper_content, re.IGNORECASE))
 
@@ -138,7 +154,14 @@ def build_auto_review_context(
     }
 
     section_highlights: Dict[str, str] = {}
-    for header in ("Abstract", "Introduction", "Results", "Experiments", "Conclusion", "Limitations"):
+    for header in (
+        "Abstract",
+        "Introduction",
+        "Results",
+        "Experiments",
+        "Conclusion",
+        "Limitations",
+    ):
         summary = extract_section(paper_content, header)
         if summary:
             section_highlights[header] = summary

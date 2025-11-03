@@ -1,5 +1,5 @@
 from . import backend_anthropic, backend_openai
-from .utils import FunctionSpec, OutputType, PromptType, compile_prompt_to_md
+from .utils import FunctionSpec, PromptType, compile_prompt_to_md
 
 
 def query(
@@ -9,8 +9,8 @@ def query(
     temperature: float | None = None,
     max_tokens: int | None = None,
     func_spec: FunctionSpec | None = None,
-    **model_kwargs,
-) -> OutputType:
+    **model_kwargs: object,
+) -> str | dict:
     """
     General LLM query for various backends with a single system and user message.
     Supports function calling for some backends.
@@ -40,8 +40,9 @@ def query(
         elif system_message is None and user_message:
             pass
         elif system_message and user_message:
-            system_message["Main Instructions"] = {}
-            system_message["Main Instructions"] |= user_message
+            if isinstance(system_message, dict):
+                system_message["Main Instructions"] = {}
+                system_message["Main Instructions"] |= user_message
             user_message = system_message
         system_message = None
         # model_kwargs["temperature"] = 0.5
@@ -53,9 +54,18 @@ def query(
         model_kwargs["max_tokens"] = max_tokens
 
     query_func = backend_anthropic.query if "claude-" in model else backend_openai.query
+
+    compiled_system = compile_prompt_to_md(system_message) if system_message else None
+    compiled_user = compile_prompt_to_md(user_message) if user_message else None
+
+    if not isinstance(compiled_system, str) and compiled_system is not None:
+        compiled_system = str(compiled_system)
+    if not isinstance(compiled_user, str) and compiled_user is not None:
+        compiled_user = str(compiled_user)
+
     output, req_time, in_tok_count, out_tok_count, info = query_func(
-        system_message=compile_prompt_to_md(system_message) if system_message else None,
-        user_message=compile_prompt_to_md(user_message) if user_message else None,
+        system_message=compiled_system,
+        user_message=compiled_user,
         func_spec=func_spec,
         **model_kwargs,
     )

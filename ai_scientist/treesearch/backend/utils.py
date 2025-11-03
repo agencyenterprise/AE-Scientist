@@ -1,5 +1,8 @@
+import logging
 from dataclasses import dataclass
+from typing import Any, Callable, TypeVar
 
+import backoff
 import jsonschema
 from dataclasses_json import DataClassJsonMixin
 
@@ -7,12 +10,9 @@ PromptType = str | dict | list
 FunctionCallType = dict
 OutputType = str | FunctionCallType
 
-
-import backoff
-import logging
-from typing import Callable
-
 logger = logging.getLogger("ai-scientist")
+
+T = TypeVar("T")
 
 
 @backoff.on_predicate(
@@ -21,8 +21,11 @@ logger = logging.getLogger("ai-scientist")
     factor=1.5,
 )
 def backoff_create(
-    create_fn: Callable, retry_exceptions: list[Exception], *args, **kwargs
-):
+    create_fn: Callable[..., T],
+    retry_exceptions: tuple[type[Exception], ...],
+    *args: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> T | bool:
     try:
         return create_fn(*args, **kwargs)
     except retry_exceptions as e:
@@ -41,15 +44,14 @@ def opt_messages_to_list(
     return messages
 
 
-def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
+def compile_prompt_to_md(
+    prompt: PromptType, _header_depth: int = 1
+) -> str | list[Any] | dict[str, Any]:
     """Convert a prompt into markdown format"""
     try:
         logger.debug(f"compile_prompt_to_md input: type={type(prompt)}")
         if isinstance(prompt, (list, dict)):
             logger.debug(f"prompt content: {prompt}")
-
-        if prompt is None:
-            return ""
 
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
@@ -85,7 +87,11 @@ def compile_prompt_to_md(prompt: PromptType, _header_depth: int = 1) -> str:
                 for k, v in prompt.items():
                     logger.debug(f"Processing dict key: {k}")
                     out.append(f"{header_prefix} {k}\n")
-                    out.append(compile_prompt_to_md(v, _header_depth=_header_depth + 1))
+                    compiled_v = compile_prompt_to_md(v, _header_depth=_header_depth + 1)
+                    if isinstance(compiled_v, str):
+                        out.append(compiled_v)
+                    else:
+                        out.append(str(compiled_v))
                 return "\n".join(out)
             except Exception as e:
                 logger.error(f"Error processing dict: {e}")
@@ -108,12 +114,12 @@ class FunctionSpec(DataClassJsonMixin):
     json_schema: dict  # JSON schema
     description: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # validate the schema
         jsonschema.Draft7Validator.check_schema(self.json_schema)
 
     @property
-    def as_openai_tool_dict(self):
+    def as_openai_tool_dict(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
@@ -124,7 +130,7 @@ class FunctionSpec(DataClassJsonMixin):
         }
 
     @property
-    def openai_tool_choice_dict(self):
+    def openai_tool_choice_dict(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {"name": self.name},

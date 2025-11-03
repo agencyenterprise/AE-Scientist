@@ -3,21 +3,23 @@
 import json
 import textwrap
 from pathlib import Path
+from typing import Iterator
 
 import numpy as np
-from igraph import Graph
-from ..journal import Journal
-
+from igraph import Graph  # type: ignore[import-untyped]
 from rich import print
 
+from ..journal import Journal
+from .config import Config
 
-def get_edges(journal: Journal):
-    for node in journal:
+
+def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
+    for node in journal.nodes:
         for c in node.children:
-            yield (node.step, c.step)
+            yield (node.step if node.step is not None else -1, c.step if c.step is not None else -1)
 
 
-def generate_layout(n_nodes, edges, layout_type="rt"):
+def generate_layout(n_nodes: int, edges: list[tuple[int, int]], layout_type: str) -> np.ndarray:
     """Generate visual layout of graph"""
     layout = Graph(
         n_nodes,
@@ -31,7 +33,7 @@ def generate_layout(n_nodes, edges, layout_type="rt"):
     return np.array(layout_coords)
 
 
-def normalize_layout(layout: np.ndarray):
+def normalize_layout(layout: np.ndarray) -> np.ndarray:
     """Normalize layout to [0, 1]"""
     layout = (layout - layout.min(axis=0)) / (layout.max(axis=0) - layout.min(axis=0))
     layout[:, 1] = 1 - layout[:, 1]
@@ -40,7 +42,7 @@ def normalize_layout(layout: np.ndarray):
     return layout
 
 
-def get_completed_stages(log_dir):
+def get_completed_stages(log_dir: Path) -> list[str]:
     """
     Determine completed stages by checking for the existence of stage directories
     that contain evidence of completion (tree_data.json, tree_plot.html, or journal.json).
@@ -55,9 +57,7 @@ def get_completed_stages(log_dir):
         prefix = f"stage_{stage_num}"
 
         # Find all directories that match this stage number
-        matching_dirs = [
-            d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith(prefix)
-        ]
+        matching_dirs = [d for d in log_dir.iterdir() if d.is_dir() and d.name.startswith(prefix)]
 
         # Check if any of these directories have completion evidence
         for stage_dir in matching_dirs:
@@ -73,11 +73,11 @@ def get_completed_stages(log_dir):
     return completed_stages
 
 
-def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
+def cfg_to_tree_struct(cfg: Config, jou: Journal, out_path: Path) -> dict:
     edges = list(get_edges(jou))
     print(f"[red]Edges: {edges}[/red]")
     try:
-        gen_layout = generate_layout(len(jou), edges)
+        gen_layout = generate_layout(n_nodes=len(jou.nodes), edges=edges, layout_type="rt")
     except Exception as e:
         print(f"Error in generate_layout: {e}")
         raise
@@ -88,10 +88,10 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
         raise
 
     best_node = jou.get_best_node()
-    metrics = []
+    metrics: list[dict[str, object] | None] = []
     is_best_node = []
 
-    for n in jou:
+    for n in jou.nodes:
         # print(f"Node {n.id} exc_stack: {type(n.exc_stack)} = {n.exc_stack}")
         if n.metric:
             # Pass the entire metric structure for the new format
@@ -104,7 +104,7 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
                         "metric_names": [
                             {
                                 "metric_name": n.metric.name or "value",
-                                "lower_is_better": not n.metric.maximize,
+                                "lower_is_better": not bool(n.metric.maximize),
                                 "description": n.metric.description or "",
                                 "data": [
                                     {
@@ -123,7 +123,7 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
         # Track whether this is the best node
         is_best_node.append(n is best_node)
 
-    tmp = {}
+    tmp: dict[str, object] = {}
 
     # Add each item individually with error handling
     try:
@@ -140,15 +140,14 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
 
     try:
         tmp["plan"] = [
-            textwrap.fill(str(n.plan) if n.plan is not None else "", width=80)
-            for n in jou.nodes
+            textwrap.fill(str(n.plan) if n.plan is not None else "", width=80) for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting plan: {e}")
         raise
 
     try:
-        tmp["code"] = [n.code for n in jou]
+        tmp["code"] = [n.code for n in jou.nodes]
     except Exception as e:
         print(f"Error setting code: {e}")
         raise
@@ -156,7 +155,7 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
     try:
         tmp["term_out"] = [
             textwrap.fill(str(n._term_out) if n._term_out is not None else "", width=80)
-            for n in jou
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting term_out: {e}")
@@ -166,26 +165,26 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
     try:
         tmp["analysis"] = [
             textwrap.fill(str(n.analysis) if n.analysis is not None else "", width=80)
-            for n in jou
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting analysis: {e}")
         raise
 
     try:
-        tmp["exc_type"] = [n.exc_type for n in jou]
+        tmp["exc_type"] = [n.exc_type for n in jou.nodes]
     except Exception as e:
         print(f"Error setting exc_type: {e}")
         raise
 
     try:
-        tmp["exc_info"] = [n.exc_info for n in jou]
+        tmp["exc_info"] = [n.exc_info for n in jou.nodes]
     except Exception as e:
         print(f"Error setting exc_info: {e}")
         raise
 
     try:
-        tmp["exc_stack"] = [n.exc_stack for n in jou]
+        tmp["exc_stack"] = [n.exc_stack for n in jou.nodes]
     except Exception as e:
         print(f"Error setting exc_stack: {e}")
         raise
@@ -209,19 +208,19 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
         raise
 
     try:
-        tmp["plots"] = [n.plots for n in jou]
+        tmp["plots"] = [n.plots for n in jou.nodes]
     except Exception as e:
         print(f"Error setting plots: {e}")
         raise
 
     try:
-        tmp["plot_paths"] = [n.plot_paths for n in jou]
+        tmp["plot_paths"] = [n.plot_paths for n in jou.nodes]
     except Exception as e:
         print(f"Error setting plot_paths: {e}")
         raise
 
     try:
-        tmp["plot_analyses"] = [n.plot_analyses for n in jou]
+        tmp["plot_analyses"] = [n.plot_analyses for n in jou.nodes]
     except Exception as e:
         print(f"Error setting plot_analyses: {e}")
         raise
@@ -229,21 +228,17 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
     try:
         tmp["vlm_feedback_summary"] = [
             textwrap.fill(
-                (
-                    str(n.vlm_feedback_summary)
-                    if n.vlm_feedback_summary is not None
-                    else ""
-                ),
+                (str(n.vlm_feedback_summary) if n.vlm_feedback_summary is not None else ""),
                 width=80,
             )
-            for n in jou
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting vlm_feedback_summary: {e}")
         raise
 
     try:
-        tmp["exec_time"] = [n.exec_time for n in jou]
+        tmp["exec_time"] = [n.exec_time for n in jou.nodes]
     except Exception as e:
         print(f"Error setting exec_time: {e}")
         raise
@@ -254,52 +249,50 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
                 str(n.exec_time_feedback) if n.exec_time_feedback is not None else "",
                 width=80,
             )
-            for n in jou
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting exec_time_feedback: {e}")
         raise
 
     try:
-        tmp["datasets_successfully_tested"] = [
-            n.datasets_successfully_tested for n in jou
-        ]
+        tmp["datasets_successfully_tested"] = [n.datasets_successfully_tested for n in jou.nodes]
     except Exception as e:
         print(f"Error setting datasets_successfully_tested: {e}")
         raise
 
     try:
-        tmp["plot_code"] = [n.plot_code for n in jou]
+        tmp["plot_code"] = [n.plot_code for n in jou.nodes]
     except Exception as e:
         print(f"Error setting plot_code: {e}")
         raise
 
     try:
-        tmp["plot_plan"] = [n.plot_plan for n in jou]
+        tmp["plot_plan"] = [n.plot_plan for n in jou.nodes]
     except Exception as e:
         print(f"Error setting plot_plan: {e}")
         raise
 
     try:
-        tmp["ablation_name"] = [n.ablation_name for n in jou]
+        tmp["ablation_name"] = [n.ablation_name for n in jou.nodes]
     except Exception as e:
         print(f"Error setting ablation_name: {e}")
         raise
 
     try:
-        tmp["hyperparam_name"] = [n.hyperparam_name for n in jou]
+        tmp["hyperparam_name"] = [n.hyperparam_name for n in jou.nodes]
     except Exception as e:
         print(f"Error setting hyperparam_name: {e}")
         raise
 
     try:
-        tmp["is_seed_node"] = [n.is_seed_node for n in jou]
+        tmp["is_seed_node"] = [n.is_seed_node for n in jou.nodes]
     except Exception as e:
         print(f"Error setting is_seed_node: {e}")
         raise
 
     try:
-        tmp["is_seed_agg_node"] = [n.is_seed_agg_node for n in jou]
+        tmp["is_seed_agg_node"] = [n.is_seed_agg_node for n in jou.nodes]
     except Exception as e:
         print(f"Error setting is_seed_agg_node: {e}")
         raise
@@ -310,56 +303,53 @@ def cfg_to_tree_struct(cfg, jou: Journal, out_path: Path = None):
                 str(n.parse_metrics_plan) if n.parse_metrics_plan is not None else "",
                 width=80,
             )
-            for n in jou
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting parse_metrics_plan: {e}")
         raise
 
     try:
-        tmp["parse_metrics_code"] = [n.parse_metrics_code for n in jou]
+        tmp["parse_metrics_code"] = [n.parse_metrics_code for n in jou.nodes]
     except Exception as e:
         print(f"Error setting parse_metrics_code: {e}")
         raise
 
     try:
         tmp["parse_term_out"] = [
-            textwrap.fill(
-                str(n.parse_term_out) if n.parse_term_out is not None else "", width=80
-            )
-            for n in jou
+            textwrap.fill(str(n.parse_term_out) if n.parse_term_out is not None else "", width=80)
+            for n in jou.nodes
         ]
     except Exception as e:
         print(f"Error setting parse_term_out: {e}")
         raise
 
     try:
-        tmp["parse_exc_type"] = [n.parse_exc_type for n in jou]
+        tmp["parse_exc_type"] = [n.parse_exc_type for n in jou.nodes]
     except Exception as e:
         print(f"Error setting parse_exc_type: {e}")
         raise
 
     try:
-        tmp["parse_exc_info"] = [n.parse_exc_info for n in jou]
+        tmp["parse_exc_info"] = [n.parse_exc_info for n in jou.nodes]
     except Exception as e:
         print(f"Error setting parse_exc_info: {e}")
         raise
 
     try:
-        tmp["parse_exc_stack"] = [n.parse_exc_stack for n in jou]
+        tmp["parse_exc_stack"] = [n.parse_exc_stack for n in jou.nodes]
     except Exception as e:
         print(f"Error setting parse_exc_stack: {e}")
         raise
 
     # Add the list of completed stages by checking directories
-    if out_path:
-        log_dir = out_path.parent.parent
-        tmp["completed_stages"] = get_completed_stages(log_dir)
+    log_dir = out_path.parent.parent
+    tmp["completed_stages"] = get_completed_stages(log_dir)
 
     return tmp
 
 
-def generate_html(tree_graph_str: str):
+def generate_html(tree_graph_str: str) -> str:
     template_dir = Path(__file__).parent / "viz_templates"
 
     with open(template_dir / "template.js") as f:
@@ -373,10 +363,10 @@ def generate_html(tree_graph_str: str):
         return html
 
 
-def generate(cfg, jou: Journal, out_path: Path):
+def generate(cfg: Config, jou: Journal, out_path: Path) -> None:
     print("[red]Checking Journal[/red]")
     try:
-        tree_struct = cfg_to_tree_struct(cfg, jou, out_path)
+        tree_struct = cfg_to_tree_struct(cfg=cfg, jou=jou, out_path=out_path)
     except Exception as e:
         print(f"Error in cfg_to_tree_struct: {e}")
         raise
@@ -396,7 +386,7 @@ def generate(cfg, jou: Journal, out_path: Path):
         print(f"Error in json.dumps: {e}")
         raise
     try:
-        html = generate_html(tree_graph_str)
+        html = generate_html(tree_graph_str=tree_graph_str)
     except Exception as e:
         print(f"Error in generate_html: {e}")
         raise
@@ -411,7 +401,7 @@ def generate(cfg, jou: Journal, out_path: Path):
         # Continue even if unified viz creation fails
 
 
-def create_unified_viz(cfg, current_stage_viz_path):
+def create_unified_viz(cfg: Config, current_stage_viz_path: Path) -> None:
     """
     Create a unified visualization that shows all completed stages in a tabbed interface.
     This will be placed in the main log directory.

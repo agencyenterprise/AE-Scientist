@@ -4,10 +4,11 @@ Contains functions to manually generate a textual preview of some common file ty
 
 import json
 from pathlib import Path
+from typing import Iterator
 
 import humanize
 import pandas as pd
-from genson import SchemaBuilder
+from genson import SchemaBuilder  # type: ignore[import-untyped]
 from pandas.api.types import is_numeric_dtype
 
 # these files are treated as code (e.g. markdown wrapped)
@@ -29,25 +30,25 @@ def get_file_len_size(f: Path) -> tuple[int, str]:
         return s, humanize.naturalsize(s)
 
 
-def file_tree(path: Path, depth=0) -> str:
+def file_tree(path: Path, depth: int = 0) -> str:
     """Generate a tree structure of files in a directory"""
     result = []
     files = [p for p in Path(path).iterdir() if not p.is_dir()]
     dirs = [p for p in Path(path).iterdir() if p.is_dir()]
     max_n = 4 if len(files) > 30 else 8
     for p in sorted(files)[:max_n]:
-        result.append(f"{' '*depth*4}{p.name} ({get_file_len_size(p)[1]})")
+        result.append(f"{' ' * depth * 4}{p.name} ({get_file_len_size(p)[1]})")
     if len(files) > max_n:
-        result.append(f"{' '*depth*4}... and {len(files)-max_n} other files")
+        result.append(f"{' ' * depth * 4}... and {len(files) - max_n} other files")
 
     for p in sorted(dirs):
-        result.append(f"{' '*depth*4}{p.name}/")
+        result.append(f"{' ' * depth * 4}{p.name}/")
         result.append(file_tree(p, depth + 1))
 
     return "\n".join(result)
 
 
-def _walk(path: Path):
+def _walk(path: Path) -> Iterator[Path]:
     """Recursively walk a directory (analogous to os.walk but for pathlib.Path)"""
     for p in sorted(Path(path).iterdir()):
         if p.is_dir():
@@ -56,7 +57,7 @@ def _walk(path: Path):
         yield p
 
 
-def preview_csv(p: Path, file_name: str, simple=True) -> str:
+def preview_csv(p: Path, file_name: str, simple: bool = True) -> str:
     """Generate a textual preview of a csv file
 
     Args:
@@ -79,7 +80,7 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
         cols_str = ", ".join(cols[:sel_cols])
         res = f"The columns are: {cols_str}"
         if len(cols) > sel_cols:
-            res += f"... and {len(cols)-sel_cols} more columns"
+            res += f"... and {len(cols) - sel_cols} more columns"
         out.append(res)
     else:
         out.append("Here is some information about the columns:")
@@ -91,7 +92,7 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
 
             if dtype == "bool":
                 v = df[col][df[col].notnull()].mean()
-                out.append(f"{name} is {v*100:.2f}% True, {100-v*100:.2f}% False")
+                out.append(f"{name} is {v * 100:.2f}% True, {100 - v * 100:.2f}% False")
             elif df[col].nunique() < 10:
                 out.append(
                     f"{name} has {df[col].nunique()} unique values: {df[col].unique().tolist()}"
@@ -108,17 +109,15 @@ def preview_csv(p: Path, file_name: str, simple=True) -> str:
     return "\n".join(out)
 
 
-def preview_json(p: Path, file_name: str):
+def preview_json(p: Path, file_name: str) -> str:
     """Generate a textual preview of a json file using a generated json schema"""
     builder = SchemaBuilder()
     with open(p) as f:
         builder.add_object(json.load(f))
-    return f"-> {file_name} has auto-generated json schema:\n" + builder.to_json(
-        indent=2
-    )
+    return f"-> {file_name} has auto-generated json schema:\n" + str(builder.to_json(indent=2))
 
 
-def generate(base_path, include_file_details=True, simple=False):
+def generate(base_path: Path, include_file_details: bool = True, simple: bool = False) -> str:
     """
     Generate a textual preview of a directory, including an overview of the directory
     structure and previews of individual files
@@ -146,8 +145,6 @@ def generate(base_path, include_file_details=True, simple=False):
 
     # if the result is very long we generate a simpler version
     if len(result) > 6_000 and not simple:
-        return generate(
-            base_path, include_file_details=include_file_details, simple=True
-        )
+        return generate(base_path, include_file_details=include_file_details, simple=True)
 
     return result

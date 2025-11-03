@@ -1,63 +1,98 @@
 import copy
 import json
-from pathlib import Path
-from typing import Type, TypeVar
 import re
+from pathlib import Path
+from typing import TypeVar, cast, overload
 
 import dataclasses_json
+
 from ..journal import Journal, Node
 
 
-def dumps_json(obj: dataclasses_json.DataClassJsonMixin):
+def dumps_json(obj: dataclasses_json.DataClassJsonMixin | Journal) -> str:
     """Serialize dataclasses (such as Journals) to JSON."""
     if isinstance(obj, Journal):
-        obj = copy.deepcopy(obj)
-        node2parent = {}
-        for n in obj.nodes:
+        journal_copy = copy.deepcopy(obj)
+        node2parent: dict[str, str] = {}
+        for n in journal_copy.nodes:
             if n.parent is not None:
                 # Handle both Node objects and string IDs
-                parent_id = n.parent.id if isinstance(n.parent, Node) else n.parent
+                parent_id = n.parent.id if isinstance(n.parent, Node) else cast(str, n.parent)
                 node2parent[n.id] = parent_id
-        for n in obj.nodes:
+        for n in journal_copy.nodes:
             n.parent = None
             n.children = set()
 
-    obj_dict = obj.to_dict()
+        obj_dict_generic = cast(dict[str, object], journal_copy.to_dict())
+        obj_dict_generic["node2parent"] = node2parent
+        obj_dict_generic["__version"] = "2"
+        return json.dumps(obj_dict_generic, separators=(",", ":"))
 
-    if isinstance(obj, Journal):
-        obj_dict["node2parent"] = node2parent
-        obj_dict["__version"] = "2"
-
-    return json.dumps(obj_dict, separators=(",", ":"))
+    obj_dict_generic = cast(dict[str, object], obj.to_dict())
+    return json.dumps(obj_dict_generic, separators=(",", ":"))
 
 
-def dump_json(obj: dataclasses_json.DataClassJsonMixin, path: Path):
+def dump_json(obj: dataclasses_json.DataClassJsonMixin | Journal, path: Path) -> None:
     with open(path, "w") as f:
-        f.write(dumps_json(obj))
+        f.write(dumps_json(obj=obj))
 
 
 G = TypeVar("G", bound=dataclasses_json.DataClassJsonMixin)
 
 
-def loads_json(s: str, cls: Type[G]) -> G:
-    """Deserialize JSON to AIDE dataclasses."""
-    obj_dict = json.loads(s)
-    obj = cls.from_dict(obj_dict)
+@overload
+def loads_json(s: str, cls: type[Journal]) -> Journal:
+    pass
 
-    if isinstance(obj, Journal):
-        id2nodes = {n.id: n for n in obj.nodes}
-        for child_id, parent_id in obj_dict["node2parent"].items():
-            id2nodes[child_id].parent = id2nodes[parent_id]
-            id2nodes[child_id].__post_init__()
+
+@overload
+def loads_json(s: str, cls: type[G]) -> G:
+    pass
+
+
+def loads_json(s: str, cls: type[object]) -> object:
+    """Deserialize JSON to dataclasses or Journal."""
+    obj_dict = json.loads(s)
+
+    if cls is Journal:
+        # Manually reconstruct Journal from dict
+        id_to_node: dict[str, Node] = {}
+        for node_data in obj_dict.get("nodes", []):
+            node = Node.from_dict(node_data)
+            id_to_node[node.id] = node
+
+        # Restore relationships
+        for child_id, parent_id in obj_dict.get("node2parent", {}).items():
+            child_node = id_to_node[child_id]
+            parent_node = id_to_node[parent_id]
+            child_node.parent = parent_node
+            child_node.__post_init__()
+
+        journal = Journal()
+        journal.nodes.extend(id_to_node.values())
+        return journal
+
+    # Generic dataclass-json path
+    obj = cls.from_dict(obj_dict)  # type: ignore[attr-defined]
     return obj
 
 
-def load_json(path: Path, cls: Type[G]) -> G:
+@overload
+def load_json(path: Path, cls: type[Journal]) -> Journal:
+    pass
+
+
+@overload
+def load_json(path: Path, cls: type[G]) -> G:
+    pass
+
+
+def load_json(path: Path, cls: type[object]) -> object:
     with open(path, "r") as f:
-        return loads_json(f.read(), cls)
+        return loads_json(s=f.read(), cls=cls)  # type: ignore[arg-type]
 
 
-def parse_markdown_to_dict(content: str):
+def parse_markdown_to_dict(content: str) -> dict[str, str]:
     """
     Reads a file that contains lines of the form:
 
