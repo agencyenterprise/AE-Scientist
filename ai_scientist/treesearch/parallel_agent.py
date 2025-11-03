@@ -1162,11 +1162,11 @@ class ParallelAgent:
         task_desc: str,
         cfg: Config,
         journal: Journal,
-        stage_name: str | None = None,
-        best_stage3_node: Node | None = None,
-        best_stage2_node: Node | None = None,
-        best_stage1_node: Node | None = None,
-        event_callback: Callable[[str, EventDataType], None] | None = None,
+        stage_name: str | None,
+        best_stage3_node: Node | None,
+        best_stage2_node: Node | None,
+        best_stage1_node: Node | None,
+        event_callback: Callable[[str, EventDataType], None] | None,
     ):
         super().__init__()
         self.task_desc = task_desc
