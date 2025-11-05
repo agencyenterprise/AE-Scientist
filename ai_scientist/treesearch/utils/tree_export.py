@@ -10,7 +10,6 @@ from igraph import Graph  # type: ignore[import-untyped]
 from rich import print
 
 from ..journal import Journal
-from .config import Config
 
 
 def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
@@ -73,7 +72,7 @@ def get_completed_stages(log_dir: Path) -> list[str]:
     return completed_stages
 
 
-def cfg_to_tree_struct(cfg: Config, jou: Journal, out_path: Path) -> dict:
+def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
     edges = list(get_edges(jou))
     print(f"[red]Edges: {edges}[/red]")
     try:
@@ -190,7 +189,7 @@ def cfg_to_tree_struct(cfg: Config, jou: Journal, out_path: Path) -> dict:
         raise
 
     try:
-        tmp["exp_name"] = cfg.exp_name
+        tmp["exp_name"] = exp_name
     except Exception as e:
         print(f"Error setting exp_name: {e}")
         raise
@@ -363,10 +362,10 @@ def generate_html(tree_graph_str: str) -> str:
         return html
 
 
-def generate(cfg: Config, jou: Journal, out_path: Path) -> None:
+def generate(exp_name: str, jou: Journal, out_path: Path) -> None:
     print("[red]Checking Journal[/red]")
     try:
-        tree_struct = cfg_to_tree_struct(cfg=cfg, jou=jou, out_path=out_path)
+        tree_struct = cfg_to_tree_struct(exp_name=exp_name, jou=jou, out_path=out_path)
     except Exception as e:
         print(f"Error in cfg_to_tree_struct: {e}")
         raise
@@ -395,13 +394,13 @@ def generate(cfg: Config, jou: Journal, out_path: Path) -> None:
 
     # Create a unified tree visualization that shows all stages
     try:
-        create_unified_viz(cfg, out_path)
+        create_unified_viz(current_stage_viz_path=out_path)
     except Exception as e:
         print(f"Error creating unified visualization: {e}")
         # Continue even if unified viz creation fails
 
 
-def create_unified_viz(cfg: Config, current_stage_viz_path: Path) -> None:
+def create_unified_viz(current_stage_viz_path: Path) -> None:
     """
     Create a unified visualization that shows all completed stages in a tabbed interface.
     This will be placed in the main log directory.

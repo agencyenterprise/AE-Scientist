@@ -6,9 +6,14 @@ from typing import cast
 import openai
 from funcy import notnone, once, select_values  # type: ignore[import-untyped]
 from openai.types.chat import ChatCompletion
-from rich import print
 
-from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
+from .utils import (
+    FunctionSpec,
+    OutputType,
+    backoff_create,
+    get_openai_base_url,
+    opt_messages_to_list,
+)
 
 logger = logging.getLogger("ai-scientist")
 
@@ -25,7 +30,10 @@ OPENAI_TIMEOUT_EXCEPTIONS = (
 @once  # type: ignore[misc]
 def _setup_openai_client() -> None:
     global _client
-    _client = openai.OpenAI(max_retries=0)
+    base_url = get_openai_base_url()
+    if base_url:
+        logger.info(f"Using custom OpenAI base_url: {base_url}")
+    _client = openai.OpenAI(max_retries=0, base_url=base_url)
 
 
 def query(
@@ -75,7 +83,7 @@ def query(
             func is not None and getattr(func, "name", None) == func_spec.name
         ), "Function name mismatch"
         try:
-            print(f"[cyan]Raw func call response: {choice}[/cyan]")
+            logger.debug(f"Raw func call response: {choice}")
             output = json.loads(func.arguments)
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding the function arguments: {getattr(func, 'arguments', '')}")

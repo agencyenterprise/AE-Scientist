@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import cast
 
@@ -6,6 +7,8 @@ from anthropic.types import Message as AnthropicMessage
 from funcy import notnone, once, select_values  # type: ignore[import-untyped]
 
 from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
+
+logger = logging.getLogger("ai-scientist")
 
 # _client: anthropic.Anthropic = None  # type: ignore
 _client: anthropic.AnthropicBedrock | None = None
@@ -57,7 +60,7 @@ def query(
         **filtered_kwargs,
     )
     req_time = time.time() - t0
-    print(filtered_kwargs)
+    logger.debug(f"Anthropic API call kwargs: {filtered_kwargs}")
 
     if message_any is False:
         raise RuntimeError("Failed to create message after retries")

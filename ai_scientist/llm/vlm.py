@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import logging
 import re
 from typing import Any, cast
 
@@ -9,7 +10,10 @@ import backoff
 import openai
 from PIL import Image
 
+from .query.utils import get_openai_base_url
 from .token_tracker import track_token_usage
+
+logger = logging.getLogger("ai-scientist")
 
 MAX_NUM_TOKENS = 4096
 
@@ -167,13 +171,13 @@ def get_response_from_vlm(
         raise ValueError(f"Model {model} not supported.")
 
     if print_debug:
-        print()
-        print("*" * 20 + " VLM START " + "*" * 20)
+        logger.debug("")
+        logger.debug("*" * 20 + " VLM START " + "*" * 20)
         for j, message in enumerate(new_msg_history):
-            print(f'{j}, {message["role"]}: {message["content"]}')
-        print(content_str)
-        print("*" * 21 + " VLM END " + "*" * 21)
-        print()
+            logger.debug(f'{j}, {message["role"]}: {message["content"]}')
+        logger.debug(content_str)
+        logger.debug("*" * 21 + " VLM END " + "*" * 21)
+        logger.debug("")
 
     return content_str, new_msg_history
 
@@ -188,8 +192,11 @@ def create_vlm_client(model: str) -> tuple[openai.OpenAI, str]:
         "o3-mini",
         "gpt-5",
     ]:
-        print(f"Using OpenAI API with model {model}.")
-        return openai.OpenAI(), model
+        logger.info(f"Using OpenAI API with model {model}.")
+        base_url = get_openai_base_url()
+        if base_url:
+            logger.info(f"Using custom OpenAI base_url: {base_url}")
+        return openai.OpenAI(base_url=base_url), model
     else:
         raise ValueError(f"Model {model} not supported.")
 
@@ -326,13 +333,13 @@ def get_batch_responses_from_vlm(
         raise ValueError(f"Model {model} not supported.")
 
     if print_debug:
-        # Just print the first response
-        print()
-        print("*" * 20 + " VLM START " + "*" * 20)
+        # Just log the first response
+        logger.debug("")
+        logger.debug("*" * 20 + " VLM START " + "*" * 20)
         for j, message in enumerate(new_msg_histories[0]):
-            print(f'{j}, {message["role"]}: {message["content"]}')
-        print(contents[0])
-        print("*" * 21 + " VLM END " + "*" * 21)
-        print()
+            logger.debug(f'{j}, {message["role"]}: {message["content"]}')
+        logger.debug(contents[0])
+        logger.debug("*" * 21 + " VLM END " + "*" * 21)
+        logger.debug("")
 
     return contents, new_msg_histories

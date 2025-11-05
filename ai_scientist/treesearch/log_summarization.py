@@ -15,8 +15,6 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
 sys.path.insert(0, parent_dir)
 from ai_scientist.llm import extract_json_between_markers, get_response_from_llm  # noqa: E402
 
-client, model = create_client("gpt-4o-2024-08-06")
-
 report_summarizer_sys_msg = """You are an expert machine learning researcher.
 You are given multiple experiment logs, each representing a node in a stage of exploring scientific ideas and implementations.
 Your task is to aggregate these logs and provide scientifically insightful information.
@@ -275,7 +273,7 @@ Ensure the JSON is valid and properly formatted, as it will be automatically par
 """
 
 
-def annotate_history(journal: Journal) -> None:
+def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> None:
     for node in journal.nodes:
         if node.parent:
             max_retries = 3
@@ -309,13 +307,16 @@ def annotate_history(journal: Journal) -> None:
             node.overall_plan = node.plan
 
 
-def overall_summarize(journals: list[tuple[str, Journal]]) -> tuple[dict[str, Any] | None, ...]:
+def overall_summarize(
+    journals: list[tuple[str, Journal]], model: str
+) -> tuple[dict[str, Any] | None, ...]:
+    client, _ = create_client(model)
 
     def process_stage(
         idx: int, stage_tuple: tuple[str, Journal]
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
         stage_name, journal = stage_tuple
-        annotate_history(journal)
+        annotate_history(journal, model=model, client=client)
         if idx in [1, 2]:
             best_node = journal.get_best_node()
             # get multi-seed results and aggregater node
@@ -365,94 +366,3 @@ def overall_summarize(journals: list[tuple[str, Journal]]) -> tuple[dict[str, An
         draft_summary, baseline_summary, research_summary, ablation_summary = results[:4]
 
     return draft_summary, baseline_summary, research_summary, ablation_summary
-
-
-if __name__ == "__main__":
-    # Test
-    example_path = "logs/247-run"
-
-    def load_stage_folders(base_path: str) -> list[str]:
-        """
-        Load the folders that start with 'stage_' followed by a number.
-
-        Args:
-            base_path (str): The base directory path where stage folders are located.
-
-        Returns:
-            list: A sorted list of stage folder paths.
-        """
-        stage_folders = []
-        for folder_name in os.listdir(base_path):
-            if folder_name.startswith("stage_"):
-                stage_folders.append(os.path.join(base_path, folder_name))
-        return sorted(stage_folders, key=lambda x: int(x.split("_")[1]))
-
-    def reconstruct_journal(journal_data: dict[str, Any]) -> Journal:
-        # Create a mapping of node IDs to Node instances
-        id_to_node = {}
-        for node_data in journal_data["nodes"]:
-            # Remove unused or invalid keys if needed
-            if "actionable_insights_from_plots" in node_data:
-                del node_data["actionable_insights_from_plots"]
-            node = Node.from_dict(node_data)
-            id_to_node[node.id] = node
-
-        # Set up parent-child relationships using node2parent
-        for node_id, parent_id in journal_data["node2parent"].items():
-            child_node = id_to_node[node_id]
-            parent_node = id_to_node[parent_id]
-            child_node.parent = parent_node
-            parent_node.children.add(child_node)
-
-        # Create a Journal (no-op event callback) and add all nodes
-        journal = Journal(event_callback=lambda _event: None)
-        journal.nodes.extend(id_to_node.values())
-
-        return journal
-
-    # Example usage
-    stage_folders = load_stage_folders(example_path)
-    journals = []
-    for index, folder in enumerate(stage_folders, start=1):
-        print(f"Stage {index}: {folder}")
-        stage_name = os.path.basename(folder)
-        journal_path = os.path.join(folder, "journal.json")
-        if os.path.exists(journal_path):
-            with open(journal_path, "r") as file:
-                journal_data = json.load(file)
-                print(f"Loaded journal.json for Stage {index}")
-        else:
-            print(f"No journal.json found for Stage {index}")
-        journal = reconstruct_journal(journal_data)
-        journals.append((stage_name, journal))
-
-    # Convert manager journals to list of (stage_name, journal) tuples
-    (
-        draft_summary,
-        baseline_summary,
-        research_summary,
-        ablation_summary,
-    ) = overall_summarize(journals)
-    log_dir = "logs/247-run"
-    draft_summary_path = log_dir + "/draft_summary.json"
-    baseline_summary_path = log_dir + "/baseline_summary.json"
-    research_summary_path = log_dir + "/research_summary.json"
-    ablation_summary_path = log_dir + "/ablation_summary.json"
-
-    with open(draft_summary_path, "w") as draft_file:
-        json.dump(draft_summary, draft_file, indent=2)
-
-    with open(baseline_summary_path, "w") as baseline_file:
-        json.dump(baseline_summary, baseline_file, indent=2)
-
-    with open(research_summary_path, "w") as research_file:
-        json.dump(research_summary, research_file, indent=2)
-
-    with open(ablation_summary_path, "w") as ablation_file:
-        json.dump(ablation_summary, ablation_file, indent=2)
-
-    print("Summary reports written to files:")
-    print(f"- Draft summary: {draft_summary_path}")
-    print(f"- Baseline summary: {baseline_summary_path}")
-    print(f"- Research summary: {research_summary_path}")
-    print(f"- Ablation summary: {ablation_summary_path}")

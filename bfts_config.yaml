@@ -1,12 +1,10 @@
 # path to the task data directory
-data_dir: "data"
 preprocess_data: False
 
-goal: null
-eval: null
-
-log_dir: logs
+desc_file: idea_example.json
 workspace_dir: workspaces
+log_dir: "workspaces/logs"
+data_dir: "workspaces/data"
 
 # whether to copy the data to the workspace directory (otherwise it will be symlinked)
 # copying is recommended to prevent the agent from accidentally modifying the original data
@@ -23,14 +21,18 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: gpt-5-mini
+  model: Qwen/Qwen2.5-VL-7B-Instruct
   temp: 1.0
+  betas: "0.9,0.95,0.99"
+  thinking:
+    type: "budget"
+    budget_tokens: 10000
 
 # LLM settings for paper writeup
 writeup:
-  big_model: gpt-5
-  small_model: gpt-5-mini
-  plot_model: gpt-5-mini
+  big_model: Qwen/Qwen2.5-VL-7B-Instruct
+  small_model: Qwen/Qwen2.5-VL-7B-Instruct
+  plot_model: Qwen/Qwen2.5-VL-7B-Instruct
 
 experiment:
   num_syn_datasets: 1
@@ -68,21 +70,32 @@ agent:
 
   # LLM settings for coding
   code:
-    model: gpt-5
+    model: Qwen/Qwen2.5-VL-7B-Instruct
     temp: 1.0
     max_tokens: 12000
+    betas: "0.9,0.95,0.99"
+    thinking:
+      type: "budget"
+      budget_tokens: 10000
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: gpt-5
-    # gpt-4o
+    model: Qwen/Qwen2.5-VL-7B-Instruct
     temp: 0.5
     max_tokens: 8192
+    betas: "0.9,0.95,0.99"
+    thinking:
+      type: "budget"
+      budget_tokens: 10000
 
   vlm_feedback:
-    model: gpt-5
+    model: Qwen/Qwen2.5-VL-7B-Instruct
     temp: 0.5
     max_tokens: null
+    betas: "0.9,0.95,0.99"
+    thinking:
+      type: "budget"
+      budget_tokens: 10000
 
   search:
     max_debug_depth: 5  # increased from 3 - try harder to debug

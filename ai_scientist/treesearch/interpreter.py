@@ -78,8 +78,8 @@ def exception_summary(
 
 
 class RedirectQueue:
-    def __init__(self, queue: Queue[str]) -> None:
-        self.queue: Queue[str] = queue
+    def __init__(self, queue: Queue) -> None:
+        self.queue: Queue = queue
 
     def write(self, msg: str) -> None:
         self.queue.put(msg)
@@ -127,7 +127,7 @@ class Interpreter:
             ]
         ]
 
-    def child_proc_setup(self, result_outq: Queue[str]) -> None:
+    def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
         shutup.mute_warnings()
 
@@ -145,16 +145,9 @@ class Interpreter:
 
     def _run_session(
         self,
-        code_inq: Queue[str],
-        result_outq: Queue[str],
-        event_outq: Queue[
-            tuple[
-                str,
-                str | None,
-                dict[str, Any] | None,
-                list[tuple[str, int, str, str | None]] | None,
-            ]
-        ],
+        code_inq: Queue,
+        result_outq: Queue,
+        event_outq: Queue,
     ) -> None:
         self.child_proc_setup(result_outq)
 

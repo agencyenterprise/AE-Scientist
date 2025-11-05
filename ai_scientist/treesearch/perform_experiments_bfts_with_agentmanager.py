@@ -14,7 +14,6 @@ High-level steps:
 import atexit
 import json
 import logging
-import pickle
 import shutil
 import time
 from pathlib import Path
@@ -29,8 +28,6 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from rich.status import Status
 from rich.text import Text
 from rich.tree import Tree
-
-from ai_scientist.llm import query
 
 from .agent_manager import AgentManager
 from .events import BaseEvent, ExperimentNodeCompletedEvent, RunLogEvent, RunStageProgressEvent
@@ -78,9 +75,6 @@ def perform_experiments_bfts(
 
     # Load the task description (idea) for the experiment
     task_desc = load_task_desc(cfg)
-    print(task_desc)
-    compiled = query.compile_prompt_to_md(task_desc)
-    task_desc_md = compiled if isinstance(compiled, str) else str(compiled)
 
     global_step = 0
 
@@ -96,9 +90,8 @@ def perform_experiments_bfts(
     atexit.register(cleanup)
 
     # Initialize the AgentManager (orchestrates stages and substages)
-    task_desc_input = task_desc if isinstance(task_desc, str) else json.dumps(task_desc)
     manager = AgentManager(
-        task_desc=task_desc_input,
+        task_desc=task_desc,
         cfg=cfg,
         workspace_dir=Path(cfg.workspace_dir),
         event_callback=event_callback,
@@ -272,7 +265,7 @@ def perform_experiments_bfts(
         ]
 
         left = Group(
-            Panel(Text(task_desc_md.strip()), title="Task description"),
+            Panel(Text(task_desc.model_dump_json(indent=2).strip()), title="Task description"),
             Panel(Text("\n".join(stage_info)), title="Stage Progress"),
             prog,
             status,
@@ -300,20 +293,6 @@ def perform_experiments_bfts(
 
     manager.run(exec_callback=create_exec_callback(status), step_callback=step_callback)
 
-    manager_pickle_path = cfg.log_dir / "manager.pkl"
-    try:
-        with open(manager_pickle_path, "wb") as f:
-            pickle.dump(manager, f)
-        logger.info(f"Saved manager state to: {manager_pickle_path}")
-    except Exception as e:
-        logger.warning(f"Failed to save full manager state: {e}")
-        try:
-            with open(manager_pickle_path, "wb") as f:
-                pickle.dump(manager.journals.items(), f)
-            logger.info(f"Saved manager journals to: {manager_pickle_path}")
-        except Exception as e:
-            logger.error(f"Failed to save manager journals: {e}")
-
     if cfg.generate_report:
         print("Generating final report from all stages...")
         (
@@ -321,7 +300,7 @@ def perform_experiments_bfts(
             baseline_summary,
             research_summary,
             ablation_summary,
-        ) = overall_summarize(list(manager.journals.items()))
+        ) = overall_summarize(list(manager.journals.items()), model=cfg.report.model)
         draft_summary_path = cfg.log_dir / "draft_summary.json"
         baseline_summary_path = cfg.log_dir / "baseline_summary.json"
         research_summary_path = cfg.log_dir / "research_summary.json"
