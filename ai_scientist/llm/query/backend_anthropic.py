@@ -92,9 +92,9 @@ def query(
                 (b for b in message.content if getattr(b, "type", None) == "text"),
                 None,
             )
-            assert first_text_block is not None and hasattr(first_text_block, "text"), (
-                "No text content returned by Anthropic"
-            )
+            assert first_text_block is not None and hasattr(
+                first_text_block, "text"
+            ), "No text content returned by Anthropic"
             output = getattr(first_text_block, "text")
     else:
         # Expect a tool_use block; extract its input as the structured output
