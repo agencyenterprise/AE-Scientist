@@ -10,9 +10,9 @@ from ai_scientist.llm.query import query
 from .codegen_agent import MinimalAgent
 from .interpreter import Interpreter
 from .journal import Node
+from .plotting import analyze_plots_with_vlm, generate_plotting_code
 from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
-from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config as AppConfig
@@ -280,7 +280,7 @@ def process_node(
                         else:
                             plot_code_from_prev_stage = None
 
-                        plotting_code = Stage3Plotting.generate_plotting_code(
+                        plotting_code = generate_plotting_code(
                             agent=worker_agent,
                             node=child_node,
                             working_dir=working_dir,
@@ -291,6 +291,20 @@ def process_node(
                     process_interpreter.cleanup_session()
                     child_node.absorb_plot_exec_result(plot_exec_result)
                     if child_node.plot_exc_type and retry_count < 3:
+                        # Emit details to help diagnose plotting failures
+                        term_lines = child_node.plot_term_out or []
+                        tail = (
+                            "".join(term_lines[-50:])
+                            if isinstance(term_lines, list)
+                            else str(term_lines)
+                        )
+                        emit(
+                            "ai.run.log",
+                            {
+                                "message": f"Plotting error ({child_node.plot_exc_type}); retrying {retry_count + 1}/3. Tail of output:\\n{tail}",
+                                "level": "warn",
+                            },
+                        )
                         retry_count += 1
                         continue
                     else:
@@ -303,6 +317,14 @@ def process_node(
                         emit(
                             "ai.run.log",
                             {"message": f"✓ Generated {plot_count} plot file(s)", "level": "info"},
+                        )
+                    else:
+                        emit(
+                            "ai.run.log",
+                            {
+                                "message": "No plot files (*.png) found in working directory after plotting",
+                                "level": "warn",
+                            },
                         )
 
                     base_dir = Path(cfg.workspace_dir).parent
@@ -332,8 +354,16 @@ def process_node(
                         web_path = f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
                         child_node.plots.append(web_path)
                         child_node.plot_paths.append(str(final_path.absolute()))
-            except Exception:
-                pass
+            except Exception as e:
+                tb = traceback.format_exc()
+                emit(
+                    "ai.run.log",
+                    {"message": f"Plotting failed with exception: {str(e)}", "level": "warn"},
+                )
+                emit(
+                    "ai.run.log",
+                    {"message": f"Plotting traceback:\\n{tb}", "level": "warn"},
+                )
 
             if child_node.plots:
                 try:
@@ -344,10 +374,21 @@ def process_node(
                             "level": "info",
                         },
                     )
-                    Stage3Plotting.analyze_plots_with_vlm(agent=worker_agent, node=child_node)
+                    analyze_plots_with_vlm(agent=worker_agent, node=child_node)
                     emit("ai.run.log", {"message": "✓ Plot analysis complete", "level": "info"})
-                except Exception:
-                    emit("ai.run.log", {"message": "Plot analysis failed", "level": "warn"})
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    emit(
+                        "ai.run.log",
+                        {
+                            "message": f"Plot analysis failed with exception: {str(e)}",
+                            "level": "warn",
+                        },
+                    )
+                    emit(
+                        "ai.run.log",
+                        {"message": f"Plot analysis traceback:\\n{tb}", "level": "warn"},
+                    )
 
         result_data = child_node.to_dict()
         # sanity pickle
