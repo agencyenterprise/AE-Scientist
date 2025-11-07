@@ -252,15 +252,18 @@ class Interpreter:
         self.result_outq = self.mp_context.Queue()
         self.event_outq = self.mp_context.Queue()
         # Use module-level function as target to avoid pickling Interpreter instance
-        self.process = self.mp_context.Process(target=_repl_run_session, kwargs=dict(
-            working_dir=str(self.working_dir),
-            agent_file_name=self.agent_file_name,
-            format_tb_ipython=self.format_tb_ipython,
-            env_vars=self.env_vars,
-            code_inq=self.code_inq,
-            result_outq=self.result_outq,
-            event_outq=self.event_outq,
-        ))
+        self.process = self.mp_context.Process(
+            target=_repl_run_session,
+            kwargs=dict(
+                working_dir=str(self.working_dir),
+                agent_file_name=self.agent_file_name,
+                format_tb_ipython=self.format_tb_ipython,
+                env_vars=self.env_vars,
+                code_inq=self.code_inq,
+                result_outq=self.result_outq,
+                event_outq=self.event_outq,
+            ),
+        )
         self.process.start()
 
     def _drain_queues(self) -> None:

@@ -252,17 +252,35 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         model=agent.cfg.agent.vlm_feedback.model,
         temperature=agent.cfg.agent.vlm_feedback.temp,
     )
+    # Log raw response for debugging/traceability
+    print("VLM plot analysis raw response type:", type(response))
+    try:
+        print("VLM plot analysis raw response:", response)
+    except Exception:
+        print("VLM plot analysis raw response: <unprintable>")
+
     if not isinstance(response, dict):
+        print("VLM plot analysis response is not a dict; skipping analysis parsing.")
         return
     valid_plots_received = bool(response.get("valid_plots_received"))
     node.is_buggy_plots = not valid_plots_received
-
+    # Sanitize plot_analyses to ensure a list of dicts with at least {"analysis": str, "plot_path": str|None}
     plot_analyses_val = response.get("plot_analyses")
     if isinstance(plot_analyses_val, list):
+        sanitized: list[dict] = []
+        had_nondict = False
         for index, analysis in enumerate(plot_analyses_val):
-            if isinstance(analysis, dict) and index < len(node.plot_paths):
-                analysis["plot_path"] = node.plot_paths[index]
-        node.plot_analyses = plot_analyses_val
+            if isinstance(analysis, dict):
+                sanitized_item = dict(analysis)
+            else:
+                had_nondict = True
+                sanitized_item = {"analysis": str(analysis)}
+            if index < len(node.plot_paths) and "plot_path" not in sanitized_item:
+                sanitized_item["plot_path"] = node.plot_paths[index]
+            sanitized.append(sanitized_item)
+        if had_nondict:
+            print("Coerced non-dict entries in plot_analyses into dicts with 'analysis' text.")
+        node.plot_analyses = sanitized
 
     vlm_summary_val = response.get("vlm_feedback_summary")
     if isinstance(vlm_summary_val, list):
