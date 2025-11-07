@@ -88,6 +88,64 @@ class RedirectQueue:
         pass
 
 
+def _repl_run_session(
+    *,
+    working_dir: str | Path,
+    agent_file_name: str,
+    format_tb_ipython: bool,
+    env_vars: dict[str, str],
+    code_inq: Queue,
+    result_outq: Queue,
+    event_outq: Queue,
+) -> None:
+    """
+    Module-level REPL loop function used as multiprocessing target.
+    Using a module-level function avoids pickling the Interpreter instance
+    which can fail under the 'spawn' start method.
+    """
+    # Child process setup (mirrors Interpreter.child_proc_setup)
+    shutup.mute_warnings()
+
+    for key, value in env_vars.items():
+        os.environ[key] = str(value)
+
+    wd = Path(working_dir)
+    os.chdir(str(wd))
+    sys.path.append(str(wd))
+    sys.stdout = sys.stderr = RedirectQueue(result_outq)  # type: ignore[assignment,unused-ignore]
+
+    global_scope: dict = {}
+    while True:
+        code = code_inq.get()
+        os.chdir(str(wd))
+        with open(agent_file_name, "w") as f:
+            f.write(code)
+
+        # Signal to the parent that we are about to execute
+        event_outq.put(("state:ready", None, None, None))
+        try:
+            exec(compile(code, agent_file_name, "exec"), global_scope)
+        except BaseException as e:
+            if isinstance(e, Exception):
+                tb_str, e_cls_name, exc_info, exc_stack = exception_summary(
+                    e, wd, agent_file_name, format_tb_ipython
+                )
+            else:
+                tb_str = str(e)
+                e_cls_name = e.__class__.__name__
+                exc_info = {}
+                exc_stack = []
+            result_outq.put(tb_str)
+            if e_cls_name == "KeyboardInterrupt":
+                e_cls_name = "TimeoutError"
+            event_outq.put(("state:finished", e_cls_name, exc_info, exc_stack))
+        else:
+            event_outq.put(("state:finished", None, None, None))
+
+        # EOF marker for parent to stop reading output
+        result_outq.put("<|EOF|>")
+
+
 class Interpreter:
     def __init__(
         self,
@@ -193,10 +251,16 @@ class Interpreter:
         self.code_inq = self.mp_context.Queue()
         self.result_outq = self.mp_context.Queue()
         self.event_outq = self.mp_context.Queue()
-        self.process = self.mp_context.Process(
-            target=self._run_session,
-            args=(self.code_inq, self.result_outq, self.event_outq),
-        )
+        # Use module-level function as target to avoid pickling Interpreter instance
+        self.process = self.mp_context.Process(target=_repl_run_session, kwargs=dict(
+            working_dir=str(self.working_dir),
+            agent_file_name=self.agent_file_name,
+            format_tb_ipython=self.format_tb_ipython,
+            env_vars=self.env_vars,
+            code_inq=self.code_inq,
+            result_outq=self.result_outq,
+            event_outq=self.event_outq,
+        ))
         self.process.start()
 
     def _drain_queues(self) -> None:

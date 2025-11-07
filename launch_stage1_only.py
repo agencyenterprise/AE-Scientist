@@ -74,5 +74,6 @@ def main(config_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    cfg_path = Path("bfts_config_claude-haiku.yaml")
+    cfg_path = Path("bfts_config.yaml")
     main(config_path=cfg_path)
+
