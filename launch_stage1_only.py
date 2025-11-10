@@ -9,6 +9,7 @@ Steps:
 - Persist results and checkpoint
 """
 
+import argparse
 import atexit
 import logging
 import shutil
@@ -74,5 +75,18 @@ def main(config_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    cfg_path = Path("bfts_config_gpt-5.yaml")
+    parser = argparse.ArgumentParser(
+        description="Run Stage 1 (initial implementation) of the BFTS workflow"
+    )
+    parser.add_argument(
+        "config_file",
+        type=str,
+        help="Path to the YAML configuration file (e.g., bfts_config.yaml)",
+    )
+    args = parser.parse_args()
+
+    cfg_path = Path(args.config_file)
+    if not cfg_path.exists():
+        parser.error(f"Configuration file not found: {cfg_path}")
+
     main(config_path=cfg_path)
