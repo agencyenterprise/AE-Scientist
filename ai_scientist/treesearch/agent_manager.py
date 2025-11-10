@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 from rich import print
 
 from ai_scientist.llm.query import FunctionSpec, query
-from ai_scientist.treesearch.events import BaseEvent
+from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, RunStageProgressEvent
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
@@ -586,6 +586,37 @@ Your research idea:\n\n
         - If False and next_substage is provided, the caller should continue with that sub-stage.
         """
         while True:
+            # Emit iteration progress before each step
+            journal = self.journals[current_substage.name]
+            max_iters = current_substage.max_iterations
+            current_iter = len(journal.nodes) + 1
+            print(
+                f"[yellow]Stage {current_substage.name}: Iteration {current_iter}/{max_iters}[/yellow]"
+            )
+            try:
+                self.event_callback(
+                    RunLogEvent(
+                        message=(
+                            f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}"
+                        ),
+                        level="info",
+                    )
+                )
+                self.event_callback(
+                    RunStageProgressEvent(
+                        stage=current_substage.name,
+                        iteration=current_iter,
+                        max_iterations=max_iters,
+                        progress=min(len(journal.nodes) / max_iters, 1.0),
+                        total_nodes=len(journal.nodes),
+                        buggy_nodes=len(journal.buggy_nodes),
+                        good_nodes=len(journal.good_nodes),
+                    )
+                )
+            except Exception:
+                # Best-effort logging; never block iteration on event errors
+                pass
+
             agent.step(exec_callback)
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
@@ -707,6 +738,21 @@ Your research idea:\n\n
         current_substage: Optional[StageMeta] = initial_substage
         while current_substage:
             print(f"[green]Starting sub-stage: {current_substage.name}[/green]")
+            print(
+                f"[magenta]Max iterations for {current_substage.name}: {current_substage.max_iterations}[/magenta]"
+            )
+            try:
+                self.event_callback(
+                    RunLogEvent(
+                        message=(
+                            f"Starting sub-stage {current_substage.name} "
+                            f"(max iterations: {current_substage.max_iterations})"
+                        ),
+                        level="info",
+                    )
+                )
+            except Exception:
+                pass
 
             with self._create_agent_for_stage(current_substage) as agent:
                 # Initialize with best result from previous sub-stage if available
