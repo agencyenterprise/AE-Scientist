@@ -317,12 +317,14 @@ class Interpreter:
         """
 
         logger.debug(f"REPL is executing code (reset_session={reset_session})")
+        print("[dim]  Starting Python interpreter process...[/dim]")
 
         if reset_session:
             if self.process is not None:
                 # terminate and clean up previous process
                 self.cleanup_session()
             self.create_process()
+            print("[dim]  ✓ Interpreter ready, sending code to execute[/dim]")
         else:
             # reset_session needs to be True on first exec
             if self.process is None:
@@ -363,6 +365,8 @@ class Interpreter:
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
+        print("[dim]  Code is now executing...[/dim]")
+        last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent
         # if the child process dies without this flag being set, it's an unexpected termination
@@ -376,6 +380,15 @@ class Interpreter:
                 exec_time = time.time() - start_time
                 break
             except queue.Empty:
+                # Print progress update every 30 seconds
+                current_time = time.time()
+                if current_time - last_progress_time >= 30:
+                    elapsed = current_time - start_time
+                    print(
+                        f"[dim]  Still executing... ({humanize.naturaldelta(elapsed)} elapsed)[/dim]"
+                    )
+                    last_progress_time = current_time
+
                 # we haven't heard back from the child -> check if it's still alive (assuming overtime interrupt wasn't sent yet)
                 if (
                     self.process is not None

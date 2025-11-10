@@ -230,9 +230,15 @@ def process_node(
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 
+        print(
+            f"[bold blue]→ Executing experiment code (timeout: {cfg.exec.timeout}s)...[/bold blue]"
+        )
         emit("ai.run.log", {"message": "Executing experiment code on GPU...", "level": "info"})
         exec_result = process_interpreter.run(child_node.code, True)
         process_interpreter.cleanup_session()
+        print(
+            f"[bold green]✓ Code execution completed in {exec_result.exec_time:.1f}s[/bold green]"
+        )
         emit(
             "ai.run.log",
             {
@@ -241,6 +247,7 @@ def process_node(
             },
         )
 
+        print("[bold blue]→ Analyzing results and extracting metrics...[/bold blue]")
         emit("ai.run.log", {"message": "Analyzing results and extracting metrics", "level": "info"})
         worker_agent.parse_exec_result(
             node=child_node, exec_result=exec_result, workspace=working_dir
@@ -255,9 +262,11 @@ def process_node(
             seed_eval=seed_eval,
             emit=emit,
         )
+        print(f"[bold green]✓ Metrics extracted. Buggy: {child_node.is_buggy}[/bold green]")
 
         if not child_node.is_buggy:
             try:
+                print("[bold blue]→ Generating visualization plots...[/bold blue]")
                 emit("ai.run.log", {"message": "Generating visualization plots", "level": "info"})
                 retry_count = 0
                 while True:
@@ -367,6 +376,9 @@ def process_node(
 
             if child_node.plots:
                 try:
+                    print(
+                        f"[bold blue]→ Analyzing {len(child_node.plots)} plots with Vision Language Model...[/bold blue]"
+                    )
                     emit(
                         "ai.run.log",
                         {
@@ -375,6 +387,9 @@ def process_node(
                         },
                     )
                     analyze_plots_with_vlm(agent=worker_agent, node=child_node)
+                    print(
+                        f"[bold green]✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}[/bold green]"
+                    )
                     emit("ai.run.log", {"message": "✓ Plot analysis complete", "level": "info"})
                 except Exception as e:
                     tb = traceback.format_exc()

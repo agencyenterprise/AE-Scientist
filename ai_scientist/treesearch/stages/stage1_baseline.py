@@ -63,6 +63,7 @@ class Stage1Baseline(Stage):
         print("MinimalAgent: Getting plan and code")
         plan, code = agent.plan_and_code_query(prompt=prompt)
         print("MinimalAgent: Draft complete")
+        print(f"[green]✓ Generated {len(code)} characters of code[/green]")
         return Node(plan=plan, code=code)
 
     @staticmethod
