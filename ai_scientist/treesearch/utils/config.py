@@ -44,18 +44,9 @@ class TaskDescription(BaseModel):
 
 
 @dataclass
-class ThinkingConfig:
-    type: str
-    budget_tokens: Optional[int] = None
-
-
-@dataclass
 class StageConfig:
     model: str
     temp: float
-    thinking: ThinkingConfig
-    betas: str
-    max_tokens: Optional[int] = None
 
 
 @dataclass
@@ -75,7 +66,6 @@ class AgentConfig:
     steps: int
     stages: dict[str, int]
     k_fold_validation: int
-    expose_prediction: bool
     data_preview: bool
 
     code: StageConfig

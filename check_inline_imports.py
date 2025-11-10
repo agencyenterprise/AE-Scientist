@@ -6,6 +6,7 @@ This script scans Python files for import statements inside function definitions
 which is against our coding standards.
 """
 
+import argparse
 import ast
 import sys
 from pathlib import Path
@@ -100,12 +101,26 @@ def check_file(file_path: Path) -> list[dict[str, Union[str, int]]]:
 
 def main() -> None:
     """Main function to check all Python files."""
-    if len(sys.argv) > 1:
+    parser = argparse.ArgumentParser(description="Check Python files for inline imports")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Directory or file patterns to exclude (can be used multiple times)",
+    )
+    parser.add_argument("files", nargs="*", help="Specific files to check")
+
+    args = parser.parse_args()
+
+    if args.files:
         # Check specific files passed as arguments
-        files_to_check = [Path(arg) for arg in sys.argv[1:]]
+        files_to_check = [Path(arg) for arg in args.files]
     else:
         # Check all Python files in the current directory and subdirectories
         files_to_check = list(Path(".").rglob("*.py"))
+
+    # Build list of patterns to exclude
+    exclude_patterns = [".venv", "__pycache__", ".git", "node_modules"] + args.exclude
 
     total_errors = 0
 
@@ -113,10 +128,8 @@ def main() -> None:
         if file_path.name == __file__.split("/")[-1]:  # Skip this script itself
             continue
 
-        # Skip virtual environment and cache directories
-        if any(
-            part in file_path.parts for part in [".venv", "__pycache__", ".git", "node_modules"]
-        ):
+        # Skip excluded directories and patterns
+        if any(pattern in file_path.parts for pattern in exclude_patterns):
             continue
 
         errors = check_file(file_path)

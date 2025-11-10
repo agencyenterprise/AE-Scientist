@@ -23,10 +23,6 @@ generate_report: True
 report:
   model: gpt-5
   temp: 1.0
-  betas: "0.9,0.95,0.99"
-  thinking:
-    type: "budget"
-    budget_tokens: 10000
 
 # LLM settings for paper writeup
 writeup:
@@ -63,8 +59,6 @@ agent:
   k_fold_validation: 1
   multi_seed_eval:
     num_seeds: 3 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
-  # whether to instruct the agent to generate a prediction function
-  expose_prediction: False
   # whether to provide the agent with a preview of the data
   data_preview: False
 
@@ -72,30 +66,15 @@ agent:
   code:
     model: gpt-5
     temp: 1.0
-    max_tokens: 12000
-    betas: "0.9,0.95,0.99"
-    thinking:
-      type: "budget"
-      budget_tokens: 10000
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
     model: gpt-5
     temp: 0.5
-    max_tokens: 8192
-    betas: "0.9,0.95,0.99"
-    thinking:
-      type: "budget"
-      budget_tokens: 10000
 
   vlm_feedback:
     model: gpt-5
     temp: 0.5
-    max_tokens: null
-    betas: "0.9,0.95,0.99"
-    thinking:
-      type: "budget"
-      budget_tokens: 10000
 
   search:
     max_debug_depth: 5  # increased from 3 - try harder to debug
