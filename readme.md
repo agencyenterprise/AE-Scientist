@@ -47,6 +47,48 @@ source .venv/bin/activate
 uv sync
 ```
 
+## Environment Variables
+
+Before running experiments, you need to configure API keys and tokens.
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and add your API keys:
+
+### Required Variables
+
+```bash
+# OpenAI API key (required for LLM queries)
+OPENAI_API_KEY=sk-your-openai-key
+
+# HuggingFace token (required for downloading datasets and models)
+# Get your token from: https://huggingface.co/settings/tokens
+HUGGINGFACE_HUB_TOKEN=hf_your_token
+HUGGINGFACE_API_KEY=hf_your_token
+HF_TOKEN=hf_your_token
+```
+
+**Note:** The three HuggingFace variables should all have the same value - they're used by different libraries.
+
+### Optional Variables
+
+```bash
+# Custom OpenAI-compatible endpoint (e.g., local LLM server, RunPod)
+# Only set this if NOT using the default OpenAI API
+OPENAI_BASE_URL="https://your-custom-endpoint.com/v1"
+
+# Anthropic API key - only required if using Claude models
+# (e.g., when using bfts_config_claude-haiku.yaml)
+ANTHROPIC_API_KEY=your-anthropic-key
+```
+
+**Important:**
+- `OPENAI_BASE_URL` should **only** be set if you're using a custom OpenAI-compatible endpoint (like a local LLM server or RunPod inference). Leave it unset to use the default OpenAI API.
+- `ANTHROPIC_API_KEY` is **only** required if you plan to use Claude models (e.g., `bfts_config_claude-haiku.yaml`).
+
 ## Running Experiments
 
 ### Run Stage 1 Only (Initial Implementation)
