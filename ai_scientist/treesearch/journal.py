@@ -357,6 +357,8 @@ class InteractiveSession(DataClassJsonMixin):
 class Journal:
     """A collection of nodes representing the solution tree."""
 
+    summary_model: str
+    node_selection_model: str
     event_callback: Callable[[BaseEvent], None] = field(repr=False)
     nodes: list[Node] = field(default_factory=list)
 
@@ -479,7 +481,7 @@ class Journal:
                 system_message=prompt,
                 user_message=None,
                 func_spec=node_selection_spec,
-                model="gpt-5-mini",
+                model=self.node_selection_model,
                 temperature=1.0,  # gpt-5 family requires temperature=1.0
             )
 
@@ -496,8 +498,8 @@ class Journal:
             selected_id = str(selection.get("selected_id", ""))
             selected_node = next((node for node in nodes if str(node.id) == selected_id), None)
             if selected_node:
-                logger.warning(f"Selected node {selected_node.id} as best implementation")
-                logger.warning(f"Reasoning: {selection.get('reasoning', '')}")
+                logger.info(f"Selected node {selected_node.id} as best implementation")
+                logger.info(f"Reasoning: {selection.get('reasoning', '')}")
 
                 # Emit user-facing event with the selection reasoning
                 self.event_callback(
@@ -577,12 +579,16 @@ class Journal:
                 "2. Common failure patterns and pitfalls to avoid\n"
                 "3. Specific recommendations for future experiments based on both successes and failures"
             ),
-            model="gpt-4o",
+            model=self.summary_model,
             temperature=0.3,
         )
 
         return summary_resp if isinstance(summary_resp, str) else json.dumps(summary_resp)
 
-    def to_dict(self) -> dict[str, list[dict[str, object]]]:
+    def to_dict(self) -> dict[str, list[dict[str, object]] | str]:
         """Convert journal to a JSON-serializable dictionary"""
-        return {"nodes": [node.to_dict() for node in self.nodes]}
+        return {
+            "nodes": [node.to_dict() for node in self.nodes],
+            "summary_model": self.summary_model,
+            "node_selection_model": self.node_selection_model,
+        }

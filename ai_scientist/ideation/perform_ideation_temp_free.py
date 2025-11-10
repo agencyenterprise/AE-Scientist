@@ -1,15 +1,16 @@
 import argparse
 import json
-import os.path as osp
 import re
 import sys
 import traceback
+from pathlib import Path
 from typing import Dict, List
 
 import anthropic
 import openai
 
-sys.path.append(osp.join(osp.dirname(__file__), ".."))
+current_dir = Path(__file__).parent
+sys.path.append(str(current_dir.parent.parent))
 from ai_scientist.ideation.base_tool import BaseTool  # noqa: E402
 from ai_scientist.ideation.semantic_scholar import SemanticScholarSearchTool  # noqa: E402
 from ai_scientist.llm import create_client, get_response_from_llm  # noqa: E402
@@ -134,7 +135,7 @@ def generate_temp_free_idea(
 ) -> List[Dict]:
     idea_str_archive = []
     # load ideas from file
-    if reload_ideas and osp.exists(idea_fname):
+    if reload_ideas and Path(idea_fname).exists():
         with open(idea_fname, "r") as f:
             idea_str_content = json.load(f)
             for idea in idea_str_content:

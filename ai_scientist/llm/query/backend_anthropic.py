@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import cast
 
@@ -7,8 +8,10 @@ from funcy import notnone, once, select_values  # type: ignore[import-untyped]
 
 from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
 
-# _client: anthropic.Anthropic = None  # type: ignore
-_client: anthropic.AnthropicBedrock | None = None
+logger = logging.getLogger("ai-scientist")
+
+_client: anthropic.Anthropic = None  # type: ignore
+# _client: anthropic.AnthropicBedrock | None = None
 
 ANTHROPIC_TIMEOUT_EXCEPTIONS = (
     anthropic.RateLimitError,
@@ -22,8 +25,8 @@ ANTHROPIC_TIMEOUT_EXCEPTIONS = (
 @once  # type: ignore[misc]
 def _setup_anthropic_client() -> None:
     global _client
-    # _client = anthropic.Anthropic(max_retries=0)
-    _client = anthropic.AnthropicBedrock(max_retries=0)
+    _client = anthropic.Anthropic(max_retries=0)
+    # _client = anthropic.AnthropicBedrock(max_retries=0)
 
 
 def query(
@@ -38,8 +41,17 @@ def query(
     if "max_tokens" not in filtered_kwargs:
         filtered_kwargs["max_tokens"] = 8192  # default for Claude models
 
+    # Tool / function calling support for Anthropic (Claude tool use)
     if func_spec is not None:
-        raise NotImplementedError("Anthropic does not support function calling for now.")
+        filtered_kwargs["tools"] = [
+            {
+                "name": func_spec.name,
+                "description": func_spec.description,
+                "input_schema": func_spec.json_schema,
+            }
+        ]
+        # Force the model to produce a tool_use for this tool
+        filtered_kwargs["tool_choice"] = {"type": "tool", "name": func_spec.name}
 
     if system_message is not None and user_message is None:
         system_message, user_message = user_message, system_message
@@ -51,29 +63,49 @@ def query(
 
     t0 = time.time()
     message_any = backoff_create(
-        create_fn=_client.messages.create,  # type: ignore[union-attr]
+        create_fn=_client.messages.create,
         retry_exceptions=ANTHROPIC_TIMEOUT_EXCEPTIONS,
         messages=messages,
         **filtered_kwargs,
     )
     req_time = time.time() - t0
-    print(filtered_kwargs)
+    logger.debug(f"Anthropic API call kwargs: {filtered_kwargs}")
 
     if message_any is False:
         raise RuntimeError("Failed to create message after retries")
 
     message = cast(AnthropicMessage, message_any)
 
-    if "thinking" in filtered_kwargs:
-        assert (
-            len(message.content) == 2
-            and message.content[0].type == "thinking"
-            and message.content[1].type == "text"
-        )
-        output_text = message.content[1].text
+    # Parse output
+    if func_spec is None:
+        if "thinking" in filtered_kwargs:
+            assert (
+                len(message.content) == 2
+                and message.content[0].type == "thinking"
+                and message.content[1].type == "text"
+            )
+            output = cast(OutputType, getattr(message.content[1], "text"))
+        else:
+            assert len(message.content) >= 1
+            # Find first text block
+            first_text_block = next(
+                (b for b in message.content if getattr(b, "type", None) == "text"),
+                None,
+            )
+            assert first_text_block is not None and hasattr(
+                first_text_block, "text"
+            ), "No text content returned by Anthropic"
+            output = getattr(first_text_block, "text")
     else:
-        assert len(message.content) == 1 and message.content[0].type == "text"
-        output_text = message.content[0].text
+        # Expect a tool_use block; extract its input as the structured output
+        tool_uses = [b for b in message.content if getattr(b, "type", None) == "tool_use"]
+        assert tool_uses, f"No tool_use returned by Anthropic for tool {func_spec.name}"
+        tool_use = tool_uses[0]
+        name = getattr(tool_use, "name", None)
+        assert name == func_spec.name, "Function name mismatch"
+        arguments = getattr(tool_use, "input", None)
+        assert isinstance(arguments, dict), "Tool input must be an object"
+        output = cast(OutputType, arguments)
 
     in_tokens = message.usage.input_tokens
     out_tokens = message.usage.output_tokens
@@ -82,4 +114,4 @@ def query(
         "stop_reason": message.stop_reason,
     }
 
-    return output_text, req_time, in_tokens, out_tokens, info
+    return output, req_time, in_tokens, out_tokens, info

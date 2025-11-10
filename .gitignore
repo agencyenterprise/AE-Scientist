@@ -201,3 +201,7 @@ huggingface/
 
 # Local PDF backups (cleaned up periodically)
 local_pdf_backups/
+workspaces/
+.env_real_api
+.env_run_pod
+research_topic_example.json

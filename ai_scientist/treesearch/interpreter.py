@@ -78,14 +78,72 @@ def exception_summary(
 
 
 class RedirectQueue:
-    def __init__(self, queue: Queue[str]) -> None:
-        self.queue: Queue[str] = queue
+    def __init__(self, queue: Queue) -> None:
+        self.queue: Queue = queue
 
     def write(self, msg: str) -> None:
         self.queue.put(msg)
 
     def flush(self) -> None:
         pass
+
+
+def _repl_run_session(
+    *,
+    working_dir: str | Path,
+    agent_file_name: str,
+    format_tb_ipython: bool,
+    env_vars: dict[str, str],
+    code_inq: Queue,
+    result_outq: Queue,
+    event_outq: Queue,
+) -> None:
+    """
+    Module-level REPL loop function used as multiprocessing target.
+    Using a module-level function avoids pickling the Interpreter instance
+    which can fail under the 'spawn' start method.
+    """
+    # Child process setup (mirrors Interpreter.child_proc_setup)
+    shutup.mute_warnings()
+
+    for key, value in env_vars.items():
+        os.environ[key] = str(value)
+
+    wd = Path(working_dir)
+    os.chdir(str(wd))
+    sys.path.append(str(wd))
+    sys.stdout = sys.stderr = RedirectQueue(result_outq)  # type: ignore[assignment,unused-ignore]
+
+    global_scope: dict = {}
+    while True:
+        code = code_inq.get()
+        os.chdir(str(wd))
+        with open(agent_file_name, "w") as f:
+            f.write(code)
+
+        # Signal to the parent that we are about to execute
+        event_outq.put(("state:ready", None, None, None))
+        try:
+            exec(compile(code, agent_file_name, "exec"), global_scope)
+        except BaseException as e:
+            if isinstance(e, Exception):
+                tb_str, e_cls_name, exc_info, exc_stack = exception_summary(
+                    e, wd, agent_file_name, format_tb_ipython
+                )
+            else:
+                tb_str = str(e)
+                e_cls_name = e.__class__.__name__
+                exc_info = {}
+                exc_stack = []
+            result_outq.put(tb_str)
+            if e_cls_name == "KeyboardInterrupt":
+                e_cls_name = "TimeoutError"
+            event_outq.put(("state:finished", e_cls_name, exc_info, exc_stack))
+        else:
+            event_outq.put(("state:finished", None, None, None))
+
+        # EOF marker for parent to stop reading output
+        result_outq.put("<|EOF|>")
 
 
 class Interpreter:
@@ -127,7 +185,7 @@ class Interpreter:
             ]
         ]
 
-    def child_proc_setup(self, result_outq: Queue[str]) -> None:
+    def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
         shutup.mute_warnings()
 
@@ -145,16 +203,9 @@ class Interpreter:
 
     def _run_session(
         self,
-        code_inq: Queue[str],
-        result_outq: Queue[str],
-        event_outq: Queue[
-            tuple[
-                str,
-                str | None,
-                dict[str, Any] | None,
-                list[tuple[str, int, str, str | None]] | None,
-            ]
-        ],
+        code_inq: Queue,
+        result_outq: Queue,
+        event_outq: Queue,
     ) -> None:
         self.child_proc_setup(result_outq)
 
@@ -200,9 +251,18 @@ class Interpreter:
         self.code_inq = self.mp_context.Queue()
         self.result_outq = self.mp_context.Queue()
         self.event_outq = self.mp_context.Queue()
+        # Use module-level function as target to avoid pickling Interpreter instance
         self.process = self.mp_context.Process(
-            target=self._run_session,
-            args=(self.code_inq, self.result_outq, self.event_outq),
+            target=_repl_run_session,
+            kwargs=dict(
+                working_dir=str(self.working_dir),
+                agent_file_name=self.agent_file_name,
+                format_tb_ipython=self.format_tb_ipython,
+                env_vars=self.env_vars,
+                code_inq=self.code_inq,
+                result_outq=self.result_outq,
+                event_outq=self.event_outq,
+            ),
         )
         self.process.start()
 
@@ -257,12 +317,14 @@ class Interpreter:
         """
 
         logger.debug(f"REPL is executing code (reset_session={reset_session})")
+        print("[dim]  Starting Python interpreter process...[/dim]")
 
         if reset_session:
             if self.process is not None:
                 # terminate and clean up previous process
                 self.cleanup_session()
             self.create_process()
+            print("[dim]  ✓ Interpreter ready, sending code to execute[/dim]")
         else:
             # reset_session needs to be True on first exec
             if self.process is None:
@@ -276,16 +338,35 @@ class Interpreter:
         self.code_inq.put(code)
 
         # wait for child to actually start execution (we don't want interrupt child setup)
-        try:
-            state = self.event_outq.get(timeout=10)
-        except queue.Empty:
-            msg = "REPL child process failed to start execution"
-            logger.critical(msg)
-            while not self.result_outq.empty():
-                logger.error(f"REPL output queue dump: {self.result_outq.get()}")
-            raise RuntimeError(msg) from None
+        startup_deadline = time.time() + float(os.environ.get("AI_SCI_STARTUP_TIMEOUT", "60"))
+        state = None
+        while True:
+            remaining = startup_deadline - time.time()
+            if remaining <= 0:
+                msg = "REPL child process failed to start execution"
+                logger.critical(msg)
+                if self.process is not None and not self.process.is_alive():
+                    logger.critical(
+                        f"REPL child died before start (pid={self.process.pid}, exitcode={self.process.exitcode})"
+                    )
+                while not self.result_outq.empty():
+                    logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                raise RuntimeError(msg) from None
+            try:
+                state = self.event_outq.get(timeout=min(1.0, max(0.0, remaining)))
+                break
+            except queue.Empty:
+                if self.process is not None and not self.process.is_alive():
+                    msg = "REPL child process died before signaling readiness"
+                    logger.critical(msg)
+                    while not self.result_outq.empty():
+                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                    raise RuntimeError(msg) from None
+                continue
         assert state[0] == "state:ready", state
         start_time = time.time()
+        print("[dim]  Code is now executing...[/dim]")
+        last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent
         # if the child process dies without this flag being set, it's an unexpected termination
@@ -299,6 +380,15 @@ class Interpreter:
                 exec_time = time.time() - start_time
                 break
             except queue.Empty:
+                # Print progress update every 30 seconds
+                current_time = time.time()
+                if current_time - last_progress_time >= 30:
+                    elapsed = current_time - start_time
+                    print(
+                        f"[dim]  Still executing... ({humanize.naturaldelta(elapsed)} elapsed)[/dim]"
+                    )
+                    last_progress_time = current_time
+
                 # we haven't heard back from the child -> check if it's still alive (assuming overtime interrupt wasn't sent yet)
                 if (
                     self.process is not None

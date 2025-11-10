@@ -4,7 +4,6 @@ from typing import Callable, Dict, Tuple
 
 from ..events import BaseEvent
 from ..journal import Journal, Node
-from ..parallel_agent import ParallelAgent
 from ..utils.config import Config
 
 
@@ -59,9 +58,6 @@ class Stage:
 
     def update_state(self, *, result_node: Node) -> None:
         return None
-
-    def on_main_stage_complete(self, *, agent: ParallelAgent, best_node: Node) -> bool:
-        return True
 
     def best_carryover_nodes(self) -> Dict[int, Node]:
         return self._context.best_nodes_by_stage

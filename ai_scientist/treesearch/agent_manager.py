@@ -33,7 +33,7 @@ from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
-from .utils.config import Config
+from .utils.config import Config, TaskDescription
 
 logger = logging.getLogger(__name__)
 
@@ -81,26 +81,18 @@ class StageTransition:
 class AgentManager:
     def __init__(
         self,
-        task_desc: str,
+        task_desc: TaskDescription,
         cfg: Config,
         workspace_dir: Path,
         event_callback: Callable[[BaseEvent], None],
     ) -> None:
         # Ingest and validate task description (idea)
-        self.task_desc = json.loads(task_desc)
-        for k in [
-            "Title",
-            "Abstract",
-            "Short Hypothesis",
-            "Experiments",
-            "Risk Factors and Limitations",
-        ]:
-            if k not in self.task_desc.keys():
-                raise ValueError(f"Key {k} not found in task_desc")
+
         # Store runtime configuration and IO context
         self.cfg = cfg
         self.workspace_dir = workspace_dir
         self.event_callback = event_callback
+        self.task_desc = task_desc
         self.current_stage_number = 0
         # Stage bookkeeping and experiment state
         self.stages: List[StageMeta] = []
@@ -125,17 +117,17 @@ Your research idea:\n\n
 """
         task_desc += (
             "Title:\n"
-            + self.task_desc["Title"]
+            + self.task_desc.title
             + "\n"
             + "Abstract:\n"
-            + self.task_desc["Abstract"]
+            + self.task_desc.abstract
             + "\n"
             + "Short Hypothesis:\n"
-            + self.task_desc["Short Hypothesis"]
+            + self.task_desc.short_hypothesis
             + "\n"
         )
-        if "Code" in self.task_desc:
-            task_desc += "Code To Use:\n" + self.task_desc["Code"] + "\n"
+        if self.task_desc.code is not None:
+            task_desc += "Code To Use:\n" + self.task_desc.code + "\n"
         return task_desc
 
     def _create_initial_stage(self) -> None:
@@ -155,31 +147,32 @@ Your research idea:\n\n
 
         self.stages.append(initial_stage)
         self.current_stage = initial_stage
-        self.journals[initial_stage.name] = Journal(event_callback=self.event_callback)
+        self.journals[initial_stage.name] = Journal(
+            summary_model=self.cfg.report.model,
+            node_selection_model=self.cfg.agent.feedback.model,
+            event_callback=self.event_callback,
+        )
 
     def _curate_task_desc(self, stage: StageMeta) -> str:
         task_desc = self._get_task_desc_str()
 
         if stage.slug == Stage3Plotting.MAIN_STAGE_SLUG:
-            if isinstance(self.task_desc["Experiments"], list):
-                if isinstance(self.task_desc["Experiments"][0], str):
-                    experiment_str = "\n".join(self.task_desc["Experiments"])
-                elif isinstance(self.task_desc["Experiments"][0], dict):
+            if isinstance(self.task_desc.experiments, list):
+                if isinstance(self.task_desc.experiments[0], str):
+                    experiment_str = "\n".join(cast(List[str], self.task_desc.experiments))
+                elif isinstance(self.task_desc.experiments[0], dict):
+                    experiments_list = cast(List[Dict[str, str]], self.task_desc.experiments)
                     experiment_str = "\n".join(
-                        [f"{k}: {v}" for d in self.task_desc["Experiments"] for k, v in d.items()]
+                        [f"{k}: {v}" for d in experiments_list for k, v in d.items()]
                     )
-            elif isinstance(self.task_desc["Experiments"], str):
-                experiment_str = self.task_desc["Experiments"]
-            else:
-                raise ValueError(
-                    f"Experiments is not a list or string: {self.task_desc['Experiments']}"
-                )
+            elif isinstance(self.task_desc.experiments, str):
+                experiment_str = self.task_desc.experiments
             task_desc += "Experiment Plan: " + experiment_str + "\n"
         elif stage.slug == Stage4Ablation.MAIN_STAGE_SLUG:
-            if isinstance(self.task_desc["Risk Factors and Limitations"], list):
-                risk_factors_str = "\n".join(self.task_desc["Risk Factors and Limitations"])
+            if isinstance(self.task_desc.risk_factors_and_limitations, list):
+                risk_factors_str = "\n".join(self.task_desc.risk_factors_and_limitations)
             else:
-                risk_factors_str = self.task_desc["Risk Factors and Limitations"]
+                risk_factors_str = self.task_desc.risk_factors_and_limitations
             task_desc += "Risk Factors and Limitations: " + risk_factors_str + "\n"
 
         return task_desc
@@ -638,7 +631,11 @@ Your research idea:\n\n
 
                     # Setup new sub-stage
                     self.stages.append(next_substage)
-                    self.journals[next_substage.name] = Journal(event_callback=self.event_callback)
+                    self.journals[next_substage.name] = Journal(
+                        summary_model=self.cfg.report.model,
+                        node_selection_model=self.cfg.agent.feedback.model,
+                        event_callback=self.event_callback,
+                    )
                     return False, next_substage
 
                 # If no next sub-stage could be created, end this main stage
@@ -665,7 +662,11 @@ Your research idea:\n\n
             )
 
             self.stages.append(next_main_stage)
-            self.journals[next_main_stage.name] = Journal(event_callback=self.event_callback)
+            self.journals[next_main_stage.name] = Journal(
+                summary_model=self.cfg.report.model,
+                node_selection_model=self.cfg.agent.feedback.model,
+                event_callback=self.event_callback,
+            )
             self.current_stage = next_main_stage
         else:
             # Exit the outer loop if no more main stages
@@ -683,33 +684,50 @@ Your research idea:\n\n
         while self.current_stage:
             print(f"[green]Starting main stage: {self.current_stage.slug}[/green]")
             print(f"[cyan]Goals: {self.current_stage.goals}[/cyan]")
-
-            # Sub-stage loop
-            current_substage: Optional[StageMeta] = self.current_stage
-            while current_substage:
-                print(f"[green]Starting sub-stage: {current_substage.name}[/green]")
-
-                with self._create_agent_for_stage(current_substage) as agent:
-                    # Initialize with best result from previous sub-stage if available
-                    if not self._prepare_substage(current_substage=current_substage):
-                        self.current_stage = None
-                        current_substage = None
-                        break
-
-                    # Run until sub-stage completion or main stage completion
-                    main_done, maybe_next_substage = self._run_substage(
-                        current_substage=current_substage,
-                        agent=agent,
-                        exec_callback=exec_callback,
-                        step_callback=step_callback,
-                    )
-                    if main_done:
-                        current_substage = None
-                    else:
-                        current_substage = maybe_next_substage
-            self._save_checkpoint()
+            # Run only the current main stage
+            self.run_stage(
+                initial_substage=self.current_stage,
+                exec_callback=exec_callback,
+                step_callback=step_callback,
+            )
             # Main stage complete - create next main stage
             self._advance_to_next_main_stage()
+
+    def run_stage(
+        self,
+        initial_substage: StageMeta,
+        exec_callback: ExecCallbackType,
+        step_callback: Optional[Callable[[StageMeta, Journal], None]],
+    ) -> None:
+        """Run a single main stage starting from the given sub-stage.
+
+        This executes the sub-stage loop until the main stage completes,
+        performs any post-stage evaluation, and saves a checkpoint.
+        """
+        current_substage: Optional[StageMeta] = initial_substage
+        while current_substage:
+            print(f"[green]Starting sub-stage: {current_substage.name}[/green]")
+
+            with self._create_agent_for_stage(current_substage) as agent:
+                # Initialize with best result from previous sub-stage if available
+                if not self._prepare_substage(current_substage=current_substage):
+                    self.current_stage = None
+                    current_substage = None
+                    break
+
+                # Run until sub-stage completion or main stage completion
+                main_done, maybe_next_substage = self._run_substage(
+                    current_substage=current_substage,
+                    agent=agent,
+                    exec_callback=exec_callback,
+                    step_callback=step_callback,
+                )
+                if main_done:
+                    self.current_stage = None
+                    current_substage = None
+                else:
+                    current_substage = maybe_next_substage
+        self._save_checkpoint()
 
     def _gather_stage_metrics(self, journal: Journal) -> Dict[str, Any]:
         """Gather detailed metrics and analysis from the stage's nodes"""

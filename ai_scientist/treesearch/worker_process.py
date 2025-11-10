@@ -3,16 +3,142 @@ import os
 import pickle
 import traceback
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, cast
+
+from ai_scientist.llm.query import query
 
 from .codegen_agent import MinimalAgent
 from .interpreter import Interpreter
 from .journal import Node
+from .plotting import analyze_plots_with_vlm, generate_plotting_code
 from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
-from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
+from .types import PromptType
 from .utils.config import Config as AppConfig
+from .utils.metric import MetricValue, WorstMetricValue
+from .vlm_function_specs import metric_parse_spec
+
+
+def parse_and_assign_metrics(
+    *,
+    worker_agent: MinimalAgent,
+    child_node: Node,
+    parent_node: Node | None,
+    cfg: AppConfig,
+    working_dir: str,
+    process_interpreter: Interpreter,
+    seed_eval: bool,
+    emit: Callable[[str, dict[str, object]], None],
+) -> None:
+    """Generate/execute metrics parsing code and assign structured metrics to the node."""
+    try:
+        working_path = Path(working_dir)
+        data_files = list(working_path.glob("*.npy"))
+        if not data_files:
+            emit(
+                "ai.run.log",
+                {
+                    "message": "No .npy files found in working directory. Data may not have been saved properly.",
+                    "level": "warn",
+                },
+            )
+
+        # Prepare or reuse metrics parsing code
+        if seed_eval and parent_node is not None:
+            parse_metrics_plan = parent_node.parse_metrics_plan
+            parse_metrics_code = parent_node.parse_metrics_code
+        else:
+            parse_metrics_prompt: PromptType = {
+                "Introduction": (
+                    "You are an AI researcher analyzing experimental results stored in numpy files. "
+                    "Write code to load and analyze the metrics from experiment_data.npy."
+                ),
+                "Context": [
+                    "Original Code: " + child_node.code,
+                ],
+                "Instructions": [
+                    "0. Make sure to get the working directory from os.path.join(os.getcwd(), 'working')",
+                    "1. Load the experiment_data.npy file, which is located in the working directory",
+                    "2. Extract metrics for each dataset. Refer to the original code to understand the data structure.",
+                    "3. Always print the name of the dataset before printing the metrics",
+                    "4. Always print the name of the metric before printing the value with precise labels (e.g., 'train accuracy', 'validation loss', 'test F1 score').",
+                    "5. Only print the best or final value for each metric for each dataset",
+                    "6. DO NOT CREATE ANY PLOTS",
+                    "Important code structure requirements:",
+                    "  - Do NOT put any execution code inside if __name__ == '" + "__main__" + "':",
+                    "  - All code should be at the global scope or in functions that are called from the global scope",
+                    "  - The script should execute immediately when run, without requiring any special entry point",
+                ],
+                "Example data loading code": [
+                    (
+                        "\nimport numpy as np\nimport os\n"
+                        "experiment_data = np.load(os.path.join(os.getcwd(), 'working', 'experiment_data.npy'), allow_pickle=True).item()\n"
+                    )
+                ],
+                "Response format": cast(
+                    dict[str, str | list[str]], worker_agent._prompt_metricparse_resp_fmt()
+                ),
+            }
+            parse_metrics_plan, parse_metrics_code = worker_agent.plan_and_code_query(
+                prompt=parse_metrics_prompt
+            )
+        child_node.parse_metrics_plan = parse_metrics_plan
+        child_node.parse_metrics_code = parse_metrics_code
+
+        # Execute metric parsing code
+        metrics_exec_result = process_interpreter.run(code=parse_metrics_code, reset_session=True)
+        process_interpreter.cleanup_session()
+        child_node.parse_term_out = metrics_exec_result.term_out
+        child_node.parse_exc_type = metrics_exec_result.exc_type
+        child_node.parse_exc_info = metrics_exec_result.exc_info
+        child_node.parse_exc_stack = metrics_exec_result.exc_stack
+
+        if metrics_exec_result.exc_type is None:
+            # Extract structured metrics from stdout
+            metrics_prompt = {
+                "Introduction": (
+                    "Parse the metrics from the execution output. You only need the final or best value "
+                    "of each metric for each dataset."
+                ),
+                "Execution Output": metrics_exec_result.term_out,
+            }
+            metrics_response = query(
+                system_message=metrics_prompt,
+                user_message=None,
+                func_spec=metric_parse_spec,
+                model=cfg.agent.feedback.model,
+                temperature=cfg.agent.feedback.temp,
+            )
+            if isinstance(metrics_response, dict) and metrics_response.get(
+                "valid_metrics_received"
+            ):
+                child_node.metric = MetricValue(
+                    value={"metric_names": metrics_response.get("metric_names", [])}
+                )
+            else:
+                child_node.metric = WorstMetricValue()
+                child_node.is_buggy = True
+        else:
+            child_node.metric = WorstMetricValue()
+            child_node.is_buggy = True
+
+        # Emit validation outcome
+        if child_node.is_buggy:
+            bug_summary = (child_node.analysis or "Unknown error")[:150]
+            emit(
+                "ai.run.log",
+                {"message": f"Implementation has bugs: {bug_summary}", "level": "warn"},
+            )
+        else:
+            emit(
+                "ai.run.log",
+                {"message": "Implementation passed validation", "level": "info"},
+            )
+    except Exception:
+        # On any unexpected error while parsing metrics, mark as worst
+        child_node.metric = WorstMetricValue()
+        child_node.is_buggy = True
 
 
 def process_node(
@@ -104,9 +230,15 @@ def process_node(
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 
+        print(
+            f"[bold blue]→ Executing experiment code (timeout: {cfg.exec.timeout}s)...[/bold blue]"
+        )
         emit("ai.run.log", {"message": "Executing experiment code on GPU...", "level": "info"})
         exec_result = process_interpreter.run(child_node.code, True)
         process_interpreter.cleanup_session()
+        print(
+            f"[bold green]✓ Code execution completed in {exec_result.exec_time:.1f}s[/bold green]"
+        )
         emit(
             "ai.run.log",
             {
@@ -115,13 +247,26 @@ def process_node(
             },
         )
 
+        print("[bold blue]→ Analyzing results and extracting metrics...[/bold blue]")
         emit("ai.run.log", {"message": "Analyzing results and extracting metrics", "level": "info"})
         worker_agent.parse_exec_result(
             node=child_node, exec_result=exec_result, workspace=working_dir
         )
+        parse_and_assign_metrics(
+            worker_agent=worker_agent,
+            child_node=child_node,
+            parent_node=parent_node,
+            cfg=cfg,
+            working_dir=working_dir,
+            process_interpreter=process_interpreter,
+            seed_eval=seed_eval,
+            emit=emit,
+        )
+        print(f"[bold green]✓ Metrics extracted. Buggy: {child_node.is_buggy}[/bold green]")
 
         if not child_node.is_buggy:
             try:
+                print("[bold blue]→ Generating visualization plots...[/bold blue]")
                 emit("ai.run.log", {"message": "Generating visualization plots", "level": "info"})
                 retry_count = 0
                 while True:
@@ -144,7 +289,7 @@ def process_node(
                         else:
                             plot_code_from_prev_stage = None
 
-                        plotting_code = Stage3Plotting.generate_plotting_code(
+                        plotting_code = generate_plotting_code(
                             agent=worker_agent,
                             node=child_node,
                             working_dir=working_dir,
@@ -155,6 +300,20 @@ def process_node(
                     process_interpreter.cleanup_session()
                     child_node.absorb_plot_exec_result(plot_exec_result)
                     if child_node.plot_exc_type and retry_count < 3:
+                        # Emit details to help diagnose plotting failures
+                        term_lines = child_node.plot_term_out or []
+                        tail = (
+                            "".join(term_lines[-50:])
+                            if isinstance(term_lines, list)
+                            else str(term_lines)
+                        )
+                        emit(
+                            "ai.run.log",
+                            {
+                                "message": f"Plotting error ({child_node.plot_exc_type}); retrying {retry_count + 1}/3. Tail of output:\\n{tail}",
+                                "level": "warn",
+                            },
+                        )
                         retry_count += 1
                         continue
                     else:
@@ -167,6 +326,14 @@ def process_node(
                         emit(
                             "ai.run.log",
                             {"message": f"✓ Generated {plot_count} plot file(s)", "level": "info"},
+                        )
+                    else:
+                        emit(
+                            "ai.run.log",
+                            {
+                                "message": "No plot files (*.png) found in working directory after plotting",
+                                "level": "warn",
+                            },
                         )
 
                     base_dir = Path(cfg.workspace_dir).parent
@@ -196,11 +363,22 @@ def process_node(
                         web_path = f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
                         child_node.plots.append(web_path)
                         child_node.plot_paths.append(str(final_path.absolute()))
-            except Exception:
-                pass
+            except Exception as e:
+                tb = traceback.format_exc()
+                emit(
+                    "ai.run.log",
+                    {"message": f"Plotting failed with exception: {str(e)}", "level": "warn"},
+                )
+                emit(
+                    "ai.run.log",
+                    {"message": f"Plotting traceback:\\n{tb}", "level": "warn"},
+                )
 
             if child_node.plots:
                 try:
+                    print(
+                        f"[bold blue]→ Analyzing {len(child_node.plots)} plots with Vision Language Model...[/bold blue]"
+                    )
                     emit(
                         "ai.run.log",
                         {
@@ -208,10 +386,24 @@ def process_node(
                             "level": "info",
                         },
                     )
-                    Stage3Plotting.analyze_plots_with_vlm(agent=worker_agent, node=child_node)
+                    analyze_plots_with_vlm(agent=worker_agent, node=child_node)
+                    print(
+                        f"[bold green]✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}[/bold green]"
+                    )
                     emit("ai.run.log", {"message": "✓ Plot analysis complete", "level": "info"})
-                except Exception:
-                    emit("ai.run.log", {"message": "Plot analysis failed", "level": "warn"})
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    emit(
+                        "ai.run.log",
+                        {
+                            "message": f"Plot analysis failed with exception: {str(e)}",
+                            "level": "warn",
+                        },
+                    )
+                    emit(
+                        "ai.run.log",
+                        {"message": f"Plot analysis traceback:\\n{tb}", "level": "warn"},
+                    )
 
         result_data = child_node.to_dict()
         # sanity pickle

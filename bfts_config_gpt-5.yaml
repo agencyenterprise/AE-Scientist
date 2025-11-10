@@ -21,14 +21,14 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: Qwen/Qwen2.5-VL-7B-Instruct
+  model: gpt-5
   temp: 1.0
 
 # LLM settings for paper writeup
 writeup:
-  big_model: Qwen/Qwen2.5-VL-7B-Instruct
-  small_model: Qwen/Qwen2.5-VL-7B-Instruct
-  plot_model: Qwen/Qwen2.5-VL-7B-Instruct
+  big_model: gpt-5
+  small_model: gpt-5
+  plot_model: gpt-5
 
 experiment:
   num_syn_datasets: 1
@@ -47,9 +47,9 @@ debug:
 # agent hyperparams
 agent:
   type: parallel
-  num_workers: 10
+  num_workers: 3
   stages:
-    stage1_max_iters: 16
+    stage1_max_iters: 9
     stage2_max_iters: 10
     stage3_max_iters: 8
     stage4_max_iters: 14
@@ -64,16 +64,16 @@ agent:
 
   # LLM settings for coding
   code:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: gpt-5
     temp: 1.0
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: gpt-5
     temp: 0.5
 
   vlm_feedback:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: gpt-5
     temp: 0.5
 
   search:

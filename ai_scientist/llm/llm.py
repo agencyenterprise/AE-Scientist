@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from typing import Any, cast
@@ -8,7 +9,10 @@ import backoff
 import openai
 import requests
 
+from .query.utils import get_openai_base_url
 from .token_tracker import track_token_usage
+
+logger = logging.getLogger("ai-scientist")
 
 MAX_NUM_TOKENS = 4096
 
@@ -127,14 +131,14 @@ def get_batch_responses_from_llm(
             histories.append(hist)
 
     if print_debug:
-        # Just print the first one.
-        print()
-        print("*" * 20 + " LLM START " + "*" * 20)
+        # Just log the first one.
+        logger.debug("")
+        logger.debug("*" * 20 + " LLM START " + "*" * 20)
         for j, msg_item in enumerate(msg_history + [{"role": "user", "content": msg}]):
-            print(f'{j}, {msg_item["role"]}: {msg_item["content"]}')
-        print(content)
-        print("*" * 21 + " LLM END " + "*" * 21)
-        print()
+            logger.debug(f'{j}, {msg_item["role"]}: {msg_item["content"]}')
+        logger.debug(content)
+        logger.debug("*" * 21 + " LLM END " + "*" * 21)
+        logger.debug("")
 
     return content, histories
 
@@ -150,9 +154,9 @@ def make_llm_call(
     if "gpt-5" in model:
         # gpt-5 models only support temperature=1 and use max_completion_tokens
         # Use 16K tokens for long-form generation (papers, writeups)
-        print(f"[DEBUG] Calling gpt-5 with {len(prompt)} messages")
-        print(f"[DEBUG] System message length: {len(system_message)} chars")
-        print(f"[DEBUG] User message length: {len(prompt[-1]['content']) if prompt else 0} chars")
+        logger.debug(f"Calling gpt-5 with {len(prompt)} messages")
+        logger.debug(f"System message length: {len(system_message)} chars")
+        logger.debug(f"User message length: {len(prompt[-1]['content']) if prompt else 0} chars")
         try:
             assert isinstance(client, openai.OpenAI)
             response = client.chat.completions.create(
@@ -164,19 +168,19 @@ def make_llm_call(
                 stop=None,
                 seed=0,
             )
-            print("[DEBUG] gpt-5 response received")
-            print(f"[DEBUG] Response finish_reason: {response.choices[0].finish_reason}")
-            print(
-                f"[DEBUG] Response content length: {len(response.choices[0].message.content) if response.choices[0].message.content else 0}"
+            logger.debug("gpt-5 response received")
+            logger.debug(f"Response finish_reason: {response.choices[0].finish_reason}")
+            logger.debug(
+                f"Response content length: {len(response.choices[0].message.content) if response.choices[0].message.content else 0}"
             )
             if response.choices[0].finish_reason == "length":
-                print(
-                    "[WARNING] gpt-5 hit token limit! Consider increasing max_completion_tokens further"
+                logger.warning(
+                    "gpt-5 hit token limit! Consider increasing max_completion_tokens further"
                 )
             return response
         except Exception as e:
-            print(f"[DEBUG] Exception in gpt-5 API call: {e}")
-            print(f"[DEBUG] Exception type: {type(e)}")
+            logger.debug(f"Exception in gpt-5 API call: {e}")
+            logger.debug(f"Exception type: {type(e)}")
             raise
     elif "gpt" in model:
         assert isinstance(client, openai.OpenAI)
@@ -373,13 +377,13 @@ def get_response_from_llm(
         raise ValueError(f"Model {model} not supported.")
 
     if print_debug:
-        print()
-        print("*" * 20 + " LLM START " + "*" * 20)
+        logger.debug("")
+        logger.debug("*" * 20 + " LLM START " + "*" * 20)
         for j, msg_item in enumerate(new_msg_history):
-            print(f'{j}, {msg_item["role"]}: {msg_item["content"]}')
-        print(content)
-        print("*" * 21 + " LLM END " + "*" * 21)
-        print()
+            logger.debug(f'{j}, {msg_item["role"]}: {msg_item["content"]}')
+        logger.debug(content)
+        logger.debug("*" * 21 + " LLM END " + "*" * 21)
+        logger.debug("")
 
     return content, new_msg_history
 
@@ -416,24 +420,24 @@ def extract_json_between_markers(llm_output: str) -> dict | None:
 
 def create_client(model: str) -> tuple[Any, str]:
     if model.startswith("claude-"):
-        print(f"Using Anthropic API with model {model}.")
+        logger.info(f"Using Anthropic API with model {model}.")
         return anthropic.Anthropic(), model
     elif model.startswith("bedrock") and "claude" in model:
         client_model = model.split("/")[-1]
-        print(f"Using Amazon Bedrock with model {client_model}.")
+        logger.info(f"Using Amazon Bedrock with model {client_model}.")
         return anthropic.AnthropicBedrock(), client_model
     elif model.startswith("vertex_ai") and "claude" in model:
         client_model = model.split("/")[-1]
-        print(f"Using Vertex AI with model {client_model}.")
+        logger.info(f"Using Vertex AI with model {client_model}.")
         return anthropic.AnthropicVertex(), client_model
-    elif "gpt" in model:
-        print(f"Using OpenAI API with model {model}.")
-        return openai.OpenAI(), model
-    elif "o1" in model or "o3" in model:
-        print(f"Using OpenAI API with model {model}.")
-        return openai.OpenAI(), model
+    elif "o1" in model or "o3" in model or "gpt" in model:
+        logger.info(f"Using OpenAI API with model {model}.")
+        base_url = get_openai_base_url()
+        if base_url:
+            logger.info(f"Using custom OpenAI base_url: {base_url}")
+        return openai.OpenAI(base_url=base_url), model
     elif model == "deepseek-coder-v2-0724":
-        print(f"Using OpenAI API with {model}.")
+        logger.info(f"Using OpenAI API with {model}.")
         return (
             openai.OpenAI(
                 api_key=os.environ["DEEPSEEK_API_KEY"],
@@ -442,7 +446,7 @@ def create_client(model: str) -> tuple[Any, str]:
             model,
         )
     elif model == "deepcoder-14b":
-        print(f"Using HuggingFace API with {model}.")
+        logger.info(f"Using HuggingFace API with {model}.")
         # Using OpenAI client with HuggingFace API
         if "HUGGINGFACE_API_KEY" not in os.environ:
             raise ValueError("HUGGINGFACE_API_KEY environment variable not set")
@@ -454,7 +458,7 @@ def create_client(model: str) -> tuple[Any, str]:
             model,
         )
     elif model == "llama3.1-405b":
-        print(f"Using OpenAI API with {model}.")
+        logger.info(f"Using OpenAI API with {model}.")
         return (
             openai.OpenAI(
                 api_key=os.environ["OPENROUTER_API_KEY"],
@@ -463,7 +467,7 @@ def create_client(model: str) -> tuple[Any, str]:
             "meta-llama/llama-3.1-405b-instruct",
         )
     elif "gemini" in model:
-        print(f"Using OpenAI API with {model}.")
+        logger.info(f"Using OpenAI API with {model}.")
         return (
             openai.OpenAI(
                 api_key=os.environ["GEMINI_API_KEY"],

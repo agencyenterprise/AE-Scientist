@@ -1,10 +1,13 @@
 import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, TypeVar
 
 import backoff
 import jsonschema
 from dataclasses_json import DataClassJsonMixin
+from dotenv import load_dotenv
 
 PromptType = str | dict | list
 FunctionCallType = dict
@@ -13,6 +16,15 @@ OutputType = str | FunctionCallType
 logger = logging.getLogger("ai-scientist")
 
 T = TypeVar("T")
+
+# Load .env file from project root
+_project_root = Path(__file__).parent.parent.parent
+load_dotenv(dotenv_path=_project_root / ".env")
+
+
+def get_openai_base_url() -> str | None:
+    """Get OpenAI base_url from environment variable if set."""
+    return os.environ.get("OPENAI_BASE_URL")
 
 
 @backoff.on_predicate(

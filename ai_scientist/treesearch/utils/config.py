@@ -1,15 +1,17 @@
 """configuration and setup utils"""
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Hashable, Optional, cast
+from typing import Dict, Hashable, List, Optional, cast
 
 import coolname  # type: ignore[import-untyped]
 import rich
 import shutup  # type: ignore[import-untyped]
 from dataclasses_json import DataClassJsonMixin
 from omegaconf import OmegaConf
+from pydantic import BaseModel, ConfigDict, Field
 from rich.logging import RichHandler
 from rich.syntax import Syntax
 
@@ -25,19 +27,26 @@ logger.setLevel(logging.WARNING)
 """ these dataclasses are just for type hinting, the actual config is in config.yaml """
 
 
-@dataclass
-class ThinkingConfig:
-    type: str
-    budget_tokens: Optional[int] = None
+class TaskDescription(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name: str = Field(alias="Name")
+    title: str = Field(alias="Title")
+    short_hypothesis: str = Field(alias="Short Hypothesis")
+    related_work: str = Field(alias="Related Work")
+    abstract: str = Field(alias="Abstract")
+    code: str | None = Field(default=None, alias="Code")
+    experiments: str | List[str] | List[Dict[str, str]] = Field(alias="Experiments")
+    risk_factors_and_limitations: str | List[str] = Field(alias="Risk Factors and Limitations")
+
+    def as_dict_with_aliases(self) -> Dict[str, object]:
+        return self.model_dump(by_alias=True)
 
 
 @dataclass
 class StageConfig:
     model: str
     temp: float
-    thinking: ThinkingConfig
-    betas: str
-    max_tokens: Optional[int] = None
 
 
 @dataclass
@@ -57,7 +66,6 @@ class AgentConfig:
     steps: int
     stages: dict[str, int]
     k_fold_validation: int
-    expose_prediction: bool
     data_preview: bool
 
     code: StageConfig
@@ -105,10 +113,7 @@ class ComputeConfig:
 @dataclass
 class Config(Hashable):
     data_dir: Path
-    desc_file: Path | None
-
-    goal: str | None
-    eval: str | None
+    desc_file: Path
 
     log_dir: Path
     workspace_dir: Path
@@ -141,16 +146,14 @@ def _get_next_logindex(dir: Path) -> int:
     return max_index + 1
 
 
-def _load_cfg(
-    path: Path = Path(__file__).parent / "config.yaml", use_cli_args: bool = False
-) -> object:
+def _load_cfg(path: Path, use_cli_args: bool = False) -> object:
     cfg = OmegaConf.load(path)
     if use_cli_args:
         cfg = OmegaConf.merge(cfg, OmegaConf.from_cli())
     return cfg
 
 
-def load_cfg(path: Path = Path(__file__).parent / "config.yaml") -> Config:
+def load_cfg(path: Path) -> Config:
     """Load config from .yaml file and CLI args, and set up logging directory."""
     return prep_cfg(_load_cfg(path))
 
@@ -163,11 +166,6 @@ def prep_cfg(cfg: object) -> Config:
 
     if cfg_obj.data_dir is None:
         raise ValueError("`data_dir` must be provided.")
-
-    if cfg_obj.desc_file is None and cfg_obj.goal is None:
-        raise ValueError(
-            "You must provide either a description of the task goal (`goal=...`) or a path to a plaintext file containing the description (`desc_file=...`)."
-        )
 
     # Normalize and resolve paths
     data_dir_path = Path(cfg_obj.data_dir)
@@ -203,43 +201,34 @@ def print_cfg(cfg: Config) -> None:
     rich.print(Syntax(OmegaConf.to_yaml(OmegaConf.structured(cfg)), "yaml", theme="paraiso-dark"))
 
 
-def load_task_desc(cfg: Config) -> str | dict:
-    """Load task description from markdown file or config str."""
+def load_task_desc(cfg: Config) -> TaskDescription:
+    """Load task description JSON and return a dict with aliased keys."""
 
-    # either load the task description from a file
-    if cfg.desc_file is not None:
-        if not (cfg.goal is None and cfg.eval is None):
-            logger.warning("Ignoring goal and eval args because task description file is provided.")
+    desc_path = Path(cfg.desc_file)
+    if not desc_path.exists():
+        raise FileNotFoundError(str(desc_path))
 
-        with open(cfg.desc_file) as f:
-            return f.read()
+    raw = desc_path.read_text()
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("Task description JSON must be an object")
 
-    # or generate it from the goal and eval args
-    if cfg.goal is None:
-        raise ValueError(
-            "`goal` (and optionally `eval`) must be provided if a task description file is not provided."
-        )
-
-    task_desc = {"Task goal": cfg.goal}
-    if cfg.eval is not None:
-        task_desc["Task evaluation"] = cfg.eval
-    print(task_desc)
-    return task_desc
+    model = TaskDescription.model_validate(data)
+    return model
 
 
 def prep_agent_workspace(cfg: Config) -> None:
     """Setup the agent's workspace and preprocess data if necessary."""
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
-
+    cfg.data_dir.mkdir(parents=True, exist_ok=True)
     copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
 
 
-def save_run(cfg: Config, journal: Journal, stage_name: str | None = None) -> None:
-    stage = stage_name if stage_name is not None else "NoStageRun"
-    save_dir = cfg.log_dir / stage
+def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
+    save_dir = cfg.log_dir / stage_name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # save journal
@@ -257,7 +246,11 @@ def save_run(cfg: Config, journal: Journal, stage_name: str | None = None) -> No
         raise
     # create the tree + code visualization
     try:
-        tree_export.generate(cfg, journal, save_dir / "tree_plot.html")
+        tree_export.generate(
+            exp_name=cfg.exp_name,
+            jou=journal,
+            out_path=save_dir / "tree_plot.html",
+        )
     except Exception as e:
         print(f"Error generating tree: {e}")
         raise

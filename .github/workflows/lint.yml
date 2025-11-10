@@ -26,7 +26,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          uv sync --frozen
+          uv sync --extra gpu --frozen
 
       - name: Lint backend (black, isort, flake8, mypy)
         run: |

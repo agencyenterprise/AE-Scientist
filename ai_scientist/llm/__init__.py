@@ -49,6 +49,8 @@ AVAILABLE_LLMS = [
     "vertex_ai/claude-3-5-sonnet@20241022",
     "vertex_ai/claude-3-sonnet@20240229",
     "vertex_ai/claude-3-haiku@20240307",
+    # Anthropic Claude models via Anthropic API
+    "claude-haiku-4-5",
     # Google Gemini models
     "gemini-2.0-flash",
     "gemini-2.5-flash-preview-04-17",
