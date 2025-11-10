@@ -51,27 +51,103 @@ export interface CreatePodOptions {
   autoTerminate?: boolean
 }
 
+export interface GpuType {
+  id: string
+  count: number
+  displayName: string
+  securePrice: number
+  communityPrice: number
+  oneMonthPrice: number
+  threeMonthPrice: number
+  sixMonthPrice: number
+  oneWeekPrice: number
+  communitySpotPrice: number
+  secureSpotPrice: number
+}
+
+export interface CpuType {
+  id: string
+  displayName: string
+  cores: number
+  threadsPerCore: number
+  groupId: string
+}
+
+export interface Machine {
+  minPodGpuCount: number
+  gpuTypeId: string
+  gpuType: GpuType
+  cpuCount: number
+  cpuTypeId: string
+  cpuType: CpuType
+  location: string
+  dataCenterId: string
+  diskThroughputMBps: number
+  maxDownloadSpeedMbps: number
+  maxUploadSpeedMbps: number
+  supportPublicIp: boolean
+  secureCloud: boolean
+  maintenanceStart?: string
+  maintenanceEnd?: string
+  maintenanceNote?: string
+  note?: string
+  costPerHr: number
+  currentPricePerGpu: number
+  gpuAvailable: number
+  gpuDisplayName: string
+}
+
+export interface NetworkVolume {
+  id: string
+  name: string
+  size: number
+  dataCenterId: string
+}
+
+export interface SavingsPlan {
+  costPerHr: number
+  endTime: string
+  gpuTypeId: string
+  id: string
+  podId: string
+  startTime: string
+}
+
 export interface PodInfo {
   id: string
   name: string
-  desiredStatus: string
-  runtime?: {
-    uptimeInSeconds?: number
-    ports?: Array<{
-      ip: string
-      isIpPublic: boolean
-      privatePort: number
-      publicPort: number
-      type: string
-    }>
-    gpus?: Array<{
-      id: string
-      gpuTypeId: string
-    }>
-  }
-  machine?: {
-    gpuCount: number
-  }
+  desiredStatus: "RUNNING" | "EXITED" | "TERMINATED"
+  adjustedCostPerHr: number
+  aiApiId: string | null
+  consumerUserId: string
+  containerDiskInGb: number
+  containerRegistryAuthId: string | null
+  costPerHr: string
+  cpuFlavorId?: string
+  dockerEntrypoint?: string[]
+  dockerStartCmd?: string[]
+  endpointId: string | null
+  env: Record<string, string>
+  gpu?: GpuType
+  image: string
+  interruptible: boolean
+  lastStartedAt: string
+  lastStatusChange: string
+  locked: boolean
+  machine?: Machine
+  machineId: string
+  memoryInGb: number
+  networkVolume?: NetworkVolume
+  portMappings: Record<string, number>
+  ports: string[]
+  publicIp: string | null
+  savingsPlans?: SavingsPlan[]
+  slsVersion?: number
+  templateId: string | null
+  vcpuCount: number
+  volumeEncrypted: boolean
+  volumeInGb: number
+  volumeMountPath: string
 }
 
 export interface ListPodsResponse {
@@ -263,6 +339,49 @@ export class RunPodService {
    */
   async getPod(podId: string): Promise<PodInfo> {
     return await this.makeRequest<PodInfo>(`/pods/${podId}`)
+  }
+
+  /**
+   * Get the pod host ID for SSH proxy connection via GraphQL API
+   * This is required for the correct SSH proxy connection format
+   */
+  async getPodHostId(podId: string): Promise<string | null> {
+    const query = `
+      query pod($input: String!) {
+        pod(input: $input) {
+          id
+          machine {
+            podHostId
+          }
+        }
+      }
+    `
+
+    try {
+      const response = await fetch("https://api.runpod.io/graphql", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          operationName: "pod",
+          variables: { input: podId },
+          query
+        })
+      })
+
+      if (!response.ok) {
+        console.warn(`⚠️  Failed to fetch podHostId from GraphQL API`)
+        return null
+      }
+
+      const data = await response.json()
+      return data?.data?.pod?.machine?.podHostId || null
+    } catch (error) {
+      console.warn(`⚠️  Error fetching podHostId:`, error)
+      return null
+    }
   }
 
   /**
