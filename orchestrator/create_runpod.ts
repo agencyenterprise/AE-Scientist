@@ -164,10 +164,10 @@ async function main() {
 
   if (sshInfo) {
     console.log(`\n📡 SSH Connection (RunPod Proxy - Recommended):`)
-    console.log(`\n $ ${sshInfo.command}`)
+    console.log(` $ ${sshInfo.command}`)
     console.log(`\n   SSH via public IP:`)
     console.log(
-      `\n $ ssh root@${readyPod.publicIp} -p ${sshInfo.port} -i ~/.ssh/id_ed25519`
+      ` $ ssh root@${readyPod.publicIp} -p ${sshInfo.port} -i ~/.ssh/id_ed25519`
     )
   } else {
     console.log("\n⚠️  SSH port not found. Pod may still be initializing.")
