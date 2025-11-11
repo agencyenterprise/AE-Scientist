@@ -49,6 +49,8 @@ export interface CreatePodOptions {
   maxRetries?: number
   /** Whether to auto-terminate the pod after completion (default: true) */
   autoTerminate?: boolean
+  /** Function to generate the pod name (default: {repoName}-worker-{timestamp}) */
+  generatePodName?: (options: CreatePodOptions) => string
 }
 
 export interface GpuType {
@@ -285,12 +287,16 @@ export class RunPodService {
       containerDiskInGb = 30,
       volumeInGb = 50,
       imageName = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
-      ports = ["22/tcp", "8888/http"]
+      ports = ["22/tcp", "8888/http"],
+      generatePodName
     } = options
     const cloudType = "SECURE"
+    const generatedName = generatePodName
+      ? generatePodName(options)
+      : `${repoName}-worker-${Date.now()}`
 
     const podPayload = {
-      name: `${repoName}-worker-${Date.now()}`,
+      name: generatedName,
       imageName,
       cloudType,
       gpuCount,

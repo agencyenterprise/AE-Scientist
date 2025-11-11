@@ -68,6 +68,7 @@ const program = new Command()
 program
   .name("create-runpod")
   .description("Create a RunPod container with SSH access")
+  .option("-n, --pod-name <name>", "Name of the pod")
   .option(
     "--auto-terminate",
     "Auto-terminate the pod after setup completes",
@@ -101,12 +102,15 @@ async function main() {
   const gpuTypes = options.gpuTypes.split(",").map((t: string) => t.trim())
   const branch = options.branch
   const gpuCount = Number.parseInt(options.gpuCount, 10)
-
+  const podName = options.podName
   console.log(`\nConfiguration:`)
   console.log(`  Repository: ${CONFIG.repoOrg}/${CONFIG.repoName}`)
   console.log(`  Branch: ${branch}`)
   console.log(`  GPU Types: ${gpuTypes.join(", ")}`)
   console.log(`  Auto-terminate: ${autoTerminate ? "Yes" : "No"}`)
+  if (podName) {
+    console.log(`  Pod Name: ${podName}`)
+  }
 
   // Validate API key
   if (!process.env.RUNPOD_API_KEY) {
@@ -134,7 +138,8 @@ async function main() {
     maxRetries: CONFIG.maxRetries,
     startupCommand: "tail -f /dev/null # Keep container running",
     autoTerminate,
-    env: CONFIG.podEnv()
+    env: CONFIG.podEnv(),
+    generatePodName: podName ? () => podName : undefined
   })
 
   // Wait for pod to be ready
