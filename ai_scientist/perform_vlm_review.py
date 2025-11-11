@@ -356,6 +356,7 @@ def generate_vlm_img_cap_ref_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json
@@ -371,6 +372,7 @@ def generate_vlm_img_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_review_json = extract_json_between_markers_vlm(content)
     return img_review_json
@@ -427,7 +429,7 @@ def detect_duplicate_figures(
             client=client,
             model=client_model,
             system_message=system_message,
-            temperature=0.7,
+            temperature=1.0,
         )
         return content
     except Exception as e:
@@ -454,6 +456,7 @@ def generate_vlm_img_selection_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json

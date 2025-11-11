@@ -298,6 +298,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
+            temperature=1.0,
             msg_history=msg_history,
             print_debug=False,
         )
@@ -342,6 +343,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
+            temperature=1.0,
             msg_history=msg_history,
             print_debug=False,
         )
@@ -698,6 +700,7 @@ def perform_writeup(
             client=big_client,
             model=big_client_model,
             system_message=big_model_system_message,
+            temperature=1.0,
             print_debug=False,
         )
 
@@ -785,6 +788,7 @@ If you believe you are done, simply say: "I am done".
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
+                temperature=1.0,
                 msg_history=msg_history,
                 print_debug=False,
             )

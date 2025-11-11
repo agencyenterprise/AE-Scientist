@@ -174,6 +174,7 @@ def generate_temp_free_idea(
                     client=client,
                     model=model,
                     system_message=system_prompt,
+                    temperature=1.0,
                     msg_history=msg_history,
                 )
 

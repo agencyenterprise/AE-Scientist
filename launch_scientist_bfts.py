@@ -219,20 +219,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model_agg_plots",
         type=str,
-        default="o3-mini-2025-01-31",
+        required=True,
         help="Model to use for plot aggregation",
     )
     parser.add_argument(
         "--model_writeup",
         type=str,
-        default="o1-preview-2024-09-12",
-        help="Model to use for writeup",
+        help="Model to use for writeup (required unless --skip_writeup is set)",
     )
     parser.add_argument(
         "--model_citation",
         type=str,
-        default="gpt-4o-2024-11-20",
-        help="Model to use for citation gathering",
+        help="Model to use for citation gathering (required unless --skip_writeup is set)",
     )
     parser.add_argument(
         "--num_cite_rounds",
@@ -243,8 +241,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model_review",
         type=str,
-        default="gpt-4o-2024-11-20",
-        help="Model to use for review main text and captions",
+        help="Model to use for review main text and captions (required unless --skip_review or --skip_writeup is set)",
     )
     parser.add_argument(
         "--skip_writeup",
@@ -256,7 +253,22 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="If set, skip the review process",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Validate conditional requirements
+    if not args.skip_writeup:
+        if args.model_writeup is None:
+            parser.error("--model_writeup is required when writeup is not skipped")
+        if args.model_citation is None:
+            parser.error("--model_citation is required when writeup is not skipped")
+
+    if not args.skip_review and not args.skip_writeup:
+        if args.model_review is None:
+            parser.error(
+                "--model_review is required when review is not skipped and writeup is not skipped"
+            )
+
+    return args
 
 
 def get_available_gpus(gpu_ids: str | None = None) -> list[int]:
@@ -464,10 +476,10 @@ if __name__ == "__main__":
                 paper_content,
                 client_model,
                 client,
+                temperature=1.0,
                 context=review_context,
                 num_reviews_ensemble=3,
                 num_reflections=2,
-                temperature=0.55,
             )
             # Performs images/captions/reference review
             review_img_cap_ref = perform_imgs_cap_ref_review(client, client_model, pdf_path)

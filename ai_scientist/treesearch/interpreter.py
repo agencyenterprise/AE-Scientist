@@ -338,7 +338,7 @@ class Interpreter:
         self.code_inq.put(code)
 
         # wait for child to actually start execution (we don't want interrupt child setup)
-        startup_deadline = time.time() + float(os.environ.get("AI_SCI_STARTUP_TIMEOUT", "60"))
+        startup_deadline = time.time() + float(os.environ.get("AI_SCI_STARTUP_TIMEOUT", "300"))
         state = None
         while True:
             remaining = startup_deadline - time.time()

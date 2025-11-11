@@ -482,7 +482,7 @@ class Journal:
                 user_message=None,
                 func_spec=node_selection_spec,
                 model=self.node_selection_model,
-                temperature=1.0,  # gpt-5 family requires temperature=1.0
+                temperature=1.0,
             )
 
             # Find and return the selected node
@@ -580,7 +580,7 @@ class Journal:
                 "3. Specific recommendations for future experiments based on both successes and failures"
             ),
             model=self.summary_model,
-            temperature=0.3,
+            temperature=1.0,
         )
 
         return summary_resp if isinstance(summary_resp, str) else json.dumps(summary_resp)

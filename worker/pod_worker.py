@@ -1509,10 +1509,10 @@ def run_experiment_pipeline(run: Dict[str, Any], mongo_client: MongoClient) -> N
                     paper_content or "",
                     client_model,
                     client,
+                    temperature=1.0,
                     context=review_context,
                     num_reviews_ensemble=3,
                     num_reflections=2,
-                    temperature=0.55,
                 )
 
                 db["runs"].update_one({"_id": run_id}, {"$set": {"currentStage.progress": 0.7}})

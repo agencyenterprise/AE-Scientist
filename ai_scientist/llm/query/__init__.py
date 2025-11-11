@@ -6,7 +6,7 @@ def query(
     system_message: PromptType | None,
     user_message: PromptType | None,
     model: str,
-    temperature: float | None = None,
+    temperature: float,
     max_tokens: int | None = None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs: object,

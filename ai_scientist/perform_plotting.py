@@ -164,6 +164,7 @@ def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflection
             client=client,
             model=model_name,
             system_message=AGGREGATOR_SYSTEM_MSG,
+            temperature=1.0,
             print_debug=False,
             msg_history=msg_history,
         )
@@ -214,6 +215,7 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
                 client=client,
                 model=model_name,
                 system_message=AGGREGATOR_SYSTEM_MSG,
+                temperature=1.0,
                 print_debug=False,
                 msg_history=msg_history,
             )

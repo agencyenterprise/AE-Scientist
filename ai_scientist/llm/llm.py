@@ -33,9 +33,9 @@ def get_batch_responses_from_llm(
     client: openai.OpenAI | anthropic.Anthropic,
     model: str,
     system_message: str,
+    temperature: float,
     print_debug: bool = False,
     msg_history: list[dict[str, Any]] | None = None,
-    temperature: float = 0.7,
     n_responses: int = 1,
 ) -> tuple[list[str], list[list[dict[str, Any]]]]:
     msg = prompt
@@ -221,9 +221,9 @@ def get_response_from_llm(
     client: openai.OpenAI | anthropic.Anthropic,
     model: str,
     system_message: str,
+    temperature: float,
     print_debug: bool = False,
     msg_history: list[dict[str, Any]] | None = None,
-    temperature: float = 0.7,
 ) -> tuple[str, list[dict[str, Any]]]:
     msg = prompt
     if msg_history is None:

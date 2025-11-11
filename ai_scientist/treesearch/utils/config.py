@@ -129,7 +129,7 @@ class Config(Hashable):
     writeup: Optional[WriteupConfig]
     agent: AgentConfig
     experiment: ExperimentConfig
-    compute: Optional[ComputeConfig]
+    compute: ComputeConfig
     debug: DebugConfig
 
 

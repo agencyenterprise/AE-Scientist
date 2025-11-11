@@ -14,7 +14,7 @@ exp_name: run # a random experiment name will be generated if not provided
 
 # settings for code execution
 exec:
-  timeout: 3600
+  timeout: 7200
   agent_file_name: runfile.py
   format_tb_ipython: False
 
@@ -36,10 +36,10 @@ experiment:
 # Hardware/Compute Resources Available
 compute:
   gpu:
-    type: "L40S"
-    count: 3
-    vram_gb: 48
-  notes: "Each experiment runs on ONE L40 GPU (48GB VRAM). The 3 GPUs per pod run 3 seeds in parallel. Design experiments for a single powerful GPU - you can use larger models (up to ~7B params), bigger batch sizes, and more extensive training than on consumer hardware. DATASETS: Use dataset sizes appropriate to the experiment at hand - datasets can be downloaded from HuggingFace. Use streaming=True for very large datasets (>10GB)."
+    type: "RTX 5090"
+    count: 1
+    vram_gb: 32
+  notes: "Each experiment runs on ONE RTX 5090 GPU (32GB VRAM). Design experiments for a single powerful GPU - you can use larger models (up to ~7B params), bigger batch sizes, and more extensive training than on consumer hardware. DATASETS: Use dataset sizes appropriate to the experiment at hand - datasets can be downloaded from HuggingFace. Use streaming=True for very large datasets (>10GB)."
 
 debug:
   stage4: False
@@ -47,7 +47,7 @@ debug:
 # agent hyperparams
 agent:
   type: parallel
-  num_workers: 10
+  num_workers: 1
   stages:
     stage1_max_iters: 16
     stage2_max_iters: 10
@@ -58,7 +58,7 @@ agent:
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 1
   multi_seed_eval:
-    num_seeds: 3 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
+    num_seeds: 1 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
   # whether to provide the agent with a preview of the data
   data_preview: False
 
