@@ -4,6 +4,7 @@ from typing import Any, Self
 
 import numpy as np
 from dataclasses_json import DataClassJsonMixin
+import traceback
 
 
 @dataclass
@@ -90,6 +91,7 @@ class MetricValue(DataClassJsonMixin):
                     return not self.value["metric_names"][0]["lower_is_better"]
                 except Exception as e:
                     print(f"error during metric value: {e}")
+                    print(traceback.format_exc())
                     return bool(self.maximize)
             # Old format
             return bool(self.maximize)
@@ -112,6 +114,7 @@ class MetricValue(DataClassJsonMixin):
                         )
                     except Exception as e:
                         print(f"error during metric value: {e}")
+                        print(traceback.format_exc())
                         values_str = "None"
                     parts.append(f"{metric['metric_name']}{opt_dir}[{values_str}]")
                 return "Metrics(" + "; ".join(parts) + ")"
