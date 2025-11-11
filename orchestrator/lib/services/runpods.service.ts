@@ -347,13 +347,14 @@ export class RunPodService {
    */
   async getPodHostId(podId: string): Promise<string | null> {
     const query = `
-      query pod($input: String!) {
+      query pod($input: PodFilter!) {
         pod(input: $input) {
-          id
           machine {
             podHostId
           }
+          __typename
         }
+        __typename
       }
     `
 
@@ -366,7 +367,11 @@ export class RunPodService {
         },
         body: JSON.stringify({
           operationName: "pod",
-          variables: { input: podId },
+          variables: {
+            input: {
+              podId
+            }
+          },
           query
         })
       })
@@ -391,6 +396,59 @@ export class RunPodService {
     await this.makeRequest<void>(`/pods/${podId}`, {
       method: "DELETE"
     })
+  }
+
+  /**
+   * Wait for a pod to be ready with SSH access
+   *
+   * Polls the pod status until it's running with public IP and port mappings.
+   * Also fetches the podHostId for SSH proxy connection.
+   *
+   * @param podId - The ID of the pod to wait for
+   * @param pollIntervalMs - Polling interval in milliseconds (default: 5000)
+   * @param maxPollAttempts - Maximum number of polling attempts (default: 60)
+   * @returns Pod info and podHostId when ready
+   * @throws Error if pod doesn't become ready in time
+   */
+  async waitForPodReady(
+    podId: string,
+    pollIntervalMs: number = 5000,
+    maxPollAttempts: number = 60
+  ): Promise<{ pod: PodInfo; podHostId: string }> {
+    console.log("\n⏳ Waiting for pod to be ready...")
+
+    for (let attempt = 1; attempt <= maxPollAttempts; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+
+      try {
+        const pod = await this.getPod(podId)
+        const isRunning = pod.desiredStatus === "RUNNING"
+        const hasPublicIp = pod.publicIp !== null && pod.publicIp !== undefined
+        const hasPortMappings = Object.keys(pod.portMappings || {}).length > 0
+
+        if (isRunning && hasPublicIp && hasPortMappings) {
+          const podHostId = await this.getPodHostId(podId)
+          if (!podHostId) {
+            throw new Error("Pod host ID not found after pod became ready")
+          }
+          console.log(
+            `✅ Pod is ready! (attempt ${attempt}/${maxPollAttempts})`
+          )
+          return {
+            pod,
+            podHostId
+          }
+        }
+
+        process.stdout.write(
+          `\r   Attempt ${attempt}/${maxPollAttempts} booting pod...`
+        )
+      } catch (error) {
+        console.log(`\n⚠️  Error checking pod status: ${error}`)
+      }
+    }
+
+    throw new Error("Pod did not become ready in time")
   }
 
   /**
@@ -457,6 +515,46 @@ export class RunPodService {
         `Tried GPU types: ${gpuTypes.join(", ")}. ` +
         `Last error: ${lastError?.message || "Unknown error"}`
     )
+  }
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+export interface SSHInfo {
+  command: string | null
+  port: number
+  ip: string
+}
+
+/**
+ * Extract SSH connection information from a pod
+ *
+ * @param pod - The pod information
+ * @param podHostId - The pod host ID from GraphQL API
+ * @returns SSH connection details or null if SSH port not mapped
+ */
+export function extractSSHInfo(
+  pod: PodInfo,
+  podHostId: string
+): SSHInfo | null {
+  // Check if SSH port (22) is mapped
+  const sshPublicPort = pod.portMappings?.["22"]
+
+  if (!sshPublicPort || !pod.publicIp) {
+    return null
+  }
+
+  // RunPod SSH proxy connection (using podHostId from GraphQL API)
+  const command = podHostId
+    ? `ssh ${podHostId}@ssh.runpod.io -i ~/.ssh/id_ed25519`
+    : null
+
+  return {
+    command,
+    port: sshPublicPort,
+    ip: pod.publicIp
   }
 }
 
