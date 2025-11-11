@@ -22,6 +22,7 @@ import re
 import shutil
 import signal
 import sys
+import traceback
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
@@ -193,6 +194,7 @@ if __name__ == "__main__":
     top_log_dir = Path(base_cfg["log_dir"]).resolve()
     top_log_dir.mkdir(parents=True, exist_ok=True)
     existing_runs_before = {p.name for p in top_log_dir.iterdir() if p.is_dir()}
+    reports_base = str(top_log_dir.parent.resolve())
 
     # Determine the idea JSON from config and update it in place with dataset reference
     idea_json_path = str(Path(base_cfg["desc_file"]).resolve())
@@ -218,87 +220,87 @@ if __name__ == "__main__":
             candidates = [p for p in top_log_dir.iterdir() if p.is_dir()]
             run_dir_path = max(candidates, key=lambda p: p.stat().st_mtime)
     except Exception:
+        traceback.print_exc()
         run_dir_path = None
 
-    # Mirror logs into base_folder/logs/<n>-run for downstream tools (plotting/writeup)
+    # (No mirroring) Use configured log_dir as the source of truth for summaries
+
+    # Determine if we should run aggregation/writeup based on presence of best solutions
+    should_run_reports = False
     if run_dir_path is not None:
-        logs_root = Path(base_folder) / "logs"
-        logs_root.mkdir(parents=True, exist_ok=True)
-        # Determine next run index under base_folder/logs
-        existing_indices: list[int] = []
-        for p in logs_root.iterdir():
-            if p.is_dir():
-                m = re.match(r"(\d+)-run$", p.name)
-                if m:
-                    try:
-                        existing_indices.append(int(m.group(1)))
-                    except ValueError:
-                        pass
-        next_index = max(existing_indices) + 1 if existing_indices else 0
-        target_logs_dir = logs_root / f"{next_index}-run"
-        target_logs_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(run_dir_path, target_logs_dir, dirs_exist_ok=True)
+        try:
+            has_best = any(run_dir_path.glob("stage_*/best_solution_*.py"))
+            if has_best:
+                should_run_reports = True
+            else:
+                print("No best_solution files found; skipping plot aggregation and writeup.")
+        except Exception:
+            traceback.print_exc()
+            print("Could not scan for best_solution files; skipping plot aggregation and writeup.")
+            should_run_reports = False
 
-        # Collect and relocate experiment results for convenience
-        experiment_results_dir = target_logs_dir / "experiment_results"
-        if experiment_results_dir.exists():
-            shutil.copytree(
-                experiment_results_dir,
-                Path(base_folder) / "experiment_results",
-                dirs_exist_ok=True,
-            )
-
-    # Aggregate plots across runs
-    aggregate_plots(base_folder=base_folder, model=args.model_agg_plots)
+    # Aggregate plots across runs (guarded and resilient)
+    agg_ok = False
+    if should_run_reports:
+        try:
+            aggregate_plots(base_folder=reports_base, model=args.model_agg_plots)
+            agg_ok = True
+        except Exception as e:
+            print(f"Aggregate plots failed: {e}. Skipping writeup.")
+            traceback.print_exc()
 
     # Remove the transient aggregated results folder (copied above)
-    shutil.rmtree(osp.join(base_folder, "experiment_results"), ignore_errors=True)
+    shutil.rmtree(osp.join(reports_base, "experiment_results"), ignore_errors=True)
 
     # Persist token accounting information
-    save_token_tracker(base_folder)
+    save_token_tracker(reports_base)
 
-    if not args.skip_writeup:
+    if not args.skip_writeup and should_run_reports and agg_ok:
         # Generate paper writeup (normal or ICBINB)
         writeup_success = False
         citations_text = gather_citations(
-            base_folder,
+            reports_base,
             num_cite_rounds=args.num_cite_rounds,
             small_model=args.model_citation,
         )
-        for attempt in range(args.writeup_retries):
-            print(f"Writeup attempt {attempt + 1} of {args.writeup_retries}")
-            if args.writeup_type == "normal":
-                writeup_success = perform_writeup(
-                    base_folder=base_folder,
-                    big_model=args.model_writeup,
-                    page_limit=8,
-                    citations_text=citations_text,
-                )
-            else:
-                writeup_success = perform_icbinb_writeup(
-                    base_folder=base_folder,
-                    big_model=args.model_writeup,
-                    page_limit=4,
-                    citations_text=citations_text,
-                )
-            if writeup_success:
-                break
+        try:
+            for attempt in range(args.writeup_retries):
+                print(f"Writeup attempt {attempt + 1} of {args.writeup_retries}")
+                if args.writeup_type == "normal":
+                    writeup_success = perform_writeup(
+                        base_folder=reports_base,
+                        big_model=args.model_writeup,
+                        page_limit=8,
+                        citations_text=citations_text,
+                    )
+                else:
+                    writeup_success = perform_icbinb_writeup(
+                        base_folder=reports_base,
+                        big_model=args.model_writeup,
+                        page_limit=4,
+                        citations_text=citations_text,
+                    )
+                if writeup_success:
+                    break
+        except Exception as e:
+            print(f"Writeup failed: {e}")
+            traceback.print_exc()
 
         if not writeup_success:
             print("Writeup process did not complete successfully after all retries.")
 
     # Record tokens after writeup stage as well
-    save_token_tracker(base_folder)
+    save_token_tracker(reports_base)
 
     if not args.skip_review and not args.skip_writeup:
         # Perform paper review (if the generated PDF exists)
-        pdf_path = find_pdf_path_for_review(base_folder)
+        pdf_path = find_pdf_path_for_review(reports_base)
         if pdf_path and os.path.exists(pdf_path):
             print("Paper found at: ", pdf_path)
             paper_content = load_paper(pdf_path)
             client, client_model = create_client(args.model_review)
             # Build review context from the run outputs
-            review_context = build_auto_review_context(base_folder, None, paper_content or "")
+            review_context = build_auto_review_context(reports_base, None, paper_content or "")
             # Performs paper review (text/main content)
             review_text = perform_review(
                 paper_content,
@@ -311,9 +313,9 @@ if __name__ == "__main__":
             )
             # Performs images/captions/reference review
             review_img_cap_ref = perform_imgs_cap_ref_review(client, client_model, pdf_path)
-            with open(osp.join(base_folder, "review_text.txt"), "w") as f:
+            with open(osp.join(reports_base, "review_text.txt"), "w") as f:
                 f.write(json.dumps(review_text, indent=4))
-            with open(osp.join(base_folder, "review_img_cap_ref.json"), "w") as f:
+            with open(osp.join(reports_base, "review_img_cap_ref.json"), "w") as f:
                 json.dump(review_img_cap_ref, f, indent=4)
             print("Paper review completed.")
         else:
@@ -332,6 +334,7 @@ if __name__ == "__main__":
         try:
             child.send_signal(signal.SIGTERM)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
+            traceback.print_exc()
             continue
 
     # Wait briefly for processes to terminate
@@ -342,6 +345,7 @@ if __name__ == "__main__":
         try:
             process.kill()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
+            traceback.print_exc()
             continue
 
     # Additional cleanup: find any orphaned processes containing specific keywords
@@ -356,5 +360,6 @@ if __name__ == "__main__":
                 if proc.is_running():
                     proc.kill()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+            traceback.print_exc()
             continue
     sys.exit(0)

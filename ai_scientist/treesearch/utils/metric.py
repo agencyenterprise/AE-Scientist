@@ -1,10 +1,10 @@
+import traceback
 from dataclasses import dataclass, field
 from functools import total_ordering
 from typing import Any, Self
 
 import numpy as np
 from dataclasses_json import DataClassJsonMixin
-import traceback
 
 
 @dataclass
