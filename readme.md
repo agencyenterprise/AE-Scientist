@@ -123,3 +123,22 @@ python launch_stage1_only.py bfts_config.yaml
 - Plots saved to: `workspaces/logs/<exp_name>/experiment_results/`
 - Best implementation code: `workspaces/logs/<exp_name>/stage_*/best_solution_*.py`
 
+## Creating a RunPod Container for Experiments
+
+**Note:** This is only necessary if you want to run experiments on RunPod.
+
+Requirement: make sure you have a RUNPOD_API_KEY environment variable set.
+
+1. Open orchestrator and install dependencies
+```bash
+cd orchestrator
+pnpm install
+```
+
+2. Call the create_runpod.ts script
+```bash
+./create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090"
+
+# Or from the root
+./orchestrator/create_runpod.ts --gpu-count 3 --branch my-branch --gpu-types "NVIDIA GeForce RTX 5090"
+```
