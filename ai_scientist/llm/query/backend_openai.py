@@ -10,6 +10,7 @@ from openai.types.chat import ChatCompletion
 from .utils import (
     FunctionSpec,
     OutputType,
+    PromptType,
     backoff_create,
     get_openai_base_url,
     opt_messages_to_list,
@@ -37,8 +38,8 @@ def _setup_openai_client() -> None:
 
 
 def query(
-    system_message: str | None,
-    user_message: str | None,
+    system_message: PromptType | None,
+    user_message: PromptType | None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs: object,
 ) -> tuple[OutputType, float, int, int, dict]:

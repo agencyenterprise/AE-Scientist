@@ -140,6 +140,16 @@ def _encode_image_to_base64(image_path: str) -> str | None:
         return None
 
 
+def _infer_image_mime_type(image_path: str) -> str:
+    p = image_path.lower()
+    if p.endswith(".png"):
+        return "image/png"
+    if p.endswith(".jpg") or p.endswith(".jpeg"):
+        return "image/jpeg"
+    # Default to PNG if unknown
+    return "image/png"
+
+
 def determine_datasets_successfully_tested(
     *, agent: SupportsPlottingAgent, node: Node
 ) -> List[str]:
@@ -250,27 +260,38 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         except Exception:
             selected_plots = node.plot_paths[:10]
 
-    user_message = [
-        {
-            "type": "text",
-            "text": (
-                "You are an experienced AI researcher analyzing experimental results. "
-                "You have been provided with plots from a machine learning experiment. "
-                f"This experiment is based on the following research idea: {agent.stage_name}"
-                "Please analyze these plots and provide detailed insights about the results. "
-                "If you don't receive any plots, say 'No plots received'. "
-                "Never make up plot analysis. "
-                "Please return the analyzes with strict order of uploaded images, but DO NOT include any word "
-                "like 'the first plot'."
-            ),
-        }
-    ] + [
-        {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{_encode_image_to_base64(plot_path)}"},
-        }
-        for plot_path in selected_plots
-    ]
+    text_part = {
+        "type": "text",
+        "text": (
+            "You are an experienced AI researcher analyzing experimental results. "
+            "You have been provided with plots from a machine learning experiment. "
+            f"This experiment is based on the following research idea: {agent.stage_name}"
+            "Please analyze these plots and provide detailed insights about the results. "
+            "If you don't receive any plots, say 'No plots received'. "
+            "Never make up plot analysis. "
+            "Please return the analyzes with strict order of uploaded images, but DO NOT include any word "
+            "like 'the first plot'."
+        ),
+    }
+
+    image_parts: list[dict] = []
+    for plot_path in selected_plots:
+        encoded = _encode_image_to_base64(plot_path)
+        if not encoded:
+            print(f"[WARN] Skipping plot for VLM (failed to base64 encode): {plot_path}")
+            continue
+        mime = _infer_image_mime_type(plot_path)
+        image_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime};base64,{encoded}",
+                    "detail": "low",
+                },
+            }
+        )
+
+    user_message = [text_part] + image_parts
 
     response = query(
         system_message=None,

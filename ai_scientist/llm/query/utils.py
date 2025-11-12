@@ -46,12 +46,15 @@ def backoff_create(
 
 
 def opt_messages_to_list(
-    system_message: str | None, user_message: str | None
-) -> list[dict[str, str]]:
-    messages = []
-    if system_message:
-        messages.append({"role": "system", "content": system_message})
-    if user_message:
+    system_message: PromptType | None, user_message: PromptType | None
+) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    if system_message is not None:
+        sys_content: Any = (
+            system_message if isinstance(system_message, str) else str(system_message)
+        )
+        messages.append({"role": "system", "content": sys_content})
+    if user_message is not None:
         messages.append({"role": "user", "content": user_message})
     return messages
 

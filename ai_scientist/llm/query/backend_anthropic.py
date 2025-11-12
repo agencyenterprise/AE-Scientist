@@ -6,7 +6,7 @@ import anthropic
 from anthropic.types import Message as AnthropicMessage
 from funcy import notnone, once, select_values  # type: ignore[import-untyped]
 
-from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
+from .utils import FunctionSpec, OutputType, PromptType, backoff_create, opt_messages_to_list
 
 logger = logging.getLogger("ai-scientist")
 
@@ -30,8 +30,8 @@ def _setup_anthropic_client() -> None:
 
 
 def query(
-    system_message: str | None,
-    user_message: str | None,
+    system_message: PromptType | None,
+    user_message: PromptType | None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs: object,
 ) -> tuple[OutputType, float, int, int, dict]:
@@ -57,7 +57,9 @@ def query(
         system_message, user_message = user_message, system_message
 
     if system_message is not None:
-        filtered_kwargs["system"] = system_message
+        filtered_kwargs["system"] = (
+            system_message if isinstance(system_message, str) else str(system_message)
+        )
 
     messages = opt_messages_to_list(None, user_message)
 
