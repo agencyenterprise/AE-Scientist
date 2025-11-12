@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import openai
-from tqdm import tqdm  # type: ignore[import-untyped]
+from tqdm import tqdm
 
 from ai_scientist.llm import create_client
 
@@ -310,7 +310,7 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
 
 def overall_summarize(
     journals: list[tuple[str, Journal]], model: str
-) -> tuple[dict[str, Any] | None, ...]:
+) -> tuple[dict[str, Any] | list[dict[str, Any]] | None, ...]:
     client, _ = create_client(model)
 
     def process_stage(

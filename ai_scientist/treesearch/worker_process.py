@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import os
 import pickle
@@ -18,6 +19,8 @@ from .types import PromptType
 from .utils.config import Config as AppConfig
 from .utils.metric import MetricValue, WorstMetricValue
 from .vlm_function_specs import metric_parse_spec
+
+logger = logging.getLogger("ai-scientist")
 
 
 def parse_and_assign_metrics(
@@ -221,12 +224,15 @@ def process_node(
                 emit("ai.run.log", {"message": "Fix attempt generated", "level": "info"})
             else:
                 if new_hyperparam_idea is not None and new_ablation_idea is None:
+                    logger.info(f"Building hyperparam tuning node {parent_node.id}")
                     child_node = Stage2Tuning.build_hyperparam_tuning_node(agent=worker_agent, parent_node=parent_node, hyperparam_idea=new_hyperparam_idea)  # type: ignore[arg-type]
                     child_node.parent = parent_node
                 elif new_ablation_idea is not None and new_hyperparam_idea is None:
+                    logger.info(f"Building ablation node {parent_node.id}")
                     child_node = Stage4Ablation.build_ablation_node(agent=worker_agent, parent_node=parent_node, ablation_idea=new_ablation_idea)  # type: ignore[arg-type]
                     child_node.parent = parent_node
                 else:
+                    logger.info(f"Improving node {parent_node.id}")
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 

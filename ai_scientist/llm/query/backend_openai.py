@@ -55,6 +55,9 @@ def query(
         filtered_kwargs["tools"] = [func_spec.as_openai_tool_dict]
         filtered_kwargs["tool_choice"] = func_spec.openai_tool_choice_dict
 
+    logger.debug(f"OpenAI API request - messages: {messages}")
+    logger.debug(f"OpenAI API request - kwargs: {filtered_kwargs}")
+
     t0 = time.time()
     completion_any = backoff_create(
         create_fn=_client.chat.completions.create,  # type: ignore[union-attr]
@@ -68,6 +71,13 @@ def query(
         raise RuntimeError("Failed to create completion after retries")
 
     completion = cast(ChatCompletion, completion_any)
+
+    logger.debug(f"OpenAI API response - completion: {completion}")
+    logger.debug(
+        f"OpenAI API response - usage: prompt_tokens={completion.usage.prompt_tokens if completion.usage else 0}, completion_tokens={completion.usage.completion_tokens if completion.usage else 0}"
+    )
+    logger.debug(f"OpenAI API response - model: {completion.model}")
+    logger.debug(f"OpenAI API response - finish_reason: {completion.choices[0].finish_reason}")
 
     choice = completion.choices[0]
 
@@ -97,5 +107,7 @@ def query(
         "model": completion.model,
         "created": completion.created,
     }
+
+    logger.debug(f"OpenAI API response - parsed output: {output}")
 
     return cast(OutputType, output), req_time, in_tokens, out_tokens, cast(dict, info)

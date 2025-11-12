@@ -61,6 +61,9 @@ def query(
 
     messages = opt_messages_to_list(None, user_message)
 
+    logger.debug(f"Anthropic API request - messages: {messages}")
+    logger.debug(f"Anthropic API request - kwargs: {filtered_kwargs}")
+
     t0 = time.time()
     message_any = backoff_create(
         create_fn=_client.messages.create,
@@ -69,12 +72,17 @@ def query(
         **filtered_kwargs,
     )
     req_time = time.time() - t0
-    logger.debug(f"Anthropic API call kwargs: {filtered_kwargs}")
 
     if message_any is False:
         raise RuntimeError("Failed to create message after retries")
 
     message = cast(AnthropicMessage, message_any)
+
+    logger.debug(f"Anthropic API response - content: {message.content}")
+    logger.debug(
+        f"Anthropic API response - usage: input_tokens={message.usage.input_tokens}, output_tokens={message.usage.output_tokens}"
+    )
+    logger.debug(f"Anthropic API response - stop_reason: {message.stop_reason}")
 
     # Parse output
     if func_spec is None:
@@ -113,5 +121,7 @@ def query(
     info = {
         "stop_reason": message.stop_reason,
     }
+
+    logger.debug(f"Anthropic API response - parsed output: {output}")
 
     return output, req_time, in_tokens, out_tokens, info

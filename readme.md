@@ -182,7 +182,7 @@ python launch_scientist_bfts.py <config_file> \
 
 **Example - Full Pipeline:**
 ```bash
-python launch_scientist_bfts.py bfts_config.yaml \
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
   --model_agg_plots gpt-5 \
   --model_writeup gpt-5 \
   --model_citation gpt-5 \
@@ -191,14 +191,12 @@ python launch_scientist_bfts.py bfts_config.yaml \
 
 **Example - Skip Writeup (Experiments Only):**
 ```bash
-python launch_scientist_bfts.py bfts_config.yaml \
-  --skip_writeup \
-  --model_agg_plots gpt-5
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml --skip_writeup --model_agg_plots gpt-5
 ```
 
 **Example - Skip Review (Experiments + Writeup):**
 ```bash
-python launch_scientist_bfts.py bfts_config.yaml \
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
   --skip_review \
   --model_agg_plots gpt-5 \
   --model_writeup gpt-5 \

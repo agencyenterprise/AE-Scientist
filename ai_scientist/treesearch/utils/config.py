@@ -62,11 +62,6 @@ class SearchConfig:
 
 
 @dataclass
-class DebugConfig:
-    stage4: bool
-
-
-@dataclass
 class AgentConfig:
     steps: int
     stages: dict[str, int]
@@ -134,7 +129,6 @@ class Config(Hashable):
     agent: AgentConfig
     experiment: ExperimentConfig
     compute: ComputeConfig
-    debug: DebugConfig
     writeup: Optional[WriteupConfig]
 
 

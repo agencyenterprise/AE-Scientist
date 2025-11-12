@@ -399,13 +399,13 @@ class Journal:
     def good_nodes(self) -> list[Node]:
         """Return a list of nodes that are not considered buggy by the agent."""
         list_of_nodes = [
-            [
-                n.step,
-                n.parent.step if n.parent else None,
-                n.id,
-                n.is_buggy,
-                n.is_buggy_plots,
-            ]
+            {
+                "step": n.step,
+                "parent_step": n.parent.step if n.parent else None,
+                "id": n.id,
+                "is_buggy": n.is_buggy,
+                "is_buggy_plots": n.is_buggy_plots,
+            }
             for n in self.nodes
         ]
         print(f"[purple]all nodes ID and is_buggy/is_buggy_plots flags: {list_of_nodes}[/purple]")

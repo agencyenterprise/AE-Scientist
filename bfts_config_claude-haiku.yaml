@@ -41,9 +41,6 @@ compute:
     count: 1
     vram_gb: 32
   notes: "Each experiment runs on ONE RTX 5090 GPU (32GB VRAM). Design experiments for a single powerful GPU - you can use larger models (up to ~7B params), bigger batch sizes, and more extensive training than on consumer hardware. DATASETS: Use dataset sizes appropriate to the experiment at hand - datasets can be downloaded from HuggingFace. Use streaming=True for very large datasets (>10GB)."
-  
-debug:
-  stage4: False
 
 # agent hyperparams
 agent:
