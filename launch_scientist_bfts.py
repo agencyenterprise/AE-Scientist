@@ -12,6 +12,7 @@ Steps:
 """
 
 import argparse
+import copy
 import json
 import os
 import os.path as osp
@@ -26,6 +27,7 @@ from typing import Generator
 
 import psutil
 import yaml
+from omegaconf import OmegaConf
 
 from ai_scientist.llm import create_client, token_tracker
 from ai_scientist.perform_icbinb_writeup import gather_citations
@@ -35,9 +37,18 @@ from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
+from ai_scientist.treesearch.agent_manager import AgentManager
+from ai_scientist.treesearch.events import BaseEvent
+from ai_scientist.treesearch.interpreter import ExecutionResult
+from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
 )
+from ai_scientist.treesearch.stages.base import StageMeta
+from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
+from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
+from ai_scientist.treesearch.utils.config import Config, load_task_desc, prep_cfg, save_run
+from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
 
 def save_token_tracker(idea_dir: str) -> None:
@@ -103,6 +114,11 @@ def parse_arguments() -> argparse.Namespace:
         "--skip_review",
         action="store_true",
         help="If set, skip the review process",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from the latest run and continue from Stage 2",
     )
     args = parser.parse_args()
 
@@ -188,6 +204,49 @@ if __name__ == "__main__":
     existing_runs_before = {p.name for p in top_log_dir.iterdir() if p.is_dir()}
     reports_base = str(top_log_dir.parent.resolve())
 
+    # Helper functions for resume flow
+    def _select_latest_run_dir(logs_root: Path) -> Path:
+        run_dirs = [p for p in logs_root.iterdir() if p.is_dir()]
+        if not run_dirs:
+            raise FileNotFoundError(f"No run directories found under {logs_root}")
+        return max(run_dirs, key=lambda p: p.stat().st_mtime)
+
+    def _select_stage1_dir(run_dir: Path) -> Path:
+        stage_dirs = sorted(
+            [p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("stage_1_")]
+        )
+        if not stage_dirs:
+            raise FileNotFoundError(f"No stage_1_* directory found under {run_dir}")
+        return stage_dirs[-1]
+
+    def _load_cfg_from_run(run_dir: Path) -> Config:
+        try:
+            stage1_dir = _select_stage1_dir(run_dir)
+            cfg_path = stage1_dir / "config.yaml"
+        except FileNotFoundError:
+            stage_dirs = sorted(
+                [p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("stage_")]
+            )
+            if not stage_dirs:
+                raise
+            cfg_path = stage_dirs[-1] / "config.yaml"
+        if not cfg_path.exists():
+            raise FileNotFoundError(str(cfg_path))
+        raw = OmegaConf.load(str(cfg_path))
+        schema = OmegaConf.structured(Config)
+        merged = OmegaConf.merge(schema, raw)
+        cfg_obj = OmegaConf.to_object(merged)
+        assert isinstance(cfg_obj, Config)
+        return cfg_obj
+
+    def _load_stage1_journal(stage1_dir: Path) -> tuple[str, Journal]:
+        stage_name = stage1_dir.name.replace("stage_", "", 1)
+        journal_path = stage1_dir / "journal.json"
+        if not journal_path.exists():
+            raise FileNotFoundError(str(journal_path))
+        journal = load_json_dc(path=journal_path, cls=Journal)
+        return stage_name, journal
+
     # Load the idea JSON from config's desc_file and merge dataset reference
     idea_json_path = str(Path(base_cfg["desc_file"]).resolve())
     with open(idea_json_path, "r") as f:
@@ -197,8 +256,87 @@ if __name__ == "__main__":
     # Base folder (next to the idea JSON) to collect artifacts for plotting/writeup
     base_folder = str(Path(idea_json_path).parent.resolve())
 
-    # Execute experiments via AgentManager (BFTS pipeline)
-    perform_experiments_bfts(Path(base_config_path), lambda event: print(event.to_dict()))
+    # Execute experiments via AgentManager (BFTS pipeline) or resume to Stage 2
+    if args.resume:
+        try:
+            logs_root = Path(base_cfg["log_dir"]).resolve()
+            run_dir = _select_latest_run_dir(logs_root)
+            cfg_obj = _load_cfg_from_run(run_dir)
+            # Apply global logging level from config so DEBUG logs are emitted
+            cfg_obj = prep_cfg(cfg=cfg_obj)
+            # Load task description using the same mechanism as stage-2 launcher
+            fake_config = copy.deepcopy(cfg_obj)
+            fake_config.desc_file = Path(idea_json_path)
+            task_desc = load_task_desc(cfg=fake_config)
+
+            def on_event(event: BaseEvent) -> None:
+                try:
+                    print(event.to_dict())
+                except Exception:
+                    traceback.print_exc()
+
+            manager = AgentManager(
+                task_desc=task_desc,
+                cfg=cfg_obj,
+                workspace_dir=Path(cfg_obj.workspace_dir),
+                event_callback=on_event,
+            )
+            # Seed Stage 1 meta and journal from the prior run
+            stage1_dir = _select_stage1_dir(run_dir)
+            stage1_name, stage1_journal = _load_stage1_journal(stage1_dir)
+            stage1_meta = StageMeta(
+                name=stage1_name,
+                number=1,
+                slug=Stage1Baseline.MAIN_STAGE_SLUG,
+                substage_number=1,
+                substage_name="preliminary",
+                goals=Stage1Baseline.DEFAULT_GOALS,
+                max_iterations=manager._get_max_iterations(1),
+                num_drafts=0,
+            )
+            # Ensure Stage 1 exists in manager state
+            manager.stages.append(stage1_meta)
+            manager.journals[stage1_meta.name] = stage1_journal
+
+            # Create empty Stage 2 meta and journal, then run Stage 2 only
+            stage2_meta = StageMeta(
+                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG + "_1_first_attempt",
+                number=2,
+                slug=Stage2Tuning.MAIN_STAGE_SLUG,
+                substage_number=1,
+                substage_name="first_attempt",
+                goals=Stage2Tuning.DEFAULT_GOALS,
+                max_iterations=manager._get_max_iterations(2),
+                num_drafts=0,
+            )
+            manager.stages.append(stage2_meta)
+            manager.current_stage = stage2_meta
+            manager.journals[stage2_meta.name] = Journal(
+                summary_model=cfg_obj.report.model,
+                node_selection_model=cfg_obj.agent.feedback.model,
+                event_callback=on_event,
+            )
+
+            def step_callback(stage: StageMeta, journal: Journal) -> None:
+                try:
+                    save_run(cfg=cfg_obj, journal=journal, stage_name=f"stage_{stage.name}")
+                except Exception:
+                    traceback.print_exc()
+
+            def exec_callback(code: str, is_exec: bool) -> ExecutionResult:
+                return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
+
+            manager.run_stage(
+                initial_substage=stage2_meta,
+                exec_callback=exec_callback,
+                step_callback=step_callback,
+            )
+        except Exception:
+            traceback.print_exc()
+            print("Resume to Stage 2 failed; exiting.")
+            sys.exit(1)
+    else:
+        perform_experiments_bfts(Path(base_config_path), lambda event: print(event.to_dict()))
 
     # Identify newly created run directory under configured log_dir
     run_dir_path: Path | None = None
