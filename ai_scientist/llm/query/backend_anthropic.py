@@ -6,7 +6,7 @@ import anthropic
 from anthropic.types import Message as AnthropicMessage
 from funcy import notnone, once, select_values  # type: ignore[import-untyped]
 
-from .utils import FunctionSpec, OutputType, backoff_create, opt_messages_to_list
+from .utils import FunctionSpec, OutputType, PromptType, backoff_create, opt_messages_to_list
 
 logger = logging.getLogger("ai-scientist")
 
@@ -30,8 +30,8 @@ def _setup_anthropic_client() -> None:
 
 
 def query(
-    system_message: str | None,
-    user_message: str | None,
+    system_message: PromptType | None,
+    user_message: PromptType | None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs: object,
 ) -> tuple[OutputType, float, int, int, dict]:
@@ -57,9 +57,14 @@ def query(
         system_message, user_message = user_message, system_message
 
     if system_message is not None:
-        filtered_kwargs["system"] = system_message
+        filtered_kwargs["system"] = (
+            system_message if isinstance(system_message, str) else str(system_message)
+        )
 
     messages = opt_messages_to_list(None, user_message)
+
+    logger.debug(f"Anthropic API request - messages: {messages}")
+    logger.debug(f"Anthropic API request - kwargs: {filtered_kwargs}")
 
     t0 = time.time()
     message_any = backoff_create(
@@ -69,12 +74,17 @@ def query(
         **filtered_kwargs,
     )
     req_time = time.time() - t0
-    logger.debug(f"Anthropic API call kwargs: {filtered_kwargs}")
 
     if message_any is False:
         raise RuntimeError("Failed to create message after retries")
 
     message = cast(AnthropicMessage, message_any)
+
+    logger.debug(f"Anthropic API response - content: {message.content}")
+    logger.debug(
+        f"Anthropic API response - usage: input_tokens={message.usage.input_tokens}, output_tokens={message.usage.output_tokens}"
+    )
+    logger.debug(f"Anthropic API response - stop_reason: {message.stop_reason}")
 
     # Parse output
     if func_spec is None:
@@ -113,5 +123,7 @@ def query(
     info = {
         "stop_reason": message.stop_reason,
     }
+
+    logger.debug(f"Anthropic API response - parsed output: {output}")
 
     return output, req_time, in_tokens, out_tokens, info

@@ -2,26 +2,27 @@
 
 import json
 import logging
+import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Hashable, List, Optional, cast
 
 import coolname  # type: ignore[import-untyped]
-import rich
 import shutup  # type: ignore[import-untyped]
 from dataclasses_json import DataClassJsonMixin
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
-from rich.logging import RichHandler
-from rich.syntax import Syntax
 
 from ..journal import Journal
 from . import copytree, preproc_data, serialize, tree_export
 
 shutup.mute_warnings()
-logging.basicConfig(level="WARNING", format="%(message)s", datefmt="[%X]", handlers=[RichHandler()])
+_LEVEL_NAME = os.getenv("AI_SCIENTIST_LOG_LEVEL", "WARNING").upper()
+_LEVEL = getattr(logging, _LEVEL_NAME, logging.WARNING)
+logging.basicConfig(level=_LEVEL, format="%(message)s", datefmt="[%X]")
 logger = logging.getLogger("ai-scientist")
-logger.setLevel(logging.WARNING)
+logger.setLevel(_LEVEL)
 
 
 """ these dataclasses are just for type hinting, the actual config is in config.yaml """
@@ -54,11 +55,6 @@ class SearchConfig:
     max_debug_depth: int
     debug_prob: float
     num_drafts: int
-
-
-@dataclass
-class DebugConfig:
-    stage4: bool
 
 
 @dataclass
@@ -114,7 +110,6 @@ class ComputeConfig:
 class Config(Hashable):
     data_dir: Path
     desc_file: Path
-
     log_dir: Path
     workspace_dir: Path
 
@@ -122,15 +117,15 @@ class Config(Hashable):
     copy_data: bool
 
     exp_name: str
+    log_level: str
 
     exec: ExecConfig
     generate_report: bool
     report: StageConfig
-    writeup: Optional[WriteupConfig]
     agent: AgentConfig
     experiment: ExperimentConfig
-    compute: Optional[ComputeConfig]
-    debug: DebugConfig
+    compute: ComputeConfig
+    writeup: Optional[WriteupConfig]
 
 
 def _get_next_logindex(dir: Path) -> int:
@@ -194,11 +189,26 @@ def prep_cfg(cfg: object) -> Config:
     if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
 
+    # Apply logging level from config
+    level_name = cfg_obj.log_level.upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.getLogger().setLevel(level)
+    for h in logging.getLogger().handlers:
+        try:
+            h.setLevel(level)
+        except Exception:
+            pass
+    logger.setLevel(level)
+
     return cfg_obj
 
 
 def print_cfg(cfg: Config) -> None:
-    rich.print(Syntax(OmegaConf.to_yaml(OmegaConf.structured(cfg)), "yaml", theme="paraiso-dark"))
+    try:
+        print(OmegaConf.to_yaml(OmegaConf.structured(cfg)))
+    except Exception:
+        # Fallback to a basic print if structured conversion fails
+        print(cfg)
 
 
 def load_task_desc(cfg: Config) -> TaskDescription:
@@ -223,6 +233,14 @@ def prep_agent_workspace(cfg: Config) -> None:
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
+    # Persist the original idea file alongside inputs for traceability
+    try:
+        idea_src = Path(cfg.desc_file)
+        idea_dst = cfg.workspace_dir / "input" / "original_idea.json"
+        if idea_src.exists():
+            shutil.copy2(idea_src, idea_dst)
+    except Exception as e:
+        print(f"Warning: failed to copy original idea file: {e}")
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
 

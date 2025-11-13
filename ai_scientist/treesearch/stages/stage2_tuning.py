@@ -30,7 +30,7 @@ class Stage2Tuning(Stage):
     DEFAULT_GOALS = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"
-        "- Introduce additional datasets from HuggingFace to test the model. Use dataset sizes appropriate to the experiment. Use streaming=True for very large datasets. See hf_dataset_reference.py for examples of available datasets."
+        "- Introduce additional datasets from HuggingFace to test the model. Use dataset sizes appropriate to the experiment. Use streaming=True for very large datasets."
     )
 
     @staticmethod

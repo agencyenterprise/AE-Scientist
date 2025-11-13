@@ -6,9 +6,10 @@ import shutil
 import subprocess
 import sys
 import traceback
+from pathlib import Path
+from typing import Optional
 
-from rich import print
-
+from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import create_client, get_response_from_llm
 from ai_scientist.perform_icbinb_writeup import (
     filter_experiment_summaries,
@@ -131,7 +132,12 @@ def run_aggregator_script(
     return aggregator_out
 
 
-def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflections: int = 5) -> None:
+def aggregate_plots(
+    base_folder: str,
+    model: str = "o1-2024-12-17",
+    n_reflections: int = 5,
+    run_dir_name: Optional[str] = None,
+) -> None:
     filename = "auto_plot_aggregator.py"
     aggregator_script_path = os.path.join(base_folder, filename)
     figures_dir = os.path.join(base_folder, "figures")
@@ -144,10 +150,70 @@ def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflection
         print("Cleaned up previous figures directory")
 
     idea_text = load_idea_text(base_folder)
-    exp_summaries = load_exp_summaries(base_folder)
+    exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
     filtered_summaries_for_plot_agg = filter_experiment_summaries(
         exp_summaries, step_name="plot_aggregation"
     )
+    # Make exp_results_npy_files and plot_paths absolute under the chosen run dir
+    try:
+        chosen_run = run_dir_name
+        if not chosen_run:
+            chosen_run = find_latest_run_dir_name(logs_dir=Path(base_folder) / "logs")
+        run_dir = Path(base_folder) / "logs" / str(chosen_run)
+
+        def absolutize_paths(obj: object) -> object:
+            if isinstance(obj, dict):
+                new_d: dict[str, object] = {}
+                for k, v in obj.items():
+                    if k in {"exp_results_npy_files", "plot_paths"} and isinstance(v, list):
+                        abs_list: list[str] = []
+                        for p in v:
+                            if isinstance(p, str) and not os.path.isabs(p):
+                                abs_list.append(str(run_dir / p))
+                            else:
+                                abs_list.append(p)
+                        new_d[k] = abs_list
+                    else:
+                        new_d[k] = absolutize_paths(v)
+                return new_d
+            if isinstance(obj, list):
+                return [absolutize_paths(x) for x in obj]
+            return obj
+
+        filtered_summaries_for_plot_agg = absolutize_paths(filtered_summaries_for_plot_agg)  # type: ignore[assignment]
+
+        # Collect and validate required .npy files
+        def collect_npy_files(obj: object, out: list[str]) -> None:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k == "exp_results_npy_files" and isinstance(v, list):
+                        for p in v:
+                            if isinstance(p, str) and p.lower().endswith(".npy"):
+                                out.append(p)
+                    else:
+                        collect_npy_files(v, out)
+            elif isinstance(obj, list):
+                for x in obj:
+                    collect_npy_files(x, out)
+
+        npy_files: list[str] = []
+        collect_npy_files(filtered_summaries_for_plot_agg, npy_files)
+        if len(npy_files) == 0:
+            raise ValueError(
+                f"No exp_results_npy_files found in summaries for run '{chosen_run}'. "
+                f"Cannot generate data-driven figures."
+            )
+        missing = [p for p in npy_files if not os.path.exists(p)]
+        if missing:
+            # Show at most a few missing paths to keep error readable
+            preview = "\n".join(missing[:10])
+            more = f"\n... and {len(missing) - 10} more" if len(missing) > 10 else ""
+            raise FileNotFoundError(
+                f"Missing experiment .npy files for run '{chosen_run}'. "
+                f"Ensure summaries reference existing files under {run_dir}.\nMissing files:\n{preview}{more}"
+            )
+    except Exception:
+        traceback.print_exc()
     # Convert them to one big JSON string for context
     combined_summaries_str = json.dumps(filtered_summaries_for_plot_agg, indent=2)
 
@@ -164,6 +230,7 @@ def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflection
             client=client,
             model=model_name,
             system_message=AGGREGATOR_SYSTEM_MSG,
+            temperature=1.0,
             print_debug=False,
             msg_history=msg_history,
         )
@@ -214,6 +281,7 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
                 client=client,
                 model=model_name,
                 system_message=AGGREGATOR_SYSTEM_MSG,
+                temperature=1.0,
                 print_debug=False,
                 msg_history=msg_history,
             )
@@ -240,6 +308,21 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
             print(
                 f"No new aggregator script was provided or it was identical. Reflection step {i + 1} complete."
             )
+
+    # Move generated figures into a per-run subfolder to avoid mixing runs
+    try:
+        chosen_run_final = run_dir_name or find_latest_run_dir_name(
+            logs_dir=Path(base_folder) / "logs"
+        )
+        dest_dir = os.path.join(figures_dir, str(chosen_run_final))
+        os.makedirs(dest_dir, exist_ok=True)
+        if os.path.exists(figures_dir):
+            for fname in os.listdir(figures_dir):
+                src = os.path.join(figures_dir, fname)
+                if os.path.isfile(src):
+                    shutil.move(src, os.path.join(dest_dir, fname))
+    except Exception:
+        traceback.print_exc()
 
 
 def main() -> None:

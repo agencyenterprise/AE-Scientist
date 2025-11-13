@@ -1,5 +1,3 @@
-from rich import print
-
 from ai_scientist.llm.query import FunctionSpec, query
 
 from ..codegen_agent import MinimalAgent

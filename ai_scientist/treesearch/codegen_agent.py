@@ -114,7 +114,7 @@ class MinimalAgent:
                     [
                         f"You MUST evaluate your solution on at least {num_syn_datasets} different datasets to ensure robustness:",
                         "  - Use dataset sizes appropriate to the experiment at hand",
-                        "  - Use standard benchmark datasets when available (see hf_dataset_reference.py for examples)",
+                        "  - Use standard benchmark datasets when available",
                         f"  - If using synthetic data, generate at least {num_syn_datasets} variants with different characteristics",
                         "  - For very large datasets (>10GB), use streaming=True to avoid memory issues",
                         "  - Report metrics separately for each dataset",

@@ -123,7 +123,7 @@ def run_plot_aggregation(*, agent: SupportsSeedAgent, node: Node, seed_nodes: Li
             timeout=agent.cfg.exec.timeout,
             format_tb_ipython=agent.cfg.exec.format_tb_ipython,
             agent_file_name=agent.cfg.exec.agent_file_name,
-            env_vars={"AI_SCIENTIST_ROOT": ""},
+            env_vars=None,
         )
         try:
             working_dir = process_interpreter.working_dir

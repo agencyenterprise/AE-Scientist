@@ -18,8 +18,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 
-from rich import print
-
 from ai_scientist.llm.query import FunctionSpec, query
 from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, RunStageProgressEvent
 
@@ -634,7 +632,10 @@ Your research idea:\n\n
                     step_callback=step_callback,
                 )
                 if not multi_seed_ok:
-                    self.current_stage = None
+                    # If multi-seed eval failed, we should still try to advance to next stage
+                    # Setting current_stage = None here would prevent that
+                    # Instead, let the caller handle this case
+                    pass
                 return True, None
 
             # Check if sub-stage is complete
@@ -769,11 +770,14 @@ Your research idea:\n\n
                     step_callback=step_callback,
                 )
                 if main_done:
-                    self.current_stage = None
+                    # Don't set self.current_stage = None here - let _advance_to_next_main_stage() handle it
+                    # This allows the next main stage to be created properly
                     current_substage = None
                 else:
                     current_substage = maybe_next_substage
-        self._save_checkpoint()
+        # Save checkpoint using the last completed stage (before advancing to next)
+        if self.current_stage:
+            self._save_checkpoint()
 
     def _gather_stage_metrics(self, journal: Journal) -> Dict[str, Any]:
         """Gather detailed metrics and analysis from the stage's nodes"""

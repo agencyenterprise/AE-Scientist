@@ -2,6 +2,7 @@ import base64
 import hashlib
 import os
 import re
+import traceback
 from typing import Any, Dict, List, Optional
 
 import openai
@@ -164,7 +165,12 @@ def extract_figure_screenshots(
     Avoid partial matches, e.g. "Figure 11" doesn't match "Figure 1".
     """
     os.makedirs(img_folder_path, exist_ok=True)
-    doc = pymupdf.open(pdf_path)
+    try:
+        doc = pymupdf.open(pdf_path)
+    except Exception:
+        print(f"Error: Could not open PDF for image extraction: {pdf_path}")
+        print(traceback.format_exc())
+        return []
     page_range = range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
 
     # ---------- (A) EXTRACT ALL TEXT BLOCKS FROM THE DOCUMENT ----------
@@ -356,6 +362,7 @@ def generate_vlm_img_cap_ref_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json
@@ -371,6 +378,7 @@ def generate_vlm_img_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_review_json = extract_json_between_markers_vlm(content)
     return img_review_json
@@ -427,7 +435,7 @@ def detect_duplicate_figures(
             client=client,
             model=client_model,
             system_message=system_message,
-            temperature=0.7,
+            temperature=1.0,
         )
         return content
     except Exception as e:
@@ -454,6 +462,7 @@ def generate_vlm_img_selection_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
+        temperature=1.0,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json

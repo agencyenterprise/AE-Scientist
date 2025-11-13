@@ -125,9 +125,9 @@ def get_response_from_vlm(
     client: openai.OpenAI,
     model: str,
     system_message: str,
+    temperature: float,
     print_debug: bool = False,
     msg_history: list[dict[str, Any]] | None = None,
-    temperature: float = 0.7,
     max_images: int = 25,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Get response from vision-language model."""
@@ -244,9 +244,9 @@ def get_batch_responses_from_vlm(
     client: openai.OpenAI,
     model: str,
     system_message: str,
+    temperature: float,
     print_debug: bool = False,
     msg_history: list[dict[str, Any]] | None = None,
-    temperature: float = 0.7,
     n_responses: int = 1,
     max_images: int = 200,
 ) -> tuple[list[str], list[list[dict[str, Any]]]]:

@@ -6,7 +6,7 @@ def query(
     system_message: PromptType | None,
     user_message: PromptType | None,
     model: str,
-    temperature: float | None = None,
+    temperature: float,
     max_tokens: int | None = None,
     func_spec: FunctionSpec | None = None,
     **model_kwargs: object,
@@ -38,10 +38,8 @@ def query(
     compiled_system = compile_prompt_to_md(system_message) if system_message else None
     compiled_user = compile_prompt_to_md(user_message) if user_message else None
 
-    if not isinstance(compiled_system, str) and compiled_system is not None:
-        compiled_system = str(compiled_system)
-    if not isinstance(compiled_user, str) and compiled_user is not None:
-        compiled_user = str(compiled_user)
+    # Preserve structured content (lists/dicts) so multi-part messages (e.g., image_url blocks)
+    # are passed through to the backend intact. Do not coerce to string here.
 
     output, req_time, in_tok_count, out_tok_count, info = query_func(
         system_message=compiled_system,

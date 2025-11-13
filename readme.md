@@ -47,6 +47,12 @@ source .venv/bin/activate
 uv sync
 ```
 
+5. Quick setup (alternative)
+```bash
+bash install_run_pod.sh
+```
+This script creates a virtual environment with system packages, activates it, and installs dependencies.
+
 ## Environment Variables
 
 Before running experiments, you need to configure API keys and tokens.
@@ -146,3 +152,90 @@ pnpm install
 ./orchestrator/create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090" --pod-name "my-pod-name"
 ./orchestrator/create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090" -n "my-pod-name"
 ```
+
+
+### Run Full End-to-End Pipeline
+
+To run the complete BFTS experiment workflow including all stages, plot aggregation, paper writeup, and review:
+
+```bash
+python launch_scientist_bfts.py <config_file> \
+  --model_agg_plots <model_name> \
+  --model_writeup <model_name> \
+  --model_citation <model_name> \
+  --model_review <model_name>
+```
+
+**Required Arguments:**
+- `<config_file>`: Path to the YAML configuration file (e.g., `bfts_config.yaml`)
+- `--model_agg_plots`: Model to use for plot aggregation (e.g., `gpt-5`)
+- `--model_writeup`: Model to use for paper writeup (e.g., `gpt-5`) - required unless `--skip_writeup` is set
+- `--model_citation`: Model to use for citation gathering (e.g., `gpt-5`) - required unless `--skip_writeup` is set
+- `--model_review`: Model to use for paper review (e.g., `gpt-5`) - required unless `--skip_review` or `--skip_writeup` is set
+
+**Optional Arguments:**
+- `--writeup-type`: Type of writeup to generate (`normal` for 8-page or `icbinb` for 4-page, default: `icbinb`)
+- `--writeup-retries`: Number of writeup attempts to try (default: `3`)
+- `--num_cite_rounds`: Number of citation rounds to perform (default: `20`)
+- `--skip_writeup`: Skip the writeup process (also skips review)
+- `--skip_review`: Skip the review process (writeup must still run)
+- `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); will execute only the next missing stage for that run, or skip stages entirely if summaries exist, then perform aggregation/writeup per flags.
+
+**Example - Full Pipeline:**
+```bash
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
+  --model_agg_plots gpt-5 \
+  --model_writeup gpt-5 \
+  --model_citation gpt-5 \
+  --model_review gpt-5
+```
+
+**Example - Skip Writeup (Experiments Only):**
+```bash
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml --skip_writeup --model_agg_plots gpt-5
+```
+
+**Example - Skip Review (Experiments + Writeup):**
+```bash
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
+  --skip_review \
+  --model_agg_plots gpt-5 \
+  --model_writeup gpt-5 \
+  --model_citation gpt-5
+```
+
+**Example - Resume From Specific Run:**
+```bash
+# Resume run "4-run" (or pass just 4). If stage 2/3/4 are missing, the launcher will run the next missing stage.
+# If all summaries exist under logs/4-run, it will skip stages and perform aggregation/writeup only.
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
+  --resume 4 \
+  --model_agg_plots gpt-5 \
+  --model_writeup gpt-5 \
+  --model_citation gpt-5 \
+  --model_review gpt-5
+```
+
+**What the Full Pipeline Does:**
+1. **Loads research idea** from the JSON file specified in config's `desc_file`
+2. **Runs all BFTS stages** via AgentManager using directories from the provided config:
+   - Stage 1: Initial implementation
+   - Stage 2: Baseline tuning
+   - Stage 3: Creative research (plotting)
+   - Stage 4: Ablation studies
+3. **Aggregates plots** across runs using the specified model
+4. **Generates paper writeup** (normal or ICBINB format) using the specified model
+5. **Gathers citations** using the specified citation model
+6. **Performs paper review** (text and images/captions/references) using the specified review model
+
+**Output:**
+- Experiment logs: under the `log_dir` specified in your config (e.g., `workspaces/logs/<run_id>/`)
+- Figures: under the parent directory of `log_dir` (e.g., `workspaces/figures/`)
+- Paper PDF (if writeup enabled): under the parent directory of `log_dir` (e.g., `workspaces/`)
+- Review results (if writeup and review enabled): `review_text.txt` and `review_img_cap_ref.json` 
+- Token usage: `token_tracker.json` in the reports base directory
+
+### Notes
+- The idea file (`desc_file`) and all directories are taken from your YAML config; do not pass idea flags to the launcher.
+- Logging level is controlled via `log_level` in the YAML config (e.g., `DEBUG`, `INFO`).
+

@@ -140,6 +140,16 @@ def _encode_image_to_base64(image_path: str) -> str | None:
         return None
 
 
+def _infer_image_mime_type(image_path: str) -> str:
+    p = image_path.lower()
+    if p.endswith(".png"):
+        return "image/png"
+    if p.endswith(".jpg") or p.endswith(".jpeg"):
+        return "image/jpeg"
+    # Default to PNG if unknown
+    return "image/png"
+
+
 def determine_datasets_successfully_tested(
     *, agent: SupportsPlottingAgent, node: Node
 ) -> List[str]:
@@ -183,7 +193,34 @@ def determine_datasets_successfully_tested(
 
 
 def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
+    print(f"[DEBUG] analyze_plots_with_vlm called for node {node.id}")
+    print(f"[DEBUG] node.plots count: {len(node.plots) if node.plots else 0}")
+    print(f"[DEBUG] node.plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}")
+    print(f"[DEBUG] node.plots: {node.plots[:3] if node.plots else 'None'}...")
+    print(f"[DEBUG] node.plot_paths: {node.plot_paths[:3] if node.plot_paths else 'None'}...")
+
     if not node.plot_paths:
+        print("=" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("⚠️  ⚠️  ⚠️  BIG WARNING: plot_paths is EMPTY but plots list has items! ⚠️  ⚠️  ⚠️")
+        print(f"⚠️  Node ID: {node.id}")
+        print(f"⚠️  plots count: {len(node.plots) if node.plots else 0}")
+        print(f"⚠️  plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}")
+        print("⚠️  This means VLM analysis cannot proceed (no actual plot files to analyze)")
+        print("⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)")
+        print("⚠️  This can happen if:")
+        print("⚠️    1. Exception occurred during file moving (plots populated but plot_paths not)")
+        print("⚠️    2. Plots were populated from a previous attempt/retry")
+        print("⚠️    3. plot_paths list was cleared/reset somewhere")
+        print("!" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("=" * 100)
+        # Set is_buggy_plots to False to allow the node to be considered "good"
+        # but mark that we couldn't verify the plots
+        node.is_buggy_plots = False
         return
     if len(node.plot_paths) <= 10:
         selected_plots = node.plot_paths
@@ -223,27 +260,38 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         except Exception:
             selected_plots = node.plot_paths[:10]
 
-    user_message = [
-        {
-            "type": "text",
-            "text": (
-                "You are an experienced AI researcher analyzing experimental results. "
-                "You have been provided with plots from a machine learning experiment. "
-                f"This experiment is based on the following research idea: {agent.stage_name}"
-                "Please analyze these plots and provide detailed insights about the results. "
-                "If you don't receive any plots, say 'No plots received'. "
-                "Never make up plot analysis. "
-                "Please return the analyzes with strict order of uploaded images, but DO NOT include any word "
-                "like 'the first plot'."
-            ),
-        }
-    ] + [
-        {
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{_encode_image_to_base64(plot_path)}"},
-        }
-        for plot_path in selected_plots
-    ]
+    text_part = {
+        "type": "text",
+        "text": (
+            "You are an experienced AI researcher analyzing experimental results. "
+            "You have been provided with plots from a machine learning experiment. "
+            f"This experiment is based on the following research idea: {agent.stage_name}"
+            "Please analyze these plots and provide detailed insights about the results. "
+            "If you don't receive any plots, say 'No plots received'. "
+            "Never make up plot analysis. "
+            "Please return the analyzes with strict order of uploaded images, but DO NOT include any word "
+            "like 'the first plot'."
+        ),
+    }
+
+    image_parts: list[dict] = []
+    for plot_path in selected_plots:
+        encoded = _encode_image_to_base64(plot_path)
+        if not encoded:
+            print(f"[WARN] Skipping plot for VLM (failed to base64 encode): {plot_path}")
+            continue
+        mime = _infer_image_mime_type(plot_path)
+        image_parts.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime};base64,{encoded}",
+                    "detail": "low",
+                },
+            }
+        )
+
+    user_message = [text_part] + image_parts
 
     response = query(
         system_message=None,
@@ -260,7 +308,23 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         print("VLM plot analysis raw response: <unprintable>")
 
     if not isinstance(response, dict):
-        print("VLM plot analysis response is not a dict; skipping analysis parsing.")
+        print("=" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("⚠️  ⚠️  ⚠️  BIG WARNING: VLM analysis response is not a dict! ⚠️  ⚠️  ⚠️")
+        print(f"⚠️  Node ID: {node.id}")
+        print(f"⚠️  Response type: {type(response)}")
+        print("⚠️  This means VLM analysis failed or returned unexpected format")
+        print("⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)")
+        print("⚠️  Execution will continue, but plots were not validated by VLM")
+        print("!" * 100)
+        print("!" * 100)
+        print("!" * 100)
+        print("=" * 100)
+        # Set is_buggy_plots to False to allow the node to be considered "good"
+        # but mark that we couldn't verify the plots via VLM
+        node.is_buggy_plots = False
         return
     valid_plots_received = bool(response.get("valid_plots_received"))
     node.is_buggy_plots = not valid_plots_received

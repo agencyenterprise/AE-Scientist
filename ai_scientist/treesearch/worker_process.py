@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import os
 import pickle
@@ -18,6 +19,8 @@ from .types import PromptType
 from .utils.config import Config as AppConfig
 from .utils.metric import MetricValue, WorstMetricValue
 from .vlm_function_specs import metric_parse_spec
+
+logger = logging.getLogger("ai-scientist")
 
 
 def parse_and_assign_metrics(
@@ -221,12 +224,15 @@ def process_node(
                 emit("ai.run.log", {"message": "Fix attempt generated", "level": "info"})
             else:
                 if new_hyperparam_idea is not None and new_ablation_idea is None:
+                    logger.info(f"Building hyperparam tuning node {parent_node.id}")
                     child_node = Stage2Tuning.build_hyperparam_tuning_node(agent=worker_agent, parent_node=parent_node, hyperparam_idea=new_hyperparam_idea)  # type: ignore[arg-type]
                     child_node.parent = parent_node
                 elif new_ablation_idea is not None and new_hyperparam_idea is None:
+                    logger.info(f"Building ablation node {parent_node.id}")
                     child_node = Stage4Ablation.build_ablation_node(agent=worker_agent, parent_node=parent_node, ablation_idea=new_ablation_idea)  # type: ignore[arg-type]
                     child_node.parent = parent_node
                 else:
+                    logger.info(f"Improving node {parent_node.id}")
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 
@@ -265,6 +271,9 @@ def process_node(
         print(f"[bold green]✓ Metrics extracted. Buggy: {child_node.is_buggy}[/bold green]")
 
         if not child_node.is_buggy:
+            print(
+                f"[DEBUG] Starting plotting for node {child_node.id}: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+            )
             try:
                 print("[bold blue]→ Generating visualization plots...[/bold blue]")
                 emit("ai.run.log", {"message": "Generating visualization plots", "level": "info"})
@@ -320,8 +329,10 @@ def process_node(
                         break
 
                 plots_dir = Path(working_dir)
+                print(f"[DEBUG] Checking plots_dir: {plots_dir}, exists={plots_dir.exists()}")
                 if plots_dir.exists():
                     plot_count = len(list(plots_dir.glob("*.png")))
+                    print(f"[DEBUG] Found {plot_count} plot files in working directory")
                     if plot_count > 0:
                         emit(
                             "ai.run.log",
@@ -335,6 +346,9 @@ def process_node(
                                 "level": "warn",
                             },
                         )
+                        print(
+                            f"[WARN] No plot files found in {plots_dir} after plotting code execution"
+                        )
 
                     base_dir = Path(cfg.workspace_dir).parent
                     run_name = Path(cfg.workspace_dir).name
@@ -345,6 +359,7 @@ def process_node(
                         / "experiment_results"
                         / f"experiment_{child_node.id}_proc_{os.getpid()}"
                     )
+                    print(f"[DEBUG] Creating exp_results_dir: {exp_results_dir}")
                     child_node.exp_results_dir = str(exp_results_dir)
                     exp_results_dir.mkdir(parents=True, exist_ok=True)
                     plot_code_path = exp_results_dir / "plotting_code.py"
@@ -357,12 +372,38 @@ def process_node(
                         exp_data_path = exp_results_dir / exp_data_file.name
                         exp_data_file.resolve().rename(exp_data_path)
 
-                    for plot_file in plots_dir.glob("*.png"):
+                    plot_files_found = list(plots_dir.glob("*.png"))
+                    print(
+                        f"[DEBUG] Found {len(plot_files_found)} plot files to move for node {child_node.id}"
+                    )
+                    print(
+                        f"[DEBUG] Before moving: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+                    )
+                    if len(plot_files_found) == 0:
+                        print(
+                            "[WARN] No plot files to move! This means plots were generated but not found, or already moved."
+                        )
+                        print(f"[WARN] Current plots list: {child_node.plots}")
+                        print(f"[WARN] Current plot_paths list: {child_node.plot_paths}")
+                    for plot_file in plot_files_found:
                         final_path = exp_results_dir / plot_file.name
-                        plot_file.resolve().rename(final_path)
-                        web_path = f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
-                        child_node.plots.append(web_path)
-                        child_node.plot_paths.append(str(final_path.absolute()))
+                        try:
+                            plot_file.resolve().rename(final_path)
+                            web_path = f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
+                            print(
+                                f"[DEBUG] Moving plot: {plot_file.name} -> {final_path}, web_path: {web_path}"
+                            )
+                            child_node.plots.append(web_path)
+                            child_node.plot_paths.append(str(final_path.absolute()))
+                            print(f"[DEBUG] Moved plot: {plot_file.name} -> {final_path}")
+                        except Exception as move_error:
+                            print(f"[ERROR] Failed to move plot {plot_file.name}: {move_error}")
+                            print("[ERROR] This could cause plots/plot_paths mismatch")
+                    print(
+                        f"[DEBUG] After moving plots: plots={len(child_node.plots)}, plot_paths={len(child_node.plot_paths)}"
+                    )
+                else:
+                    print(f"[WARN] plots_dir {plots_dir} does not exist!")
             except Exception as e:
                 tb = traceback.format_exc()
                 emit(
@@ -374,7 +415,20 @@ def process_node(
                     {"message": f"Plotting traceback:\\n{tb}", "level": "warn"},
                 )
 
+            print(
+                f"[DEBUG] Before VLM check: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+            )
             if child_node.plots:
+                if not child_node.plot_paths:
+                    print(
+                        f"[WARN] MISMATCH: child_node.plots has {len(child_node.plots)} items but plot_paths is empty for node {child_node.id}"
+                    )
+                    print(
+                        "[WARN] This suggests plots were populated but plot_paths wasn't. This can happen if:"
+                    )
+                    print("[WARN]   1. Exception occurred during file moving (lines 366-371)")
+                    print("[WARN]   2. Plots were populated from a previous attempt/retry")
+                    print("[WARN]   3. plot_paths list was cleared/reset somewhere")
                 try:
                     print(
                         f"[bold blue]→ Analyzing {len(child_node.plots)} plots with Vision Language Model...[/bold blue]"

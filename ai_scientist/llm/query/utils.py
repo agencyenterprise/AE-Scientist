@@ -46,12 +46,15 @@ def backoff_create(
 
 
 def opt_messages_to_list(
-    system_message: str | None, user_message: str | None
-) -> list[dict[str, str]]:
-    messages = []
-    if system_message:
-        messages.append({"role": "system", "content": system_message})
-    if user_message:
+    system_message: PromptType | None, user_message: PromptType | None
+) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    if system_message is not None:
+        sys_content: Any = (
+            system_message if isinstance(system_message, str) else str(system_message)
+        )
+        messages.append({"role": "system", "content": sys_content})
+    if user_message is not None:
         messages.append({"role": "user", "content": user_message})
     return messages
 
@@ -60,9 +63,9 @@ def compile_prompt_to_md(
     prompt: PromptType, _header_depth: int = 1
 ) -> str | list[Any] | dict[str, Any]:
     try:
-        logger.debug(f"compile_prompt_to_md input: type={type(prompt)}")
-        if isinstance(prompt, (list, dict)):
-            logger.debug(f"prompt content: {prompt}")
+        # logger.debug(f"compile_prompt_to_md input: type={type(prompt)}")
+        # if isinstance(prompt, (list, dict)):
+        #     logger.debug(f"prompt content: {prompt}")
 
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
@@ -76,8 +79,8 @@ def compile_prompt_to_md(
             try:
                 result = "\n".join([f"- {s.strip()}" for s in prompt] + ["\n"])
                 return result
-            except Exception as e:
-                logger.error(f"Error processing list items: {e}")
+            except Exception:
+                logger.exception("Error processing list items")
                 logger.error("List contents:")
                 for i, item in enumerate(prompt):
                     logger.error(f"  Item {i}: type={type(item)}, value={item}")
@@ -91,7 +94,7 @@ def compile_prompt_to_md(
                 out = []
                 header_prefix = "#" * _header_depth
                 for k, v in prompt.items():
-                    logger.debug(f"Processing dict key: {k}")
+                    # logger.debug(f"Processing dict key: {k}")
                     out.append(f"{header_prefix} {k}\n")
                     compiled_v = compile_prompt_to_md(v, _header_depth=_header_depth + 1)
                     if isinstance(compiled_v, str):
@@ -99,8 +102,8 @@ def compile_prompt_to_md(
                     else:
                         out.append(str(compiled_v))
                 return "\n".join(out)
-            except Exception as e:
-                logger.error(f"Error processing dict: {e}")
+            except Exception:
+                logger.exception("Error processing dict")
                 logger.error(f"Dict contents: {prompt}")
                 raise
 

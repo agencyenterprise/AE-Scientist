@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from collections import defaultdict
 from datetime import datetime
 from functools import wraps
@@ -55,6 +56,21 @@ class TokenTracker:
                 "prompt": 1.1 / 1000000,  # $1.10 per 1M tokens
                 "cached": 0.55 / 1000000,  # $0.55 per 1M tokens
                 "completion": 4.4 / 1000000,  # $4.40 per 1M tokens
+            },
+            "gpt-5": {
+                "prompt": 1.25 / 1000000,  # $1.25 per 1M tokens
+                "cached": 0.625 / 1000000,  # $0.625 per 1M tokens (50% discount)
+                "completion": 10 / 1000000,  # $10.00 per 1M tokens
+            },
+            "gpt-5-2025-08-07": {
+                "prompt": 1.25 / 1000000,  # $1.25 per 1M tokens
+                "cached": 0.625 / 1000000,  # $0.625 per 1M tokens (50% discount)
+                "completion": 10 / 1000000,  # $10.00 per 1M tokens
+            },
+            "gpt-5-mini": {
+                "prompt": 0.25 / 1000000,  # $0.25 per 1M tokens
+                "cached": 0.125 / 1000000,  # $0.125 per 1M tokens (50% discount)
+                "completion": 2 / 1000000,  # $2.00 per 1M tokens
             },
         }
 
@@ -148,37 +164,54 @@ def track_token_usage(func: F) -> F:
         prompt = kwargs.get("prompt")
         system_message = kwargs.get("system_message")
         if not prompt and not system_message:
-            raise ValueError(
-                "Either 'prompt' or 'system_message' must be provided for token tracking"
+            logging.warning(
+                "Token tracking skipped: both 'prompt' and 'system_message' are missing"
             )
-
-        logging.info("args: ", args)
-        logging.info("kwargs: ", kwargs)
 
         result = await func(*args, **kwargs)
-        model = result.model
-        timestamp = result.created
 
-        if hasattr(result, "usage"):
-            token_tracker.add_tokens(
-                model,
-                result.usage.prompt_tokens,
-                result.usage.completion_tokens,
-                result.usage.completion_tokens_details.reasoning_tokens,
-                (
-                    result.usage.prompt_tokens_details.cached_tokens
-                    if hasattr(result.usage, "prompt_tokens_details")
-                    else 0
-                ),
-            )
-            # Add interaction details
-            token_tracker.add_interaction(
-                model,
-                system_message or "",
-                prompt or "",
-                result.choices[0].message.content or "",  # Assumes response is in content field
-                timestamp,
-            )
+        try:
+            model = getattr(result, "model", "unknown-model")
+            timestamp = getattr(result, "created", datetime.utcnow())
+
+            if hasattr(result, "usage"):
+                prompt_tokens = getattr(result.usage, "prompt_tokens", 0)
+                completion_tokens = getattr(result.usage, "completion_tokens", 0)
+                reasoning_tokens = getattr(
+                    getattr(result.usage, "completion_tokens_details", None),
+                    "reasoning_tokens",
+                    0,
+                )
+                cached_tokens = getattr(
+                    getattr(result.usage, "prompt_tokens_details", None),
+                    "cached_tokens",
+                    0,
+                )
+
+                token_tracker.add_tokens(
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    cached_tokens=cached_tokens,
+                )
+                # Add interaction details
+                response_text = ""
+                try:
+                    response_text = result.choices[0].message.content or ""
+                except Exception:
+                    # Best effort; do not fail if response shape differs
+                    pass
+                token_tracker.add_interaction(
+                    model=model,
+                    system_message=system_message or "",
+                    prompt=prompt or "",
+                    response=response_text,
+                    timestamp=timestamp,
+                )
+        except Exception:
+            traceback.print_exc()
+            logging.warning("Token tracking failed; continuing without tracking")
         return result
 
     @wraps(func)
@@ -186,35 +219,54 @@ def track_token_usage(func: F) -> F:
         prompt = kwargs.get("prompt")
         system_message = kwargs.get("system_message")
         if not prompt and not system_message:
-            raise ValueError(
-                "Either 'prompt' or 'system_message' must be provided for token tracking"
+            logging.warning(
+                "Token tracking skipped: both 'prompt' and 'system_message' are missing"
             )
-        result = func(*args, **kwargs)
-        model = result.model
-        timestamp = result.created
-        logging.info("args: ", args)
-        logging.info("kwargs: ", kwargs)
 
-        if hasattr(result, "usage"):
-            token_tracker.add_tokens(
-                model,
-                result.usage.prompt_tokens,
-                result.usage.completion_tokens,
-                result.usage.completion_tokens_details.reasoning_tokens,
-                (
-                    result.usage.prompt_tokens_details.cached_tokens
-                    if hasattr(result.usage, "prompt_tokens_details")
-                    else 0
-                ),
-            )
-            # Add interaction details
-            token_tracker.add_interaction(
-                model,
-                system_message or "",
-                prompt or "",
-                result.choices[0].message.content or "",  # Assumes response is in content field
-                timestamp,
-            )
+        result = func(*args, **kwargs)
+
+        try:
+            model = getattr(result, "model", "unknown-model")
+            timestamp = getattr(result, "created", datetime.utcnow())
+
+            if hasattr(result, "usage"):
+                prompt_tokens = getattr(result.usage, "prompt_tokens", 0)
+                completion_tokens = getattr(result.usage, "completion_tokens", 0)
+                reasoning_tokens = getattr(
+                    getattr(result.usage, "completion_tokens_details", None),
+                    "reasoning_tokens",
+                    0,
+                )
+                cached_tokens = getattr(
+                    getattr(result.usage, "prompt_tokens_details", None),
+                    "cached_tokens",
+                    0,
+                )
+
+                token_tracker.add_tokens(
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    cached_tokens=cached_tokens,
+                )
+                # Add interaction details
+                response_text = ""
+                try:
+                    response_text = result.choices[0].message.content or ""
+                except Exception:
+                    # Best effort; do not fail if response shape differs
+                    pass
+                token_tracker.add_interaction(
+                    model=model,
+                    system_message=system_message or "",
+                    prompt=prompt or "",
+                    response=response_text,
+                    timestamp=timestamp,
+                )
+        except Exception:
+            traceback.print_exc()
+            logging.warning("Token tracking failed; continuing without tracking")
         return result
 
     return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper  # type: ignore[return-value]

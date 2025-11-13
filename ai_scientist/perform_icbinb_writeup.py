@@ -8,12 +8,14 @@ import subprocess
 import tempfile
 import traceback
 import unicodedata
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
 import openai
 
 from ai_scientist.ideation.semantic_scholar import search_for_papers
+from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import (
     AVAILABLE_LLMS,
     create_client,
@@ -27,6 +29,7 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
 )
+from ai_scientist.perform_writeup import _ensure_graphicspath
 
 
 def remove_accents_and_clean(s: str) -> str:
@@ -73,9 +76,12 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> None:
     print("FINISHED GENERATING LATEX")
 
     try:
-        shutil.move(osp.join(cwd, "template.pdf"), pdf_file)
+        source_pdf = osp.join(cwd, "template.pdf")
+        shutil.move(source_pdf, pdf_file)
     except FileNotFoundError:
-        print("Failed to rename PDF.")
+        print("Failed to move generated PDF. Source not found or inaccessible.")
+        print("Expected source: {osp.join(cwd, 'template.pdf')}")
+        print(f"Target path: {pdf_file}")
         print("EXCEPTION in compile_latex while moving PDF:")
         print(traceback.format_exc())
 
@@ -435,6 +441,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
+            temperature=1.0,
             msg_history=msg_history,
             print_debug=False,
         )
@@ -443,7 +450,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None, True
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (initial search). Raw response:")
+            print(text)
+            return None, False
         query = json_output["Query"]
         papers = search_for_papers(query, result_limit=5)
     except Exception:
@@ -479,6 +489,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
+            temperature=1.0,
             msg_history=msg_history,
             print_debug=False,
         )
@@ -487,7 +498,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None, False
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (selecting papers). Raw response:")
+            print(text)
+            return None, False
         desc = json_output["Description"]
         selected_papers = str(json_output["Selected"])
 
@@ -653,17 +667,55 @@ def load_idea_text(base_folder: str) -> str:
         if osp.exists(idea_md_path):
             with open(idea_md_path, "r") as f_idea:
                 idea_text = f_idea.read()
+        else:
+            # Warn if neither research_idea.md nor idea.md exists
+            print(
+                f"Warning: Missing idea markdown files. "
+                f"Not found: {research_idea_path} and {idea_md_path}. "
+                "Proceeding with empty idea_text."
+            )
     return idea_text
 
 
-def load_exp_summaries(base_folder: str) -> Dict[str, Any]:
+def load_exp_summaries(base_folder: str, run_dir_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Load the experiment summaries from the base folder.
     """
+    logs_dir = osp.join(base_folder, "logs")
+    latest_run_dir = "0-run"
+    if run_dir_name and osp.exists(osp.join(logs_dir, run_dir_name)):
+        latest_run_dir = run_dir_name
+    elif osp.exists(logs_dir):
+        try:
+            latest_run_dir = find_latest_run_dir_name(logs_dir=Path(logs_dir))
+        except Exception:
+            traceback.print_exc()
+            latest_run_dir = "0-run"
+    if osp.exists(logs_dir):
+        try:
+            candidates = [
+                d
+                for d in os.listdir(logs_dir)
+                if osp.isdir(osp.join(logs_dir, d)) and d.endswith("-run")
+            ]
+            if len(candidates) > 0:
+                # Prefer highest numeric prefix (e.g., 4-run > 1-run > 0-run)
+                def _run_number(name: str) -> int:
+                    try:
+                        return int(name.split("-")[0])
+                    except Exception:
+                        return -1
+
+                latest_run_dir = sorted(candidates, key=_run_number, reverse=True)[0]
+        except Exception:
+            traceback.print_exc()
+            # Fall back to 0-run if discovery fails
+            latest_run_dir = "0-run"
+
     summary_files = [
-        ("logs/0-run/baseline_summary.json", "BASELINE_SUMMARY"),
-        ("logs/0-run/research_summary.json", "RESEARCH_SUMMARY"),
-        ("logs/0-run/ablation_summary.json", "ABLATION_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "research_summary.json"), "RESEARCH_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "ablation_summary.json"), "ABLATION_SUMMARY"),
     ]
     loaded_summaries: Dict[str, Any] = {}
     for fname, key in summary_files:
@@ -671,12 +723,21 @@ def load_exp_summaries(base_folder: str) -> Dict[str, Any]:
         if osp.exists(path):
             try:
                 with open(path, "r") as f:
-                    loaded_summaries[key] = json.load(f)
+                    data = json.load(f)
+                    # Coerce nulls to empty containers expected by downstream code
+                    if key in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
+                        loaded_summaries[key] = data if isinstance(data, dict) else {}
+                    elif key == "ABLATION_SUMMARY":
+                        loaded_summaries[key] = data if isinstance(data, list) else []
+                    else:
+                        loaded_summaries[key] = data
             except json.JSONDecodeError:
+                traceback.print_exc()
                 print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
-                loaded_summaries[key] = {}
+                loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
         else:
-            loaded_summaries[key] = {}
+            print(f"Warning: Summary file not found for {key}: {path}")
+            loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
     return loaded_summaries
 
 
@@ -738,6 +799,7 @@ def gather_citations(
     base_folder: str,
     num_cite_rounds: int = 20,
     small_model: str = "gpt-4o-2024-05-13",
+    run_dir_name: Optional[str] = None,
 ) -> Optional[str]:
     """
     Gather citations for a paper, with ability to resume from previous progress.
@@ -752,9 +814,11 @@ def gather_citations(
         str: The gathered citations text, or None if failed
     """
 
-    # Paths for storing progress
-    citations_cache_path = osp.join(base_folder, "cached_citations.bib")
-    progress_path = osp.join(base_folder, "citations_progress.json")
+    # Paths for storing progress (per-run when provided)
+    cache_base = osp.join(base_folder, "logs", run_dir_name) if run_dir_name else base_folder
+    os.makedirs(cache_base, exist_ok=True)
+    citations_cache_path = osp.join(cache_base, "cached_citations.bib")
+    progress_path = osp.join(cache_base, "citations_progress.json")
 
     # Initialize or load progress
     current_round = 0
@@ -777,7 +841,7 @@ def gather_citations(
     try:
         # Load idea text and summaries
         idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder)
+        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
         filtered_summaries = filter_experiment_summaries(
             exp_summaries, step_name="citation_gathering"
         )
@@ -857,9 +921,22 @@ def perform_writeup(
     big_model: str = "o1-2024-12-17",
     n_writeup_reflections: int = 3,
     page_limit: int = 4,
+    run_dir_name: Optional[str] = None,
 ) -> bool:
-    pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}.pdf")
-    latex_folder = osp.join(base_folder, "latex")
+    # Place outputs under the specific run directory
+    logs_root = osp.join(base_folder, "logs")
+    if run_dir_name and osp.exists(osp.join(logs_root, run_dir_name)):
+        chosen_run = run_dir_name
+    else:
+        try:
+            chosen_run = find_latest_run_dir_name(logs_dir=Path(logs_root))
+        except Exception:
+            traceback.print_exc()
+            chosen_run = "0-run"
+    run_out_dir = osp.join(logs_root, chosen_run)
+    os.makedirs(run_out_dir, exist_ok=True)
+    pdf_file = osp.join(run_out_dir, "paper.pdf")
+    latex_folder = osp.join(run_out_dir, "latex")
 
     # Cleanup any previous latex folder and pdf
     if osp.exists(latex_folder):
@@ -867,14 +944,14 @@ def perform_writeup(
     if osp.exists(pdf_file):
         os.remove(pdf_file)
 
-    # Remove any previous reflection PDFs
-    for old_pdf in os.listdir(base_folder):
+    # Remove any previous reflection PDFs under the run directory
+    for old_pdf in os.listdir(run_out_dir):
         if old_pdf.endswith(".pdf") and "reflection" in old_pdf:
-            os.remove(osp.join(base_folder, old_pdf))
+            os.remove(osp.join(run_out_dir, old_pdf))
 
     try:
         idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder)
+        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
         filtered_summaries_for_writeup = filter_experiment_summaries(
             exp_summaries, step_name="writeup"
         )
@@ -889,13 +966,15 @@ def perform_writeup(
         with open(writeup_file, "r") as f:
             writeup_text = f.read()
 
-        # Gather plot filenames from figures/ folder
-        figures_dir = osp.join(base_folder, "figures")
+        # Gather plot filenames from figures/ folder (per-run when provided)
+        figures_dir = osp.join(base_folder, "figures", chosen_run)
         plot_names = []
         if osp.exists(figures_dir):
             for fplot in os.listdir(figures_dir):
                 if fplot.lower().endswith(".png"):
                     plot_names.append(fplot)
+        else:
+            print(f"Warning: Figures directory not found: {figures_dir}")
 
         # Load aggregator script to include in the prompt
         aggregator_path = osp.join(base_folder, "auto_plot_aggregator.py")
@@ -904,15 +983,19 @@ def perform_writeup(
             with open(aggregator_path, "r") as fa:
                 aggregator_code = fa.read()
         else:
-            aggregator_code = "No aggregator script found."
+            aggregator_code = f"No aggregator script found at: {aggregator_path}"
 
         if no_writing:
             compile_latex(latex_folder, pdf_file)
             return osp.exists(pdf_file)
 
-        # If no citations provided, try to load from cache first
+        # If no citations provided, try to load from per-run cache first
         if citations_text is None:
-            citations_cache_path = osp.join(base_folder, "cached_citations.bib")
+            citations_cache_path = (
+                osp.join(base_folder, "logs", run_dir_name, "cached_citations.bib")
+                if run_dir_name
+                else osp.join(base_folder, "cached_citations.bib")
+            )
             if osp.exists(citations_cache_path):
                 try:
                     with open(citations_cache_path, "r") as f:
@@ -921,10 +1004,16 @@ def perform_writeup(
                 except Exception as e:
                     print(f"Error loading cached citations: {e}")
                     citations_text = None
+            else:
+                print(
+                    f"Info: Citations cache not found at: {citations_cache_path}. Will gather citations."
+                )
 
             # If still no citations, gather them
             if not citations_text:
-                citations_text = gather_citations(base_folder, num_cite_rounds, small_model)
+                citations_text = gather_citations(
+                    base_folder, num_cite_rounds, small_model, run_dir_name=run_dir_name
+                )
                 if citations_text is None:
                     print("Warning: Citation gathering failed")
                     citations_text = ""
@@ -945,6 +1034,7 @@ def perform_writeup(
             for pf in plot_names:
                 ppath = osp.join(figures_dir, pf)
                 if not osp.exists(ppath):
+                    print(f"Warning: Referenced plot file not found: {ppath}")
                     continue
                 img_dict = {
                     "images": [ppath],
@@ -986,6 +1076,7 @@ def perform_writeup(
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
+                temperature=1.0,
                 print_debug=False,
             )
         except Exception as e:
@@ -1009,6 +1100,10 @@ def perform_writeup(
         updated_latex_code = latex_code_match.group(1).strip()
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
+        # Ensure figures path is correct for this run
+        _ensure_graphicspath(
+            writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
+        )
 
         # Multiple reflection loops on the final LaTeX
         for i in range(n_writeup_reflections):
@@ -1025,9 +1120,7 @@ def perform_writeup(
             invalid_figs = used_figs - all_figs
 
             # Save PDF with reflection trial number
-            reflection_pdf = osp.join(
-                base_folder, f"{osp.basename(base_folder)}_reflection{i + 1}.pdf"
-            )
+            reflection_pdf = osp.join(run_out_dir, f"paper_reflection{i + 1}.pdf")
             # Compile current version before reflection
             print(f"[green]Compiling PDF for reflection {i + 1}...[/green]")
             compile_latex(latex_folder, reflection_pdf)
@@ -1086,6 +1179,7 @@ Ensure proper citation usage:
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
+                temperature=1.0,
                 msg_history=msg_history[-1:],
                 print_debug=False,
             )
@@ -1108,6 +1202,11 @@ Ensure proper citation usage:
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
+                    _ensure_graphicspath(
+                        writeup_file=writeup_file,
+                        latex_folder=latex_folder,
+                        figures_dir=figures_dir,
+                    )
                     compile_latex(latex_folder, reflection_pdf)
                 else:
                     print(f"No changes in reflection step {i + 1}.")
@@ -1146,6 +1245,7 @@ If you believe you are done with reflection, simply say: "I am done"."""
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
+                temperature=1.0,
                 msg_history=msg_history[-1:],
                 print_debug=False,
             )
@@ -1171,6 +1271,11 @@ If you believe you are done with reflection, simply say: "I am done"."""
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
+                    _ensure_graphicspath(
+                        writeup_file=writeup_file,
+                        latex_folder=latex_folder,
+                        figures_dir=figures_dir,
+                    )
                     compile_latex(latex_folder, reflection_pdf)
                 else:
                     print(f"No changes in reflection step {i + 1}.")
@@ -1192,13 +1297,12 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             client=big_client,
             model=big_client_model,
             system_message=big_model_system_message,
+            temperature=1.0,
             msg_history=msg_history[-1:],
             print_debug=False,
         )
 
-        reflection_pdf = osp.join(
-            base_folder, f"{osp.basename(base_folder)}_reflection_final_page_limit.pdf"
-        )
+        reflection_pdf = osp.join(run_out_dir, "paper_reflection_final_page_limit.pdf")
         # Compile current version before reflection
         print("[green]Compiling PDF for reflection final page limit...[/green]")
 
@@ -1221,6 +1325,9 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
                 with open(writeup_file, "w") as fo:
                     fo.write(final_text)
 
+                _ensure_graphicspath(
+                    writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
+                )
                 compile_latex(latex_folder, reflection_pdf)
             else:
                 print("No changes in reflection page step.")

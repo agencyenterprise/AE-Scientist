@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import openai
-from tqdm import tqdm  # type: ignore[import-untyped]
+from tqdm import tqdm
 
 from ai_scientist.llm import create_client
 
@@ -151,7 +151,7 @@ def get_stage_summary(
 ) -> dict[str, Any] | None:
     sys_msg, prompt = get_summarizer_prompt(journal=journal, stage_name=stage_name)
     response_text, _ = get_response_from_llm(
-        prompt=prompt, client=client, model=model, system_message=sys_msg
+        prompt=prompt, client=client, model=model, system_message=sys_msg, temperature=1.0
     )
     summary_json = extract_json_between_markers(response_text)
     return summary_json
@@ -221,6 +221,7 @@ def update_summary(
             client=client,
             model=model,
             system_message="You are an expert machine learning researcher.",
+            temperature=1.0,
         )
         summary_json = extract_json_between_markers(response_text)
         assert summary_json
@@ -287,6 +288,7 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
                         client=client,
                         model=model,
                         system_message=report_summarizer_sys_msg,
+                        temperature=1.0,
                     )
                     parsed = extract_json_between_markers(response_text)
                     if parsed and "overall_plan" in parsed:
@@ -308,7 +310,7 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
 
 def overall_summarize(
     journals: list[tuple[str, Journal]], model: str
-) -> tuple[dict[str, Any] | None, ...]:
+) -> tuple[dict[str, Any] | list[dict[str, Any]] | None, ...]:
     client, _ = create_client(model)
 
     def process_stage(
