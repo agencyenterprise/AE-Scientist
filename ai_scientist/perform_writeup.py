@@ -8,11 +8,14 @@ import subprocess
 import traceback
 import unicodedata
 import uuid
+from pathlib import Path
+from typing import Any
 
 import anthropic
 import openai
 
 from ai_scientist.ideation.semantic_scholar import search_for_papers
+from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import (
     AVAILABLE_LLMS,
     create_client,
@@ -509,6 +512,7 @@ def perform_writeup(
     n_writeup_reflections: int = 3,
     page_limit: int = 8,
     citations_text: str | None = None,
+    run_dir_name: str | None = None,
 ) -> bool:
     print("\n" + "=" * 80)
     print("STARTING PERFORM_WRITEUP")
@@ -549,23 +553,41 @@ def perform_writeup(
                     idea_text = f_idea.read()
 
         # Load summaries
+        logs_dir = osp.join(base_folder, "logs")
+        latest_run_dir = "0-run"
+        if run_dir_name and osp.exists(osp.join(logs_dir, run_dir_name)):
+            latest_run_dir = run_dir_name
+        elif osp.exists(logs_dir):
+            try:
+                latest_run_dir = find_latest_run_dir_name(logs_dir=Path(logs_dir))
+            except Exception:
+                traceback.print_exc()
+                latest_run_dir = "0-run"
+
         summary_files = [
-            ("logs/0-run/baseline_summary.json", "BASELINE_SUMMARY"),
-            ("logs/0-run/research_summary.json", "RESEARCH_SUMMARY"),
-            ("logs/0-run/ablation_summary.json", "ABLATION_SUMMARY"),
+            (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
+            (osp.join("logs", latest_run_dir, "research_summary.json"), "RESEARCH_SUMMARY"),
+            (osp.join("logs", latest_run_dir, "ablation_summary.json"), "ABLATION_SUMMARY"),
         ]
-        loaded_summaries = {}
+        loaded_summaries: dict[str, Any] = {}
         for fname, key in summary_files:
             path = osp.join(base_folder, fname)
             if osp.exists(path):
                 try:
                     with open(path, "r") as f:
-                        loaded_summaries[key] = json.load(f)
+                        data = json.load(f)
+                        if key in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
+                            loaded_summaries[key] = data if isinstance(data, dict) else {}
+                        elif key == "ABLATION_SUMMARY":
+                            loaded_summaries[key] = data if isinstance(data, list) else []
+                        else:
+                            loaded_summaries[key] = data
                 except json.JSONDecodeError:
+                    traceback.print_exc()
                     print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
-                    loaded_summaries[key] = {}
+                    loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
             else:
-                loaded_summaries[key] = {}
+                loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
 
         # Convert them to one big JSON string for context
         combined_summaries_str = json.dumps(loaded_summaries, indent=2)

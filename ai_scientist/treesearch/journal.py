@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, cast
 
 from dataclasses_json import DataClassJsonMixin
-from rich import print
 
 from ai_scientist.llm.query import FunctionSpec, query
 

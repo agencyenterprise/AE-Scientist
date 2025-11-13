@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -65,7 +66,24 @@ class EventMonitor:
 
     def check_stage_progress(self, stage_name: str, main_stage: str, max_iters: int) -> None:
         """Check stage progress files and emit events."""
-        stage_dir = self.exp_dir / "logs" / "0-run" / f"stage_{stage_name}" / "notes"
+        # Determine latest run directory (fallback to 0-run)
+        logs_dir = self.exp_dir / "logs"
+        run_dir = logs_dir / "0-run"
+        try:
+            candidates = [d for d in logs_dir.iterdir() if d.is_dir() and d.name.endswith("-run")]
+            if candidates:
+
+                def _run_number(p: Path) -> int:
+                    try:
+                        return int(p.name.split("-")[0])
+                    except Exception:
+                        return -1
+
+                run_dir = sorted(candidates, key=_run_number, reverse=True)[0]
+        except Exception:
+            traceback.print_exc()
+
+        stage_dir = run_dir / f"stage_{stage_name}" / "notes"
         progress_file = stage_dir / "stage_progress.json"
 
         if not progress_file.exists():
@@ -153,7 +171,23 @@ class EventMonitor:
 
     def stream_logs(self) -> None:
         """Stream new log lines from experiment log files."""
-        log_files = list(self.exp_dir.glob("logs/0-run/**/*.log"))
+        logs_dir = self.exp_dir / "logs"
+        run_dir = logs_dir / "0-run"
+        try:
+            candidates = [d for d in logs_dir.iterdir() if d.is_dir() and d.name.endswith("-run")]
+            if candidates:
+
+                def _run_number(p: Path) -> int:
+                    try:
+                        return int(p.name.split("-")[0])
+                    except Exception:
+                        return -1
+
+                run_dir = sorted(candidates, key=_run_number, reverse=True)[0]
+        except Exception:
+            traceback.print_exc()
+
+        log_files = list(run_dir.glob("**/*.log"))
 
         for log_file in log_files:
             log_key = str(log_file.relative_to(self.exp_dir))

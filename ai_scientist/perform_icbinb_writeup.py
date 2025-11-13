@@ -8,12 +8,14 @@ import subprocess
 import tempfile
 import traceback
 import unicodedata
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import anthropic
 import openai
 
 from ai_scientist.ideation.semantic_scholar import search_for_papers
+from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import (
     AVAILABLE_LLMS,
     create_client,
@@ -658,14 +660,45 @@ def load_idea_text(base_folder: str) -> str:
     return idea_text
 
 
-def load_exp_summaries(base_folder: str) -> Dict[str, Any]:
+def load_exp_summaries(base_folder: str, run_dir_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Load the experiment summaries from the base folder.
     """
+    logs_dir = osp.join(base_folder, "logs")
+    latest_run_dir = "0-run"
+    if run_dir_name and osp.exists(osp.join(logs_dir, run_dir_name)):
+        latest_run_dir = run_dir_name
+    elif osp.exists(logs_dir):
+        try:
+            latest_run_dir = find_latest_run_dir_name(logs_dir=Path(logs_dir))
+        except Exception:
+            traceback.print_exc()
+            latest_run_dir = "0-run"
+    if osp.exists(logs_dir):
+        try:
+            candidates = [
+                d
+                for d in os.listdir(logs_dir)
+                if osp.isdir(osp.join(logs_dir, d)) and d.endswith("-run")
+            ]
+            if len(candidates) > 0:
+                # Prefer highest numeric prefix (e.g., 4-run > 1-run > 0-run)
+                def _run_number(name: str) -> int:
+                    try:
+                        return int(name.split("-")[0])
+                    except Exception:
+                        return -1
+
+                latest_run_dir = sorted(candidates, key=_run_number, reverse=True)[0]
+        except Exception:
+            traceback.print_exc()
+            # Fall back to 0-run if discovery fails
+            latest_run_dir = "0-run"
+
     summary_files = [
-        ("logs/0-run/baseline_summary.json", "BASELINE_SUMMARY"),
-        ("logs/0-run/research_summary.json", "RESEARCH_SUMMARY"),
-        ("logs/0-run/ablation_summary.json", "ABLATION_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "research_summary.json"), "RESEARCH_SUMMARY"),
+        (osp.join("logs", latest_run_dir, "ablation_summary.json"), "ABLATION_SUMMARY"),
     ]
     loaded_summaries: Dict[str, Any] = {}
     for fname, key in summary_files:
@@ -673,12 +706,20 @@ def load_exp_summaries(base_folder: str) -> Dict[str, Any]:
         if osp.exists(path):
             try:
                 with open(path, "r") as f:
-                    loaded_summaries[key] = json.load(f)
+                    data = json.load(f)
+                    # Coerce nulls to empty containers expected by downstream code
+                    if key in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
+                        loaded_summaries[key] = data if isinstance(data, dict) else {}
+                    elif key == "ABLATION_SUMMARY":
+                        loaded_summaries[key] = data if isinstance(data, list) else []
+                    else:
+                        loaded_summaries[key] = data
             except json.JSONDecodeError:
+                traceback.print_exc()
                 print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
-                loaded_summaries[key] = {}
+                loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
         else:
-            loaded_summaries[key] = {}
+            loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
     return loaded_summaries
 
 
@@ -740,6 +781,7 @@ def gather_citations(
     base_folder: str,
     num_cite_rounds: int = 20,
     small_model: str = "gpt-4o-2024-05-13",
+    run_dir_name: Optional[str] = None,
 ) -> Optional[str]:
     """
     Gather citations for a paper, with ability to resume from previous progress.
@@ -779,7 +821,7 @@ def gather_citations(
     try:
         # Load idea text and summaries
         idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder)
+        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
         filtered_summaries = filter_experiment_summaries(
             exp_summaries, step_name="citation_gathering"
         )
@@ -859,6 +901,7 @@ def perform_writeup(
     big_model: str = "o1-2024-12-17",
     n_writeup_reflections: int = 3,
     page_limit: int = 4,
+    run_dir_name: Optional[str] = None,
 ) -> bool:
     pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}.pdf")
     latex_folder = osp.join(base_folder, "latex")
@@ -876,7 +919,7 @@ def perform_writeup(
 
     try:
         idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder)
+        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
         filtered_summaries_for_writeup = filter_experiment_summaries(
             exp_summaries, step_name="writeup"
         )

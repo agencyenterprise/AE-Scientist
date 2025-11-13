@@ -179,6 +179,7 @@ python launch_scientist_bfts.py <config_file> \
 - `--num_cite_rounds`: Number of citation rounds to perform (default: `20`)
 - `--skip_writeup`: Skip the writeup process (also skips review)
 - `--skip_review`: Skip the review process (writeup must still run)
+- `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); will execute only the next missing stage for that run, or skip stages entirely if summaries exist, then perform aggregation/writeup per flags.
 
 **Example - Full Pipeline:**
 ```bash
@@ -203,6 +204,18 @@ python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
   --model_citation gpt-5
 ```
 
+**Example - Resume From Specific Run:**
+```bash
+# Resume run "4-run" (or pass just 4). If stage 2/3/4 are missing, the launcher will run the next missing stage.
+# If all summaries exist under logs/4-run, it will skip stages and perform aggregation/writeup only.
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
+  --resume 4 \
+  --model_agg_plots gpt-5 \
+  --model_writeup gpt-5 \
+  --model_citation gpt-5 \
+  --model_review gpt-5
+```
+
 **What the Full Pipeline Does:**
 1. **Loads research idea** from the JSON file specified in config's `desc_file`
 2. **Runs all BFTS stages** via AgentManager using directories from the provided config:
@@ -221,4 +234,8 @@ python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
 - Paper PDF (if writeup enabled): under the parent directory of `log_dir` (e.g., `workspaces/`)
 - Review results (if writeup and review enabled): `review_text.txt` and `review_img_cap_ref.json` 
 - Token usage: `token_tracker.json` in the reports base directory
+
+### Notes
+- The idea file (`desc_file`) and all directories are taken from your YAML config; do not pass idea flags to the launcher.
+- Logging level is controlled via `log_level` in the YAML config (e.g., `DEBUG`, `INFO`).
 

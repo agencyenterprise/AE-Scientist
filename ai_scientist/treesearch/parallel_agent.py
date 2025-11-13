@@ -19,8 +19,6 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from types import TracebackType
 from typing import List, Optional, cast
 
-from rich import print
-
 from ai_scientist.llm.query import query
 
 from .events import BaseEvent, RunLogEvent

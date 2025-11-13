@@ -477,7 +477,3 @@ def create_client(model: str) -> tuple[Any, str]:
         )
     else:
         raise ValueError(f"Model {model} not supported.")
-
-
-# Low-level wrappers so all direct SDK calls live in this module
-# Note: Low-level SDK wrappers were intentionally removed to avoid mypy instability.

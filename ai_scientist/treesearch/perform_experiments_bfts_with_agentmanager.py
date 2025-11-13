@@ -19,49 +19,15 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from rich.columns import Columns
-from rich.console import Group
-from rich.live import Live
-from rich.padding import Padding
-from rich.panel import Panel
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
-from rich.status import Status
-from rich.text import Text
-from rich.tree import Tree
-
 from .agent_manager import AgentManager
 from .events import BaseEvent, ExperimentNodeCompletedEvent, RunLogEvent, RunStageProgressEvent
 from .interpreter import ExecutionResult
-from .journal import Journal, Node
+from .journal import Journal
 from .log_summarization import overall_summarize
 from .stages.base import StageMeta
 from .utils.config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 
 logger = logging.getLogger("ai-scientist")
-
-
-def journal_to_rich_tree(journal: Journal) -> Tree:
-    best_node = journal.get_best_node()
-
-    def append_rec(node: Node, tree: Tree) -> None:
-        if node.is_buggy:
-            s = "[red]◍ bug"
-        else:
-            style = "bold " if node is best_node else ""
-            metric_val = f"{node.metric.value:.3f}" if node.metric is not None else "N/A"
-            if node is best_node:
-                s = f"[{style}green]● {metric_val} (best)"
-            else:
-                s = f"[{style}green]● {metric_val}"
-
-        subtree = tree.add(s)
-        for child in node.children:
-            append_rec(child, subtree)
-
-    tree = Tree("[bold blue]Solution tree")
-    for n in journal.draft_nodes:
-        append_rec(n, tree)
-    return tree
 
 
 def perform_experiments_bfts(
@@ -79,8 +45,8 @@ def perform_experiments_bfts(
     global_step = 0
 
     # Prepare a clean agent workspace for the run
-    with Status("Preparing agent workspace (copying and extracting files) ..."):
-        prep_agent_workspace(cfg)
+    print("Preparing agent workspace (copying and extracting files) ...")
+    prep_agent_workspace(cfg)
 
     def cleanup() -> None:
         if global_step == 0:
@@ -97,22 +63,9 @@ def perform_experiments_bfts(
         event_callback=event_callback,
     )
 
-    # Build a minimal progress UI
-    prog = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=20),
-        MofNCompleteColumn(),
-        TimeRemainingColumn(),
-    )
-    status = Status("[green]Running experiments...")
-    prog.add_task("Progress:", total=cfg.agent.steps, completed=global_step)
-
-    def create_exec_callback(status_obj: Status) -> Callable[[str, bool], ExecutionResult]:
+    def create_exec_callback() -> Callable[[str, bool], ExecutionResult]:
         def exec_callback(_code: str, _is_exec: bool) -> ExecutionResult:
-            # Update status while the agent executes code
-            status_obj.update("[magenta]Executing code...")
             # Not used by ParallelAgent; return a placeholder result
-            status_obj.update("[green]Generating code...")
             return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
 
         return exec_callback
@@ -241,57 +194,7 @@ def perform_experiments_bfts(
         print(f"Step {len(journal)}/{stage.max_iterations} at stage_{stage.name}")
         print(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
 
-    def generate_live(manager: AgentManager) -> Panel:
-        # Build the live UI panel (task description, stage info, tree view, progress)
-        current_stage = manager.current_stage
-        key = current_stage.name if current_stage else ""
-        current_journal = manager.journals.get(key, None)
-
-        if current_journal:
-            tree = journal_to_rich_tree(current_journal)
-        else:
-            tree = Tree("[bold blue]No results yet")
-
-        file_paths = [
-            f"Result visualization:\n[yellow]▶ {str((cfg.log_dir / 'tree_plot.html'))}",  # Link to the tree plot
-            f"Agent workspace directory:\n[yellow]▶ {str(cfg.workspace_dir)}",
-            f"Experiment log directory:\n[yellow]▶ {str(cfg.log_dir)}",
-        ]
-
-        stage_info = [
-            "[bold]Experiment Progress:",
-            f"Current Stage: [cyan]{current_stage.name if current_stage else 'None'}[/cyan]",
-            f"Completed Stages: [green]{', '.join(manager.completed_stages)}[/green]",
-        ]
-
-        left = Group(
-            Panel(Text(task_desc.model_dump_json(indent=2).strip()), title="Task description"),
-            Panel(Text("\n".join(stage_info)), title="Stage Progress"),
-            prog,
-            status,
-        )
-        right = tree
-        wide = Group(*file_paths)
-
-        return Panel(
-            Group(
-                Padding(wide, (1, 1, 1, 1)),
-                Columns(
-                    [Padding(left, (1, 2, 1, 1)), Padding(right, (1, 1, 1, 2))],
-                    equal=True,
-                ),
-            ),
-            title=f'[b]AIDE is working on experiment: [bold green]"{cfg.exp_name}[/b]"',
-            subtitle="Press [b]Ctrl+C[/b] to stop the run",
-        )
-
-    Live(
-        generate_live(manager),
-        refresh_per_second=16,
-        screen=True,
-    )
-
-    manager.run(exec_callback=create_exec_callback(status), step_callback=step_callback)
+    manager.run(exec_callback=create_exec_callback(), step_callback=step_callback)
 
     if cfg.generate_report:
         print("Generating final report from all stages...")

@@ -7,7 +7,6 @@ from typing import Iterator
 
 import numpy as np
 from igraph import Graph  # type: ignore[import-untyped]
-from rich import print
 
 from ..journal import Journal
 

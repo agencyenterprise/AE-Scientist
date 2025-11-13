@@ -6,8 +6,7 @@ import shutil
 import subprocess
 import sys
 import traceback
-
-from rich import print
+from typing import Optional
 
 from ai_scientist.llm import create_client, get_response_from_llm
 from ai_scientist.perform_icbinb_writeup import (
@@ -131,7 +130,12 @@ def run_aggregator_script(
     return aggregator_out
 
 
-def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflections: int = 5) -> None:
+def aggregate_plots(
+    base_folder: str,
+    model: str = "o1-2024-12-17",
+    n_reflections: int = 5,
+    run_dir_name: Optional[str] = None,
+) -> None:
     filename = "auto_plot_aggregator.py"
     aggregator_script_path = os.path.join(base_folder, filename)
     figures_dir = os.path.join(base_folder, "figures")
@@ -144,7 +148,7 @@ def aggregate_plots(base_folder: str, model: str = "o1-2024-12-17", n_reflection
         print("Cleaned up previous figures directory")
 
     idea_text = load_idea_text(base_folder)
-    exp_summaries = load_exp_summaries(base_folder)
+    exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
     filtered_summaries_for_plot_agg = filter_experiment_summaries(
         exp_summaries, step_name="plot_aggregation"
     )

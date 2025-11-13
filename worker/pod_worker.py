@@ -768,7 +768,29 @@ def copy_best_solutions_to_root(idea_dir: str) -> None:
     try:
 
         idea_path = Path(idea_dir)
-        logs_dir = idea_path / "logs" / "0-run"
+        logs_root = idea_path / "logs"
+        # Select latest <n>-run (fallback to 0-run)
+        if logs_root.exists():
+            try:
+                candidates = [
+                    d for d in logs_root.iterdir() if d.is_dir() and d.name.endswith("-run")
+                ]
+                if candidates:
+
+                    def _run_number(p: Path) -> int:
+                        try:
+                            return int(p.name.split("-")[0])
+                        except Exception:
+                            return -1
+
+                    logs_dir = sorted(candidates, key=_run_number, reverse=True)[0]
+                else:
+                    logs_dir = logs_root / "0-run"
+            except Exception:
+                traceback.print_exc()
+                logs_dir = logs_root / "0-run"
+        else:
+            logs_dir = idea_path / "logs" / "0-run"
 
         if not logs_dir.exists():
             print("⚠️ No logs directory found, skipping best solution copy")
@@ -866,7 +888,7 @@ def copy_best_solutions_to_root(idea_dir: str) -> None:
                 f.write("- Plot quality and experimental evidence\n")
                 f.write("- LLM-based evaluation (GPT-5-mini) considering all factors\n\n")
 
-                f.write("See `logs/0-run/<stage_name>/journal.json` for the complete ")
+                f.write(f"See `logs/{logs_dir.name}/<stage_name>/journal.json` for the complete ")
                 f.write("experimental history and selection reasoning.\n")
 
             print("✓ Created BEST_SOLUTIONS_README.md")

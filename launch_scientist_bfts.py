@@ -47,6 +47,8 @@ from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
 from ai_scientist.treesearch.stages.base import StageMeta
 from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
+from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
+from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
 from ai_scientist.treesearch.utils.config import Config, load_task_desc, prep_cfg, save_run
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
@@ -117,8 +119,9 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--resume",
-        action="store_true",
-        help="Resume from the latest run and continue from Stage 2",
+        type=str,
+        metavar="RUN_NAME_OR_NUMBER",
+        help="Resume from a specific run (e.g., 4 or 4-run)",
     )
     args = parser.parse_args()
 
@@ -219,6 +222,14 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"No stage_1_* directory found under {run_dir}")
         return stage_dirs[-1]
 
+    def _select_stage_dir(run_dir: Path, prefix: str) -> Path:
+        stage_dirs = sorted(
+            [p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith(prefix)]
+        )
+        if not stage_dirs:
+            raise FileNotFoundError(f"No {prefix}* directory found under {run_dir}")
+        return stage_dirs[-1]
+
     def _load_cfg_from_run(run_dir: Path) -> Config:
         try:
             stage1_dir = _select_stage1_dir(run_dir)
@@ -247,6 +258,31 @@ if __name__ == "__main__":
         journal = load_json_dc(path=journal_path, cls=Journal)
         return stage_name, journal
 
+    def _load_stage_journal(stage_dir: Path) -> tuple[str, Journal]:
+        stage_name = stage_dir.name.replace("stage_", "", 1)
+        journal_path = stage_dir / "journal.json"
+        if not journal_path.exists():
+            raise FileNotFoundError(str(journal_path))
+        journal = load_json_dc(path=journal_path, cls=Journal)
+        return stage_name, journal
+
+    def _stage_exists(run_dir: Path, prefix: str) -> bool:
+        try:
+            _select_stage_dir(run_dir, prefix)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def _all_summaries_exist(run_dir: Path) -> bool:
+        # Summary JSONs expected at run_dir level
+        paths = [
+            run_dir / "draft_summary.json",
+            run_dir / "baseline_summary.json",
+            run_dir / "research_summary.json",
+            run_dir / "ablation_summary.json",
+        ]
+        return all(p.exists() for p in paths)
+
     # Load the idea JSON from config's desc_file and merge dataset reference
     idea_json_path = str(Path(base_cfg["desc_file"]).resolve())
     with open(idea_json_path, "r") as f:
@@ -257,101 +293,215 @@ if __name__ == "__main__":
     base_folder = str(Path(idea_json_path).parent.resolve())
 
     # Execute experiments via AgentManager (BFTS pipeline) or resume to Stage 2
-    if args.resume:
+    # Track selected resume run directory for later reporting/aggregation
+    resume_run_dir: Path | None = None
+
+    if args.resume is not None:
         try:
+
+            def _normalize_run_name(run_arg: str) -> str:
+                s = run_arg.strip()
+                if s.isdigit():
+                    return f"{s}-run"
+                if s.startswith("run-") and s[4:].isdigit():
+                    return f"{s[4:]}-run"
+                return s
+
             logs_root = Path(base_cfg["log_dir"]).resolve()
-            run_dir = _select_latest_run_dir(logs_root)
-            cfg_obj = _load_cfg_from_run(run_dir)
+            run_name = _normalize_run_name(args.resume)
+            run_dir = (logs_root / run_name).resolve()
+            if not run_dir.exists():
+                raise FileNotFoundError(str(run_dir))
+            resume_run_dir = run_dir
+
+            cfg_obj = _load_cfg_from_run(run_dir=run_dir)
             # Apply global logging level from config so DEBUG logs are emitted
             cfg_obj = prep_cfg(cfg=cfg_obj)
-            # Load task description using the same mechanism as stage-2 launcher
-            fake_config = copy.deepcopy(cfg_obj)
-            fake_config.desc_file = Path(idea_json_path)
-            task_desc = load_task_desc(cfg=fake_config)
+            # Decide which stage (if any) to run, or skip to post-processing
+            if _all_summaries_exist(run_dir=run_dir):
+                # Everything is already summarized for this run; skip stages
+                print(
+                    "All summary files found; skipping stage execution and proceeding to reports."
+                )
+            else:
+                # Determine which next stage to run based on existing stage artifacts
+                s1 = _stage_exists(run_dir=run_dir, prefix="stage_1_")
+                s2 = _stage_exists(run_dir=run_dir, prefix="stage_2_")
+                s3 = _stage_exists(run_dir=run_dir, prefix="stage_3_")
+                s4 = _stage_exists(run_dir=run_dir, prefix="stage_4_")
 
-            def on_event(event: BaseEvent) -> None:
-                try:
-                    print(event.to_dict())
-                except Exception:
-                    traceback.print_exc()
+                next_stage: int | None = None
+                if s1 and not s2:
+                    next_stage = 2
+                elif s2 and not s3:
+                    next_stage = 3
+                elif s3 and not s4:
+                    next_stage = 4
+                else:
+                    # Either only Stage 1 missing, or all stages present - nothing to run
+                    next_stage = None
 
-            manager = AgentManager(
-                task_desc=task_desc,
-                cfg=cfg_obj,
-                workspace_dir=Path(cfg_obj.workspace_dir),
-                event_callback=on_event,
-            )
-            # Seed Stage 1 meta and journal from the prior run
-            stage1_dir = _select_stage1_dir(run_dir)
-            stage1_name, stage1_journal = _load_stage1_journal(stage1_dir)
-            stage1_meta = StageMeta(
-                name=stage1_name,
-                number=1,
-                slug=Stage1Baseline.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="preliminary",
-                goals=Stage1Baseline.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(1),
-                num_drafts=0,
-            )
-            # Ensure Stage 1 exists in manager state
-            manager.stages.append(stage1_meta)
-            manager.journals[stage1_meta.name] = stage1_journal
+                if next_stage is not None:
+                    # Load task description using the same mechanism as stage launchers
+                    fake_config = copy.deepcopy(cfg_obj)
+                    fake_config.desc_file = Path(idea_json_path)
+                    task_desc = load_task_desc(cfg=fake_config)
 
-            # Create empty Stage 2 meta and journal, then run Stage 2 only
-            stage2_meta = StageMeta(
-                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG + "_1_first_attempt",
-                number=2,
-                slug=Stage2Tuning.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="first_attempt",
-                goals=Stage2Tuning.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(2),
-                num_drafts=0,
-            )
-            manager.stages.append(stage2_meta)
-            manager.current_stage = stage2_meta
-            manager.journals[stage2_meta.name] = Journal(
-                summary_model=cfg_obj.report.model,
-                node_selection_model=cfg_obj.agent.feedback.model,
-                event_callback=on_event,
-            )
+                    def on_event(event: BaseEvent) -> None:
+                        try:
+                            print(event.to_dict())
+                        except Exception:
+                            traceback.print_exc()
 
-            def step_callback(stage: StageMeta, journal: Journal) -> None:
-                try:
-                    save_run(cfg=cfg_obj, journal=journal, stage_name=f"stage_{stage.name}")
-                except Exception:
-                    traceback.print_exc()
+                    manager = AgentManager(
+                        task_desc=task_desc,
+                        cfg=cfg_obj,
+                        workspace_dir=Path(cfg_obj.workspace_dir),
+                        event_callback=on_event,
+                    )
 
-            def exec_callback(code: str, is_exec: bool) -> ExecutionResult:
-                return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
+                    # Seed previous stages' metas and journals
+                    if s1:
+                        stage1_dir = _select_stage_dir(run_dir=run_dir, prefix="stage_1_")
+                        stage1_name, stage1_journal = _load_stage_journal(stage_dir=stage1_dir)
+                        stage1_meta = StageMeta(
+                            name=stage1_name,
+                            number=1,
+                            slug=Stage1Baseline.MAIN_STAGE_SLUG,
+                            substage_number=1,
+                            substage_name="preliminary",
+                            goals=Stage1Baseline.DEFAULT_GOALS,
+                            max_iterations=manager._get_max_iterations(1),
+                            num_drafts=0,
+                        )
+                        manager.stages.append(stage1_meta)
+                        manager.journals[stage1_meta.name] = stage1_journal
 
-            manager.run_stage(
-                initial_substage=stage2_meta,
-                exec_callback=exec_callback,
-                step_callback=step_callback,
-            )
+                    if s2 or (next_stage and next_stage > 2):
+                        # If Stage 2 exists (or we're going to Stage 3/4), seed Stage 2
+                        try:
+                            stage2_dir = _select_stage_dir(run_dir=run_dir, prefix="stage_2_")
+                            stage2_name, stage2_journal = _load_stage_journal(stage_dir=stage2_dir)
+                            stage2_meta = StageMeta(
+                                name=stage2_name,
+                                number=2,
+                                slug=Stage2Tuning.MAIN_STAGE_SLUG,
+                                substage_number=1,
+                                substage_name="first_attempt",
+                                goals=Stage2Tuning.DEFAULT_GOALS,
+                                max_iterations=manager._get_max_iterations(2),
+                                num_drafts=0,
+                            )
+                            manager.stages.append(stage2_meta)
+                            manager.journals[stage2_meta.name] = stage2_journal
+                        except FileNotFoundError:
+                            # Ok if we're about to run Stage 2
+                            pass
+
+                    if s3 or (next_stage and next_stage > 3):
+                        # If Stage 3 exists (or we're going to Stage 4), seed Stage 3
+                        try:
+                            stage3_dir = _select_stage_dir(run_dir=run_dir, prefix="stage_3_")
+                            stage3_name, stage3_journal = _load_stage_journal(stage_dir=stage3_dir)
+                            stage3_meta = StageMeta(
+                                name=stage3_name,
+                                number=3,
+                                slug=Stage3Plotting.MAIN_STAGE_SLUG,
+                                substage_number=1,
+                                substage_name="first_attempt",
+                                goals=Stage3Plotting.DEFAULT_GOALS,
+                                max_iterations=manager._get_max_iterations(3),
+                                num_drafts=0,
+                            )
+                            manager.stages.append(stage3_meta)
+                            manager.journals[stage3_meta.name] = stage3_journal
+                        except FileNotFoundError:
+                            # Ok if we're about to run Stage 3
+                            pass
+
+                    # Create next stage meta and journal, then run only that stage
+                    if next_stage == 2:
+                        next_meta = StageMeta(
+                            name="2_" + Stage2Tuning.MAIN_STAGE_SLUG + "_1_first_attempt",
+                            number=2,
+                            slug=Stage2Tuning.MAIN_STAGE_SLUG,
+                            substage_number=1,
+                            substage_name="first_attempt",
+                            goals=Stage2Tuning.DEFAULT_GOALS,
+                            max_iterations=manager._get_max_iterations(2),
+                            num_drafts=0,
+                        )
+                    elif next_stage == 3:
+                        next_meta = StageMeta(
+                            name="3_" + Stage3Plotting.MAIN_STAGE_SLUG + "_1_first_attempt",
+                            number=3,
+                            slug=Stage3Plotting.MAIN_STAGE_SLUG,
+                            substage_number=1,
+                            substage_name="first_attempt",
+                            goals=Stage3Plotting.DEFAULT_GOALS,
+                            max_iterations=manager._get_max_iterations(3),
+                            num_drafts=0,
+                        )
+                    else:  # next_stage == 4
+                        next_meta = StageMeta(
+                            name="4_" + Stage4Ablation.MAIN_STAGE_SLUG + "_1_first_attempt",
+                            number=4,
+                            slug=Stage4Ablation.MAIN_STAGE_SLUG,
+                            substage_number=1,
+                            substage_name="first_attempt",
+                            goals=Stage4Ablation.DEFAULT_GOALS,
+                            max_iterations=manager._get_max_iterations(4),
+                            num_drafts=0,
+                        )
+
+                    manager.stages.append(next_meta)
+                    manager.current_stage = next_meta
+                    manager.journals[next_meta.name] = Journal(
+                        summary_model=cfg_obj.report.model,
+                        node_selection_model=cfg_obj.agent.feedback.model,
+                        event_callback=on_event,
+                    )
+
+                    def step_callback(stage: StageMeta, journal: Journal) -> None:
+                        try:
+                            save_run(cfg=cfg_obj, journal=journal, stage_name=f"stage_{stage.name}")
+                        except Exception:
+                            traceback.print_exc()
+
+                    def exec_callback(code: str, is_exec: bool) -> ExecutionResult:
+                        return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
+
+                    manager.run_stage(
+                        initial_substage=next_meta,
+                        exec_callback=exec_callback,
+                        step_callback=step_callback,
+                    )
         except Exception:
             traceback.print_exc()
-            print("Resume to Stage 2 failed; exiting.")
+            print("Resume failed; exiting.")
             sys.exit(1)
     else:
         perform_experiments_bfts(Path(base_config_path), lambda event: print(event.to_dict()))
 
     # Identify newly created run directory under configured log_dir
     run_dir_path: Path | None = None
-    try:
-        new_runs = [
-            p for p in top_log_dir.iterdir() if p.is_dir() and p.name not in existing_runs_before
-        ]
-        if new_runs:
-            run_dir_path = max(new_runs, key=lambda p: p.stat().st_mtime)
-        else:
-            candidates = [p for p in top_log_dir.iterdir() if p.is_dir()]
-            run_dir_path = max(candidates, key=lambda p: p.stat().st_mtime)
-    except Exception:
-        traceback.print_exc()
-        run_dir_path = None
+    if resume_run_dir is not None:
+        run_dir_path = resume_run_dir
+    else:
+        try:
+            new_runs = [
+                p
+                for p in top_log_dir.iterdir()
+                if p.is_dir() and p.name not in existing_runs_before
+            ]
+            if new_runs:
+                run_dir_path = max(new_runs, key=lambda p: p.stat().st_mtime)
+            else:
+                candidates = [p for p in top_log_dir.iterdir() if p.is_dir()]
+                run_dir_path = max(candidates, key=lambda p: p.stat().st_mtime)
+        except Exception:
+            traceback.print_exc()
+            run_dir_path = None
 
     # (No mirroring) Use configured log_dir as the source of truth for summaries
 
@@ -373,7 +523,11 @@ if __name__ == "__main__":
     agg_ok = False
     if should_run_reports:
         try:
-            aggregate_plots(base_folder=reports_base, model=args.model_agg_plots)
+            aggregate_plots(
+                base_folder=reports_base,
+                model=args.model_agg_plots,
+                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
+            )
             agg_ok = True
         except Exception as e:
             print(f"Aggregate plots failed: {e}. Skipping writeup.")
@@ -389,9 +543,10 @@ if __name__ == "__main__":
         # Generate paper writeup (normal or ICBINB)
         writeup_success = False
         citations_text = gather_citations(
-            reports_base,
+            base_folder=reports_base,
             num_cite_rounds=args.num_cite_rounds,
             small_model=args.model_citation,
+            run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         )
         try:
             for attempt in range(args.writeup_retries):
@@ -402,6 +557,7 @@ if __name__ == "__main__":
                         big_model=args.model_writeup,
                         page_limit=8,
                         citations_text=citations_text,
+                        run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                     )
                 else:
                     writeup_success = perform_icbinb_writeup(
@@ -409,6 +565,7 @@ if __name__ == "__main__":
                         big_model=args.model_writeup,
                         page_limit=4,
                         citations_text=citations_text,
+                        run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                     )
                 if writeup_success:
                     break
