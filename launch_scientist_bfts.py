@@ -18,7 +18,6 @@ import os
 import os.path as osp
 import re
 import shutil
-import signal
 import sys
 import traceback
 from contextlib import contextmanager
@@ -38,6 +37,7 @@ from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
 from ai_scientist.treesearch.agent_manager import AgentManager
+from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.events import BaseEvent
 from ai_scientist.treesearch.interpreter import ExecutionResult
 from ai_scientist.treesearch.journal import Journal
@@ -145,8 +145,14 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-def find_pdf_path_for_review(idea_dir: str) -> str | None:
-    pdf_files = [f for f in os.listdir(idea_dir) if f.endswith(".pdf")]
+def find_pdf_path_for_review(idea_dir: str, run_dir_name: str | None = None) -> str | None:
+    # Look under the run-specific logs directory if provided
+    search_dir = idea_dir
+    if run_dir_name:
+        candidate = osp.join(idea_dir, "logs", run_dir_name)
+        if os.path.exists(candidate):
+            search_dir = candidate
+    pdf_files = [f for f in os.listdir(search_dir) if f.endswith(".pdf")]
     reflection_pdfs = [f for f in pdf_files if "reflection" in f]
 
     pdf_path = None  # Initialize to avoid UnboundLocalError
@@ -156,7 +162,7 @@ def find_pdf_path_for_review(idea_dir: str) -> str | None:
         final_pdfs = [f for f in reflection_pdfs if "final" in f.lower()]
         if final_pdfs:
             # Use the final version if available
-            pdf_path = osp.join(idea_dir, final_pdfs[0])
+            pdf_path = osp.join(search_dir, final_pdfs[0])
         else:
             # Try to find numbered reflections
             reflection_nums = []
@@ -168,13 +174,13 @@ def find_pdf_path_for_review(idea_dir: str) -> str | None:
             if reflection_nums:
                 # Get the file with the highest reflection number
                 highest_reflection = max(reflection_nums, key=lambda x: x[0])
-                pdf_path = osp.join(idea_dir, highest_reflection[1])
+                pdf_path = osp.join(search_dir, highest_reflection[1])
             else:
                 # Fall back to the first reflection PDF if no numbers found
-                pdf_path = osp.join(idea_dir, reflection_pdfs[0])
+                pdf_path = osp.join(search_dir, reflection_pdfs[0])
     elif pdf_files:
         # No reflection PDFs, use any PDF
-        pdf_path = osp.join(idea_dir, pdf_files[0])
+        pdf_path = osp.join(search_dir, pdf_files[0])
 
     return pdf_path
 
@@ -291,6 +297,15 @@ if __name__ == "__main__":
 
     # Base folder (next to the idea JSON) to collect artifacts for plotting/writeup
     base_folder = str(Path(idea_json_path).parent.resolve())
+
+    # Ensure a markdown version of the idea exists at the reports base for plotting/writeup
+    try:
+        md_output_path = Path(reports_base) / "research_idea.md"
+        idea_to_markdown(data=idea, output_path=str(md_output_path), load_code="")
+        print(f"Wrote research idea markdown to {md_output_path}")
+    except Exception:
+        traceback.print_exc()
+        print("Failed to write research_idea.md; continuing without it.")
 
     # Execute experiments via AgentManager (BFTS pipeline) or resume to Stage 2
     # Track selected resume run directory for later reporting/aggregation
@@ -537,7 +552,7 @@ if __name__ == "__main__":
     shutil.rmtree(osp.join(reports_base, "experiment_results"), ignore_errors=True)
 
     # Persist token accounting information
-    save_token_tracker(reports_base)
+    save_token_tracker(run_dir_path.as_posix() if run_dir_path is not None else reports_base)
 
     if not args.skip_writeup and should_run_reports and agg_ok:
         # Generate paper writeup (normal or ICBINB)
@@ -577,11 +592,13 @@ if __name__ == "__main__":
             print("Writeup process did not complete successfully after all retries.")
 
     # Record tokens after writeup stage as well
-    save_token_tracker(reports_base)
+    save_token_tracker(run_dir_path.as_posix() if run_dir_path is not None else reports_base)
 
     if not args.skip_review and not args.skip_writeup:
         # Perform paper review (if the generated PDF exists)
-        pdf_path = find_pdf_path_for_review(reports_base)
+        pdf_path = find_pdf_path_for_review(
+            reports_base, run_dir_path.name if run_dir_path is not None else None
+        )
         if pdf_path and os.path.exists(pdf_path):
             print("Paper found at: ", pdf_path)
             paper_content = load_paper(pdf_path)
@@ -600,9 +617,15 @@ if __name__ == "__main__":
             )
             # Performs images/captions/reference review
             review_img_cap_ref = perform_imgs_cap_ref_review(client, client_model, pdf_path)
-            with open(osp.join(reports_base, "review_text.txt"), "w") as f:
+            review_out_dir = (
+                osp.join(reports_base, "logs", run_dir_path.name)
+                if run_dir_path is not None
+                else reports_base
+            )
+            os.makedirs(review_out_dir, exist_ok=True)
+            with open(osp.join(review_out_dir, "review_text.txt"), "w") as f:
                 f.write(json.dumps(review_text, indent=4))
-            with open(osp.join(reports_base, "review_img_cap_ref.json"), "w") as f:
+            with open(osp.join(review_out_dir, "review_img_cap_ref.json"), "w") as f:
                 json.dump(review_img_cap_ref, f, indent=4)
             print("Paper review completed.")
         else:
@@ -616,23 +639,26 @@ if __name__ == "__main__":
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
 
-    # First try graceful termination
+    # First try graceful termination (tolerant to already-exited processes)
     for child in children:
         try:
-            child.send_signal(signal.SIGTERM)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            traceback.print_exc()
+            if child.is_running():
+                child.terminate()
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
             continue
 
     # Wait briefly for processes to terminate
-    gone, alive = psutil.wait_procs(children, timeout=3)
+    try:
+        gone, alive = psutil.wait_procs(children, timeout=3)
+    except Exception:
+        # Be resilient to any unexpected psutil issues here
+        gone, alive = [], [p for p in children if p.is_running()]
 
     # If any processes remain, force kill them
     for process in alive:
         try:
             process.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            traceback.print_exc()
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
             continue
 
     # Additional cleanup: find any orphaned processes containing specific keywords
@@ -642,11 +668,21 @@ if __name__ == "__main__":
             # Check both process name and command line arguments
             cmdline = " ".join(proc.cmdline()).lower()
             if any(keyword in cmdline for keyword in keywords):
-                proc.send_signal(signal.SIGTERM)
-                proc.wait(timeout=3)
-                if proc.is_running():
-                    proc.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-            traceback.print_exc()
+                try:
+                    if proc.is_running():
+                        proc.terminate()
+                        proc.wait(timeout=3)
+                except (
+                    psutil.TimeoutExpired,
+                    psutil.NoSuchProcess,
+                    psutil.ZombieProcess,
+                    psutil.AccessDenied,
+                ):
+                    # Try a hard kill if graceful termination failed or raced
+                    try:
+                        proc.kill()
+                    except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):
+                        pass
+        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, psutil.Error):
             continue
     sys.exit(0)

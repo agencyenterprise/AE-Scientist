@@ -31,6 +31,43 @@ from ai_scientist.perform_vlm_review import (
 )
 
 
+def _ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str) -> None:
+    """
+    Ensure LaTeX graphicspath includes the run-specific figures directory.
+    """
+    try:
+        wf = Path(writeup_file)
+        lf = Path(latex_folder)
+        fd = Path(figures_dir)
+        rel = os.path.relpath(str(fd), str(lf)).replace("\\", "/")
+        # Build directive like: \graphicspath{{../figures/<run>/}{../figures/}}
+        new_gp = "\\graphicspath{{" + rel + "/}{../figures/}}"
+        # Replace entire line containing \graphicspath, else insert after \usepackage{graphicx}
+        lines: list[str] = []
+        with open(wf, "r") as f:
+            lines = f.readlines()
+        found = False
+        for i, line in enumerate(lines):
+            if "\\graphicspath" in line:
+                lines[i] = new_gp + "\n"
+                found = True
+                break
+        if not found:
+            for i, line in enumerate(lines):
+                if "\\usepackage{graphicx}" in line:
+                    lines.insert(i + 1, new_gp + "\n")
+                    found = True
+                    break
+        if not found:
+            # Fallback: prepend at top
+            lines.insert(0, new_gp + "\n")
+        with open(wf, "w") as f:
+            f.writelines(lines)
+    except Exception:
+        print("Warning: failed to adjust \\graphicspath; figures may not render.")
+        print(traceback.format_exc())
+
+
 def remove_accents_and_clean(s: str) -> str:
     # Normalize to separate accents
     nfkd_form = unicodedata.normalize("NFKD", s)
@@ -75,9 +112,12 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> None:
     print("FINISHED GENERATING LATEX")
 
     try:
-        shutil.move(osp.join(cwd, "template.pdf"), pdf_file)
+        source_pdf = osp.join(cwd, "template.pdf")
+        shutil.move(source_pdf, pdf_file)
     except FileNotFoundError:
-        print("Failed to rename PDF.")
+        print("Failed to move generated PDF. Source not found or inaccessible.")
+        print("Expected source: {osp.join(cwd, 'template.pdf')}")
+        print(f"Target path: {pdf_file}")
         print("EXCEPTION in compile_latex while moving PDF:")
         print(traceback.format_exc())
 
@@ -446,7 +486,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None, True
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (initial search). Raw response:")
+            print(text)
+            return None, False
         query = json_output["Query"]
         papers = search_for_papers(query, result_limit=5)
     except Exception:
@@ -491,7 +534,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None, False
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (selecting papers). Raw response:")
+            print(text)
+            return None, False
         desc = json_output["Description"]
         selected_papers = str(json_output["Selected"])
 
@@ -657,6 +703,13 @@ def load_idea_text(base_folder: str) -> str:
         if osp.exists(idea_md_path):
             with open(idea_md_path, "r") as f_idea:
                 idea_text = f_idea.read()
+        else:
+            # Warn if neither research_idea.md nor idea.md exists
+            print(
+                f"Warning: Missing idea markdown files. "
+                f"Not found: {research_idea_path} and {idea_md_path}. "
+                "Proceeding with empty idea_text."
+            )
     return idea_text
 
 
@@ -719,6 +772,7 @@ def load_exp_summaries(base_folder: str, run_dir_name: Optional[str] = None) -> 
                 print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
                 loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
         else:
+            print(f"Warning: Summary file not found for {key}: {path}")
             loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
     return loaded_summaries
 
@@ -796,9 +850,11 @@ def gather_citations(
         str: The gathered citations text, or None if failed
     """
 
-    # Paths for storing progress
-    citations_cache_path = osp.join(base_folder, "cached_citations.bib")
-    progress_path = osp.join(base_folder, "citations_progress.json")
+    # Paths for storing progress (per-run when provided)
+    cache_base = osp.join(base_folder, "logs", run_dir_name) if run_dir_name else base_folder
+    os.makedirs(cache_base, exist_ok=True)
+    citations_cache_path = osp.join(cache_base, "cached_citations.bib")
+    progress_path = osp.join(cache_base, "citations_progress.json")
 
     # Initialize or load progress
     current_round = 0
@@ -903,8 +959,20 @@ def perform_writeup(
     page_limit: int = 4,
     run_dir_name: Optional[str] = None,
 ) -> bool:
-    pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}.pdf")
-    latex_folder = osp.join(base_folder, "latex")
+    # Place outputs under the specific run directory
+    logs_root = osp.join(base_folder, "logs")
+    if run_dir_name and osp.exists(osp.join(logs_root, run_dir_name)):
+        chosen_run = run_dir_name
+    else:
+        try:
+            chosen_run = find_latest_run_dir_name(logs_dir=Path(logs_root))
+        except Exception:
+            traceback.print_exc()
+            chosen_run = "0-run"
+    run_out_dir = osp.join(logs_root, chosen_run)
+    os.makedirs(run_out_dir, exist_ok=True)
+    pdf_file = osp.join(run_out_dir, "paper.pdf")
+    latex_folder = osp.join(run_out_dir, "latex")
 
     # Cleanup any previous latex folder and pdf
     if osp.exists(latex_folder):
@@ -912,10 +980,10 @@ def perform_writeup(
     if osp.exists(pdf_file):
         os.remove(pdf_file)
 
-    # Remove any previous reflection PDFs
-    for old_pdf in os.listdir(base_folder):
+    # Remove any previous reflection PDFs under the run directory
+    for old_pdf in os.listdir(run_out_dir):
         if old_pdf.endswith(".pdf") and "reflection" in old_pdf:
-            os.remove(osp.join(base_folder, old_pdf))
+            os.remove(osp.join(run_out_dir, old_pdf))
 
     try:
         idea_text = load_idea_text(base_folder)
@@ -934,13 +1002,15 @@ def perform_writeup(
         with open(writeup_file, "r") as f:
             writeup_text = f.read()
 
-        # Gather plot filenames from figures/ folder
-        figures_dir = osp.join(base_folder, "figures")
+        # Gather plot filenames from figures/ folder (per-run when provided)
+        figures_dir = osp.join(base_folder, "figures", chosen_run)
         plot_names = []
         if osp.exists(figures_dir):
             for fplot in os.listdir(figures_dir):
                 if fplot.lower().endswith(".png"):
                     plot_names.append(fplot)
+        else:
+            print(f"Warning: Figures directory not found: {figures_dir}")
 
         # Load aggregator script to include in the prompt
         aggregator_path = osp.join(base_folder, "auto_plot_aggregator.py")
@@ -949,15 +1019,19 @@ def perform_writeup(
             with open(aggregator_path, "r") as fa:
                 aggregator_code = fa.read()
         else:
-            aggregator_code = "No aggregator script found."
+            aggregator_code = f"No aggregator script found at: {aggregator_path}"
 
         if no_writing:
             compile_latex(latex_folder, pdf_file)
             return osp.exists(pdf_file)
 
-        # If no citations provided, try to load from cache first
+        # If no citations provided, try to load from per-run cache first
         if citations_text is None:
-            citations_cache_path = osp.join(base_folder, "cached_citations.bib")
+            citations_cache_path = (
+                osp.join(base_folder, "logs", run_dir_name, "cached_citations.bib")
+                if run_dir_name
+                else osp.join(base_folder, "cached_citations.bib")
+            )
             if osp.exists(citations_cache_path):
                 try:
                     with open(citations_cache_path, "r") as f:
@@ -966,10 +1040,16 @@ def perform_writeup(
                 except Exception as e:
                     print(f"Error loading cached citations: {e}")
                     citations_text = None
+            else:
+                print(
+                    f"Info: Citations cache not found at: {citations_cache_path}. Will gather citations."
+                )
 
             # If still no citations, gather them
             if not citations_text:
-                citations_text = gather_citations(base_folder, num_cite_rounds, small_model)
+                citations_text = gather_citations(
+                    base_folder, num_cite_rounds, small_model, run_dir_name=run_dir_name
+                )
                 if citations_text is None:
                     print("Warning: Citation gathering failed")
                     citations_text = ""
@@ -990,6 +1070,7 @@ def perform_writeup(
             for pf in plot_names:
                 ppath = osp.join(figures_dir, pf)
                 if not osp.exists(ppath):
+                    print(f"Warning: Referenced plot file not found: {ppath}")
                     continue
                 img_dict = {
                     "images": [ppath],
@@ -1055,6 +1136,10 @@ def perform_writeup(
         updated_latex_code = latex_code_match.group(1).strip()
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
+        # Ensure figures path is correct for this run
+        _ensure_graphicspath(
+            writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
+        )
 
         # Multiple reflection loops on the final LaTeX
         for i in range(n_writeup_reflections):
@@ -1071,9 +1156,7 @@ def perform_writeup(
             invalid_figs = used_figs - all_figs
 
             # Save PDF with reflection trial number
-            reflection_pdf = osp.join(
-                base_folder, f"{osp.basename(base_folder)}_reflection{i + 1}.pdf"
-            )
+            reflection_pdf = osp.join(run_out_dir, f"paper_reflection{i + 1}.pdf")
             # Compile current version before reflection
             print(f"[green]Compiling PDF for reflection {i + 1}...[/green]")
             compile_latex(latex_folder, reflection_pdf)
@@ -1155,6 +1238,11 @@ Ensure proper citation usage:
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
+                    _ensure_graphicspath(
+                        writeup_file=writeup_file,
+                        latex_folder=latex_folder,
+                        figures_dir=figures_dir,
+                    )
                     compile_latex(latex_folder, reflection_pdf)
                 else:
                     print(f"No changes in reflection step {i + 1}.")
@@ -1219,6 +1307,11 @@ If you believe you are done with reflection, simply say: "I am done"."""
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
+                    _ensure_graphicspath(
+                        writeup_file=writeup_file,
+                        latex_folder=latex_folder,
+                        figures_dir=figures_dir,
+                    )
                     compile_latex(latex_folder, reflection_pdf)
                 else:
                     print(f"No changes in reflection step {i + 1}.")
@@ -1245,9 +1338,7 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             print_debug=False,
         )
 
-        reflection_pdf = osp.join(
-            base_folder, f"{osp.basename(base_folder)}_reflection_final_page_limit.pdf"
-        )
+        reflection_pdf = osp.join(run_out_dir, "paper_reflection_final_page_limit.pdf")
         # Compile current version before reflection
         print("[green]Compiling PDF for reflection final page limit...[/green]")
 
@@ -1270,6 +1361,9 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
                 with open(writeup_file, "w") as fo:
                     fo.write(final_text)
 
+                _ensure_graphicspath(
+                    writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
+                )
                 compile_latex(latex_folder, reflection_pdf)
             else:
                 print("No changes in reflection page step.")

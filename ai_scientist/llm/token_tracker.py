@@ -152,11 +152,6 @@ def track_token_usage(func: F) -> F:
             logging.warning(
                 "Token tracking skipped: both 'prompt' and 'system_message' are missing"
             )
-        try:
-            logging.info("args: %s", args)
-            logging.info("kwargs: %s", kwargs)
-        except Exception:
-            traceback.print_exc()
 
         result = await func(*args, **kwargs)
 
@@ -214,12 +209,6 @@ def track_token_usage(func: F) -> F:
             )
 
         result = func(*args, **kwargs)
-
-        try:
-            logging.info("args: %s", args)
-            logging.info("kwargs: %s", kwargs)
-        except Exception:
-            traceback.print_exc()
 
         try:
             model = getattr(result, "model", "unknown-model")

@@ -310,7 +310,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (initial search). Raw response:")
+            print(text)
+            return None
         query = json_output["Query"]
         papers = search_for_papers(query)
     except Exception:
@@ -355,7 +358,10 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None
 
         json_output = extract_json_between_markers(text)
-        assert json_output is not None, "Failed to extract JSON from LLM output"
+        if json_output is None:
+            print("Failed to extract JSON from LLM output (selecting papers). Raw response:")
+            print(text)
+            return None
         desc = json_output["Description"]
         selected_papers = str(json_output["Selected"])
 
@@ -526,16 +532,8 @@ def perform_writeup(
     print("=" * 80 + "\n")
 
     compile_attempt = 0
-    base_pdf_file = osp.join(base_folder, f"{osp.basename(base_folder)}")
-    latex_folder = osp.join(base_folder, "latex")
 
-    print(f"[DEBUG] base_pdf_file (without extension): {base_pdf_file}")
-    print(f"[DEBUG] latex_folder: {latex_folder}")
-
-    # Cleanup any previous latex folder and pdf
-    if osp.exists(latex_folder):
-        print(f"[DEBUG] Removing existing latex folder: {latex_folder}")
-        shutil.rmtree(latex_folder)
+    # Cleanup will be set after run output directory is resolved
     # if osp.exists(pdf_file):
     #     os.remove(pdf_file)
 
@@ -551,6 +549,13 @@ def perform_writeup(
             if osp.exists(idea_md_path):
                 with open(idea_md_path, "r") as f_idea:
                     idea_text = f_idea.read()
+            else:
+                # Warn if neither research_idea.md nor idea.md exists
+                print(
+                    f"Warning: Missing idea markdown files. "
+                    f"Not found: {research_idea_path} and {idea_md_path}. "
+                    "Proceeding with empty idea_text."
+                )
 
         # Load summaries
         logs_dir = osp.join(base_folder, "logs")
@@ -563,6 +568,18 @@ def perform_writeup(
             except Exception:
                 traceback.print_exc()
                 latest_run_dir = "0-run"
+
+        # Set run-specific output directories for latex and PDFs
+        run_out_dir = osp.join(logs_dir, latest_run_dir)
+        os.makedirs(run_out_dir, exist_ok=True)
+        base_pdf_file = osp.join(run_out_dir, "paper")
+        latex_folder = osp.join(run_out_dir, "latex")
+        print(f"[DEBUG] base_pdf_file (without extension): {base_pdf_file}")
+        print(f"[DEBUG] latex_folder: {latex_folder}")
+        # Cleanup any previous latex folder
+        if osp.exists(latex_folder):
+            print(f"[DEBUG] Removing existing latex folder: {latex_folder}")
+            shutil.rmtree(latex_folder)
 
         summary_files = [
             (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
@@ -587,6 +604,7 @@ def perform_writeup(
                     print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
                     loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
             else:
+                print(f"Warning: Summary file not found for {key}: {path}")
                 loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
 
         # Convert them to one big JSON string for context
@@ -600,13 +618,38 @@ def perform_writeup(
         with open(writeup_file, "r") as f:
             writeup_text = f.read()
 
-        # Gather plot filenames from figures/ folder
-        figures_dir = osp.join(base_folder, "figures")
+        # Gather plot filenames from figures/ folder (per-run when provided)
+        figures_dir = osp.join(base_folder, "figures", latest_run_dir)
         plot_names = []
         if osp.exists(figures_dir):
             for fplot in os.listdir(figures_dir):
                 if fplot.lower().endswith(".png"):
                     plot_names.append(fplot)
+
+        # Seed citations from per-run cache if available
+        try:
+            cache_base = osp.join(logs_dir, latest_run_dir)
+            os.makedirs(cache_base, exist_ok=True)
+            citations_cache_path = osp.join(cache_base, "cached_citations.bib")
+            progress_path = osp.join(cache_base, "citations_progress.json")
+            if osp.exists(citations_cache_path):
+                with open(citations_cache_path, "r") as f:
+                    cached_citations = f.read()
+                print(f"[DEBUG] Loaded cached citations from: {citations_cache_path}")
+                try:
+                    with open(writeup_file, "r") as f:
+                        content = f.read()
+                    pattern_end = r"\end{filecontents}"
+                    content = content.replace(pattern_end, f"\n{cached_citations}{pattern_end}")
+                    with open(writeup_file, "w") as f:
+                        f.write(content)
+                    print("[DEBUG] Seeded LaTeX references with cached citations.")
+                except Exception:
+                    print("[WARNING] Failed to seed LaTeX with cached citations.")
+                    print(traceback.format_exc())
+        except Exception:
+            print("[WARNING] Exception while initializing citation cache paths.")
+            print(traceback.format_exc())
 
         # Load aggregator script to include in the prompt
         aggregator_path = osp.join(base_folder, "auto_plot_aggregator.py")
@@ -646,6 +689,13 @@ def perform_writeup(
                     idea_text,
                 )
                 if addition is None:
+                    # Mark citation gathering as done in progress cache
+                    try:
+                        with open(progress_path, "w") as f:
+                            json.dump({"done": True, "round_idx": round_idx}, f, indent=2)
+                    except Exception:
+                        print("[WARNING] Failed to update citations progress cache on completion.")
+                        print(traceback.format_exc())
                     break
 
                 if addition is not None:
@@ -662,9 +712,47 @@ def perform_writeup(
                             )
                             with open(writeup_file, "w") as fo:
                                 fo.write(revised)
+                            # Save updated citations to cache
+                            try:
+                                with open(writeup_file, "r") as f:
+                                    current_text = f.read()
+                                current_refs = re.search(
+                                    r"\\begin{filecontents}{references.bib}(.*?)\\end{filecontents}",
+                                    current_text,
+                                    re.DOTALL,
+                                )
+                                if current_refs:
+                                    with open(citations_cache_path, "w") as f:
+                                        f.write(current_refs.group(1))
+                                with open(progress_path, "w") as f:
+                                    json.dump(
+                                        {"done": False, "round_idx": round_idx + 1},
+                                        f,
+                                        indent=2,
+                                    )
+                            except Exception:
+                                print("[WARNING] Failed to update citations cache/progress.")
+                                print(traceback.format_exc())
             except Exception:
                 print("EXCEPTION in perform_writeup (citation round):")
                 print(traceback.format_exc())
+                # Save progress and current citations in case of error
+                try:
+                    with open(writeup_file, "r") as f:
+                        current_text = f.read()
+                    current_refs = re.search(
+                        r"\\begin{filecontents}{references.bib}(.*?)\\end{filecontents}",
+                        current_text,
+                        re.DOTALL,
+                    )
+                    if current_refs:
+                        with open(citations_cache_path, "w") as f:
+                            f.write(current_refs.group(1))
+                    with open(progress_path, "w") as f:
+                        json.dump({"done": False, "round_idx": round_idx}, f, indent=2)
+                except Exception:
+                    print("[WARNING] Failed to persist citations after exception.")
+                    print(traceback.format_exc())
                 continue
 
         # Generate VLM-based descriptions but do not overwrite plot_names

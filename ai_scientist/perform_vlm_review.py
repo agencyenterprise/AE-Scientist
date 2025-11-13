@@ -2,6 +2,7 @@ import base64
 import hashlib
 import os
 import re
+import traceback
 from typing import Any, Dict, List, Optional
 
 import openai
@@ -164,7 +165,12 @@ def extract_figure_screenshots(
     Avoid partial matches, e.g. "Figure 11" doesn't match "Figure 1".
     """
     os.makedirs(img_folder_path, exist_ok=True)
-    doc = pymupdf.open(pdf_path)
+    try:
+        doc = pymupdf.open(pdf_path)
+    except Exception:
+        print(f"Error: Could not open PDF for image extraction: {pdf_path}")
+        print(traceback.format_exc())
+        return []
     page_range = range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
 
     # ---------- (A) EXTRACT ALL TEXT BLOCKS FROM THE DOCUMENT ----------
