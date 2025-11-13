@@ -298,14 +298,7 @@ if __name__ == "__main__":
     # Base folder (next to the idea JSON) to collect artifacts for plotting/writeup
     base_folder = str(Path(idea_json_path).parent.resolve())
 
-    # Ensure a markdown version of the idea exists at the reports base for plotting/writeup
-    try:
-        md_output_path = Path(reports_base) / "research_idea.md"
-        idea_to_markdown(data=idea, output_path=str(md_output_path), load_code="")
-        print(f"Wrote research idea markdown to {md_output_path}")
-    except Exception:
-        traceback.print_exc()
-        print("Failed to write research_idea.md; continuing without it.")
+    # Defer writing research_idea.md until the specific run directory is known
 
     # Execute experiments via AgentManager (BFTS pipeline) or resume to Stage 2
     # Track selected resume run directory for later reporting/aggregation
@@ -517,6 +510,20 @@ if __name__ == "__main__":
         except Exception:
             traceback.print_exc()
             run_dir_path = None
+
+    # Write research_idea.md into the specific run directory (not the workspace root)
+    try:
+        if run_dir_path is not None:
+            md_output_path = run_dir_path / "research_idea.md"
+            idea_to_markdown(data=idea, output_path=str(md_output_path), load_code="")
+            print(f"Wrote research idea markdown to {md_output_path}")
+        else:
+            print(
+                "Warning: run_dir_path is None; cannot write research_idea.md to a run-specific folder."
+            )
+    except Exception:
+        traceback.print_exc()
+        print("Failed to write research_idea.md into the run directory; continuing without it.")
 
     # (No mirroring) Use configured log_dir as the source of truth for summaries
 

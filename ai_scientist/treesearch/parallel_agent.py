@@ -130,7 +130,7 @@ class ParallelAgent:
             temperature=self.cfg.agent.code.temp,
         )
 
-        print(f"[green]Defined eval metrics:[/green] {response}")
+        print(f"Defined eval metrics: {response}")
         response_text: str = response if isinstance(response, str) else str(response)
         return response_text
 
@@ -198,7 +198,7 @@ class ParallelAgent:
             best_stage3_plot_code = None
             seed_eval = True
             memory_summary = ""
-            print("[yellow]Starting multi-seed eval...[/yellow]")
+            print("Starting multi-seed eval...")
             futures.append(
                 self.executor.submit(
                     process_node,
@@ -269,7 +269,7 @@ class ParallelAgent:
         nodes_to_process: list[Optional[Node]] = []
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
-        print(f"[cyan]self.num_workers: {self.num_workers}, [/cyan]")
+        print(f"self.num_workers: {self.num_workers}, ")
 
         while len(nodes_to_process) < self.num_workers:
             # Drafting: create root nodes up to target drafts
@@ -323,8 +323,8 @@ class ParallelAgent:
                         continue
 
             # Stage-specific selection: Ablation Studies
-            print(f"[red]self.stage_name: {self.stage_name}[/red]")
-            # print(f"[red]self.best_stage3_node: {self.best_stage3_node}[/red]")
+            print(f"self.stage_name: {self.stage_name}")
+            # print(f"self.best_stage3_node: {self.best_stage3_node}")
             if self.stage_name and self.stage_name.startswith("4_"):
                 self._emit_event(
                     RunLogEvent(
@@ -528,7 +528,7 @@ class ParallelAgent:
                 # Journal acts as a database to look up a parent node,
                 # and add the result node as a child.
                 result_node = Node.from_dict(result_data, self.journal)
-                print("[red]Investigating if result node has metric[/red]", flush=True)
+                print("Investigating if result node has metric", flush=True)
                 print(result_node.metric)
                 # Update hyperparam tuning state if in Stage 2
                 Stage2Tuning.update_hyperparam_state(

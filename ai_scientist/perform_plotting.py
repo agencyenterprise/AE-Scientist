@@ -274,7 +274,7 @@ Please criticize the current script for any flaws including but not limited to:
 
 If you believe you are done, simply say: "I am done". Otherwise, please provide an updated aggregator script in triple backticks."""
 
-        print("[green]Reflection prompt:[/green] ", reflection_prompt)
+        print("Reflection prompt: ", reflection_prompt)
         try:
             reflection_response, msg_history = get_response_from_llm(
                 prompt=reflection_prompt,

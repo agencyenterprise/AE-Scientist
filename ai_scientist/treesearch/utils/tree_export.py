@@ -73,7 +73,7 @@ def get_completed_stages(log_dir: Path) -> list[str]:
 
 def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
     edges = list(get_edges(jou))
-    print(f"[red]Edges: {edges}[/red]")
+    print(f"Edges: {edges}")
     try:
         gen_layout = generate_layout(n_nodes=len(jou.nodes), edges=edges, layout_type="rt")
     except Exception as e:
@@ -362,7 +362,7 @@ def generate_html(tree_graph_str: str) -> str:
 
 
 def generate(exp_name: str, jou: Journal, out_path: Path) -> None:
-    print("[red]Checking Journal[/red]")
+    print("Checking Journal")
     try:
         tree_struct = cfg_to_tree_struct(exp_name=exp_name, jou=jou, out_path=out_path)
     except Exception as e:
@@ -469,4 +469,4 @@ def create_unified_viz(current_stage_viz_path: Path) -> None:
     with open(unified_viz_path, "w") as f:
         f.write(html)
 
-    print(f"[green]Created unified visualization at {unified_viz_path}[/green]")
+    print(f"Created unified visualization at {unified_viz_path}")

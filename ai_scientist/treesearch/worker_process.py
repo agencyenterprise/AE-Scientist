@@ -236,15 +236,11 @@ def process_node(
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 
-        print(
-            f"[bold blue]→ Executing experiment code (timeout: {cfg.exec.timeout}s)...[/bold blue]"
-        )
+        print(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
         emit("ai.run.log", {"message": "Executing experiment code on GPU...", "level": "info"})
         exec_result = process_interpreter.run(child_node.code, True)
         process_interpreter.cleanup_session()
-        print(
-            f"[bold green]✓ Code execution completed in {exec_result.exec_time:.1f}s[/bold green]"
-        )
+        print(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
         emit(
             "ai.run.log",
             {
@@ -253,7 +249,7 @@ def process_node(
             },
         )
 
-        print("[bold blue]→ Analyzing results and extracting metrics...[/bold blue]")
+        print("→ Analyzing results and extracting metrics...")
         emit("ai.run.log", {"message": "Analyzing results and extracting metrics", "level": "info"})
         worker_agent.parse_exec_result(
             node=child_node, exec_result=exec_result, workspace=working_dir
@@ -268,14 +264,14 @@ def process_node(
             seed_eval=seed_eval,
             emit=emit,
         )
-        print(f"[bold green]✓ Metrics extracted. Buggy: {child_node.is_buggy}[/bold green]")
+        print(f"✓ Metrics extracted. Buggy: {child_node.is_buggy}")
 
         if not child_node.is_buggy:
             print(
                 f"[DEBUG] Starting plotting for node {child_node.id}: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
             )
             try:
-                print("[bold blue]→ Generating visualization plots...[/bold blue]")
+                print("→ Generating visualization plots...")
                 emit("ai.run.log", {"message": "Generating visualization plots", "level": "info"})
                 retry_count = 0
                 while True:
@@ -431,7 +427,7 @@ def process_node(
                     print("[WARN]   3. plot_paths list was cleared/reset somewhere")
                 try:
                     print(
-                        f"[bold blue]→ Analyzing {len(child_node.plots)} plots with Vision Language Model...[/bold blue]"
+                        f"→ Analyzing {len(child_node.plots)} plots with Vision Language Model..."
                     )
                     emit(
                         "ai.run.log",
@@ -441,9 +437,7 @@ def process_node(
                         },
                     )
                     analyze_plots_with_vlm(agent=worker_agent, node=child_node)
-                    print(
-                        f"[bold green]✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}[/bold green]"
-                    )
+                    print(f"✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}")
                     emit("ai.run.log", {"message": "✓ Plot analysis complete", "level": "info"})
                 except Exception as e:
                     tb = traceback.format_exc()

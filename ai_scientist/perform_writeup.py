@@ -587,11 +587,11 @@ def perform_writeup(
                 with open(idea_md_path, "r") as f_idea:
                     idea_text = f_idea.read()
             else:
-                # Warn if neither research_idea.md nor idea.md exists
+                # defer to run-specific path after latest_run_dir is computed below
                 print(
-                    f"Warning: Missing idea markdown files. "
+                    f"Warning: Missing idea markdown files in base folder. "
                     f"Not found: {research_idea_path} and {idea_md_path}. "
-                    "Proceeding with empty idea_text."
+                    "Will check run-specific location under logs/<run>/research_idea.md."
                 )
 
         # Load summaries
@@ -613,6 +613,19 @@ def perform_writeup(
         latex_folder = osp.join(run_out_dir, "latex")
         print(f"[DEBUG] base_pdf_file (without extension): {base_pdf_file}")
         print(f"[DEBUG] latex_folder: {latex_folder}")
+        # If idea_text is still empty, attempt to load from run-specific location
+        if not idea_text:
+            run_md_path = osp.join(run_out_dir, "research_idea.md")
+            if osp.exists(run_md_path):
+                with open(run_md_path, "r") as f_idea:
+                    idea_text = f_idea.read()
+                    print(f"[DEBUG] Loaded research_idea.md from run dir: {run_md_path}")
+            else:
+                print(
+                    f"Warning: research_idea.md not found in run dir: {run_md_path}. "
+                    "Proceeding with empty idea_text."
+                )
+
         # Cleanup any previous latex folder
         if osp.exists(latex_folder):
             print(f"[DEBUG] Removing existing latex folder: {latex_folder}")

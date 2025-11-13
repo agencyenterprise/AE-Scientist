@@ -663,17 +663,43 @@ def load_idea_text(base_folder: str) -> str:
         with open(research_idea_path, "r") as f_idea:
             idea_text = f_idea.read()
     else:
-        idea_md_path = osp.join(base_folder, "idea.md")
-        if osp.exists(idea_md_path):
-            with open(idea_md_path, "r") as f_idea:
-                idea_text = f_idea.read()
+        # Try per-run location under logs/<latest-run>/research_idea.md
+        logs_dir = osp.join(base_folder, "logs")
+        run_candidate = None
+        if osp.exists(logs_dir):
+            try:
+                run_candidate = find_latest_run_dir_name(logs_dir=Path(logs_dir))
+            except Exception:
+                traceback.print_exc()
+                run_candidate = None
+        if run_candidate:
+            run_md_path = osp.join(logs_dir, run_candidate, "research_idea.md")
+            if osp.exists(run_md_path):
+                with open(run_md_path, "r") as f_idea:
+                    idea_text = f_idea.read()
+            else:
+                idea_md_path = osp.join(base_folder, "idea.md")
+                if osp.exists(idea_md_path):
+                    with open(idea_md_path, "r") as f_idea:
+                        idea_text = f_idea.read()
+                else:
+                    print(
+                        f"Warning: Missing idea markdown files. "
+                        f"Not found: {research_idea_path}, {run_md_path} and {idea_md_path}. "
+                        "Proceeding with empty idea_text."
+                    )
         else:
-            # Warn if neither research_idea.md nor idea.md exists
-            print(
-                f"Warning: Missing idea markdown files. "
-                f"Not found: {research_idea_path} and {idea_md_path}. "
-                "Proceeding with empty idea_text."
-            )
+            # Fallback to idea.md in base folder
+            idea_md_path = osp.join(base_folder, "idea.md")
+            if osp.exists(idea_md_path):
+                with open(idea_md_path, "r") as f_idea:
+                    idea_text = f_idea.read()
+            else:
+                print(
+                    f"Warning: Missing idea markdown files. "
+                    f"Not found: {research_idea_path} and {idea_md_path}. "
+                    "Proceeding with empty idea_text."
+                )
     return idea_text
 
 
@@ -1122,7 +1148,7 @@ def perform_writeup(
             # Save PDF with reflection trial number
             reflection_pdf = osp.join(run_out_dir, f"paper_reflection{i + 1}.pdf")
             # Compile current version before reflection
-            print(f"[green]Compiling PDF for reflection {i + 1}...[/green]")
+            print(f"Compiling PDF for reflection {i + 1}...")
             compile_latex(latex_folder, reflection_pdf)
 
             review_img_cap_ref = perform_imgs_cap_ref_review(vlm_client, vlm_model, reflection_pdf)
@@ -1304,7 +1330,7 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
 
         reflection_pdf = osp.join(run_out_dir, "paper_reflection_final_page_limit.pdf")
         # Compile current version before reflection
-        print("[green]Compiling PDF for reflection final page limit...[/green]")
+        print("Compiling PDF for reflection final page limit...")
 
         print(f"reflection step {i + 1}")
 

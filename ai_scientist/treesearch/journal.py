@@ -366,6 +366,8 @@ class Journal:
     _best_cache_time: float | None = field(default=None, repr=False)
     _best_cache_candidate_ids: list[str] | None = field(default=None, repr=False)
     _best_cache_total_nodes_count: int | None = field(default=None, repr=False)
+    # Memoization for research summary calls, keyed by good-node IDs and include_code flag
+    _summary_cache: dict[str, str] = field(default_factory=dict, repr=False)
 
     def __getstate__(self) -> dict:
         state = self.__dict__.copy()
@@ -463,13 +465,17 @@ class Journal:
                 parts.append(f"{n.id}:{metric_val}:{n.is_buggy}:{n.is_buggy_plots}")
             return "|".join(str(p) for p in parts)
 
-        candidate_ids = sorted([n.id for n in nodes])
+        # Exclude seed nodes from candidate set for selection prompt; fall back to all nodes if exclusion empties the set
+        candidate_nodes = [n for n in nodes if not n.is_seed_node]
+        if not candidate_nodes:
+            candidate_nodes = nodes
+        candidate_ids = sorted([n.id for n in candidate_nodes])
         print(
             f"[DEBUG] Candidate set for best-node selection (count={len(candidate_ids)}): "
             f"{[cid[:8] for cid in candidate_ids]}"
         )
 
-        sig = _selection_signature(nodes)
+        sig = _selection_signature(candidate_nodes)
         if self._best_cache_signature == sig:
             # If new nodes were added but candidates didn't change (only_good=True), likely new nodes are buggy
             if (
@@ -491,7 +497,7 @@ class Journal:
             return self._best_cache_result
 
         if use_val_metric_only:
-            nodes_with_metric = [n for n in nodes if n.metric is not None]
+            nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
             if not nodes_with_metric:
                 # Cache the absence as well to avoid repeated work until state changes
                 self._best_cache_signature = sig
@@ -516,8 +522,8 @@ class Journal:
             )
             return selected_metric_node
 
-        if len(nodes) == 1:
-            selected_single = nodes[0]
+        if len(candidate_nodes) == 1:
+            selected_single = candidate_nodes[0]
             self._best_cache_signature = sig
             self._best_cache_result = selected_single
             self._best_cache_time = time.time()
@@ -545,22 +551,21 @@ class Journal:
             "Candidates": "",
         }
         # Gather info about each node
-        for node in nodes:
-            if not node.is_seed_node:
-                candidate_info = (
-                    f"ID: {node.id}\n" f"Metric: {str(node.metric)}\n"
-                    if node.metric
+        for node in candidate_nodes:
+            candidate_info = (
+                f"ID: {node.id}\n" f"Metric: {str(node.metric)}\n"
+                if node.metric
+                else (
+                    "N/A\n" f"Training Analysis: {node.analysis}\n"
+                    if hasattr(node, "analysis")
                     else (
-                        "N/A\n" f"Training Analysis: {node.analysis}\n"
-                        if hasattr(node, "analysis")
-                        else (
-                            "N/A\n" f"VLM Feedback: {node.vlm_feedback_summary}\n"
-                            if hasattr(node, "vlm_feedback_summary")
-                            else "N/A\n"
-                        )
+                        "N/A\n" f"VLM Feedback: {node.vlm_feedback_summary}\n"
+                        if hasattr(node, "vlm_feedback_summary")
+                        else "N/A\n"
                     )
                 )
-                prompt["Candidates"] += candidate_info
+            )
+            prompt["Candidates"] += candidate_info
 
         try:
             print(
@@ -596,7 +601,9 @@ class Journal:
                 return selected_fb
 
             selected_id = str(selection.get("selected_id", ""))
-            selected_node = next((node for node in nodes if str(node.id) == selected_id), None)
+            selected_node = next(
+                (node for node in candidate_nodes if str(node.id) == selected_id), None
+            )
             if selected_node:
                 logger.info(f"Selected node {selected_node.id} as best implementation")
                 logger.info(f"Reasoning: {selection.get('reasoning', '')}")
@@ -630,7 +637,7 @@ class Journal:
                 return selected_node
             else:
                 logger.warning("Falling back to metric-based selection")
-                nodes_with_metric = [n for n in nodes if n.metric is not None]
+                nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
                 selected_fallback = (
                     max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
                     if nodes_with_metric
@@ -650,7 +657,7 @@ class Journal:
         except Exception as e:
             logger.error(f"Error in LLM selection process: {e}")
             logger.warning("Falling back to metric-based selection")
-            nodes_with_metric = [n for n in nodes if n.metric is not None]
+            nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
             selected_on_error = (
                 max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
                 if nodes_with_metric
@@ -671,6 +678,21 @@ class Journal:
         """Generate a summary of the research progress using LLM, including both successes and failures."""
         if not self.nodes:
             return "No experiments conducted yet."
+
+        # Build cache key from the current set of good nodes and include_code flag
+        good_ids = sorted([n.id for n in self.good_nodes])
+        cache_key = f"include_code={include_code}|good_ids={','.join(good_ids)}"
+        cached_summary = self._summary_cache.get(cache_key)
+        if cached_summary is not None:
+            print(
+                f"[DEBUG] Summary cache HIT: include_code={include_code}, "
+                f"good_nodes_count={len(good_ids)}. Reusing previous summary (no new good nodes)."
+            )
+            return cached_summary
+        print(
+            f"[DEBUG] Summary cache MISS: include_code={include_code}, "
+            f"good_nodes_count={len(good_ids)}. Invoking LLM to generate summary."
+        )
 
         prompt = {
             "Introduction": (
@@ -713,7 +735,14 @@ class Journal:
             temperature=1.0,
         )
 
-        return summary_resp if isinstance(summary_resp, str) else json.dumps(summary_resp)
+        summary_text = summary_resp if isinstance(summary_resp, str) else json.dumps(summary_resp)
+        # Cache and return
+        self._summary_cache[cache_key] = summary_text
+        print(
+            f"[DEBUG] Summary cached. Key reflects include_code and current good nodes "
+            f"(include_code={include_code}, good_nodes_count={len(good_ids)})."
+        )
+        return summary_text
 
     def to_dict(self) -> dict[str, list[dict[str, object]] | str]:
         """Convert journal to a JSON-serializable dictionary"""

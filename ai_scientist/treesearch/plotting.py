@@ -125,6 +125,9 @@ def generate_plotting_code(
         )
 
     plan, code = agent.plan_and_code_query(prompt=plotting_prompt, retries=3)
+    print("----- LLM code start (stage3 plotting) -----")
+    print(code)
+    print("----- LLM code end (stage3 plotting) -----")
     if not code.strip().startswith("import"):
         code = "import matplotlib.pyplot as plt\nimport numpy as np\n\n" + code
     node.plot_code = code

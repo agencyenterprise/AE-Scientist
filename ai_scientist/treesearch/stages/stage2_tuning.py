@@ -32,6 +32,10 @@ class Stage2Tuning(Stage):
         "- DO NOT change the model architecture from the previous stage\n"
         "- Introduce additional datasets from HuggingFace to test the model. Use dataset sizes appropriate to the experiment. Use streaming=True for very large datasets."
     )
+    # Memoization caches for completion queries
+    # key -> (is_complete, message)
+    _substage_completion_cache: dict[str, tuple[bool, str]] = {}
+    _stage_completion_cache: dict[str, tuple[bool, str]] = {}
 
     @staticmethod
     def build_hyperparam_tuning_node(
@@ -74,6 +78,9 @@ class Stage2Tuning(Stage):
         hp_instructions |= agent._prompt_hyperparam_tuning_resp_fmt
         prompt["Instructions"] = hp_instructions
         plan, code = agent.plan_and_code_query(prompt=prompt)
+        print("----- LLM code start (stage2 tuning) -----")
+        print(code)
+        print("----- LLM code end (stage2 tuning) -----")
         return Node(
             plan="Hyperparam tuning name: " + hyperparam_idea.name + ".\n" + plan,
             code=code,
@@ -151,6 +158,19 @@ class Stage2Tuning(Stage):
         best_node = journal.get_best_node()
         if not best_node:
             return False, "No best node found"
+        metric_val = best_node.metric.value if best_node.metric is not None else None
+        cache_key = f"stage=2_substage|id={best_node.id}|metric={metric_val}|goals={goals}"
+        cached = Stage2Tuning._substage_completion_cache.get(cache_key)
+        if cached is not None:
+            print(
+                f"[DEBUG] Stage2 substage-completion cache HIT for best_node={best_node.id[:8]} "
+                f"(metric={metric_val}). Goals unchanged. Skipping LLM."
+            )
+            return cached
+        print(
+            f"[DEBUG] Stage2 substage-completion cache MISS for best_node={best_node.id[:8]} "
+            f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
+        )
         eval_prompt = f"""
         Evaluate if Stage 2 (baseline tuning) sub-stage is complete.
 
@@ -182,11 +202,29 @@ class Stage2Tuning(Stage):
             temperature=cfg.agent.feedback.temp,
         )
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
-            return True, str(evaluation.get("reasoning", "sub-stage complete"))
+            result = True, str(evaluation.get("reasoning", "sub-stage complete"))
+            Stage2Tuning._substage_completion_cache[cache_key] = result
+            print(
+                f"[DEBUG] Stage2 substage-completion result cached for best_node={best_node.id[:8]} "
+                f"(metric={metric_val})."
+            )
+            return result
         if isinstance(evaluation, dict):
             missing = ", ".join(evaluation.get("missing_criteria", []))
-            return False, "Missing criteria: " + missing
-        return False, "Sub-stage not complete"
+            result = False, "Missing criteria: " + missing
+            Stage2Tuning._substage_completion_cache[cache_key] = result
+            print(
+                f"[DEBUG] Stage2 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+                f"(metric={metric_val}). Missing: {missing}"
+            )
+            return result
+        result = False, "Sub-stage not complete"
+        Stage2Tuning._substage_completion_cache[cache_key] = result
+        print(
+            f"[DEBUG] Stage2 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+            f"(metric={metric_val})."
+        )
+        return result
 
     @staticmethod
     def compute_stage_completion(*, journal: Journal, cfg: AppConfig) -> tuple[bool, str]:
@@ -195,6 +233,21 @@ class Stage2Tuning(Stage):
             return False, "No best node found"
         if best_node == journal.nodes[0]:
             return False, "No improvement from base node"
+        metric_val = best_node.metric.value if best_node.metric is not None else None
+        # Static requirement goals for Stage 2 completion encoded as a short signature
+        goals_sig = "stable_convergence;two_datasets;no_plot_instabilities"
+        cache_key = f"stage=2_stage|id={best_node.id}|metric={metric_val}|goals={goals_sig}"
+        cached = Stage2Tuning._stage_completion_cache.get(cache_key)
+        if cached is not None:
+            print(
+                f"[DEBUG] Stage2 stage-completion cache HIT for best_node={best_node.id[:8]} "
+                f"(metric={metric_val}). Requirements unchanged. Skipping LLM."
+            )
+            return cached
+        print(
+            f"[DEBUG] Stage2 stage-completion cache MISS for best_node={best_node.id[:8]} "
+            f"(metric={metric_val}). Requirements changed or new best node. Invoking LLM."
+        )
         eval_prompt = f"""
         Evaluate if Stage 2 (baseline tuning) is complete based on the following evidence:
 
@@ -228,11 +281,29 @@ class Stage2Tuning(Stage):
             temperature=cfg.agent.feedback.temp,
         )
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
-            return True, str(evaluation.get("reasoning", "stage complete"))
+            result = True, str(evaluation.get("reasoning", "stage complete"))
+            Stage2Tuning._stage_completion_cache[cache_key] = result
+            print(
+                f"[DEBUG] Stage2 stage-completion result cached for best_node={best_node.id[:8]} "
+                f"(metric={metric_val})."
+            )
+            return result
         if isinstance(evaluation, dict):
             missing = ", ".join(evaluation.get("missing_criteria", []))
-            return False, "Missing criteria: " + missing
-        return False, "stage not completed"
+            result = False, "Missing criteria: " + missing
+            Stage2Tuning._stage_completion_cache[cache_key] = result
+            print(
+                f"[DEBUG] Stage2 stage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+                f"(metric={metric_val}). Missing: {missing}"
+            )
+            return result
+        result = False, "stage not completed"
+        Stage2Tuning._stage_completion_cache[cache_key] = result
+        print(
+            f"[DEBUG] Stage2 stage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+            f"(metric={metric_val})."
+        )
+        return result
 
     def curate_task_desc(self) -> str:
         return self._context.task_desc

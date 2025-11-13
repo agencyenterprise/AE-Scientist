@@ -357,7 +357,7 @@ class MinimalAgent:
         node.analysis = response["summary"]
         node.is_buggy = response["is_bug"] or node.exc_type is not None
         print(
-            "[red]Checking if response contains metric name and description[/red]",
+            "Checking if response contains metric name and description",
             flush=True,
         )
         print(response)
