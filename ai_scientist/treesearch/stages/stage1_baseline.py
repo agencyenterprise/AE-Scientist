@@ -1,3 +1,5 @@
+import logging
+
 from ai_scientist.llm.query import FunctionSpec, query
 
 from ..codegen_agent import MinimalAgent
@@ -6,6 +8,8 @@ from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
 from .base import Stage
+
+logger = logging.getLogger(__name__)
 
 
 class Stage1Baseline(Stage):
@@ -56,18 +60,13 @@ class Stage1Baseline(Stage):
         if agent.cfg.agent.data_preview:
             prompt["Data Overview"] = agent.data_preview
 
-        print("--------------------------------")
-        print("self.task_desc")
-        print("" + agent.task_desc + "")
-        print("--------------------------------")
-
-        print("MinimalAgent: Getting plan and code")
+        logger.debug("MinimalAgent: Getting plan and code")
         plan, code = agent.plan_and_code_query(prompt=prompt)
-        print("MinimalAgent: Draft complete")
-        print("----- LLM code start -----")
-        print(code)
-        print("----- LLM code end -----")
-        print(f"✓ Generated {len(code)} characters of code")
+        logger.debug("MinimalAgent: Draft complete")
+        logger.debug("----- LLM code start -----")
+        logger.debug(code)
+        logger.debug("----- LLM code end -----")
+        logger.info(f"✓ Generated {len(code)} characters of code")
         return Node(plan=plan, code=code)
 
     @staticmethod
@@ -94,9 +93,9 @@ class Stage1Baseline(Stage):
         prompt["Instructions"] = improve_instructions
 
         plan, code = agent.plan_and_code_query(prompt=prompt)
-        print("----- LLM code start (improve) -----")
-        print(code)
-        print("----- LLM code end (improve) -----")
+        logger.debug("----- LLM code start (improve) -----")
+        logger.debug(code)
+        logger.debug("----- LLM code end (improve) -----")
         return Node(
             plan=plan,
             code=code,
@@ -120,13 +119,13 @@ class Stage1Baseline(Stage):
         cache_key = f"stage=1_substage|id={best_node.id}|metric={metric_val}|goals={goals}"
         cached = Stage1Baseline._substage_completion_cache.get(cache_key)
         if cached is not None:
-            print(
-                f"[DEBUG] Stage1 substage-completion cache HIT for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage1 substage-completion cache HIT for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Goals unchanged. Skipping LLM."
             )
             return cached
-        print(
-            f"[DEBUG] Stage1 substage-completion cache MISS for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage1 substage-completion cache MISS for best_node={best_node.id[:8]} "
             f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
         )
         prompt = f"""
@@ -162,8 +161,8 @@ class Stage1Baseline(Stage):
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
             result = True, str(evaluation.get("reasoning", "sub-stage complete"))
             Stage1Baseline._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage1 substage-completion result cached for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage1 substage-completion result cached for best_node={best_node.id[:8]} "
                 f"(metric={metric_val})."
             )
             return result
@@ -171,15 +170,15 @@ class Stage1Baseline(Stage):
             missing = ", ".join(evaluation.get("missing_criteria", []))
             result = False, "Missing criteria: " + missing
             Stage1Baseline._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage1 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage1 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Missing: {missing}"
             )
             return result
         result = False, "Sub-stage not complete"
         Stage1Baseline._substage_completion_cache[cache_key] = result
-        print(
-            f"[DEBUG] Stage1 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage1 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
             f"(metric={metric_val})."
         )
         return result

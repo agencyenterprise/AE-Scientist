@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import re
 import shutil
@@ -16,6 +17,8 @@ from ai_scientist.perform_icbinb_writeup import (
     load_exp_summaries,
     load_idea_text,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_FIGURES = 12
 
@@ -101,12 +104,12 @@ def run_aggregator_script(
     aggregator_code: str, aggregator_script_path: str, base_folder: str, script_name: str
 ) -> str:
     if not aggregator_code.strip():
-        print("No aggregator code was provided. Skipping aggregator script run.")
+        logger.info("No aggregator code was provided. Skipping aggregator script run.")
         return ""
     with open(aggregator_script_path, "w") as f:
         f.write(aggregator_code)
 
-    print(f"Aggregator script written to '{aggregator_script_path}'. Attempting to run it...")
+    logger.info(f"Aggregator script written to '{aggregator_script_path}'. Attempting to run it...")
 
     aggregator_out = ""
     try:
@@ -119,15 +122,13 @@ def run_aggregator_script(
             text=True,
         )
         aggregator_out = result.stdout + "\n" + result.stderr
-        print("Aggregator script ran successfully.")
+        logger.info("Aggregator script ran successfully.")
     except subprocess.CalledProcessError as e:
         aggregator_out = (e.stdout or "") + "\n" + (e.stderr or "")
-        print("Error: aggregator script returned a non-zero exit code.")
-        print(e)
+        logger.warning(f"Error: aggregator script returned a non-zero exit code: {e}")
     except Exception as e:
         aggregator_out = str(e)
-        print("Error while running aggregator script.")
-        print(e)
+        logger.exception(f"Error while running aggregator script: {e}")
 
     return aggregator_out
 
@@ -147,7 +148,7 @@ def aggregate_plots(
         os.remove(aggregator_script_path)
     if os.path.exists(figures_dir):
         shutil.rmtree(figures_dir)
-        print("Cleaned up previous figures directory")
+        logger.debug("Cleaned up previous figures directory")
 
     idea_text = load_idea_text(base_folder)
     exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
@@ -236,12 +237,13 @@ def aggregate_plots(
         )
     except Exception:
         traceback.print_exc()
-        print("Failed to get aggregator script from LLM.")
+        logger.exception("Failed to get aggregator script from LLM.")
         return
 
     aggregator_code = extract_code_snippet(response)
     if not aggregator_code.strip():
-        print("No Python code block was found in LLM response. Full response:\n", response)
+        logger.warning("No Python code block was found in LLM response. Full response:")
+        logger.debug(response)
         return
 
     # First run of aggregator script
@@ -257,7 +259,7 @@ def aggregate_plots(
             figure_count = len(
                 [f for f in os.listdir(figures_dir) if os.path.isfile(os.path.join(figures_dir, f))]
             )
-        print(f"[{i + 1} / {n_reflections}]: Number of figures: {figure_count}")
+        logger.info(f"[{i + 1} / {n_reflections}]: Number of figures: {figure_count}")
         # Reflection prompt with reminder for common checks and early exit
         reflection_prompt = f"""We have run your aggregator script and it produced {figure_count} figure(s). The script's output is:
 ```
@@ -274,7 +276,7 @@ Please criticize the current script for any flaws including but not limited to:
 
 If you believe you are done, simply say: "I am done". Otherwise, please provide an updated aggregator script in triple backticks."""
 
-        print("Reflection prompt: ", reflection_prompt)
+        logger.debug(f"Reflection prompt: {reflection_prompt}")
         try:
             reflection_response, msg_history = get_response_from_llm(
                 prompt=reflection_prompt,
@@ -288,12 +290,12 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
 
         except Exception:
             traceback.print_exc()
-            print("Failed to get reflection from LLM.")
+            logger.exception("Failed to get reflection from LLM.")
             return
 
         # Early-exit check
         if figure_count > 0 and "I am done" in reflection_response:
-            print("LLM indicated it is done with reflections. Exiting reflection loop.")
+            logger.info("LLM indicated it is done with reflections. Exiting reflection loop.")
             break
 
         aggregator_new_code = extract_code_snippet(reflection_response)
@@ -305,7 +307,7 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
                 aggregator_code, aggregator_script_path, base_folder, filename
             )
         else:
-            print(
+            logger.debug(
                 f"No new aggregator script was provided or it was identical. Reflection step {i + 1} complete."
             )
 

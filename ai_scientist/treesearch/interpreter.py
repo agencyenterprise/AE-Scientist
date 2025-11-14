@@ -14,6 +14,7 @@ import signal
 import sys
 import time
 import traceback
+import warnings
 from dataclasses import dataclass
 from multiprocessing import Queue
 from multiprocessing.context import SpawnProcess
@@ -105,6 +106,9 @@ def _repl_run_session(
     """
     # Child process setup (mirrors Interpreter.child_proc_setup)
     shutup.mute_warnings()
+    # Suppress PyMuPDF layout warning
+    warnings.filterwarnings("ignore", message=".*pymupdf_layout.*", category=UserWarning)
+    warnings.filterwarnings("ignore", message="Consider using the pymupdf_layout package.*")
 
     for key, value in env_vars.items():
         os.environ[key] = str(value)
@@ -188,6 +192,9 @@ class Interpreter:
     def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
         shutup.mute_warnings()
+        # Suppress PyMuPDF layout warning
+        warnings.filterwarnings("ignore", message=".*pymupdf_layout.*", category=UserWarning)
+        warnings.filterwarnings("ignore", message="Consider using the pymupdf_layout package.*")
 
         for key, value in self.env_vars.items():
             os.environ[key] = str(value)
@@ -317,14 +324,14 @@ class Interpreter:
         """
 
         logger.debug(f"REPL is executing code (reset_session={reset_session})")
-        print("  Starting Python interpreter process...")
+        logger.debug("  Starting Python interpreter process...")
 
         if reset_session:
             if self.process is not None:
                 # terminate and clean up previous process
                 self.cleanup_session()
             self.create_process()
-            print("  ✓ Interpreter ready, sending code to execute")
+            logger.debug("  ✓ Interpreter ready, sending code to execute")
         else:
             # reset_session needs to be True on first exec
             if self.process is None:
@@ -365,7 +372,7 @@ class Interpreter:
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
-        print("  Code is now executing...")
+        logger.debug("  Code is now executing...")
         last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent
@@ -384,7 +391,7 @@ class Interpreter:
                 current_time = time.time()
                 if current_time - last_progress_time >= 30:
                     elapsed = current_time - start_time
-                    print(f"  Still executing... ({humanize.naturaldelta(elapsed)} elapsed)")
+                    logger.debug(f"  Still executing... ({humanize.naturaldelta(elapsed)} elapsed)")
                     last_progress_time = current_time
 
                 # we haven't heard back from the child -> check if it's still alive (assuming overtime interrupt wasn't sent yet)
@@ -427,6 +434,14 @@ class Interpreter:
         while not self.result_outq.empty() or not output or output[-1] != "<|EOF|>":
             output.append(self.result_outq.get())
         output.pop()  # remove the EOF marker
+
+        # Filter out PyMuPDF layout warning messages
+        output = [
+            line
+            for line in output
+            if "pymupdf_layout" not in line.lower()
+            and "Consider using the pymupdf_layout package" not in line
+        ]
 
         e_cls_name = state[1] if len(state) > 1 else None
         exc_info = state[2] if len(state) > 2 else None

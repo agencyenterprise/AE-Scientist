@@ -14,6 +14,7 @@ Steps:
 import argparse
 import copy
 import json
+import logging
 import os
 import os.path as osp
 import re
@@ -51,6 +52,8 @@ from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
 from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
 from ai_scientist.treesearch.utils.config import Config, load_task_desc, prep_cfg, save_run
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
+
+logger = logging.getLogger(__name__)
 
 
 def save_token_tracker(idea_dir: str) -> None:
@@ -99,7 +102,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--num_cite_rounds",
         type=int,
-        default=20,
+        default=5,
         help="Number of citation rounds to perform",
     )
     parser.add_argument(
@@ -293,7 +296,7 @@ if __name__ == "__main__":
     idea_json_path = str(Path(base_cfg["desc_file"]).resolve())
     with open(idea_json_path, "r") as f:
         idea = json.load(f)
-        print(f"Loaded idea from {idea_json_path}")
+        logger.info(f"Loaded idea from {idea_json_path}")
 
     # Base folder (next to the idea JSON) to collect artifacts for plotting/writeup
     base_folder = str(Path(idea_json_path).parent.resolve())
@@ -328,7 +331,7 @@ if __name__ == "__main__":
             # Decide which stage (if any) to run, or skip to post-processing
             if _all_summaries_exist(run_dir=run_dir):
                 # Everything is already summarized for this run; skip stages
-                print(
+                logger.info(
                     "All summary files found; skipping stage execution and proceeding to reports."
                 )
             else:
@@ -357,7 +360,7 @@ if __name__ == "__main__":
 
                     def on_event(event: BaseEvent) -> None:
                         try:
-                            print(event.to_dict())
+                            logger.debug(event.to_dict())
                         except Exception:
                             traceback.print_exc()
 
@@ -485,11 +488,12 @@ if __name__ == "__main__":
                         step_callback=step_callback,
                     )
         except Exception:
-            traceback.print_exc()
-            print("Resume failed; exiting.")
+            logger.exception("Resume failed; exiting.")
             sys.exit(1)
     else:
-        perform_experiments_bfts(Path(base_config_path), lambda event: print(event.to_dict()))
+        perform_experiments_bfts(
+            Path(base_config_path), lambda event: logger.debug(event.to_dict())
+        )
 
     # Identify newly created run directory under configured log_dir
     run_dir_path: Path | None = None
@@ -516,14 +520,16 @@ if __name__ == "__main__":
         if run_dir_path is not None:
             md_output_path = run_dir_path / "research_idea.md"
             idea_to_markdown(data=idea, output_path=str(md_output_path), load_code="")
-            print(f"Wrote research idea markdown to {md_output_path}")
+            logger.info(f"Wrote research idea markdown to {md_output_path}")
         else:
-            print(
+            logger.warning(
                 "Warning: run_dir_path is None; cannot write research_idea.md to a run-specific folder."
             )
     except Exception:
         traceback.print_exc()
-        print("Failed to write research_idea.md into the run directory; continuing without it.")
+        logger.warning(
+            "Failed to write research_idea.md into the run directory; continuing without it."
+        )
 
     # (No mirroring) Use configured log_dir as the source of truth for summaries
 
@@ -535,10 +541,12 @@ if __name__ == "__main__":
             if has_best:
                 should_run_reports = True
             else:
-                print("No best_solution files found; skipping plot aggregation and writeup.")
+                logger.info("No best_solution files found; skipping plot aggregation and writeup.")
         except Exception:
             traceback.print_exc()
-            print("Could not scan for best_solution files; skipping plot aggregation and writeup.")
+            logger.warning(
+                "Could not scan for best_solution files; skipping plot aggregation and writeup."
+            )
             should_run_reports = False
 
     # Aggregate plots across runs (guarded and resilient)
@@ -552,7 +560,7 @@ if __name__ == "__main__":
             )
             agg_ok = True
         except Exception as e:
-            print(f"Aggregate plots failed: {e}. Skipping writeup.")
+            logger.warning(f"Aggregate plots failed: {e}. Skipping writeup.")
             traceback.print_exc()
 
     # Remove the transient aggregated results folder (copied above)
@@ -572,7 +580,7 @@ if __name__ == "__main__":
         )
         try:
             for attempt in range(args.writeup_retries):
-                print(f"Writeup attempt {attempt + 1} of {args.writeup_retries}")
+                logger.info(f"Writeup attempt {attempt + 1} of {args.writeup_retries}")
                 if args.writeup_type == "normal":
                     writeup_success = perform_writeup(
                         base_folder=reports_base,
@@ -592,11 +600,11 @@ if __name__ == "__main__":
                 if writeup_success:
                     break
         except Exception as e:
-            print(f"Writeup failed: {e}")
+            logger.exception(f"Writeup failed: {e}")
             traceback.print_exc()
 
         if not writeup_success:
-            print("Writeup process did not complete successfully after all retries.")
+            logger.error("Writeup process did not complete successfully after all retries.")
 
     # Record tokens after writeup stage as well
     save_token_tracker(run_dir_path.as_posix() if run_dir_path is not None else reports_base)
@@ -607,7 +615,7 @@ if __name__ == "__main__":
             reports_base, run_dir_path.name if run_dir_path is not None else None
         )
         if pdf_path and os.path.exists(pdf_path):
-            print("Paper found at: ", pdf_path)
+            logger.info(f"Paper found at: {pdf_path}")
             paper_content = load_paper(pdf_path)
             client, client_model = create_client(args.model_review)
             # Build review context from the run outputs
@@ -634,12 +642,12 @@ if __name__ == "__main__":
                 f.write(json.dumps(review_text, indent=4))
             with open(osp.join(review_out_dir, "review_img_cap_ref.json"), "w") as f:
                 json.dump(review_img_cap_ref, f, indent=4)
-            print("Paper review completed.")
+            logger.info("Paper review completed.")
         else:
-            print("No PDF found for review (writeup likely failed). Skipping review.")
+            logger.warning("No PDF found for review (writeup likely failed). Skipping review.")
 
     # Clean up any lingering worker processes to avoid resource leaks
-    print("Start cleaning up processes")
+    logger.info("Start cleaning up processes")
     # Kill all mp and torch processes associated with this experiment
 
     # Get the current process and all its children

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from typing import List, Protocol, Tuple
 
@@ -11,6 +12,8 @@ from .response_parsing import parse_keyword_prefix_response
 from .types import PromptType
 from .utils.config import Config as AppConfig
 from .vlm_function_specs import plot_selection_spec, vlm_feedback_spec
+
+logger = logging.getLogger(__name__)
 
 
 class SupportsPlottingAgent(Protocol):
@@ -125,9 +128,9 @@ def generate_plotting_code(
         )
 
     plan, code = agent.plan_and_code_query(prompt=plotting_prompt, retries=3)
-    print("----- LLM code start (stage3 plotting) -----")
-    print(code)
-    print("----- LLM code end (stage3 plotting) -----")
+    logger.debug("----- LLM code start (stage3 plotting) -----")
+    logger.debug(code)
+    logger.debug("----- LLM code end (stage3 plotting) -----")
     if not code.strip().startswith("import"):
         code = "import matplotlib.pyplot as plt\nimport numpy as np\n\n" + code
     node.plot_code = code
@@ -196,31 +199,41 @@ def determine_datasets_successfully_tested(
 
 
 def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
-    print(f"[DEBUG] analyze_plots_with_vlm called for node {node.id}")
-    print(f"[DEBUG] node.plots count: {len(node.plots) if node.plots else 0}")
-    print(f"[DEBUG] node.plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}")
-    print(f"[DEBUG] node.plots: {node.plots[:3] if node.plots else 'None'}...")
-    print(f"[DEBUG] node.plot_paths: {node.plot_paths[:3] if node.plot_paths else 'None'}...")
+    logger.debug(f"analyze_plots_with_vlm called for node {node.id}")
+    logger.debug(f"node.plots count: {len(node.plots) if node.plots else 0}")
+    logger.debug(f"node.plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}")
+    logger.debug(f"node.plots: {node.plots[:3] if node.plots else 'None'}...")
+    logger.debug(f"node.plot_paths: {node.plot_paths[:3] if node.plot_paths else 'None'}...")
 
     if not node.plot_paths:
-        print("=" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("⚠️  ⚠️  ⚠️  BIG WARNING: plot_paths is EMPTY but plots list has items! ⚠️  ⚠️  ⚠️")
-        print(f"⚠️  Node ID: {node.id}")
-        print(f"⚠️  plots count: {len(node.plots) if node.plots else 0}")
-        print(f"⚠️  plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}")
-        print("⚠️  This means VLM analysis cannot proceed (no actual plot files to analyze)")
-        print("⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)")
-        print("⚠️  This can happen if:")
-        print("⚠️    1. Exception occurred during file moving (plots populated but plot_paths not)")
-        print("⚠️    2. Plots were populated from a previous attempt/retry")
-        print("⚠️    3. plot_paths list was cleared/reset somewhere")
-        print("!" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("=" * 100)
+        warning_msg = (
+            "=" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "⚠️  ⚠️  ⚠️  BIG WARNING: plot_paths is EMPTY but plots list has items! ⚠️  ⚠️  ⚠️\n"
+            + f"⚠️  Node ID: {node.id}\n"
+            + f"⚠️  plots count: {len(node.plots) if node.plots else 0}\n"
+            + f"⚠️  plot_paths count: {len(node.plot_paths) if node.plot_paths else 0}\n"
+            + "⚠️  This means VLM analysis cannot proceed (no actual plot files to analyze)\n"
+            + "⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)\n"
+            + "⚠️  This can happen if:\n"
+            + "⚠️    1. Exception occurred during file moving (plots populated but plot_paths not)\n"
+            + "⚠️    2. Plots were populated from a previous attempt/retry\n"
+            + "⚠️    3. plot_paths list was cleared/reset somewhere\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "=" * 100
+        )
+        logger.warning(warning_msg)
         # Set is_buggy_plots to False to allow the node to be considered "good"
         # but mark that we couldn't verify the plots
         node.is_buggy_plots = False
@@ -281,7 +294,7 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
     for plot_path in selected_plots:
         encoded = _encode_image_to_base64(plot_path)
         if not encoded:
-            print(f"[WARN] Skipping plot for VLM (failed to base64 encode): {plot_path}")
+            logger.warning(f"Skipping plot for VLM (failed to base64 encode): {plot_path}")
             continue
         mime = _infer_image_mime_type(plot_path)
         image_parts.append(
@@ -304,27 +317,37 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         temperature=agent.cfg.agent.vlm_feedback.temp,
     )
     # Log raw response for debugging/traceability
-    print("VLM plot analysis raw response type:", type(response))
+    logger.debug(f"VLM plot analysis raw response type: {type(response)}")
     try:
-        print("VLM plot analysis raw response:", response)
+        logger.debug(f"VLM plot analysis raw response: {response}")
     except Exception:
-        print("VLM plot analysis raw response: <unprintable>")
+        logger.debug("VLM plot analysis raw response: <unprintable>")
 
     if not isinstance(response, dict):
-        print("=" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("⚠️  ⚠️  ⚠️  BIG WARNING: VLM analysis response is not a dict! ⚠️  ⚠️  ⚠️")
-        print(f"⚠️  Node ID: {node.id}")
-        print(f"⚠️  Response type: {type(response)}")
-        print("⚠️  This means VLM analysis failed or returned unexpected format")
-        print("⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)")
-        print("⚠️  Execution will continue, but plots were not validated by VLM")
-        print("!" * 100)
-        print("!" * 100)
-        print("!" * 100)
-        print("=" * 100)
+        warning_msg = (
+            "=" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "⚠️  ⚠️  ⚠️  BIG WARNING: VLM analysis response is not a dict! ⚠️  ⚠️  ⚠️\n"
+            + f"⚠️  Node ID: {node.id}\n"
+            + f"⚠️  Response type: {type(response)}\n"
+            + "⚠️  This means VLM analysis failed or returned unexpected format\n"
+            + "⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)\n"
+            + "⚠️  Execution will continue, but plots were not validated by VLM\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "!" * 100
+            + "\n"
+            + "=" * 100
+        )
+        logger.warning(warning_msg)
         # Set is_buggy_plots to False to allow the node to be considered "good"
         # but mark that we couldn't verify the plots via VLM
         node.is_buggy_plots = False
@@ -346,7 +369,9 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
                 sanitized_item["plot_path"] = node.plot_paths[index]
             sanitized.append(sanitized_item)
         if had_nondict:
-            print("Coerced non-dict entries in plot_analyses into dicts with 'analysis' text.")
+            logger.debug(
+                "Coerced non-dict entries in plot_analyses into dicts with 'analysis' text."
+            )
         node.plot_analyses = sanitized
 
     vlm_summary_val = response.get("vlm_feedback_summary")

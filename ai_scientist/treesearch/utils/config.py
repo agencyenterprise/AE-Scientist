@@ -18,11 +18,65 @@ from ..journal import Journal
 from . import copytree, preproc_data, serialize, tree_export
 
 shutup.mute_warnings()
-_LEVEL_NAME = os.getenv("AI_SCIENTIST_LOG_LEVEL", "WARNING").upper()
-_LEVEL = getattr(logging, _LEVEL_NAME, logging.WARNING)
-logging.basicConfig(level=_LEVEL, format="%(message)s", datefmt="[%X]")
+_LEVEL_NAME = os.getenv("AI_SCIENTIST_LOG_LEVEL", "DEBUG").upper()
+_LEVEL = getattr(logging, _LEVEL_NAME, logging.DEBUG)
+logging.basicConfig(
+    level=_LEVEL,
+    format="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger("ai-scientist")
 logger.setLevel(_LEVEL)
+
+
+def apply_log_level(*, level_name: str) -> None:
+    """Apply logging level and formatter globally.
+
+    This overrides any earlier basicConfig/env defaults and ensures consistency
+    across main and worker processes.
+    """
+    level = getattr(logging, level_name.upper(), logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    log_format = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    for handler in root_logger.handlers:
+        try:
+            handler.setLevel(level)
+            handler.setFormatter(log_format)
+        except Exception:
+            # Be resilient to odd handlers in some environments
+            pass
+    # Ensure our library logger follows the same level
+    logging.getLogger("ai-scientist").setLevel(level)
+    # Suppress noisy third-party debug logs the user doesn't want
+    try:
+        fm_logger = logging.getLogger("matplotlib.font_manager")
+        fm_logger.setLevel(logging.WARNING)
+        fm_logger.propagate = False
+        # Suppress OpenAI client/httpx/httpcore verbose logs
+        for noisy in [
+            "openai",
+            "openai._base_client",
+            "openai._client",
+            "httpx",
+            "httpcore",
+            # Suppress remote IO/debug noise
+            "urllib3",
+            "urllib3.connectionpool",
+            "fsspec",
+            "fsspec.spec",
+            "s3fs",
+            "datasets",
+            "huggingface_hub",
+        ]:
+            lgr = logging.getLogger(noisy)
+            lgr.setLevel(logging.WARNING)
+            lgr.propagate = False
+    except Exception:
+        pass
 
 
 """ these dataclasses are just for type hinting, the actual config is in config.yaml """
@@ -137,7 +191,7 @@ def _get_next_logindex(dir: Path) -> int:
                 max_index = current_index
         except ValueError:
             pass
-    print("max_index: ", max_index)
+    logger.debug(f"max_index: {max_index}")
     return max_index + 1
 
 
@@ -189,26 +243,18 @@ def prep_cfg(cfg: object) -> Config:
     if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
 
-    # Apply logging level from config
-    level_name = cfg_obj.log_level.upper()
-    level = getattr(logging, level_name, logging.INFO)
-    logging.getLogger().setLevel(level)
-    for h in logging.getLogger().handlers:
-        try:
-            h.setLevel(level)
-        except Exception:
-            pass
-    logger.setLevel(level)
+    # Apply logging level from config uniformly
+    apply_log_level(level_name=cfg_obj.log_level)
 
     return cfg_obj
 
 
 def print_cfg(cfg: Config) -> None:
     try:
-        print(OmegaConf.to_yaml(OmegaConf.structured(cfg)))
+        logger.info(OmegaConf.to_yaml(OmegaConf.structured(cfg)))
     except Exception:
         # Fallback to a basic print if structured conversion fails
-        print(cfg)
+        logger.info(str(cfg))
 
 
 def load_task_desc(cfg: Config) -> TaskDescription:
@@ -240,7 +286,7 @@ def prep_agent_workspace(cfg: Config) -> None:
         if idea_src.exists():
             shutil.copy2(idea_src, idea_dst)
     except Exception as e:
-        print(f"Warning: failed to copy original idea file: {e}")
+        logger.warning(f"Warning: failed to copy original idea file: {e}")
     if cfg.preprocess_data:
         preproc_data(cfg.workspace_dir / "input")
 
@@ -254,13 +300,13 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
         # Journal is compatible with serialization utilities; cast for typing
         serialize.dump_json(cast(DataClassJsonMixin, journal), save_dir / "journal.json")
     except Exception as e:
-        print(f"Error saving journal: {e}")
+        logger.exception(f"Error saving journal: {e}")
         raise
     # save config
     try:
         OmegaConf.save(config=cfg, f=save_dir / "config.yaml")
     except Exception as e:
-        print(f"Error saving config: {e}")
+        logger.exception(f"Error saving config: {e}")
         raise
     # create the tree + code visualization
     try:
@@ -270,11 +316,16 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
             out_path=save_dir / "tree_plot.html",
         )
     except Exception as e:
-        print(f"Error generating tree: {e}")
+        logger.exception(f"Error generating tree: {e}")
         raise
     # save the best found solution
     try:
-        best_node = journal.get_best_node(only_good=False)
+        # Prefer good nodes first; only fall back to all nodes if no good nodes exist
+        # Use metric-only selection to avoid unnecessary LLM calls for saving
+        best_node = journal.get_best_node(only_good=True, use_val_metric_only=True)
+        if best_node is None:
+            # Fall back to all nodes (including buggy) only if no good nodes exist
+            best_node = journal.get_best_node(only_good=False, use_val_metric_only=True)
         if best_node is not None:
             for existing_file in save_dir.glob("best_solution_*.py"):
                 existing_file.unlink()
@@ -286,6 +337,6 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
             with open(save_dir / "best_node_id.txt", "w") as f:
                 f.write(str(best_node.id))
         else:
-            print("No best node found yet")
+            logger.info("No best node found yet")
     except Exception as e:
-        print(f"Error saving best solution: {e}")
+        logger.exception(f"Error saving best solution: {e}")

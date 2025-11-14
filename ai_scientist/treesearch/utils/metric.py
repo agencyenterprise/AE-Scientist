@@ -1,10 +1,12 @@
-import traceback
+import logging
 from dataclasses import dataclass, field
 from functools import total_ordering
 from typing import Any, Self
 
 import numpy as np
 from dataclasses_json import DataClassJsonMixin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -90,8 +92,7 @@ class MetricValue(DataClassJsonMixin):
                 try:
                     return not self.value["metric_names"][0]["lower_is_better"]
                 except Exception as e:
-                    print(f"error during metric value: {e}")
-                    print(traceback.format_exc())
+                    logger.exception(f"error during metric value: {e}")
                     return bool(self.maximize)
             # Old format
             return bool(self.maximize)
@@ -113,8 +114,7 @@ class MetricValue(DataClassJsonMixin):
                             for d in metric["data"]
                         )
                     except Exception as e:
-                        print(f"error during metric value: {e}")
-                        print(traceback.format_exc())
+                        logger.exception(f"error during metric value: {e}")
                         values_str = "None"
                     parts.append(f"{metric['metric_name']}{opt_dir}[{values_str}]")
                 return "Metrics(" + "; ".join(parts) + ")"

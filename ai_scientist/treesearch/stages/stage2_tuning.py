@@ -1,3 +1,4 @@
+import logging
 from typing import List, Protocol, Tuple
 
 from ai_scientist.llm.query import FunctionSpec, query
@@ -8,6 +9,8 @@ from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
 from .base import Stage
+
+logger = logging.getLogger(__name__)
 
 
 class HyperparamTuningIdea:
@@ -78,9 +81,9 @@ class Stage2Tuning(Stage):
         hp_instructions |= agent._prompt_hyperparam_tuning_resp_fmt
         prompt["Instructions"] = hp_instructions
         plan, code = agent.plan_and_code_query(prompt=prompt)
-        print("----- LLM code start (stage2 tuning) -----")
-        print(code)
-        print("----- LLM code end (stage2 tuning) -----")
+        logger.debug("----- LLM code start (stage2 tuning) -----")
+        logger.debug(code)
+        logger.debug("----- LLM code end (stage2 tuning) -----")
         return Node(
             plan="Hyperparam tuning name: " + hyperparam_idea.name + ".\n" + plan,
             code=code,
@@ -162,13 +165,13 @@ class Stage2Tuning(Stage):
         cache_key = f"stage=2_substage|id={best_node.id}|metric={metric_val}|goals={goals}"
         cached = Stage2Tuning._substage_completion_cache.get(cache_key)
         if cached is not None:
-            print(
-                f"[DEBUG] Stage2 substage-completion cache HIT for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 substage-completion cache HIT for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Goals unchanged. Skipping LLM."
             )
             return cached
-        print(
-            f"[DEBUG] Stage2 substage-completion cache MISS for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage2 substage-completion cache MISS for best_node={best_node.id[:8]} "
             f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
         )
         eval_prompt = f"""
@@ -204,8 +207,8 @@ class Stage2Tuning(Stage):
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
             result = True, str(evaluation.get("reasoning", "sub-stage complete"))
             Stage2Tuning._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage2 substage-completion result cached for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 substage-completion result cached for best_node={best_node.id[:8]} "
                 f"(metric={metric_val})."
             )
             return result
@@ -213,15 +216,15 @@ class Stage2Tuning(Stage):
             missing = ", ".join(evaluation.get("missing_criteria", []))
             result = False, "Missing criteria: " + missing
             Stage2Tuning._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage2 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Missing: {missing}"
             )
             return result
         result = False, "Sub-stage not complete"
         Stage2Tuning._substage_completion_cache[cache_key] = result
-        print(
-            f"[DEBUG] Stage2 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage2 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
             f"(metric={metric_val})."
         )
         return result
@@ -239,13 +242,13 @@ class Stage2Tuning(Stage):
         cache_key = f"stage=2_stage|id={best_node.id}|metric={metric_val}|goals={goals_sig}"
         cached = Stage2Tuning._stage_completion_cache.get(cache_key)
         if cached is not None:
-            print(
-                f"[DEBUG] Stage2 stage-completion cache HIT for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 stage-completion cache HIT for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Requirements unchanged. Skipping LLM."
             )
             return cached
-        print(
-            f"[DEBUG] Stage2 stage-completion cache MISS for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage2 stage-completion cache MISS for best_node={best_node.id[:8]} "
             f"(metric={metric_val}). Requirements changed or new best node. Invoking LLM."
         )
         eval_prompt = f"""
@@ -283,8 +286,8 @@ class Stage2Tuning(Stage):
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
             result = True, str(evaluation.get("reasoning", "stage complete"))
             Stage2Tuning._stage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage2 stage-completion result cached for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 stage-completion result cached for best_node={best_node.id[:8]} "
                 f"(metric={metric_val})."
             )
             return result
@@ -292,15 +295,15 @@ class Stage2Tuning(Stage):
             missing = ", ".join(evaluation.get("missing_criteria", []))
             result = False, "Missing criteria: " + missing
             Stage2Tuning._stage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage2 stage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage2 stage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Missing: {missing}"
             )
             return result
         result = False, "stage not completed"
         Stage2Tuning._stage_completion_cache[cache_key] = result
-        print(
-            f"[DEBUG] Stage2 stage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage2 stage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
             f"(metric={metric_val})."
         )
         return result

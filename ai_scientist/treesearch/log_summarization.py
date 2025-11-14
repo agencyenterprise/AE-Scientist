@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -9,6 +10,8 @@ from tqdm import tqdm
 from ai_scientist.llm import create_client
 
 from .journal import Journal, Node
+
+logger = logging.getLogger(__name__)
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, parent_dir)
@@ -138,7 +141,7 @@ def get_nodes_infos(nodes: list[Node]) -> str:
 def get_summarizer_prompt(journal: Journal, stage_name: str) -> tuple[str, str]:
     good_leaf_nodes = [n for n in journal.good_nodes if n.is_leaf]
     if not good_leaf_nodes:
-        print("NO GOOD LEAF NODES!!!")
+        logger.warning("NO GOOD LEAF NODES!!!")
         good_leaf_nodes = [n for n in journal.good_nodes]
     node_infos = get_nodes_infos(good_leaf_nodes)
     return report_summarizer_sys_msg, report_summarizer_prompt.format(
@@ -227,7 +230,7 @@ def update_summary(
         assert summary_json
     except Exception as e:
         if max_retry > 0:
-            print(f"Error occurred: {e}. Retrying... ({max_retry} attempts left)")
+            logger.warning(f"Error occurred: {e}. Retrying... ({max_retry} attempts left)")
             return update_summary(
                 prev_summary=prev_summary,
                 cur_stage_name=cur_stage_name,
@@ -238,7 +241,7 @@ def update_summary(
                 max_retry=max_retry - 1,
             )
         else:
-            print(f"Failed to update summary after multiple attempts. Error: {e}")
+            logger.exception(f"Failed to update summary after multiple attempts. Error: {e}")
             raise
     return summary_json
 
@@ -299,9 +302,9 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
                 except Exception as e:
                     retry_count += 1
                     if retry_count == max_retries:
-                        print(f"Failed after {max_retries} attempts. Error: {e}")
+                        logger.exception(f"Failed after {max_retries} attempts. Error: {e}")
                         raise
-                    print(
+                    logger.warning(
                         f"Error occurred: {e}. Retrying... ({max_retries - retry_count} attempts left)"
                     )
         else:

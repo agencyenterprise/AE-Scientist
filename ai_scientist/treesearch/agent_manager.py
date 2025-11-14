@@ -197,7 +197,7 @@ Your research idea:\n\n
             "workspace_dir": self.workspace_dir,
             "current_stage": self.current_stage,
         }
-        print("Saving checkpoint to ", save_path)
+        logger.info(f"Saving checkpoint to {save_path}")
         with open(save_path, "wb") as f:
             pickle.dump(checkpoint, f)
 
@@ -211,8 +211,6 @@ Your research idea:\n\n
         task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
         task_desc += f"Sub-stage: {stage.substage_number} - {stage.substage_name}\n"
         task_desc += f"Sub-stage goals: {stage.goals}"
-        print("Checking task_desc inside _create_agent_for_stage")
-        print(task_desc)
 
         # Determine carryover best nodes based on current main stage
         if stage.number == 2:
@@ -263,7 +261,6 @@ Your research idea:\n\n
         # Terminate if max iterations reached
         if len(journal.nodes) >= current_substage.max_iterations:
             logger.info(f"Stage {current_substage.name} completed: reached max iterations")
-            print(f"Stage {current_substage.name} completed: reached max iterations")
             return True, "Reached max iterations"
         main_stage_num = current_substage.number
 
@@ -296,14 +293,13 @@ Your research idea:\n\n
         # Terminate if max iterations reached
         if len(journal.nodes) >= stage.max_iterations:
             logger.info(f"Stage {stage.name} completed: reached max iterations")
-            print(f"Stage {stage.name} completed: reached max iterations")
             if stage.number == 1:
                 # For initial stage, if it didn't even find a working implementation until max iterations,
                 # end gracefully and stop the experiment.
                 logger.error(
                     f"Initial stage {stage.name} did not find a working implementation after {stage.max_iterations} iterations. Consider increasing the max iterations or reducing the complexity of the research idea."
                 )
-                print(
+                logger.error(
                     f"Experiment ended: Could not find working implementation in initial stage after {stage.max_iterations} iterations"
                 )
                 self.current_stage = None  # This will cause the run loop to exit
@@ -529,13 +525,13 @@ Your research idea:\n\n
         """
         if self.stage_history:
             prev_stage = self.stage_history[-1].from_stage
-            print(f"prev_stage: {prev_stage}")
-            print(f"self.stage_history: {self.stage_history}")
+            logger.debug(f"prev_stage: {prev_stage}")
+            logger.debug(f"self.stage_history: {self.stage_history}")
             prev_best = self._get_best_implementation(prev_stage)
             if prev_best:
                 self.journals[current_substage.name].append(prev_best)
                 return True
-            print(
+            logger.error(
                 f"No previous best implementation found for {current_substage.name}. Something went wrong so finishing the experiment..."
             )
             return False
@@ -565,7 +561,7 @@ Your research idea:\n\n
             run_plot_aggregation(agent=agent, node=best_node, seed_nodes=seed_nodes)
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
-            print(f"Stage {current_substage.name} multi-seed eval done.")
+            logger.info(f"Stage {current_substage.name} multi-seed eval done.")
 
         return True
 
@@ -588,7 +584,7 @@ Your research idea:\n\n
             journal = self.journals[current_substage.name]
             max_iters = current_substage.max_iterations
             current_iter = len(journal.nodes) + 1
-            print(f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}")
+            logger.debug(f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}")
             try:
                 self.event_callback(
                     RunLogEvent(
@@ -621,7 +617,7 @@ Your research idea:\n\n
             main_stage_complete, main_stage_feedback = self._check_stage_completion(
                 current_substage
             )
-            print(f"Feedback from _check_stage_completion: {main_stage_feedback}")
+            logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
             if main_stage_complete:
                 # After main stage completion, run multi-seed eval on the best node
                 multi_seed_ok = self._perform_multi_seed_eval_if_needed(
@@ -712,8 +708,8 @@ Your research idea:\n\n
         """Run the experiment through generated stages"""
         # Main stage loop
         while self.current_stage:
-            print(f"Starting main stage: {self.current_stage.slug}")
-            print(f"Goals: {self.current_stage.goals}")
+            logger.info(f"Starting main stage: {self.current_stage.slug}")
+            logger.info(f"Goals: {self.current_stage.goals}")
             # Run only the current main stage
             self.run_stage(
                 initial_substage=self.current_stage,
@@ -736,9 +732,9 @@ Your research idea:\n\n
         """
         current_substage: Optional[StageMeta] = initial_substage
         while current_substage:
-            print(f"Starting sub-stage: {current_substage.name}")
-            print(
-                f"[magenta]Max iterations for {current_substage.name}: {current_substage.max_iterations}[/magenta]"
+            logger.info(f"Starting sub-stage: {current_substage.name}")
+            logger.info(
+                f"Max iterations for {current_substage.name}: {current_substage.max_iterations}"
             )
             try:
                 self.event_callback(

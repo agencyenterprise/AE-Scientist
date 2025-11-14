@@ -29,7 +29,7 @@ from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
 from ai_scientist.treesearch.utils.config import Config, load_task_desc, save_run
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
-logger = logging.getLogger("ai-scientist")
+logger = logging.getLogger(__name__)
 
 
 def _normalize_run_name(run_arg: str) -> str:
@@ -175,6 +175,6 @@ def main(run_arg: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python launch_stage2_from_run.py <run_name_or_number>")
+        logger.error("Usage: python launch_stage2_from_run.py <run_name_or_number>")
         sys.exit(1)
     main(sys.argv[1])

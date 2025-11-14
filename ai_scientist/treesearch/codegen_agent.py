@@ -319,12 +319,12 @@ class MinimalAgent:
                 # merge all code blocks into a single string
                 return nl_text, code
 
-            print("Plan + code extraction failed, retrying...")
+            logger.warning("Plan + code extraction failed, retrying...")
             # 3) Provide parsing feedback for the next attempt
             prompt["Parsing Feedback"] = (
                 "The code extraction failed. Make sure to use the format ```python ... ``` for the code blocks."
             )
-        print("Final plan + code extraction attempt failed, giving up...")
+        logger.error("Final plan + code extraction attempt failed, giving up...")
         return "", last_completion
 
     def parse_exec_result(self, node: Node, exec_result: ExecutionResult, workspace: str) -> None:
@@ -356,11 +356,8 @@ class MinimalAgent:
         # Update node-level analysis and bug status based on model output
         node.analysis = response["summary"]
         node.is_buggy = response["is_bug"] or node.exc_type is not None
-        print(
-            "Checking if response contains metric name and description",
-            flush=True,
-        )
-        print(response)
+        logger.debug("Checking if response contains metric name and description")
+        logger.debug(f"Bug check response: {response}")
 
     # Wrapper removed: callers should use Stage3Plotting.generate_plotting_code directly
 

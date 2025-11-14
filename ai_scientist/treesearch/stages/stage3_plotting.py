@@ -1,4 +1,5 @@
 import base64
+import logging
 from typing import List, Protocol, Tuple, cast
 
 from ai_scientist.llm.query import FunctionSpec, query
@@ -12,6 +13,8 @@ from ..plotting import generate_plotting_code as generic_generate_plotting_code
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from .base import Stage
+
+logger = logging.getLogger(__name__)
 
 
 class SupportsStage3Agent(Protocol):
@@ -96,13 +99,13 @@ class Stage3Plotting(Stage):
         cache_key = f"stage=3_substage|id={best_node.id}|metric={metric_val}|goals={goals}"
         cached = Stage3Plotting._substage_completion_cache.get(cache_key)
         if cached is not None:
-            print(
-                f"[DEBUG] Stage3 substage-completion cache HIT for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage3 substage-completion cache HIT for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Goals unchanged. Skipping LLM."
             )
             return cached
-        print(
-            f"[DEBUG] Stage3 substage-completion cache MISS for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage3 substage-completion cache MISS for best_node={best_node.id[:8]} "
             f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
         )
         vlm_feedback = Stage3Plotting.parse_vlm_feedback(node=best_node)
@@ -139,8 +142,8 @@ class Stage3Plotting(Stage):
         if isinstance(evaluation, dict) and evaluation.get("is_complete"):
             result = True, str(evaluation.get("reasoning", "sub-stage complete"))
             Stage3Plotting._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage3 substage-completion result cached for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage3 substage-completion result cached for best_node={best_node.id[:8]} "
                 f"(metric={metric_val})."
             )
             return result
@@ -148,15 +151,15 @@ class Stage3Plotting(Stage):
             missing = ", ".join(evaluation.get("missing_criteria", []))
             result = False, "Missing criteria: " + missing
             Stage3Plotting._substage_completion_cache[cache_key] = result
-            print(
-                f"[DEBUG] Stage3 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+            logger.debug(
+                f"Stage3 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
                 f"(metric={metric_val}). Missing: {missing}"
             )
             return result
         result = False, "Sub-stage not complete"
         Stage3Plotting._substage_completion_cache[cache_key] = result
-        print(
-            f"[DEBUG] Stage3 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
+        logger.debug(
+            f"Stage3 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
             f"(metric={metric_val})."
         )
         return result

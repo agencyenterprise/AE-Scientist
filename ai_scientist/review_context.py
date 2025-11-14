@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 def bool_label(value: bool) -> str:
@@ -50,7 +53,7 @@ def _load_idea_payload(
             result = json.loads(idea_path.read_text())
             return result if isinstance(result, dict) else None
         except Exception as exc:
-            print(f"Warning: could not read idea.json for review context ({exc})")
+            logger.warning(f"Warning: could not read idea.json for review context ({exc})")
     return None
 
 

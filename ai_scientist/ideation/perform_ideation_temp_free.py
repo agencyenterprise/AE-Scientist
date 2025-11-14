@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import re
 import sys
 import traceback
@@ -8,6 +9,8 @@ from typing import Dict, List
 
 import anthropic
 import openai
+
+logger = logging.getLogger(__name__)
 
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir.parent.parent))
@@ -140,13 +143,13 @@ def generate_temp_free_idea(
             idea_str_content = json.load(f)
             for idea in idea_str_content:
                 idea_str_archive.append(json.dumps(idea))
-            print(f"Loaded {len(idea_str_archive)} ideas from {idea_fname}")
+            logger.info(f"Loaded {len(idea_str_archive)} ideas from {idea_fname}")
     else:
-        print(f"No ideas found in {idea_fname}. Starting from scratch.")
+        logger.info(f"No ideas found in {idea_fname}. Starting from scratch.")
 
     for gen_idx in range(max_num_generations):
-        print()
-        print(f"Generating proposal {gen_idx + 1}/{max_num_generations}")
+        logger.debug("")
+        logger.info(f"Generating proposal {gen_idx + 1}/{max_num_generations}")
         try:
             prev_ideas_string = "\n\n".join(idea_str_archive)
 
@@ -198,8 +201,8 @@ def generate_temp_free_idea(
                     assert arguments_match is not None
                     action = action_match.group(1).strip()
                     arguments_text = arguments_match.group(1).strip()
-                    print(f"Action: {action}")
-                    print(f"Arguments: {arguments_text}")
+                    logger.debug(f"Action: {action}")
+                    logger.debug(f"Arguments: {arguments_text}")
 
                     # If arguments are wrapped in ```json blocks, extract the content
                     if arguments_text.startswith("```json"):
@@ -239,16 +242,16 @@ def generate_temp_free_idea(
 
                             # Append the idea to the archive
                             idea_str_archive.append(json.dumps(idea))
-                            print(f"Proposal finalized: {idea}")
+                            logger.info(f"Proposal finalized: {idea}")
                             idea_finalized = True
                             break
                         except json.JSONDecodeError:
                             raise ValueError("Invalid arguments JSON for FinalizeIdea.")
                     else:
-                        print("Invalid action. Please specify one of the available tools.")
-                        print(f"Available actions are: {tool_names_str}")
+                        logger.warning("Invalid action. Please specify one of the available tools.")
+                        logger.warning(f"Available actions are: {tool_names_str}")
                 except Exception:
-                    print(f"Failed to parse LLM response. Response text:\n{response_text}")
+                    logger.warning(f"Failed to parse LLM response. Response text:\n{response_text}")
                     traceback.print_exc()
                     break  # Exit the loop if parsing fails
 
@@ -256,8 +259,7 @@ def generate_temp_free_idea(
                 continue  # Move to the next idea
 
         except Exception:
-            print("Failed to generate proposal:")
-            traceback.print_exc()
+            logger.exception("Failed to generate proposal:")
             continue
 
     # Save ideas
@@ -265,7 +267,7 @@ def generate_temp_free_idea(
 
     with open(idea_fname, "w") as f:
         json.dump(ideas, f, indent=4)
-    print(f"Stored {len(ideas)} ideas in {idea_fname}")
+    logger.info(f"Stored {len(ideas)} ideas in {idea_fname}")
     return ideas
 
 
@@ -302,19 +304,19 @@ if __name__ == "__main__":
     # Load workshop description from PDF or markdown
     if args.workshop_file.endswith(".pdf"):
         workshop_description = load_paper(args.workshop_file)
-        print(f"Loaded full paper from PDF: {args.workshop_file}")
+        logger.info(f"Loaded full paper from PDF: {args.workshop_file}")
         # Create output filename by replacing .pdf extension with .json
         idea_fname = args.workshop_file.replace(".pdf", ".json")
     else:
         with open(args.workshop_file, "r") as f:
             workshop_description = f.read()
-        print(f"Using workshop description from {args.workshop_file} for idea generation.")
+        logger.info(f"Using workshop description from {args.workshop_file} for idea generation.")
         # Create output filename by replacing .md extension with .json
         idea_fname = args.workshop_file.replace(".md", ".json")
 
-    print(f"Workshop description preview (first 500 chars):\n{workshop_description[:500]}...")
-    print(f"Total length: {len(workshop_description)} characters")
-    print("Starting idea generation for", idea_fname)
+    logger.info(f"Workshop description preview (first 500 chars):\n{workshop_description[:500]}...")
+    logger.info(f"Total length: {len(workshop_description)} characters")
+    logger.info(f"Starting idea generation for {idea_fname}")
     ideas = generate_temp_free_idea(
         idea_fname=idea_fname,
         client=client,
@@ -323,4 +325,4 @@ if __name__ == "__main__":
         max_num_generations=args.max_num_generations,
         num_reflections=args.num_reflections,
     )
-    print(f"{args.workshop_file} generated {len(ideas)} ideas.")
+    logger.info(f"{args.workshop_file} generated {len(ideas)} ideas.")

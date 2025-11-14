@@ -17,6 +17,7 @@ from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config as AppConfig
+from .utils.config import apply_log_level
 from .utils.metric import MetricValue, WorstMetricValue
 from .vlm_function_specs import metric_parse_spec
 
@@ -83,6 +84,9 @@ def parse_and_assign_metrics(
                     dict[str, str | list[str]], worker_agent._prompt_metricparse_resp_fmt()
                 ),
             }
+            logger.debug(
+                "Generating metric parsing code to extract metrics from experiment results"
+            )
             parse_metrics_plan, parse_metrics_code = worker_agent.plan_and_code_query(
                 prompt=parse_metrics_prompt
             )
@@ -90,6 +94,9 @@ def parse_and_assign_metrics(
         child_node.parse_metrics_code = parse_metrics_code
 
         # Execute metric parsing code
+        logger.debug(
+            "Starting second interpreter: executing metric parsing code to load .npy files and extract metrics"
+        )
         metrics_exec_result = process_interpreter.run(code=parse_metrics_code, reset_session=True)
         process_interpreter.cleanup_session()
         child_node.parse_term_out = metrics_exec_result.term_out
@@ -161,6 +168,13 @@ def process_node(
     seed_eval: bool = False,
     event_callback: Optional[Callable[[str, dict[str, object]], None]] = None,
 ) -> dict[str, object]:
+    # Ensure worker process respects config-based logging level
+    try:
+        apply_log_level(level_name=cfg.log_level)
+    except Exception:
+        # Never fail the worker due to logging configuration
+        pass
+
     def emit(event_type: str, data: dict[str, object]) -> None:
         if event_callback:
             try:
@@ -236,11 +250,12 @@ def process_node(
                     child_node = Stage1Baseline.improve(agent=worker_agent, parent_node=parent_node)
                     child_node.parent = parent_node
 
-        print(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
+        logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
+        logger.debug("Starting first interpreter: executing experiment code")
         emit("ai.run.log", {"message": "Executing experiment code on GPU...", "level": "info"})
         exec_result = process_interpreter.run(child_node.code, True)
         process_interpreter.cleanup_session()
-        print(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
+        logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
         emit(
             "ai.run.log",
             {
@@ -249,7 +264,7 @@ def process_node(
             },
         )
 
-        print("→ Analyzing results and extracting metrics...")
+        logger.info("→ Analyzing results and extracting metrics...")
         emit("ai.run.log", {"message": "Analyzing results and extracting metrics", "level": "info"})
         worker_agent.parse_exec_result(
             node=child_node, exec_result=exec_result, workspace=working_dir
@@ -264,14 +279,14 @@ def process_node(
             seed_eval=seed_eval,
             emit=emit,
         )
-        print(f"✓ Metrics extracted. Buggy: {child_node.is_buggy}")
+        logger.info(f"✓ Metrics extracted. Buggy: {child_node.is_buggy}")
 
         if not child_node.is_buggy:
-            print(
-                f"[DEBUG] Starting plotting for node {child_node.id}: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+            logger.debug(
+                f"Starting plotting for node {child_node.id}: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
             )
             try:
-                print("→ Generating visualization plots...")
+                logger.info("→ Generating visualization plots...")
                 emit("ai.run.log", {"message": "Generating visualization plots", "level": "info"})
                 retry_count = 0
                 while True:
@@ -325,10 +340,10 @@ def process_node(
                         break
 
                 plots_dir = Path(working_dir)
-                print(f"[DEBUG] Checking plots_dir: {plots_dir}, exists={plots_dir.exists()}")
+                logger.debug(f"Checking plots_dir: {plots_dir}, exists={plots_dir.exists()}")
                 if plots_dir.exists():
                     plot_count = len(list(plots_dir.glob("*.png")))
-                    print(f"[DEBUG] Found {plot_count} plot files in working directory")
+                    logger.debug(f"Found {plot_count} plot files in working directory")
                     if plot_count > 0:
                         emit(
                             "ai.run.log",
@@ -342,8 +357,8 @@ def process_node(
                                 "level": "warn",
                             },
                         )
-                        print(
-                            f"[WARN] No plot files found in {plots_dir} after plotting code execution"
+                        logger.warning(
+                            f"No plot files found in {plots_dir} after plotting code execution"
                         )
 
                     base_dir = Path(cfg.workspace_dir).parent
@@ -355,7 +370,7 @@ def process_node(
                         / "experiment_results"
                         / f"experiment_{child_node.id}_proc_{os.getpid()}"
                     )
-                    print(f"[DEBUG] Creating exp_results_dir: {exp_results_dir}")
+                    logger.debug(f"Creating exp_results_dir: {exp_results_dir}")
                     child_node.exp_results_dir = str(exp_results_dir)
                     exp_results_dir.mkdir(parents=True, exist_ok=True)
                     plot_code_path = exp_results_dir / "plotting_code.py"
@@ -369,37 +384,37 @@ def process_node(
                         exp_data_file.resolve().rename(exp_data_path)
 
                     plot_files_found = list(plots_dir.glob("*.png"))
-                    print(
-                        f"[DEBUG] Found {len(plot_files_found)} plot files to move for node {child_node.id}"
+                    logger.debug(
+                        f"Found {len(plot_files_found)} plot files to move for node {child_node.id}"
                     )
-                    print(
-                        f"[DEBUG] Before moving: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+                    logger.debug(
+                        f"Before moving: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
                     )
                     if len(plot_files_found) == 0:
-                        print(
-                            "[WARN] No plot files to move! This means plots were generated but not found, or already moved."
+                        logger.warning(
+                            "No plot files to move! This means plots were generated but not found, or already moved."
                         )
-                        print(f"[WARN] Current plots list: {child_node.plots}")
-                        print(f"[WARN] Current plot_paths list: {child_node.plot_paths}")
+                        logger.warning(f"Current plots list: {child_node.plots}")
+                        logger.warning(f"Current plot_paths list: {child_node.plot_paths}")
                     for plot_file in plot_files_found:
                         final_path = exp_results_dir / plot_file.name
                         try:
                             plot_file.resolve().rename(final_path)
                             web_path = f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
-                            print(
-                                f"[DEBUG] Moving plot: {plot_file.name} -> {final_path}, web_path: {web_path}"
+                            logger.debug(
+                                f"Moving plot: {plot_file.name} -> {final_path}, web_path: {web_path}"
                             )
                             child_node.plots.append(web_path)
                             child_node.plot_paths.append(str(final_path.absolute()))
-                            print(f"[DEBUG] Moved plot: {plot_file.name} -> {final_path}")
+                            logger.debug(f"Moved plot: {plot_file.name} -> {final_path}")
                         except Exception as move_error:
-                            print(f"[ERROR] Failed to move plot {plot_file.name}: {move_error}")
-                            print("[ERROR] This could cause plots/plot_paths mismatch")
-                    print(
-                        f"[DEBUG] After moving plots: plots={len(child_node.plots)}, plot_paths={len(child_node.plot_paths)}"
+                            logger.error(f"Failed to move plot {plot_file.name}: {move_error}")
+                            logger.error("This could cause plots/plot_paths mismatch")
+                    logger.debug(
+                        f"After moving plots: plots={len(child_node.plots)}, plot_paths={len(child_node.plot_paths)}"
                     )
                 else:
-                    print(f"[WARN] plots_dir {plots_dir} does not exist!")
+                    logger.warning(f"plots_dir {plots_dir} does not exist!")
             except Exception as e:
                 tb = traceback.format_exc()
                 emit(
@@ -411,22 +426,22 @@ def process_node(
                     {"message": f"Plotting traceback:\\n{tb}", "level": "warn"},
                 )
 
-            print(
-                f"[DEBUG] Before VLM check: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
+            logger.debug(
+                f"Before VLM check: plots={len(child_node.plots) if child_node.plots else 0}, plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
             )
             if child_node.plots:
                 if not child_node.plot_paths:
-                    print(
-                        f"[WARN] MISMATCH: child_node.plots has {len(child_node.plots)} items but plot_paths is empty for node {child_node.id}"
+                    logger.warning(
+                        f"MISMATCH: child_node.plots has {len(child_node.plots)} items but plot_paths is empty for node {child_node.id}"
                     )
-                    print(
-                        "[WARN] This suggests plots were populated but plot_paths wasn't. This can happen if:"
+                    logger.warning(
+                        "This suggests plots were populated but plot_paths wasn't. This can happen if:"
                     )
-                    print("[WARN]   1. Exception occurred during file moving (lines 366-371)")
-                    print("[WARN]   2. Plots were populated from a previous attempt/retry")
-                    print("[WARN]   3. plot_paths list was cleared/reset somewhere")
+                    logger.warning("   1. Exception occurred during file moving (lines 366-371)")
+                    logger.warning("   2. Plots were populated from a previous attempt/retry")
+                    logger.warning("   3. plot_paths list was cleared/reset somewhere")
                 try:
-                    print(
+                    logger.info(
                         f"→ Analyzing {len(child_node.plots)} plots with Vision Language Model..."
                     )
                     emit(
@@ -437,7 +452,9 @@ def process_node(
                         },
                     )
                     analyze_plots_with_vlm(agent=worker_agent, node=child_node)
-                    print(f"✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}")
+                    logger.info(
+                        f"✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}"
+                    )
                     emit("ai.run.log", {"message": "✓ Plot analysis complete", "level": "info"})
                 except Exception as e:
                     tb = traceback.format_exc()

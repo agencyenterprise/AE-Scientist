@@ -27,6 +27,7 @@ Example Usage:
 For more details, see: ai_scientist/tools/SEMANTIC_SCHOLAR_IMPROVEMENTS.md
 """
 
+import logging
 import os
 import time
 import warnings
@@ -40,9 +41,11 @@ from backoff.types import Details
 
 from ai_scientist.ideation.base_tool import BaseTool, ToolParameter
 
+logger = logging.getLogger(__name__)
+
 
 def on_backoff(details: Details) -> None:
-    print(
+    logger.debug(
         f"Backing off {details['wait']:0.1f} seconds after {details['tries']} tries "
         f"calling function {details['target'].__name__} at {time.strftime('%X')}"
     )
@@ -135,8 +138,8 @@ class SemanticScholarSearchTool(BaseTool):
                 "fields": "title,authors,venue,year,abstract,citationCount",
             },
         )
-        print(f"Response Status Code: {rsp.status_code}")
-        print(f"Response Content: {rsp.text[:500]}")
+        logger.debug(f"Response Status Code: {rsp.status_code}")
+        logger.debug(f"Response Content: {rsp.text[:500]}")
         rsp.raise_for_status()
         results = rsp.json()
         total = results.get("total", 0)
@@ -191,10 +194,8 @@ def search_for_papers(query: str, result_limit: int = 10) -> list[Dict[Any, Any]
             "fields": "title,authors,venue,year,abstract,citationStyles,citationCount",
         },
     )
-    print(f"Response Status Code: {rsp.status_code}")
-    print(
-        f"Response Content: {rsp.text[:500]}"
-    )  # Print the first 500 characters of the response content
+    logger.debug(f"Response Status Code: {rsp.status_code}")
+    logger.debug(f"Response Content: {rsp.text[:500]}")
     rsp.raise_for_status()
     results = rsp.json()
     total = results["total"]
@@ -230,7 +231,7 @@ def search_for_papers_batch(
             papers = search_for_papers(query, result_limit)
             return (query, papers)
         except Exception as e:
-            print(f"Error searching for '{query}': {e}")
+            logger.exception(f"Error searching for '{query}': {e}")
             return (query, None)
 
     # Use ThreadPoolExecutor for parallel requests

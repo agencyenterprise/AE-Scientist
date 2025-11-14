@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import os.path as osp
 import re
@@ -24,6 +25,8 @@ from ai_scientist.llm import (
     get_response_from_llm,
 )
 from ai_scientist.perform_vlm_review import generate_vlm_img_review
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str) -> None:
@@ -59,12 +62,11 @@ def _ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str)
         with open(wf, "w") as f:
             f.writelines(lines)
     except Exception:
-        print("Warning: failed to adjust \\graphicspath; figures may not render.")
-        print(traceback.format_exc())
+        logger.warning("Warning: failed to adjust \\graphicspath; figures may not render.")
+        logger.debug(traceback.format_exc())
 
 
 def remove_accents_and_clean(s: str) -> str:
-    # print("Original:", s)
     # Normalize to separate accents
     nfkd_form = unicodedata.normalize("NFKD", s)
     # Remove non-ASCII characters
@@ -73,18 +75,17 @@ def remove_accents_and_clean(s: str) -> str:
     ascii_str = re.sub(r"[^a-zA-Z0 - 9:_@\{\},-]+", "", ascii_str)
     # Convert to lowercase
     ascii_str = ascii_str.lower()
-    # print("Cleaned: ", ascii_str)
     return ascii_str
 
 
 def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
-    print("=" * 80)
-    print("GENERATING LATEX")
-    print(f"[DEBUG] cwd (latex folder): {cwd}")
-    print(f"[DEBUG] target pdf_file: {pdf_file}")
-    print(f"[DEBUG] cwd exists: {osp.exists(cwd)}")
-    print(f"[DEBUG] cwd is absolute: {osp.isabs(cwd)}")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("GENERATING LATEX")
+    logger.debug(f"cwd (latex folder): {cwd}")
+    logger.debug(f"target pdf_file: {pdf_file}")
+    logger.debug(f"cwd exists: {osp.exists(cwd)}")
+    logger.debug(f"cwd is absolute: {osp.isabs(cwd)}")
+    logger.info("=" * 80)
 
     commands = [
         ["pdflatex", "-interaction=nonstopmode", "template.tex"],
@@ -94,7 +95,7 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
     ]
 
     for i, command in enumerate(commands):
-        print(f"\n[DEBUG] Running command {i + 1}/4: {' '.join(command)}")
+        logger.debug(f"Running command {i + 1}/4: {' '.join(command)}")
         try:
             result = subprocess.run(
                 command,
@@ -104,65 +105,62 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
                 text=True,
                 timeout=timeout,
             )
-            print(f"[DEBUG] Command {i + 1} return code: {result.returncode}")
+            logger.debug(f"Command {i + 1} return code: {result.returncode}")
             if result.returncode != 0:
-                print(f"[WARNING] Command failed with return code {result.returncode}")
+                logger.warning(f"Command failed with return code {result.returncode}")
             # Only show full output for errors or final compile
             if result.returncode != 0 or i == len(commands) - 1:
-                print(
-                    "Standard Output:\n",
-                    result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout,
+                logger.debug(
+                    f"Standard Output:\n{result.stdout[-2000:] if len(result.stdout) > 2000 else result.stdout}"
                 )
-                print(
-                    "Standard Error:\n",
-                    result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr,
+                logger.debug(
+                    f"Standard Error:\n{result.stderr[-1000:] if len(result.stderr) > 1000 else result.stderr}"
                 )
         except subprocess.TimeoutExpired:
-            print(f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds.")
-            print(traceback.format_exc())
+            logger.exception(
+                f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds."
+            )
         except subprocess.CalledProcessError:
-            print(f"EXCEPTION in compile_latex: Error running command {' '.join(command)}")
-            print(traceback.format_exc())
+            logger.exception(
+                f"EXCEPTION in compile_latex: Error running command {' '.join(command)}"
+            )
 
-    print("\n" + "=" * 80)
-    print("FINISHED GENERATING LATEX")
+    logger.info("\n" + "=" * 80)
+    logger.info("FINISHED GENERATING LATEX")
 
     source_pdf = osp.join(cwd, "template.pdf")
-    print(f"[DEBUG] Checking for generated PDF at: {source_pdf}")
-    print(f"[DEBUG] PDF exists: {osp.exists(source_pdf)}")
+    logger.debug(f"Checking for generated PDF at: {source_pdf}")
+    logger.debug(f"PDF exists: {osp.exists(source_pdf)}")
 
     if osp.exists(source_pdf):
         pdf_size = osp.getsize(source_pdf)
-        print(f"[DEBUG] PDF size: {pdf_size} bytes")
+        logger.debug(f"PDF size: {pdf_size} bytes")
 
-    print(f"[DEBUG] Attempting to move to: {pdf_file}")
-    print(f"[DEBUG] Target directory exists: {osp.exists(osp.dirname(pdf_file))}")
-    print("=" * 80)
+    logger.debug(f"Attempting to move to: {pdf_file}")
+    logger.debug(f"Target directory exists: {osp.exists(osp.dirname(pdf_file))}")
+    logger.info("=" * 80)
 
     try:
         if not osp.exists(source_pdf):
-            print(f"[ERROR] Source PDF not found: {source_pdf}")
-            print(f"[ERROR] Files in latex dir: {os.listdir(cwd)}")
+            logger.error(f"Source PDF not found: {source_pdf}")
+            logger.error(f"Files in latex dir: {os.listdir(cwd)}")
             return False
 
         # Ensure target directory exists
         target_dir = osp.dirname(pdf_file)
         if not osp.exists(target_dir):
-            print(f"[WARNING] Target directory doesn't exist, creating: {target_dir}")
+            logger.warning(f"Target directory doesn't exist, creating: {target_dir}")
             os.makedirs(target_dir, exist_ok=True)
 
         shutil.move(source_pdf, pdf_file)
-        print(f"[SUCCESS] PDF moved to: {pdf_file}")
-        print(f"[SUCCESS] Final PDF exists: {osp.exists(pdf_file)}")
+        logger.info(f"PDF moved to: {pdf_file}")
+        logger.info(f"Final PDF exists: {osp.exists(pdf_file)}")
         return True
     except FileNotFoundError as e:
-        print(f"[ERROR] Failed to rename PDF: {e}")
-        print("EXCEPTION in compile_latex while moving PDF:")
-        print(traceback.format_exc())
+        logger.exception(f"Failed to rename PDF: {e}")
         return False
     except Exception as e:
-        print(f"[ERROR] Unexpected error moving PDF: {e}")
-        print(traceback.format_exc())
+        logger.exception(f"Unexpected error moving PDF: {e}")
         return False
 
 
@@ -343,23 +341,22 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             print_debug=False,
         )
         if "No more citations needed" in text:
-            print("No more citations needed.")
+            logger.info("No more citations needed.")
             return None
 
         json_output = extract_json_between_markers(text)
         if json_output is None:
-            print("Failed to extract JSON from LLM output (initial search). Raw response:")
-            print(text)
+            logger.warning("Failed to extract JSON from LLM output (initial search). Raw response:")
+            logger.debug(text)
             return None
         query = json_output["Query"]
         papers = search_for_papers(query)
     except Exception:
-        print("EXCEPTION in get_citation_addition (initial search):")
-        print(traceback.format_exc())
+        logger.exception("EXCEPTION in get_citation_addition (initial search):")
         return None
 
     if papers is None:
-        print("No papers found.")
+        logger.warning("No papers found.")
         return None
 
     paper_strings = []
@@ -391,13 +388,15 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             print_debug=False,
         )
         if "Do not add any" in text:
-            print("Do not add any.")
+            logger.info("Do not add any.")
             return None
 
         json_output = extract_json_between_markers(text)
         if json_output is None:
-            print("Failed to extract JSON from LLM output (selecting papers). Raw response:")
-            print(text)
+            logger.warning(
+                "Failed to extract JSON from LLM output (selecting papers). Raw response:"
+            )
+            logger.debug(text)
             return None
         desc = json_output["Description"]
         selected_papers = str(json_output["Selected"])
@@ -424,8 +423,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             return None
 
     except Exception:
-        print("EXCEPTION in get_citation_addition (selecting papers):")
-        print(traceback.format_exc())
+        logger.exception("EXCEPTION in get_citation_addition (selecting papers):")
         return None
 
     references_format = """% {description}
@@ -557,16 +555,16 @@ def perform_writeup(
     citations_text: str | None = None,
     run_dir_name: str | None = None,
 ) -> bool:
-    print("\n" + "=" * 80)
-    print("STARTING PERFORM_WRITEUP")
-    print(f"[DEBUG] base_folder: {base_folder}")
-    print(f"[DEBUG] base_folder exists: {osp.exists(base_folder)}")
-    print(f"[DEBUG] base_folder is absolute: {osp.isabs(base_folder)}")
-    print(f"[DEBUG] Current working directory: {os.getcwd()}")
-    print(f"[DEBUG] big_model: {big_model}")
-    print(f"[DEBUG] n_writeup_reflections: {n_writeup_reflections}")
-    print(f"[DEBUG] citations_text provided: {citations_text is not None}")
-    print("=" * 80 + "\n")
+    logger.info("\n" + "=" * 80)
+    logger.info("STARTING PERFORM_WRITEUP")
+    logger.debug(f"base_folder: {base_folder}")
+    logger.debug(f"base_folder exists: {osp.exists(base_folder)}")
+    logger.debug(f"base_folder is absolute: {osp.isabs(base_folder)}")
+    logger.debug(f"Current working directory: {os.getcwd()}")
+    logger.debug(f"big_model: {big_model}")
+    logger.debug(f"n_writeup_reflections: {n_writeup_reflections}")
+    logger.debug(f"citations_text provided: {citations_text is not None}")
+    logger.info("=" * 80 + "\n")
 
     compile_attempt = 0
 
@@ -588,7 +586,7 @@ def perform_writeup(
                     idea_text = f_idea.read()
             else:
                 # defer to run-specific path after latest_run_dir is computed below
-                print(
+                logger.warning(
                     f"Warning: Missing idea markdown files in base folder. "
                     f"Not found: {research_idea_path} and {idea_md_path}. "
                     "Will check run-specific location under logs/<run>/research_idea.md."
@@ -611,24 +609,24 @@ def perform_writeup(
         os.makedirs(run_out_dir, exist_ok=True)
         base_pdf_file = osp.join(run_out_dir, "paper")
         latex_folder = osp.join(run_out_dir, "latex")
-        print(f"[DEBUG] base_pdf_file (without extension): {base_pdf_file}")
-        print(f"[DEBUG] latex_folder: {latex_folder}")
+        logger.debug(f" base_pdf_file (without extension): {base_pdf_file}")
+        logger.debug(f" latex_folder: {latex_folder}")
         # If idea_text is still empty, attempt to load from run-specific location
         if not idea_text:
             run_md_path = osp.join(run_out_dir, "research_idea.md")
             if osp.exists(run_md_path):
                 with open(run_md_path, "r") as f_idea:
                     idea_text = f_idea.read()
-                    print(f"[DEBUG] Loaded research_idea.md from run dir: {run_md_path}")
+                    logger.debug(f" Loaded research_idea.md from run dir: {run_md_path}")
             else:
-                print(
+                logger.warning(
                     f"Warning: research_idea.md not found in run dir: {run_md_path}. "
                     "Proceeding with empty idea_text."
                 )
 
         # Cleanup any previous latex folder
         if osp.exists(latex_folder):
-            print(f"[DEBUG] Removing existing latex folder: {latex_folder}")
+            logger.debug(f" Removing existing latex folder: {latex_folder}")
             shutil.rmtree(latex_folder)
 
         summary_files = [
@@ -651,10 +649,10 @@ def perform_writeup(
                             loaded_summaries[key] = data
                 except json.JSONDecodeError:
                     traceback.print_exc()
-                    print(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
+                    logger.warning(f" {fname} is not valid JSON. Using empty data for {key}.")
                     loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
             else:
-                print(f"Warning: Summary file not found for {key}: {path}")
+                logger.warning(f" Summary file not found for {key}: {path}")
                 loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
 
         # Convert them to one big JSON string for context
@@ -685,7 +683,7 @@ def perform_writeup(
             if osp.exists(citations_cache_path):
                 with open(citations_cache_path, "r") as f:
                     cached_citations = f.read()
-                print(f"[DEBUG] Loaded cached citations from: {citations_cache_path}")
+                logger.debug(f" Loaded cached citations from: {citations_cache_path}")
                 try:
                     with open(writeup_file, "r") as f:
                         content = f.read()
@@ -693,13 +691,13 @@ def perform_writeup(
                     content = content.replace(pattern_end, f"\n{cached_citations}{pattern_end}")
                     with open(writeup_file, "w") as f:
                         f.write(content)
-                    print("[DEBUG] Seeded LaTeX references with cached citations.")
+                    logger.debug(" Seeded LaTeX references with cached citations.")
                 except Exception:
-                    print("[WARNING] Failed to seed LaTeX with cached citations.")
-                    print(traceback.format_exc())
+                    logger.warning(" Failed to seed LaTeX with cached citations.")
+                    logger.debug(traceback.format_exc())
         except Exception:
-            print("[WARNING] Exception while initializing citation cache paths.")
-            print(traceback.format_exc())
+            logger.warning(" Exception while initializing citation cache paths.")
+            logger.debug(traceback.format_exc())
 
         # Load aggregator script to include in the prompt
         aggregator_path = osp.join(base_folder, "auto_plot_aggregator.py")
@@ -744,8 +742,8 @@ def perform_writeup(
                         with open(progress_path, "w") as f:
                             json.dump({"done": True, "round_idx": round_idx}, f, indent=2)
                     except Exception:
-                        print("[WARNING] Failed to update citations progress cache on completion.")
-                        print(traceback.format_exc())
+                        logger.warning(" Failed to update citations progress cache on completion.")
+                        logger.debug(traceback.format_exc())
                     break
 
                 if addition is not None:
@@ -781,11 +779,10 @@ def perform_writeup(
                                         indent=2,
                                     )
                             except Exception:
-                                print("[WARNING] Failed to update citations cache/progress.")
-                                print(traceback.format_exc())
+                                logger.warning(" Failed to update citations cache/progress.")
+                                logger.debug(traceback.format_exc())
             except Exception:
-                print("EXCEPTION in perform_writeup (citation round):")
-                print(traceback.format_exc())
+                logger.exception("EXCEPTION in perform_writeup (citation round):")
                 # Save progress and current citations in case of error
                 try:
                     with open(writeup_file, "r") as f:
@@ -801,8 +798,8 @@ def perform_writeup(
                     with open(progress_path, "w") as f:
                         json.dump({"done": False, "round_idx": round_idx}, f, indent=2)
                 except Exception:
-                    print("[WARNING] Failed to persist citations after exception.")
-                    print(traceback.format_exc())
+                    logger.warning(" Failed to persist citations after exception.")
+                    logger.debug(traceback.format_exc())
                 continue
 
         # Generate VLM-based descriptions but do not overwrite plot_names
@@ -830,8 +827,7 @@ def perform_writeup(
                 plot_descriptions_list.append(f"{fname}: {desc_text}")
             plot_descriptions_str = "\n".join(plot_descriptions_list)
         except Exception:
-            print("EXCEPTION in VLM figure description generation:")
-            print(traceback.format_exc())
+            logger.exception("EXCEPTION in VLM figure description generation:")
             plot_descriptions_str = "No descriptions available."
 
         # Construct final prompt for big model, placing the figure descriptions alongside the plot list
@@ -849,11 +845,11 @@ def perform_writeup(
             plot_descriptions=plot_descriptions_str,
         )
 
-        print("\n" + "=" * 80)
-        print("[DEBUG] Requesting initial LaTeX generation from LLM...")
-        print(f"[DEBUG] Model: {big_client_model}")
-        print(f"[DEBUG] Prompt length: {len(combined_prompt)} chars")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.debug("Requesting initial LaTeX generation from LLM...")
+        logger.debug(f"Model: {big_client_model}")
+        logger.debug(f"Prompt length: {len(combined_prompt)} chars")
+        logger.info("=" * 80)
 
         response, msg_history = get_response_from_llm(
             prompt=combined_prompt,
@@ -864,30 +860,30 @@ def perform_writeup(
             print_debug=False,
         )
 
-        print("\n" + "=" * 80)
-        print(f"[DEBUG] LLM response received. Length: {len(response)} chars")
-        print(f"[DEBUG] First 500 chars of response: {response[:500]}")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.debug(f"LLM response received. Length: {len(response)} chars")
+        logger.debug(f"First 500 chars of response: {response[:500]}")
+        logger.info("=" * 80)
 
         latex_code_match = re.search(r"```latex(.*?)```", response, re.DOTALL)
         if not latex_code_match:
-            print("[ERROR] No LaTeX code block found in LLM response!")
-            print(f"[ERROR] Full response (first 2000 chars): {response[:2000]}")
-            print("[ERROR] Checking for other code block markers...")
+            logger.error(" No LaTeX code block found in LLM response!")
+            logger.error(f"Full response (first 2000 chars): {response[:2000]}")
+            logger.error(" Checking for other code block markers...")
             if "```" in response:
-                print(
-                    f"[ERROR] Found code blocks but not ```latex. First block: {response[response.find('```'):response.find('```') + 200]}"
+                logger.error(
+                    f"Found code blocks but not ```latex. First block: {response[response.find('```'):response.find('```') + 200]}"
                 )
             else:
-                print("[ERROR] No code blocks found at all in response")
+                logger.error(" No code blocks found at all in response")
             return False
 
-        print(f"[DEBUG] Found LaTeX code block. Length: {len(latex_code_match.group(1))} chars")
+        logger.debug(f" Found LaTeX code block. Length: {len(latex_code_match.group(1))} chars")
         updated_latex_code = latex_code_match.group(1).strip()
-        print(f"[DEBUG] Writing LaTeX to: {writeup_file}")
+        logger.debug(f" Writing LaTeX to: {writeup_file}")
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
-        print(f"[SUCCESS] Wrote {len(updated_latex_code)} chars to template.tex")
+        logger.info(f" Wrote {len(updated_latex_code)} chars to template.tex")
         # Ensure LaTeX \graphicspath points to the run-specific figures directory
         _ensure_graphicspath(
             writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
@@ -910,7 +906,7 @@ def perform_writeup(
             # Compile current version before reflection
             compile_latex(latex_folder, base_pdf_file + f"_{compile_attempt}.pdf")
             compile_attempt += 1
-            print(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
+            logger.info(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
 
             # Detect where "Impact Statement" appears
             impact_loc = detect_pages_before_impact(latex_folder)
@@ -958,7 +954,7 @@ If you believe you are done, simply say: "I am done".
             )
 
             if "I am done" in reflection_response:
-                print("LLM indicated it is done with reflections. Exiting reflection loop.")
+                logger.info("LLM indicated it is done with reflections. Exiting reflection loop.")
                 break
 
             reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
@@ -986,19 +982,18 @@ If you believe you are done, simply say: "I am done".
                     )
                     compile_latex(latex_folder, base_pdf_file + f"_{compile_attempt}.pdf")
                     compile_attempt += 1
-                    print(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
+                    logger.info(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
                 else:
-                    print(f"No changes in reflection step {i + 1}.")
+                    logger.debug(f"No changes in reflection step {i + 1}.")
                     break
             else:
-                print(f"No valid LaTeX code block found in reflection step {i + 1}.")
+                logger.warning(f"No valid LaTeX code block found in reflection step {i + 1}.")
                 break
 
         return osp.exists(base_pdf_file + f"_{compile_attempt - 1}.pdf")
 
     except Exception:
-        print("EXCEPTION in perform_writeup:")
-        print(traceback.format_exc())
+        logger.exception("EXCEPTION in perform_writeup:")
         return False
 
 
@@ -1046,7 +1041,6 @@ if __name__ == "__main__":
             page_limit=args.page_limit,
         )
         if not success:
-            print("Writeup process did not complete successfully.")
+            logger.error("Writeup process did not complete successfully.")
     except Exception:
-        print("EXCEPTION in main:")
-        print(traceback.format_exc())
+        logger.exception("EXCEPTION in main:")

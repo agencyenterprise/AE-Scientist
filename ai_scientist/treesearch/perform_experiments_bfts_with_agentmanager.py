@@ -45,7 +45,7 @@ def perform_experiments_bfts(
     global_step = 0
 
     # Prepare a clean agent workspace for the run
-    print("Preparing agent workspace (copying and extracting files) ...")
+    logger.info("Preparing agent workspace (copying and extracting files) ...")
     prep_agent_workspace(cfg)
 
     def cleanup() -> None:
@@ -76,7 +76,7 @@ def perform_experiments_bfts(
 
     def step_callback(stage: StageMeta, journal: Journal) -> None:
         # Persist progress snapshot and emit progress events after each step
-        print("Step complete")
+        logger.debug("Step complete")
         try:
             # Track iteration timing
             current_time = time.time()
@@ -192,18 +192,17 @@ def perform_experiments_bfts(
                 )
 
         except Exception as e:
-            print(f"Error in step callback: {e}")
+            logger.exception(f"Error in step callback: {e}")
 
-        print(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
-        print(
+        logger.info(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
+        logger.debug(
             f"Step {min(len(journal), stage.max_iterations)}/{stage.max_iterations} at stage_{stage.name}"
         )
-        print(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
 
     manager.run(exec_callback=create_exec_callback(), step_callback=step_callback)
 
     if cfg.generate_report:
-        print("Generating final report from all stages...")
+        logger.info("Generating final report from all stages...")
         (
             draft_summary,
             baseline_summary,
@@ -227,11 +226,11 @@ def perform_experiments_bfts(
         with open(ablation_summary_path, "w") as ablation_file:
             json.dump(ablation_summary, ablation_file, indent=2)
 
-        print("Summary reports written to files:")
-        print(f"- Draft summary: {draft_summary_path}")
-        print(f"- Baseline summary: {baseline_summary_path}")
-        print(f"- Research summary: {research_summary_path}")
-        print(f"- Ablation summary: {ablation_summary_path}")
+        logger.info("Summary reports written to files:")
+        logger.info(f"- Draft summary: {draft_summary_path}")
+        logger.info(f"- Baseline summary: {baseline_summary_path}")
+        logger.info(f"- Research summary: {research_summary_path}")
+        logger.info(f"- Ablation summary: {ablation_summary_path}")
 
 
 if __name__ == "__main__":

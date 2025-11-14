@@ -71,11 +71,11 @@ class ParallelAgent:
         # Configure parallelism and optional GPUs
         self.num_workers = cfg.agent.num_workers
         self.num_gpus = get_gpu_count()
-        print(f"num_gpus: {self.num_gpus}")
+        logger.info(f"num_gpus: {self.num_gpus}")
         if self.num_gpus == 0:
-            print("No GPUs detected, falling back to CPU-only mode")
+            logger.info("No GPUs detected, falling back to CPU-only mode")
         else:
-            print(f"Detected {self.num_gpus} GPUs")
+            logger.info(f"Detected {self.num_gpus} GPUs")
 
         self.gpu_manager = GPUManager(self.num_gpus) if self.num_gpus > 0 else None
 
@@ -130,7 +130,7 @@ class ParallelAgent:
             temperature=self.cfg.agent.code.temp,
         )
 
-        print(f"Defined eval metrics: {response}")
+        logger.debug(f"Defined eval metrics: {response}")
         response_text: str = response if isinstance(response, str) else str(response)
         return response_text
 
@@ -155,11 +155,11 @@ class ParallelAgent:
             if code and nl_text:
                 # merge all code blocks into a single string
                 return nl_text, code
-            print("Plan + code extraction failed, retrying...")
+            logger.warning("Plan + code extraction failed, retrying...")
             prompt["Parsing Feedback"] = (
                 "The code extraction failed. Make sure to use the format ```python ... ``` for the code blocks."
             )
-        print("Final plan + code extraction attempt failed, giving up...")
+        logger.error("Final plan + code extraction attempt failed, giving up...")
         return "", cast(str, completion_text)
 
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
@@ -198,7 +198,7 @@ class ParallelAgent:
             best_stage3_plot_code = None
             seed_eval = True
             memory_summary = ""
-            print("Starting multi-seed eval...")
+            logger.info("Starting multi-seed eval...")
             futures.append(
                 self.executor.submit(
                     process_node,
@@ -225,14 +225,14 @@ class ParallelAgent:
                 result_data = future.result(timeout=self.timeout)
                 result_node = Node.from_dict(result_data, self.journal)
                 parent_id_str = result_node.parent.id if result_node.parent is not None else "N/A"
-                print(f"Parent node id: {parent_id_str}")
-                print(f"Sanity check: actual parent node id: {node.id}")
+                logger.debug(f"Parent node id: {parent_id_str}")
+                logger.debug(f"Sanity check: actual parent node id: {node.id}")
                 # Add node to journal's list and assign its step number
                 self.journal.append(result_node)
                 node_found = self.journal.get_node_by_id(result_node.id)
                 if node_found is not None:
                     seed_nodes.append(node_found)
-                print("Added result node to journal")
+                logger.debug("Added result node to journal")
             except Exception as e:
                 logger.error(f"Error in multi-seed evaluation: {str(e)}")
             finally:
@@ -269,11 +269,11 @@ class ParallelAgent:
         nodes_to_process: list[Optional[Node]] = []
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
-        print(f"self.num_workers: {self.num_workers}, ")
+        logger.debug(f"self.num_workers: {self.num_workers}, ")
 
         while len(nodes_to_process) < self.num_workers:
             # Drafting: create root nodes up to target drafts
-            print(
+            logger.debug(
                 f"Checking draft nodes... num of journal.draft_nodes: {len(self.journal.draft_nodes)}, search_cfg.num_drafts: {search_cfg.num_drafts}"
             )
             if len(self.journal.draft_nodes) < search_cfg.num_drafts:
@@ -289,14 +289,13 @@ class ParallelAgent:
 
             # Debugging phase (probabilistic)
             if random.random() < search_cfg.debug_prob:
-                print("Checking debuggable nodes")
-                # print(f"Buggy nodes: {self.journal.buggy_nodes}")
+                logger.debug("Checking debuggable nodes")
                 try:
                     debuggable_nodes = None
-                    print("Checking buggy nodes...")
+                    logger.debug("Checking buggy nodes...")
                     buggy_nodes = self.journal.buggy_nodes
-                    print(f"Type of buggy_nodes: {type(buggy_nodes)}")
-                    print(f"Length of buggy_nodes: {len(buggy_nodes)}")
+                    logger.debug(f"Type of buggy_nodes: {type(buggy_nodes)}")
+                    logger.debug(f"Length of buggy_nodes: {len(buggy_nodes)}")
 
                     debuggable_nodes = [
                         n
@@ -308,9 +307,9 @@ class ParallelAgent:
                         )
                     ]
                 except Exception as e:
-                    print(f"Error getting debuggable nodes: {e}")
+                    logger.exception(f"Error getting debuggable nodes: {e}")
                 if debuggable_nodes:
-                    print("Found debuggable nodes")
+                    logger.debug("Found debuggable nodes")
                     node = random.choice(debuggable_nodes)
                     tree_root = node
                     while tree_root.parent:
@@ -323,8 +322,7 @@ class ParallelAgent:
                         continue
 
             # Stage-specific selection: Ablation Studies
-            print(f"self.stage_name: {self.stage_name}")
-            # print(f"self.best_stage3_node: {self.best_stage3_node}")
+            logger.debug(f"self.stage_name: {self.stage_name}")
             if self.stage_name and self.stage_name.startswith("4_"):
                 self._emit_event(
                     RunLogEvent(
@@ -340,7 +338,7 @@ class ParallelAgent:
                 continue
             else:  # Stage 1, 3: normal best-first search
                 # Improvement phase
-                print("Checking good nodes..")
+                logger.debug("Checking good nodes..")
                 good_nodes = self.journal.good_nodes
                 if not good_nodes:
                     nodes_to_process.append(None)  # Back to drafting
@@ -380,9 +378,9 @@ class ParallelAgent:
 
     def step(self, exec_callback: ExecCallbackType) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
-        print("Selecting nodes to process")
+        logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
-        print(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")
+        logger.debug(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")
 
         draft_count = sum(1 for n in nodes_to_process if n is None)
         debug_count = sum(1 for n in nodes_to_process if n and n.is_buggy)
@@ -439,7 +437,7 @@ class ParallelAgent:
         memory_summary = self.journal.generate_summary(include_code=False)
 
         # Submit tasks to process pool
-        print("Submitting tasks to process pool")
+        logger.debug("Submitting tasks to process pool")
 
         futures: list[Future] = []
         for node_data in node_data_list:
@@ -515,21 +513,21 @@ class ParallelAgent:
             )
 
         # Collect results as they complete and update journal/state
-        print("Waiting for results")
+        logger.debug("Waiting for results")
         for i, future in enumerate(futures):
             try:
-                print("About to get result from future")
+                logger.debug("About to get result from future")
                 result_data = future.result(timeout=self.timeout)
                 if "metric" in result_data:
-                    print(f"metric type: {type(result_data['metric'])}")
-                    print(f"metric contents: {result_data['metric']}")
+                    logger.debug(f"metric type: {type(result_data['metric'])}")
+                    logger.debug(f"metric contents: {result_data['metric']}")
 
                 # Create node and restore relationships using journal.
                 # Journal acts as a database to look up a parent node,
                 # and add the result node as a child.
                 result_node = Node.from_dict(result_data, self.journal)
-                print("Investigating if result node has metric", flush=True)
-                print(result_node.metric)
+                logger.debug("Investigating if result node has metric")
+                logger.debug(str(result_node.metric))
                 # Update hyperparam tuning state if in Stage 2
                 Stage2Tuning.update_hyperparam_state(
                     stage_name=self.stage_name,
@@ -545,7 +543,7 @@ class ParallelAgent:
 
                 # Add node to journal's list and assign its step number
                 self.journal.append(result_node)
-                print("Added result node to journal")
+                logger.debug("Added result node to journal")
 
                 if result_node.is_buggy:
                     self._emit_event(
@@ -564,8 +562,7 @@ class ParallelAgent:
                     )
 
             except TimeoutError:
-                print("Worker process timed out, couldn't get the result")
-                logger.error("Worker process timed out, couldn't get the result")
+                logger.warning("Worker process timed out, couldn't get the result")
                 self._emit_event(
                     RunLogEvent(
                         message=f"Node {i + 1}/{len(futures)} timed out after {self.timeout}s",
@@ -573,8 +570,7 @@ class ParallelAgent:
                     )
                 )
             except Exception as e:
-                print(f"Error processing node: {str(e)}")
-                logger.error(f"Error processing node: {str(e)}")
+                logger.exception(f"Error processing node: {str(e)}")
 
                 traceback.print_exc()
                 raise
@@ -592,7 +588,7 @@ class ParallelAgent:
         """Cleanup parallel workers and resources"""
         # Release GPUs, shutdown executor, and terminate lingering processes
         if not self._is_shutdown:
-            print("Shutting down parallel executor...")
+            logger.info("Shutting down parallel executor...")
             try:
                 # Release all GPUs
                 if self.gpu_manager is not None:
@@ -613,10 +609,10 @@ class ParallelAgent:
                             process.terminate()
                             process.join(timeout=1)
 
-                print("Executor shutdown complete")
+                logger.info("Executor shutdown complete")
 
             except Exception as e:
-                print(f"Error during executor shutdown: {e}")
+                logger.exception(f"Error during executor shutdown: {e}")
             finally:
                 self._is_shutdown = True
 
