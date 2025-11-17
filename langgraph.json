@@ -1,0 +1,6 @@
+{
+    "graphs": {
+      "agent": "./aigraph/agent_step_1.py:build"
+    },
+    "dependencies": ["."]
+  }
