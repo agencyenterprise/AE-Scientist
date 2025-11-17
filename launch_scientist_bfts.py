@@ -50,7 +50,13 @@ from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
 from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
 from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
-from ai_scientist.treesearch.utils.config import Config, load_task_desc, prep_cfg, save_run
+from ai_scientist.treesearch.utils.config import (
+    Config,
+    apply_log_level,
+    load_task_desc,
+    prep_cfg,
+    save_run,
+)
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
 logger = logging.getLogger(__name__)
@@ -211,17 +217,12 @@ if __name__ == "__main__":
     base_config_path = str(Path(args.config_file))
     with open(base_config_path, "r") as f:
         base_cfg = yaml.load(f, Loader=yaml.FullLoader)
+    # Apply logging level from config early so noisy third-party DEBUG logs are suppressed
+    apply_log_level(level_name=str(base_cfg.get("log_level", "DEBUG")))
     top_log_dir = Path(base_cfg["log_dir"]).resolve()
     top_log_dir.mkdir(parents=True, exist_ok=True)
     existing_runs_before = {p.name for p in top_log_dir.iterdir() if p.is_dir()}
     reports_base = str(top_log_dir.parent.resolve())
-
-    # Helper functions for resume flow
-    def _select_latest_run_dir(logs_root: Path) -> Path:
-        run_dirs = [p for p in logs_root.iterdir() if p.is_dir()]
-        if not run_dirs:
-            raise FileNotFoundError(f"No run directories found under {logs_root}")
-        return max(run_dirs, key=lambda p: p.stat().st_mtime)
 
     def _select_stage1_dir(run_dir: Path) -> Path:
         stage_dirs = sorted(

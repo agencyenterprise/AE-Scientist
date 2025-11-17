@@ -11,6 +11,7 @@ import multiprocessing
 import os
 import queue
 import signal
+import subprocess
 import sys
 import time
 import traceback
@@ -32,6 +33,117 @@ try:
     multiprocessing.set_start_method("spawn", force=True)
 except RuntimeError:
     pass
+
+
+def _project_root() -> Path:
+    """
+    Best-effort repository root used for PYTHONPATH when spawning a different interpreter.
+    Assumes this file lives under <root>/ai_scientist/treesearch/interpreter.py.
+    """
+    root = Path(__file__).resolve().parents[2]
+    logger.debug(f"_project_root resolved to {root}")
+    return root
+
+
+def _managed_venv_dir(working_dir: Path) -> Path:
+    """
+    Directory where the interpreter-managed virtual environment is created.
+    """
+    venv_dir = working_dir / ".ai_scientist_venv"
+    logger.debug(f"Managed venv directory set to {venv_dir}")
+    return venv_dir
+
+
+def _venv_python_path(venv_dir: Path) -> Path:
+    """
+    Resolve the python executable for the managed venv on Linux.
+    Assumes `uv venv` created `<venv_dir>/bin/python`.
+    """
+    python_path = venv_dir / "bin" / "python"
+    if python_path.exists():
+        logger.debug(f"Resolved venv python at {python_path}")
+        return python_path
+    raise FileNotFoundError(f"Python executable not found in venv at {venv_dir}")
+
+
+def _run_uv(
+    *, args: list[str], timeout_seconds: int, extra_env: dict[str, str], cwd: Path
+) -> subprocess.CompletedProcess:
+    """
+    Helper to run `uv <args...>` with consistent settings.
+    """
+    env = os.environ.copy()
+    for key, value in extra_env.items():
+        env[key] = value
+    cmd_display = " ".join(["uv", *args])
+    logger.debug(f"Running uv command: {cmd_display} (cwd={cwd})")
+    proc = subprocess.run(
+        args=["uv", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        env=env,
+        cwd=str(cwd),
+    )
+    logger.debug(
+        f"uv command completed: {cmd_display} (stdout_len={len(proc.stdout)}, stderr_len={len(proc.stderr)})"
+    )
+    return proc
+
+
+def _ensure_managed_venv(*, working_dir: Path, timeout_seconds: int) -> Path:
+    """
+    Create (if needed) and populate a managed virtual environment mirroring the current env.
+    Returns the path to the managed venv's python executable.
+    """
+    venv_dir = _managed_venv_dir(working_dir)
+    logger.debug(
+        f"Ensuring managed venv (working_dir={working_dir}, venv_dir={venv_dir}, timeout={timeout_seconds})"
+    )
+    if not venv_dir.exists():
+        logger.debug(f"Creating managed venv via uv venv --system-site-packages at {venv_dir}")
+        _run_uv(
+            args=["venv", "--system-site-packages", str(venv_dir)],
+            timeout_seconds=timeout_seconds,
+            extra_env={},
+            cwd=working_dir,
+        )
+    else:
+        logger.debug(f"Reusing existing managed venv at {venv_dir}")
+
+    venv_python = _venv_python_path(venv_dir)
+
+    # Install project dependencies from pyproject.toml using `uv sync`
+    project_root = _project_root()
+    src_pyproject = project_root / "pyproject.toml"
+    dst_pyproject = working_dir / "pyproject.toml"
+    if src_pyproject.exists():
+        logger.debug(f"Copying pyproject.toml from {src_pyproject} to {dst_pyproject}")
+        dst_pyproject.write_text(src_pyproject.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        logger.debug(f"No pyproject.toml found at {src_pyproject}; proceeding without copy")
+    # Copy uv.lock if present to keep resolution consistent
+    src_lock = project_root / "uv.lock"
+    dst_lock = working_dir / "uv.lock"
+    if src_lock.exists():
+        logger.debug(f"Copying uv.lock from {src_lock} to {dst_lock}")
+        dst_lock.write_text(src_lock.read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        logger.debug(f"No uv.lock found at {src_lock}; uv will resolve dependencies")
+    logger.debug(f"Syncing project dependencies with uv (cwd={working_dir}, python={venv_python})")
+    _run_uv(
+        args=["sync"],
+        timeout_seconds=max(timeout_seconds, 600),
+        extra_env={
+            "UV_PROJECT_ENVIRONMENT": str(venv_dir),
+            "UV_PYTHON": str(venv_python),
+        },
+        cwd=working_dir,
+    )
+    logger.debug(f"Managed venv ready (python={venv_python})")
+
+    return venv_python
 
 
 @dataclass
@@ -178,6 +290,7 @@ class Interpreter:
         self.process: SpawnProcess | None = None
         self.env_vars = env_vars or {}
         self.mp_context = multiprocessing.get_context("spawn")
+        self._venv_python: Path | None = None
         self.code_inq: Queue[str]
         self.result_outq: Queue[str]
         self.event_outq: Queue[
@@ -200,6 +313,9 @@ class Interpreter:
             os.environ[key] = str(value)
 
         os.chdir(str(self.working_dir))
+        logger.debug(
+            f"Child process environment prepared (cwd={self.working_dir}, env_overrides={list(self.env_vars.keys())})"
+        )
 
         # this seems to only  benecessary because we're exec'ing code from a string,
         # a .py file should be able to import modules from the cwd anyway
@@ -207,6 +323,7 @@ class Interpreter:
 
         # capture stdout and stderr
         sys.stdout = sys.stderr = RedirectQueue(result_outq)  # type: ignore[assignment,unused-ignore]
+        logger.debug("Child process stdio redirected to parent result queue")
 
     def _run_session(
         self,
@@ -258,20 +375,44 @@ class Interpreter:
         self.code_inq = self.mp_context.Queue()
         self.result_outq = self.mp_context.Queue()
         self.event_outq = self.mp_context.Queue()
-        # Use module-level function as target to avoid pickling Interpreter instance
-        self.process = self.mp_context.Process(
-            target=_repl_run_session,
-            kwargs=dict(
-                working_dir=str(self.working_dir),
-                agent_file_name=self.agent_file_name,
-                format_tb_ipython=self.format_tb_ipython,
-                env_vars=self.env_vars,
-                code_inq=self.code_inq,
-                result_outq=self.result_outq,
-                event_outq=self.event_outq,
-            ),
+        # Prepare managed venv and configure the spawn executable
+        if self._venv_python is None:
+            # Use a generous timeout for environment setup independent of execution timeout
+            setup_timeout = max(900, int(self.timeout))
+            logger.debug(
+                f"Preparing managed venv for child (parent_executable={sys.executable}, timeout={setup_timeout})"
+            )
+            self._venv_python = _ensure_managed_venv(
+                working_dir=self.working_dir, timeout_seconds=setup_timeout
+            )
+
+        # Temporarily point multiprocessing to the managed venv's python for this start()
+        old_executable = getattr(multiprocessing, "get_executable", lambda: sys.executable)()
+        logger.debug(
+            f"Setting multiprocessing executable (old={old_executable}, new={self._venv_python})"
         )
-        self.process.start()
+        multiprocessing.set_executable(str(self._venv_python))
+        try:
+            # Use module-level function as target to avoid pickling Interpreter instance
+            self.process = self.mp_context.Process(
+                target=_repl_run_session,
+                kwargs=dict(
+                    working_dir=str(self.working_dir),
+                    agent_file_name=self.agent_file_name,
+                    format_tb_ipython=self.format_tb_ipython,
+                    env_vars=self.env_vars,
+                    code_inq=self.code_inq,
+                    result_outq=self.result_outq,
+                    event_outq=self.event_outq,
+                ),
+            )
+            self.process.start()
+            logger.debug(
+                f"Child process started (pid={self.process.pid}, executable={self._venv_python}, cwd={self.working_dir}, agent_file={self.agent_file_name})"
+            )
+        finally:
+            multiprocessing.set_executable(str(old_executable))
+            logger.debug(f"Restored multiprocessing executable to {old_executable}")
 
     def _drain_queues(self) -> None:
         """Quickly drain all in-flight messages to prevent blocking."""
@@ -297,6 +438,7 @@ class Interpreter:
         if self.process is None:
             return
         # give the child process a chance to terminate gracefully
+        logger.debug(f"Terminating child process (pid={self.process.pid})")
         self.process.terminate()
         self._drain_queues()
         self.process.join(timeout=2)
@@ -308,6 +450,7 @@ class Interpreter:
             self.process.join(timeout=2)
         # don't wait for gc, clean up immediately
         self.process.close()
+        logger.debug("Child process resources released")
         self.process = None
 
     def run(self, code: str, reset_session: bool = True) -> ExecutionResult:
@@ -323,15 +466,17 @@ class Interpreter:
 
         """
 
-        logger.debug(f"REPL is executing code (reset_session={reset_session})")
-        logger.debug("  Starting Python interpreter process...")
+        logger.debug(
+            f"Interpreter.run called (reset_session={reset_session}, timeout={self.timeout}, parent_executable={sys.executable})"
+        )
+        logger.debug("Starting Python interpreter process...")
 
         if reset_session:
             if self.process is not None:
                 # terminate and clean up previous process
                 self.cleanup_session()
             self.create_process()
-            logger.debug("  ✓ Interpreter ready, sending code to execute")
+            logger.debug("✓ Interpreter ready, sending code to execute")
         else:
             # reset_session needs to be True on first exec
             if self.process is None:
@@ -343,6 +488,7 @@ class Interpreter:
         assert self.process.is_alive()
 
         self.code_inq.put(code)
+        logger.debug(f"Submitted code to child (chars={len(code)})")
 
         # wait for child to actually start execution (we don't want interrupt child setup)
         startup_deadline = time.time() + float(os.environ.get("AI_SCI_STARTUP_TIMEOUT", "300"))
@@ -372,7 +518,7 @@ class Interpreter:
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
-        logger.debug("  Code is now executing...")
+        logger.debug("Code is now executing...")
         last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent
@@ -391,7 +537,7 @@ class Interpreter:
                 current_time = time.time()
                 if current_time - last_progress_time >= 30:
                     elapsed = current_time - start_time
-                    logger.debug(f"  Still executing... ({humanize.naturaldelta(elapsed)} elapsed)")
+                    logger.debug(f"Still executing... ({humanize.naturaldelta(elapsed)} elapsed)")
                     last_progress_time = current_time
 
                 # we haven't heard back from the child -> check if it's still alive (assuming overtime interrupt wasn't sent yet)
@@ -434,6 +580,7 @@ class Interpreter:
         while not self.result_outq.empty() or not output or output[-1] != "<|EOF|>":
             output.append(self.result_outq.get())
         output.pop()  # remove the EOF marker
+        logger.debug(f"Collected {len(output)} output segments from child")
 
         # Filter out PyMuPDF layout warning messages
         output = [
@@ -455,4 +602,5 @@ class Interpreter:
             output.append(
                 f"Execution time: {humanize.naturaldelta(exec_time)} seconds (time limit is {humanize.naturaldelta(self.timeout)})."
             )
+        logger.debug(f"Child execution completed (exc_type={e_cls_name}, exec_time={exec_time})")
         return ExecutionResult(output, exec_time, e_cls_name, exc_info, exc_stack)
