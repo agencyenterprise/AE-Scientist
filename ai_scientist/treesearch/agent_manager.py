@@ -125,7 +125,13 @@ Your research idea:\n\n
             + "\n"
         )
         if self.task_desc.code is not None:
+            logger.info("Loading code example from idea input")
             task_desc += "Code To Use:\n" + self.task_desc.code + "\n"
+        else:
+            logger.info("Loading example code from example_code.py")
+            example_code_path = Path(__file__).parent.parent / "example_code.py"
+            example_code = example_code_path.read_text()
+            task_desc += "Code To Use:\n" + example_code + "\n"
         return task_desc
 
     def _create_initial_stage(self) -> None:
