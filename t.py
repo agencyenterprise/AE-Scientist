@@ -1,68 +1,53 @@
 import asyncio
+import json
+import logging
+from pprint import pp
 
 from langfuse.langchain import CallbackHandler
-from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import RunnableConfig
-from pydantic import BaseModel
 
-from aigraph import agent_step_1, agent_step_2
+from aigraph import agent_step_1
+from aigraph import utils
 
-
-class State(BaseModel):
-    idea: str
-
-    stage1: agent_step_1.State | None = None
-    stage2: agent_step_2.State | None = None
-
-
-async def node_stage_1(state: State) -> State:
-    input = agent_step_1.State(idea="Minimal hello world")
-    context = agent_step_1.Context(model="gpt-4o-mini", temperature=0.0)
-    config = RunnableConfig(callbacks=[CallbackHandler()])
-
-    graph = agent_step_1.build()
-    result: agent_step_1.State = await graph.ainvoke(
-        input, config=config, context=context
-    )  # type: ignore
-
-    state.stage1 = result
-    return state
-
-
-async def node_stage_2(state: State) -> State:
-    code = state.stage1.code if state.stage1 else ""
-    code = code or ""
-
-    input = agent_step_2.State(idea=state.idea, base_code=code)
-    context = agent_step_2.Context(model="gpt-4o-mini", temperature=0.0)
-    config = RunnableConfig(callbacks=[CallbackHandler()])
-
-    graph = agent_step_2.build()
-    result: agent_step_2.State = await graph.ainvoke(
-        input, config=config, context=context
-    )  # type: ignore
-
-    state.stage2 = result
-    return state
+task = utils.Task.model_validate(
+    {
+        "Name": "rare_token_persistence",
+        "Title": "Rare Token Persistence: Measuring Retention of Rare Tokens in Small Language Models",
+        "Short Hypothesis": "Language models remember and reproduce rare tokens more reliably than common ones, even after additional fine-tuning on unrelated data. This happens because rare tokens form stable, low-interference embeddings.",
+        "Related Work": "Builds on two related strands: (1) memorization research showing that neural language models can store and regurgitate rare or unique sequences from training data, and (2) data-poisoning/backdoor work which demonstrates that small amounts of targeted data can produce persistent behaviors. Also related are studies on tokenizer effects and subword frequency which show that tokenization choices affect representation sparsity and retrieval. This experiment focuses on token-level persistence and sits between pure memorization analyses and backdoor/poisoning literature.",
+        "Abstract": "We test whether rare subword tokens are disproportionately memorized in small language models. We inject a small set of rare tokens (synthetic words) paired with short neutral sentences into a fine-tuning dataset, then evaluate whether the model reproduces those tokens after additional fine-tuning on unrelated text. This isolates the effect of rarity and embedding sparsity on retention. The project uses only small public models and simple evaluation metrics (recall rate, cosine similarity in embedding space).",
+        "Experiments": [
+            "E1: Identify 10 rare tokens from the model’s tokenizer vocabulary (low frequency in corpus).",
+            "E2: Fine-tune a 125M–1B parameter model on 1,000 short sentences that each include one of the rare tokens in a neutral context.",
+            "E3: Fine-tune the same model again on unrelated clean text (e.g., Wikipedia subset) without rare tokens.",
+            "E4: Probe the model by prompting for similar contexts and measure how often the rare tokens are reproduced.",
+            "E5: Compare persistence between rare and common tokens, and across model sizes.",
+        ],
+        "Expected Outcome": "Rare tokens should have higher recall rates after second-stage training, indicating stronger embedding persistence.",
+        "Risk Factors and Limitations": [
+            "Ethical risk: None — no harmful or manipulative data used.",
+            "Compute: Can run on a single GPU with small models.",
+            "Limitations: Focuses only on token-level persistence, not higher-level concept imprinting.",
+        ],
+    }
+)
 
 
 async def main() -> None:
-    builder = StateGraph(State)
-
-    builder.add_node("stage_1", node_stage_1)
-    builder.add_node("stage_2", node_stage_2)
-    builder.add_edge(START, "stage_1")
-    builder.add_edge("stage_1", "stage_2")
-    builder.add_edge("stage_2", END)
-
-    graph = builder.compile()
-
     config = RunnableConfig(callbacks=[CallbackHandler()])
+    state = agent_step_1.State(task=task)
+    context = agent_step_1.Context(model="gpt-4o-mini", temperature=0.0)
 
-    state = State(idea="Minimal hello world")
-    result: State = await graph.ainvoke(state, config=config)  # type: ignore
-    print(result)
+    graph = agent_step_1.build()
+    result = await graph.ainvoke(
+        input=state,
+        config=config,
+        context=context,
+    )
+
+    pp(result)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

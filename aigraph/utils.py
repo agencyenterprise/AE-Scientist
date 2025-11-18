@@ -45,6 +45,11 @@ class Metric(BaseModel):
     description: str
 
 
+class Hyperparam(BaseModel):
+    name: str
+    description: str
+
+
 @dataclass
 class RunCodeResult:
     stdout: str
