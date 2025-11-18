@@ -4,7 +4,7 @@ import json
 from aigraph.utils import ROOT_DIR, Task, Metric
 
 
-def build_task_prompt(task: Task) -> str:
+def _task_to_prompt(task: Task) -> str:
     prompt = f"""
     You are an ambitious AI researcher who is looking to publish a paper that
     will contribute significantly to the field.
@@ -41,8 +41,7 @@ def build_task_prompt(task: Task) -> str:
     return prompt + f"Code To Use:\n{code}\n"
 
 
-
-def build_prompt_metrics(task: Task) -> str:
+def build_prompt_define_metrics(task: Task) -> str:
     return f"""
     ## Introduction
     
@@ -52,7 +51,7 @@ def build_prompt_metrics(task: Task) -> str:
 
     ## Research idea
 
-    {build_task_prompt(task)}
+    {_task_to_prompt(task)}
     
     ## Goals 
     
@@ -79,7 +78,7 @@ def build_prompt_metrics(task: Task) -> str:
     """
 
 
-def build_prompt_plan_and_code(task: Task, metrics: list[Metric], memory: str) -> str:
+def build_prompt_code_experiment(task: Task, metrics: list[Metric], memory: str) -> str:
     prompt = f"""
     ## Introduction
 
@@ -93,7 +92,7 @@ def build_prompt_plan_and_code(task: Task, metrics: list[Metric], memory: str) -
 
     ## Research idea
 
-    {build_task_prompt(task)}
+    {_task_to_prompt(task)}
 
     ## Memory
 
@@ -241,113 +240,108 @@ def build_prompt_plan_and_code(task: Task, metrics: list[Metric], memory: str) -
     """
     return prompt
 
-def build_prompt_draft(*, task: Task, memory: str) -> str:
+
+def build_prompt_parse_experiment_output(task: Task, code: str, stdout: str, stderr: str) -> str:
     return f"""
     ## Introduction
     
-    You are an AI researcher who is looking to publish a paper that will
-    contribute significantly to the field. Your first task is to write python
-    code to implement a solid baseline based on your research idea provided
-    below, from data preparation to model training, as well as evaluation and
-    visualization. Focus on getting a simple but working implementation first,
-    before any sophisticated improvements. We will explore more advanced
-    variations in later stages.
-    
+    You are an experienced AI researcher. You have written code for your
+    research experiment and now need to evaluate the output of the code
+    execution. Analyze the execution output, determine if there were any bugs,
+    and provide a summary of the findings.
+
     ## Research idea
-    
-    {build_task_prompt(task)}
-    
-    ## Memory
-    
-    {memory}
-    
-    ## Instructions
-    
-    ### Experiment design sketch guideline
-    
-    - This first experiment design should be relatively simple, without
-      extensive hyper-parameter optimization.
-    - Take the Memory section into consideration when proposing the design.
-    - The solution sketch should be 6-10 sentences.
-    - Don't suggest to do EDA.
-    - Prioritize using real public datasets (e.g., from HuggingFace) when they
-      suit the task, and only fall back to synthetic data if no suitable dataset
-      is available or synthetic generation is essential to the proposed
-      experiment.
-    
-    ### Goals
-    
-    - Focus on getting basic working implementation
-    - Use a dataset appropriate to the experiment
-    - Aim for basic functional correctness
-    - If you are given "Code To Use", you can directly use it as a starting
-      point.
+
+    {_task_to_prompt(task)}
+
+    ## Implementation
+
+    ```python
+    {code}
+    ```
+
+    ## Stdout
+
+    ```
+    {stdout}
+    ```
+
+    ## Stderr
+
+    ```
+    {stderr}
+    ```
     """
 
 
-def build_prompt_improve(
-    *,
-    task: Task,
-    memory: str,
-    previous_code: str,
-    feedback: str,
-) -> str:
-    code_block = f"```python\n{previous_code}\n```" if previous_code else "None"
+def build_prompt_code_metrics_parser(code: str) -> str:
     return f"""
     ## Introduction
     
-    You are an experienced AI researcher. You are provided with a previously
-    developed implementation. Your task is to improve it based on the current
-    experimental stage.
+    You are an AI researcher analyzing experimental results stored in numpy
+    files. Write code to load and analyze the metrics from
+    `experiment_data.npy`.
     
-    ## Research idea
+    ## Context
     
-    {build_task_prompt(task)}
+    Original Code:
     
-    ## Memory
-    
-    {memory}
-    
-    ## Previous solution
-    
-    ### Code
-    
-    {code_block}
-    
-    ## Feedback
-    
-    {feedback}
+    ```python
+    {code}
+    ```
     
     ## Instructions
     
-    Focus on addressing the feedback and improving the implementation while
-    maintaining the core functionality.
+    0. Make sure to get the working directory from `os.path.join(os.getcwd(),
+       'working')`
+    1. Load the `experiment_data.npy` file, which is located in the working
+       directory
+    2. Extract metrics for each dataset. Refer to the original code to
+       understand the data structure.
+    3. Always print the name of the dataset before printing the metrics
+    4. Always print the name of the metric before printing the value with
+       precise labels (e.g., 'train accuracy', 'validation loss', 'test F1
+       score').
+    5. Only print the best or final value for each metric for each dataset
+    6. DO NOT CREATE ANY PLOTS
+    
+    Important code structure requirements:
+
+    - Do NOT put any execution code inside `if __name__ == "__main__":`
+    - All code should be at the global scope or in functions that are called
+      from the global scope
+    - The script should execute immediately when run, without requiring any
+      special entry point
+    
+    ## Example data loading code
+    
+    ```python
+    import numpy as np
+    import os
+    experiment_data = np.load(os.path.join(os.getcwd(), 'working', 'experiment_data.npy'), allow_pickle=True).item()
+    ```
+    
+    ## Response format
+    
+    Your response should be a brief outline/sketch of your proposed solution in
+    natural language (3-5 sentences), followed by a single markdown code block
+    (using the format ```python ... ```) which implements the full code for the
+    metric parsing. There should be no additional headings or text in your
+    response. Just natural language text followed by a newline and then the
+    markdown code block. Your generated code should be complete and executable.
     """
 
 
-def build_prompt_check_completion(
-    *,
-    metric: float | str | None,
-    has_code: bool,
-    returncode: int | None,
-    stderr: str | None,
-    goals: str,
-) -> str:
-    metric_str = str(metric) if metric is not None else "N/A"
-    err = (stderr or "None")[:1000]
+def build_prompt_parse_metrics(stdout: str) -> str:
     return f"""
-    Evaluate if the current stage is complete.
-    
-    ## Evidence
-    
-    - Best metric: {metric_str}
-    - Has working code: {has_code}
-    - Return code: {returncode}
-    - Error output: {err}
-    
-    ## Requirements for completion
-    
-    - {goals}
-    
-    Determine if these requirements are met.
+    ## Introduction
+
+    Parse the metrics from the execution output. You only need the final or best
+    value of each metric for each dataset.
+
+    ## Execution Output
+
+    ```
+    {stdout}
+    ```
     """
