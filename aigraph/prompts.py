@@ -1,5 +1,4 @@
 
-
 import json
 from aigraph.utils import ROOT_DIR, Task, Metric
 
@@ -540,4 +539,81 @@ def build_prompt_evaluate_tuning_stage(datasets: str) -> str:
     3. No major instabilities or issues in the plots
     
     Provide a detailed evaluation of completion status.
+    """
+
+
+def build_prompt_generate_plotting_code(code: str, data: str) -> str:
+    return f"""
+    ## AVAILABLE DATA: 
+
+    Experiment Data: {data}
+
+    ## REQUIREMENTS: 
+
+    The code should start with:
+
+    ```python
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import os
+    working_dir = os.path.join(os.getcwd(), 'working')
+    ```
+
+    - Create standard visualizations of experiment results
+    - Save all plots to working_dir
+    - Include training/validation curves if available
+    - ONLY plot data that exists in experiment_data.npy - DO NOT make up or
+      simulate any values
+    - Use basic matplotlib without custom styles
+    - Each plot should be in a separate try-except block
+    - Always close figures after saving
+    - Always include a title for each plot, and be sure to use clear
+      subtitles—such as 'Left: Ground Truth, Right: Generated Samples'—while
+      also specifying the type of dataset being used.
+    - Make sure to use descriptive names for figures when saving e.g. always
+      include the dataset name and the type of plot in the name
+    - When there are many similar figures to plot (e.g. generated samples at
+      each epoch), make sure to plot only at a suitable interval of epochs so
+      that you only plot at most 5 figures.
+    
+    Use the following experiment code to infer the data to plot: 
+    
+    ```python
+    {code}
+    ```
+
+    Example to extract data from experiment_data: 
+    
+    ```python
+    experiment_data['dataset_name_1']['metrics']['train']
+    ```
+    
+    Example data loading and plot saving code: 
+
+    ```python
+    try:
+        experiment_data = np.load(os.path.join(working_dir, 'experiment_data.npy'), allow_pickle=True).item()
+    except Exception as e:
+        print(f'Error loading experiment data: {{e}}')
+
+    try:
+        # First plot
+        plt.figure()
+        # ... plotting code ...
+        plt.savefig('working_dir/[plot_name_1].png')
+        plt.close()
+    except Exception as e:
+        print(f"Error creating plot1: {{e}}")
+        plt.close()  # Always close figure even if error occurs
+
+    try:
+        # Second plot
+        plt.figure()
+        # ... plotting code ...
+        plt.savefig('working_dir/[plot_name_2].png')
+        plt.close()
+    except Exception as e:
+        print(f"Error creating plot2: {{e}}")
+        plt.close()
+    ```
     """
