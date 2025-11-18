@@ -28,6 +28,11 @@ class Task(BaseModel):
     ]
 
 
+class Metric(BaseModel):
+    name: str
+    maximize: bool
+    description: str
+
 @dataclass
 class RunCodeResult:
     stdout: str
