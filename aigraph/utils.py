@@ -50,6 +50,11 @@ class Hyperparam(BaseModel):
     description: str
 
 
+class Ablation(BaseModel):
+    name: str
+    description: str
+
+
 @dataclass
 class RunCodeResult:
     stdout: str
