@@ -1,7 +1,7 @@
 import os
 import random
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: F401
 import torch
 from datasets import Dataset, load_dataset  # type: ignore[import-untyped]
 from huggingface_hub import login
@@ -445,10 +445,3 @@ print(
     "common:",
     sum(common_cos) / len(common_cos),
 )
-
-# --- Step 7: Plot safely ---
-plt.boxplot([rare_cos, common_cos])
-plt.xticks([1, 2], ["Rare", "Common"])
-plt.title("Embedding Retention Cosine")
-plt.savefig("embedding_retention.png")
-print("✅ Done; plot saved as embedding_retention.png")

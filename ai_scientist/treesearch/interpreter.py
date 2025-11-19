@@ -77,15 +77,27 @@ def _run_uv(
         env[key] = value
     cmd_display = " ".join(["uv", *args])
     logger.debug(f"Running uv command: {cmd_display} (cwd={cwd})")
-    proc = subprocess.run(
-        args=["uv", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        env=env,
-        cwd=str(cwd),
-    )
+    try:
+        proc = subprocess.run(
+            args=["uv", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            env=env,
+            cwd=str(cwd),
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.error(
+            "uv command failed: %s (cwd=%s, returncode=%d)\nstdout:\n%s\nstderr:\n%s",
+            cmd_display,
+            cwd,
+            exc.returncode,
+            exc.stdout,
+            exc.stderr,
+        )
+        raise
+
     logger.debug(
         "uv command completed: %s (stdout_len=%d, stderr_len=%d)",
         cmd_display,

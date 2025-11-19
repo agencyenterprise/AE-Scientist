@@ -56,14 +56,14 @@ def apply_log_level(*, level_name: str) -> None:
         fm_logger = logging.getLogger("matplotlib.font_manager")
         fm_logger.setLevel(logging.WARNING)
         fm_logger.propagate = False
-        # Suppress OpenAI client/httpx/httpcore verbose logs
-        for noisy in [
+        # Suppress OpenAI client/httpx/httpcore and remote IO verbose logs
+        noisy_loggers = [
+            "matplotlib",
             "openai",
             "openai._base_client",
             "openai._client",
             "httpx",
             "httpcore",
-            # Suppress remote IO/debug noise
             "urllib3",
             "urllib3.connectionpool",
             "fsspec",
@@ -71,9 +71,14 @@ def apply_log_level(*, level_name: str) -> None:
             "s3fs",
             "datasets",
             "huggingface_hub",
-        ]:
-            lgr = logging.getLogger(noisy)
-            lgr.setLevel(logging.WARNING)
+        ]
+        for name in noisy_loggers:
+            lgr = logging.getLogger(name)
+            # Completely silence debug/info chatter while still allowing critical errors
+            if name.startswith("urllib3"):
+                lgr.setLevel(logging.ERROR)
+            else:
+                lgr.setLevel(logging.WARNING)
             lgr.propagate = False
     except Exception:
         pass
