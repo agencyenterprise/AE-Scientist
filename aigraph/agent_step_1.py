@@ -71,7 +71,6 @@ async def node_define_metrics(state: State, runtime: Runtime[Context]) -> State:
         metrics: list[utils.Metric]
 
     prompt = prompts.build_prompt_define_metrics(state.task)
-
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
     state.metrics = response.metrics
@@ -81,7 +80,7 @@ async def node_define_metrics(state: State, runtime: Runtime[Context]) -> State:
 
 
 async def node_code_experiment(state: State, runtime: Runtime[Context]) -> State:
-    logger.info("Starting node_plan_and_code")
+    logger.info("Starting node_code_experiment")
 
     class Schema(BaseModel):
         plan: str
@@ -120,12 +119,12 @@ async def node_code_experiment(state: State, runtime: Runtime[Context]) -> State
     state.experiment_deps = response.dependencies
     state.experiment_retry_count += 1
 
-    logger.info("node_plan_and_code completed")
+    logger.info("node_code_experiment completed")
     return state
 
 
 async def node_exec_experiment(state: State, runtime: Runtime[Context]) -> State:
-    logger.info("Starting node_execute")
+    logger.info("Starting node_exec_experiment")
 
     response = await utils.exec_code(
         state.cwd,
@@ -138,14 +137,15 @@ async def node_exec_experiment(state: State, runtime: Runtime[Context]) -> State
     state.experiment_returncode = response.returncode
     state.experiment_filename = response.filename
 
-    logger.info("node_execute completed")
+    logger.info("node_exec_experiment completed")
     return state
 
 
 async def node_should_retry_code_from_experiment(
     state: State, runtime: Runtime[Context]
 ) -> Literal["code_experiment", "parse_experiment_output"]:
-    logger.info("Starting node_should_retry_code_experiment")
+    logger.info("Starting node_should_retry_code_from_experiment")
+
     if state.experiment_returncode == 0:
         return "parse_experiment_output"
     return "code_experiment"
@@ -180,6 +180,7 @@ async def node_should_retry_code_from_output(
     state: State, runtime: Runtime[Context]
 ) -> Literal["code_experiment", "code_metrics_parser"]:
     logger.info("Starting node_should_retry_code_from_output")
+
     if state.parse_returncode is not None and state.parse_returncode > 0:
         return "code_experiment"
     return "code_metrics_parser"
@@ -224,7 +225,7 @@ async def node_exec_metrics_parser(state: State, runtime: Runtime[Context]) -> S
 
 
 async def node_parse_metrics_output(state: State, runtime: Runtime[Context]) -> State:
-    logger.info("Starting node_code_metrics_parser")
+    logger.info("Starting node_parse_metrics_output")
 
     class Schema(BaseModel):
         valid_metrics_received: bool
@@ -237,7 +238,7 @@ async def node_parse_metrics_output(state: State, runtime: Runtime[Context]) -> 
     state.parse_valid_metrics_received = response.valid_metrics_received
     state.parse_metric_names = response.metric_names
 
-    logger.info("node_code_metrics_parser completed")
+    logger.info("node_parse_metrics_output completed")
     return state
 
 
