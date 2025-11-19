@@ -8,8 +8,8 @@
             "name": "Launch Stage 1 Only",
             "type": "debugpy",
             "request": "launch",
-            "program": "launch_stage1_only.py",
-            "args": ["bfts_config.yaml"],
+            "program": "t.py",
+            "args": [],
             "envFile": "${workspaceFolder}/.env",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}"
