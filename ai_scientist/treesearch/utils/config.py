@@ -29,6 +29,16 @@ logger = logging.getLogger("ai-scientist")
 logger.setLevel(_LEVEL)
 
 
+class _SuppressPngDebugFilter(logging.Filter):
+    """Filter out noisy Pillow PNG STREAM debug logs while keeping real errors."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        # Match by filename to be robust to different logger names
+        if record.filename == "PngImagePlugin.py" and record.levelno < logging.WARNING:
+            return False
+        return True
+
+
 def apply_log_level(*, level_name: str) -> None:
     """Apply logging level and formatter globally.
 
@@ -46,6 +56,8 @@ def apply_log_level(*, level_name: str) -> None:
         try:
             handler.setLevel(level)
             handler.setFormatter(log_format)
+            # Always attach filter to hide extremely noisy Pillow PNG STREAM debug logs
+            handler.addFilter(_SuppressPngDebugFilter())
         except Exception:
             # Be resilient to odd handlers in some environments
             pass
