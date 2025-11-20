@@ -164,61 +164,55 @@ pnpm install
 To run the complete BFTS experiment workflow including all stages, plot aggregation, paper writeup, and review:
 
 ```bash
-python launch_scientist_bfts.py <config_file> \
-  --model_agg_plots <model_name> \
-  --model_writeup <model_name> \
-  --model_citation <model_name> \
-  --model_review <model_name>
+python launch_scientist_bfts.py <config_file>
 ```
 
-**Required Arguments:**
+**Required Argument:**
 - `<config_file>`: Path to the YAML configuration file (e.g., `bfts_config.yaml`)
-- `--model_agg_plots`: Model to use for plot aggregation (e.g., `gpt-5`)
-- `--model_writeup`: Model to use for paper writeup (e.g., `gpt-5`) - required unless `--skip_writeup` is set
-- `--model_citation`: Model to use for citation gathering (e.g., `gpt-5`) - required unless `--skip_writeup` is set
-- `--model_review`: Model to use for paper review (e.g., `gpt-5`) - required unless `--skip_review` or `--skip_writeup` is set
 
-**Optional Arguments:**
-- `--writeup-type`: Type of writeup to generate (`normal` for 8-page or `icbinb` for 4-page, default: `icbinb`)
-- `--writeup-retries`: Number of writeup attempts to try (default: `3`)
-- `--num_cite_rounds`: Number of citation rounds to perform (default: `20`)
-- `--skip_writeup`: Skip the writeup process (also skips review)
-- `--skip_review`: Skip the review process (writeup must still run)
-- `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); will execute only the next missing stage for that run, or skip stages entirely if summaries exist, then perform aggregation/writeup per flags.
+**Review Configuration:**
+- Define the review model and temperature directly in your YAML config:
+  ```
+  review:
+    model: gpt-5
+    temperature: 1.0
+  ```
+- If the `review` section is missing or incomplete, the review stage is skipped even when `--skip_review` is not set.
+
+**Writeup Configuration:**
+- Configure all writeup and aggregation settings inside the `writeup` section of your YAML config. Example:
+  ```
+  writeup:
+    model: gpt-5
+    plot_model: gpt-5
+    citation_model: gpt-5
+    temperature: 0.8
+    writeup_type: normal
+    writeup_retries: 3
+    num_cite_rounds: 5
+  ```
+- `model`: LLM for drafting the paper.
+- `plot_model`: LLM used for plot aggregation.
+- `citation_model`: LLM used for citation gathering (falls back to `model` when omitted).
+- `temperature`: Sampling temperature shared across citation, drafting, and reflection steps.
+- `writeup_type`: `normal` for 8-page or `icbinb` for 4-page writeups.
+- `writeup_retries`: Maximum number of writeup attempts.
+- `num_cite_rounds`: Maximum number of citation gathering rounds.
+- Remove the `writeup` block entirely to skip writeup and review.
+
+**Optional Argument:**
+- `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); the launcher runs only the next missing stage for that run, or skips stages entirely if summaries exist, then performs aggregation/writeup per config.
 
 **Example - Full Pipeline:**
 ```bash
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
-  --model_agg_plots gpt-5 \
-  --model_writeup gpt-5 \
-  --model_citation gpt-5 \
-  --model_review gpt-5
-```
-
-**Example - Skip Writeup (Experiments Only):**
-```bash
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml --skip_writeup --model_agg_plots gpt-5
-```
-
-**Example - Skip Review (Experiments + Writeup):**
-```bash
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
-  --skip_review \
-  --model_agg_plots gpt-5 \
-  --model_writeup gpt-5 \
-  --model_citation gpt-5
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml
 ```
 
 **Example - Resume From Specific Run:**
 ```bash
 # Resume run "4-run" (or pass just 4). If stage 2/3/4 are missing, the launcher will run the next missing stage.
 # If all summaries exist under logs/4-run, it will skip stages and perform aggregation/writeup only.
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
-  --resume 1 \
-  --model_agg_plots gpt-5 \
-  --model_writeup gpt-5 \
-  --model_citation gpt-5 \
-  --model_review gpt-5
+python launch_scientist_bfts.py bfts_config_gpt-5.yaml --resume 1
 ```
 
 **What the Full Pipeline Does:**
@@ -231,7 +225,7 @@ python launch_scientist_bfts.py bfts_config_gpt-5.yaml \
 3. **Aggregates plots** across runs using the specified model
 4. **Generates paper writeup** (normal or ICBINB format) using the specified model
 5. **Gathers citations** using the specified citation model
-6. **Performs paper review** (text and images/captions/references) using the specified review model
+6. **Performs paper review** (text and images/captions/references) using the model defined in the config's `review` section (when present)
 
 **Output:**
 - Experiment logs: under the `log_dir` specified in your config (e.g., `workspaces/logs/<run_id>/`)

@@ -23,6 +23,15 @@ report:
 writeup:
   model: claude-haiku-4-5
   plot_model: claude-haiku-4-5
+  citation_model: claude-haiku-4-5
+  temperature: 1.0
+  writeup_type: normal
+  writeup_retries: 3
+  num_cite_rounds: 5
+
+review:
+  model: claude-haiku-4-5
+  temperature: 1.0
 
 experiment:
   num_syn_datasets: 1

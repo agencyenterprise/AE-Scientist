@@ -339,6 +339,7 @@ def get_citation_addition(
     current_round: int,
     total_rounds: int,
     idea_text: str,
+    temperature: float,
 ) -> Tuple[Optional[str], bool]:
     report, citations = context
     msg_history: List[Dict[str, Any]] = []
@@ -438,7 +439,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "No more citations needed" in text:
@@ -484,7 +485,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "Do not add any" in text:
@@ -819,7 +820,8 @@ def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -
 def gather_citations(
     base_folder: str,
     model: str,
-    num_cite_rounds: int = 20,
+    temperature: float,
+    num_cite_rounds: int,
     run_dir_name: Optional[str] = None,
 ) -> Optional[str]:
     """
@@ -875,12 +877,13 @@ def gather_citations(
             try:
                 context_for_citation = (filtered_summaries_str, citations_text)
                 addition, done = get_citation_addition(
-                    client,
-                    client_model,
-                    context_for_citation,
-                    round_idx,
-                    num_cite_rounds,
-                    idea_text,
+                    client=client,
+                    model=client_model,
+                    context=context_for_citation,
+                    current_round=round_idx,
+                    total_rounds=num_cite_rounds,
+                    idea_text=idea_text,
+                    temperature=temperature,
                 )
 
                 if done:
@@ -934,6 +937,7 @@ def gather_citations(
 def perform_writeup(
     base_folder: str,
     model: str,
+    temperature: float,
     citations_text: Optional[str] = None,
     no_writing: bool = False,
     num_cite_rounds: int = 20,
@@ -1034,6 +1038,7 @@ def perform_writeup(
                     model=model,
                     num_cite_rounds=num_cite_rounds,
                     run_dir_name=run_dir_name,
+                    temperature=temperature,
                 )
                 if citations_text is None:
                     logger.warning("Warning: Citation gathering failed")
@@ -1096,7 +1101,7 @@ def perform_writeup(
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
             )
         except Exception as e:
             logger.exception(f"ERROR: Exception calling {big_client_model}: {e}")
@@ -1198,7 +1203,7 @@ Ensure proper citation usage:
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history[-1:],
             )
 
@@ -1263,7 +1268,7 @@ If you believe you are done with reflection, simply say: "I am done"."""
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history[-1:],
             )
 
@@ -1314,7 +1319,7 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             client=big_client,
             model=big_client_model,
             system_message=big_model_system_message,
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history[-1:],
         )
 
@@ -1390,6 +1395,12 @@ if __name__ == "__main__":
         default=4,
         help="Target page limit for the main paper (excluding references).",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling temperature for all writeup LLM calls.",
+    )
     args = parser.parse_args()
 
     try:
@@ -1400,6 +1411,7 @@ if __name__ == "__main__":
             model=args.model,
             n_writeup_reflections=args.writeup_reflections,
             page_limit=args.page_limit,
+            temperature=args.temperature,
         )
         if not success:
             logger.error("Writeup process did not complete successfully.")
