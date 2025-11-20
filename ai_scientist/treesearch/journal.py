@@ -735,19 +735,31 @@ class Journal:
         if not self.nodes:
             return "No experiments conducted yet."
 
-        # Build cache key from the current set of good nodes and include_code flag
+        # Build cache key from the current sets of good and buggy nodes plus include_code flag.
+        # We only reuse a cached summary if both lists are unchanged.
         good_ids = sorted([n.id for n in self.good_nodes])
-        cache_key = f"include_code={include_code}|good_ids={','.join(good_ids)}"
+        buggy_ids = sorted([n.id for n in self.buggy_nodes])
+        cache_key = (
+            f"include_code={include_code}"
+            f"|good_ids={','.join(good_ids)}"
+            f"|buggy_ids={','.join(buggy_ids)}"
+        )
         cached_summary = self._summary_cache.get(cache_key)
         if cached_summary is not None:
             logger.debug(
-                f"Summary cache HIT: include_code={include_code}, "
-                f"good_nodes_count={len(good_ids)}. Reusing previous summary (no new good nodes)."
+                "Summary cache HIT: "
+                f"include_code={include_code}, "
+                f"good_nodes_count={len(good_ids)}, "
+                f"buggy_nodes_count={len(buggy_ids)}. "
+                "Reusing previous summary (good and buggy sets unchanged)."
             )
             return cached_summary
         logger.debug(
-            f"Summary cache MISS: include_code={include_code}, "
-            f"good_nodes_count={len(good_ids)}. Invoking LLM to generate summary."
+            "Summary cache MISS: "
+            f"include_code={include_code}, "
+            f"good_nodes_count={len(good_ids)}, "
+            f"buggy_nodes_count={len(buggy_ids)}. "
+            "Invoking LLM to generate summary."
         )
 
         prompt = {
@@ -795,8 +807,9 @@ class Journal:
         # Cache and return
         self._summary_cache[cache_key] = summary_text
         logger.debug(
-            f"Summary cached. Key reflects include_code and current good nodes "
-            f"(include_code={include_code}, good_nodes_count={len(good_ids)})."
+            "Summary cached. Key reflects include_code and current good and buggy nodes "
+            f"(include_code={include_code}, good_nodes_count={len(good_ids)}, "
+            f"buggy_nodes_count={len(buggy_ids)})."
         )
         return summary_text
 
