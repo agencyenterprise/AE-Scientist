@@ -8,6 +8,7 @@ import logging
 from pydantic import BaseModel, ConfigDict, Field
 
 ROOT_DIR = Path(__file__).parent
+DATA_DIR = ROOT_DIR / "data"
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ class Hyperparam(BaseModel):
 class Ablation(BaseModel):
     name: str
     description: str
+
+
+class Plot(BaseModel):
+    path: Path
+    analysis: str
 
 
 @dataclass

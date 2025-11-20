@@ -1,6 +1,6 @@
 
 import json
-from aigraph.utils import ROOT_DIR, Task, Metric
+from aigraph.utils import DATA_DIR, Task, Metric
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -31,7 +31,7 @@ def _task_to_prompt(task: Task) -> str:
         code = f'```python\n{task.code}\n```'
         return prompt + f"Code To Use:\n{code}\n"
 
-    example = ROOT_DIR / "example.py"
+    example = DATA_DIR / "example.py"
     if not example.exists():
         return prompt
 
