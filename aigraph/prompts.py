@@ -384,7 +384,7 @@ def build_prompt_propose_hyperparam(code: str, hyperparams: list[str]) -> str:
     """
 
 
-def build_prompt_code_tuning(name: str, description: str, code: str, memory: str = "") -> str:
+def build_prompt_code_tuning(name: str, description: str, code: str) -> str:
     return f"""
     ## Introduction
 
@@ -400,10 +400,6 @@ def build_prompt_code_tuning(name: str, description: str, code: str, memory: str
     ```python
     {code}
     ```
-
-    ## Memory
-
-    {memory}
     
     ## Implementation Guidelines
     
