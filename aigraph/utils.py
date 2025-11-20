@@ -3,10 +3,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Annotated
+import logging
 
 from pydantic import BaseModel, ConfigDict, Field
 
 ROOT_DIR = Path(__file__).parent
+
+logger = logging.getLogger(__name__)
 
 
 class Task(BaseModel):
@@ -84,41 +87,57 @@ def _to_script(code: str, deps: list[str] = []) -> str:
     return script
 
 
-async def exec_code(
-    cwd: str | Path,
-    code: str,
-    deps: list[str] = [],
-) -> RunCodeResult:
-    file = NamedTemporaryFile(mode="wt", suffix=".py", dir=cwd, delete=False)
-
-    script = _to_script(code, deps)
-    file.write(script)
-    file.flush()
+async def exec_code(cwd: str | Path, filename: str, code: str, deps: list[str]) -> RunCodeResult:
+    file = Path(cwd) / filename
+    file = file.absolute()
+    file.write_text(_to_script(code, deps))
 
     proc = await asyncio.create_subprocess_exec(
         "uv",
         "run",
-        file.name,
+        str(file),
         cwd=cwd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
 
-    await proc.wait()
+    async def _read(stream: asyncio.StreamReader | None, prefix: str) -> str:
+        """
+        Utility to read and log the stdout/stderr of a subprocess while it is 
+        executing
+        """
+        if stream is None:
+            return ""
 
-    stdout = await proc.stdout.read() if proc.stdout else b""
-    stderr = await proc.stderr.read() if proc.stderr else b""
+        data = ""
+        while line := await stream.readline():
+            logger.debug(f"{prefix}: {line!r}")
+            data += line.decode()
+
+        return data
+
+    async with asyncio.TaskGroup() as tg:
+        stdout_task = tg.create_task(_read(proc.stdout, "stdout"))
+        stderr_task = tg.create_task(_read(proc.stderr, "stderr"))
+        await proc.wait()
+
+    stdout = await stdout_task
+    stderr = await stderr_task
+
+    logger.debug(f"returncode: {proc.returncode}")
+    logger.debug(f"stdout: {stdout[:96]}")
+    logger.debug(f"stderr: {stderr[:96]}")
 
     # ternary because 0 is a valid return code and falsy... so, using:
     # `returncode = proc.returncode or -1` would be incorrectly mapped to -1
     returncode = proc.returncode if proc.returncode is not None else -1
 
     return RunCodeResult(
-        stdout=stdout.decode(),
-        stderr=stderr.decode(),
+        stdout=stdout,
+        stderr=stderr,
         returncode=returncode,
-        directory=cwd,
-        filename=file.name,
+        directory=str(cwd),
+        filename=str(file),
     )
 
 
