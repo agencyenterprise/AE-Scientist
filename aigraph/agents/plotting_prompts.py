@@ -171,3 +171,26 @@ def build_prompt_plotting_output(task: Task, code: str, stdout: str, stderr: str
     </STDERR>
     """
 
+
+def build_prompt_analyze_plots(task: Task) -> str:
+    return f"""
+    ## Introduction
+
+    You are an AI researcher. You have generated plots from your experiment
+    results. Your task is to analyze these plots to interpret the scientific
+    findings.
+
+    ## Research idea
+
+    <RESEARCH_IDEA>
+    {_task_to_prompt(task)}
+    </RESEARCH_IDEA>
+
+    ## Instructions
+
+    - Analyze the provided plot images.
+    - Describe the trends you observe (e.g., convergence, overfitting,
+      performance comparison).
+    - Relate the findings back to the hypothesis.
+    - Conclude if the hypothesis is supported or rejected.
+    """

@@ -1,15 +1,17 @@
 import asyncio
-import json
 import logging
 import logging.config
 from pathlib import Path
 from pprint import pp
+from typing import Any
 
 from langfuse.langchain import CallbackHandler
-from langgraph.graph.state import RunnableConfig
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.state import CompiledStateGraph, RunnableConfig
+from pydantic import BaseModel
 
 from aigraph import utils
-from aigraph.agents import baseline, plotting, tuning
+from aigraph.agents import ablation, baseline, plotting, tuning
 
 task = utils.Task.model_validate(
     {
@@ -34,44 +36,86 @@ task = utils.Task.model_validate(
     }
 )
 
-async def run_baseline() -> dict:
-    config = RunnableConfig(callbacks=[CallbackHandler()])
-    state = baseline.State(cwd=Path("./tst"), task=task)
-    # context = baseline.Context(model="gpt-4o-mini", temperature=0.0)
-    context = baseline.Context(model="gpt-5-mini", temperature=0.0)
+
+class State(BaseModel):
+    cwd: Path
+    task: utils.Task
+
+    baseline_output: dict[str, Any] | None = None
+    tuning_output: dict[str, Any] | None = None
+    ablation_output: dict[str, Any] | None = None
+    plotting_output: dict[str, Any] | None = None
+
+
+async def node_baseline(state: State) -> State:
+    sub_state = baseline.State(cwd=state.cwd, task=state.task)
+    sub_context = baseline.Context(model="gpt-5-mini", temperature=0.0)
     graph = baseline.build()
-    return await graph.ainvoke(input=state, config=config, context=context)
+    state.baseline_output = await graph.ainvoke(input=sub_state, context=sub_context)
+    return state
 
 
-async def run_tuning(code: str) -> dict:
-    config = RunnableConfig(callbacks=[CallbackHandler()])
-    state = tuning.State(cwd=Path("./tst"), task=task, code=code)
-    # context = tuning.Context(model="gpt-4o-mini", temperature=0.0)
-    context = tuning.Context(model="gpt-5-mini", temperature=0.0)
+async def node_tuning(state: State) -> State:
+    assert state.baseline_output
+    code = state.baseline_output["experiment_code"]
+    
+    sub_state = tuning.State(cwd=state.cwd, task=state.task, code=code)
+    sub_context = tuning.Context(model="gpt-5-mini", temperature=0.0)
+    
     graph = tuning.build()
-    return await graph.ainvoke(input=state, config=config, context=context)
+    state.tuning_output = await graph.ainvoke(input=sub_state, context=sub_context)
+    return state
 
 
-async def run_plotting(code: str) -> dict:
-    config = RunnableConfig(callbacks=[CallbackHandler()])
-    state = plotting.State(cwd=Path("./tst"), task=task, code=code)
-    # context = plotting.Context(model="gpt-4o-mini", temperature=0.0)
-    context = plotting.Context(model="gpt-5-mini", temperature=0.0)
+async def node_ablation(state: State) -> State:
+    assert state.tuning_output
+    code = state.tuning_output["tuning_code"]
+    
+    sub_state = ablation.State(cwd=state.cwd, task=state.task, code=code)
+    sub_context = ablation.Context(model="gpt-5-mini", temperature=0.0)
+    
+    graph = ablation.build()
+    state.ablation_output = await graph.ainvoke(input=sub_state, context=sub_context)
+    return state
+
+
+async def node_plotting(state: State) -> State:
+    assert state.tuning_output
+    code = state.tuning_output["tuning_code"]
+    
+    sub_state = plotting.State(cwd=state.cwd, task=state.task, code=code)
+    sub_context = plotting.Context(model="gpt-5-mini", temperature=0.0)
+    
     graph = plotting.build()
-    return await graph.ainvoke(input=state, config=config, context=context)
+    state.plotting_output = await graph.ainvoke(input=sub_state, context=sub_context)
+    return state
 
 
 async def main() -> None:
-    r_baseline = await run_baseline()
-    pp(r_baseline)
+    builder = StateGraph(State)
+    builder.add_node("baseline", node_baseline)
+    builder.add_node("tuning", node_tuning)
+    builder.add_node("ablation", node_ablation)
+    builder.add_node("plotting", node_plotting)
+    
+    builder.add_edge(START, "baseline")
+    builder.add_edge("baseline", "tuning")
+    builder.add_edge("tuning", "ablation")
+    builder.add_edge("ablation", "plotting")
+    builder.add_edge("plotting", END)
+    
+    graph: CompiledStateGraph[State, None, State, State] = builder.compile() # type: ignore
+    
+    state = State(cwd=Path("./tst"), task=task)
+    result = await graph.ainvoke(input=state)
+    
+    pp(result["baseline_output"])
     print("=" * 80)
-
-    r_tuning = await run_tuning(r_baseline["experiment_code"])
-    pp(r_tuning)
+    pp(result["tuning_output"])
     print("=" * 80)
-
-    r_plotting = await run_plotting(r_tuning["tuning_code"])
-    pp(r_plotting)
+    pp(result["ablation_output"])
+    print("=" * 80)
+    pp(result["plotting_output"])
     print("=" * 80)
 
 

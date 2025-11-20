@@ -185,7 +185,9 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
     }}
     ```
 
-    CRITICAL: Your experiment_data dictionary MUST ALWAYS include these four required keys for each dataset:
+    CRITICAL: Your experiment_data dictionary MUST ALWAYS include these four
+    required keys for each dataset:
+    
     - 'metrics': Dictionary with 'train' and 'val' lists
     - 'losses': Dictionary with 'train' and 'val' lists  
     - 'predictions': List of model predictions
@@ -391,10 +393,10 @@ def build_prompt_baseline_parser_output(code: str, stdout: str, stderr: str) -> 
     return f"""
     ## Introduction
 
-    You are an experienced AI researcher. You have written code to parse and analyze the
-    results of your research experiment. Now you need to evaluate the output of the
-    parser execution. Analyze the execution output, determine if there were any bugs,
-    and provide a summary of the findings.
+    You are an experienced AI researcher. You have written code to parse and
+    analyze the results of your research experiment. Now you need to evaluate
+    the output of the parser execution. Analyze the execution output, determine
+    if there were any bugs, and provide a summary of the findings.
 
     ## Implementation
 
