@@ -67,7 +67,7 @@ class ParallelAgent:
         self.best_stage1_node = best_stage1_node  # to initialize hyperparam tuning (stage 2)
         self.best_stage2_node = best_stage2_node  # to initialize plotting code (stage 3)
         self.best_stage3_node = best_stage3_node  # to initialize ablation stuides (stage 4)
-        self.data_preview = None
+
         # Configure parallelism and optional GPUs
         self.num_workers = cfg.agent.num_workers
         self.num_gpus = get_gpu_count()

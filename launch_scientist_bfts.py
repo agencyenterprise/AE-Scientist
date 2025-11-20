@@ -28,6 +28,7 @@ from typing import Generator
 import yaml
 from omegaconf import OmegaConf
 
+from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.llm import create_client, token_tracker
 from ai_scientist.perform_icbinb_writeup import gather_citations
 from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
@@ -301,17 +302,10 @@ if __name__ == "__main__":
 
     if args.resume is not None:
         try:
-
-            def _normalize_run_name(run_arg: str) -> str:
-                s = run_arg.strip()
-                if s.isdigit():
-                    return f"{s}-run"
-                if s.startswith("run-") and s[4:].isdigit():
-                    return f"{s[4:]}-run"
-                return s
-
             logs_root = Path(base_cfg["log_dir"]).resolve()
-            run_name = _normalize_run_name(args.resume)
+            raw_exp_name = base_cfg["exp_name"]
+            exp_name = str(raw_exp_name) if raw_exp_name else "run"
+            run_name = normalize_run_name(run_arg=args.resume, exp_name=exp_name)
             run_dir = (logs_root / run_name).resolve()
             if not run_dir.exists():
                 raise FileNotFoundError(str(run_dir))

@@ -51,7 +51,6 @@ class MinimalAgent:
         self.gpu_spec = gpu_spec
         self.evaluation_metrics = evaluation_metrics
         self.stage_name = stage_name
-        self.data_preview = None
 
     @property
     def _prompt_environment(self) -> dict[str, str]:
@@ -301,10 +300,6 @@ class MinimalAgent:
         }
         debug_instructions |= self._prompt_impl_guideline
         prompt["Instructions"] = debug_instructions
-
-        if self.cfg.agent.data_preview:
-            prompt["Data Overview"] = self.data_preview
-
         plan, code = self.plan_and_code_query(prompt)
         return Node(plan=plan, code=code, parent=parent_node)
 

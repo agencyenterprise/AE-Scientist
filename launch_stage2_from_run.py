@@ -19,6 +19,7 @@ from typing import Optional
 
 from omegaconf import OmegaConf
 
+from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.events import BaseEvent
 from ai_scientist.treesearch.interpreter import ExecutionResult
@@ -30,15 +31,6 @@ from ai_scientist.treesearch.utils.config import Config, load_task_desc, save_ru
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_run_name(run_arg: str) -> str:
-    s = run_arg.strip()
-    if s.isdigit():
-        return f"{s}-run"
-    if s.startswith("run-") and s[4:].isdigit():
-        return f"{s[4:]}-run"
-    return s
 
 
 def _select_stage1_dir(run_dir: Path) -> Path:
@@ -84,7 +76,7 @@ def _load_stage1_journal(stage1_dir: Path) -> tuple[str, Journal]:
 
 
 def main(run_arg: str) -> None:
-    run_name = _normalize_run_name(run_arg)
+    run_name = normalize_run_name(run_arg=run_arg, exp_name="run")
     logs_root = Path("workspaces") / "logs"
     run_dir = logs_root.resolve() / run_name
     if not run_dir.exists():

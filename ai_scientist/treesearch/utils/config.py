@@ -15,7 +15,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..journal import Journal
-from . import copytree, preproc_data, serialize, tree_export
+from . import serialize, tree_export
 
 shutup.mute_warnings()
 _LEVEL_NAME = os.getenv("AI_SCIENTIST_LOG_LEVEL", "DEBUG").upper()
@@ -150,7 +150,6 @@ class AgentConfig:
     steps: int
     stages: dict[str, int]
     k_fold_validation: int
-    data_preview: bool
 
     code: StageConfig
     feedback: StageConfig
@@ -182,13 +181,9 @@ class WriteupConfig:
 
 @dataclass
 class Config(Hashable):
-    data_dir: Path
     desc_file: Path
     log_dir: Path
     workspace_dir: Path
-
-    preprocess_data: bool
-    copy_data: bool
 
     exp_name: str
     log_level: str
@@ -231,15 +226,6 @@ def prep_cfg(cfg: object) -> Config:
     schema = OmegaConf.structured(Config)
     merged = OmegaConf.merge(schema, cfg)
     cfg_obj = cast(Config, OmegaConf.to_object(merged))
-
-    if cfg_obj.data_dir is None:
-        raise ValueError("`data_dir` must be provided.")
-
-    # Normalize and resolve paths
-    data_dir_path = Path(cfg_obj.data_dir)
-    if str(data_dir_path).startswith("example_tasks/"):
-        data_dir_path = Path(__file__).parent.parent / data_dir_path
-    cfg_obj.data_dir = data_dir_path.resolve()
 
     if cfg_obj.desc_file is not None:
         desc_file_path = Path(cfg_obj.desc_file)
@@ -296,8 +282,7 @@ def prep_agent_workspace(cfg: Config) -> None:
     """Setup the agent's workspace and preprocess data if necessary."""
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
-    cfg.data_dir.mkdir(parents=True, exist_ok=True)
-    copytree(cfg.data_dir, cfg.workspace_dir / "input", use_symlinks=not cfg.copy_data)
+
     # Persist the original idea file alongside inputs for traceability
     try:
         idea_src = Path(cfg.desc_file)
@@ -306,8 +291,6 @@ def prep_agent_workspace(cfg: Config) -> None:
             shutil.copy2(idea_src, idea_dst)
     except Exception as e:
         logger.warning(f"Warning: failed to copy original idea file: {e}")
-    if cfg.preprocess_data:
-        preproc_data(cfg.workspace_dir / "input")
 
 
 def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:

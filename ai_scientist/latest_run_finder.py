@@ -1,12 +1,24 @@
 from pathlib import Path
 
 
-def normalize_run_name(run_arg: str) -> str:
+def normalize_run_name(run_arg: str, exp_name: str) -> str:
     s = run_arg.strip()
+    suffix = f"-{exp_name}"
+
     if s.isdigit():
-        return f"{s}-run"
-    if s.startswith("run-") and s[4:].isdigit():
-        return f"{s[4:]}-run"
+        return f"{s}{suffix}"
+
+    if s.endswith(suffix):
+        prefix = s[: -len(suffix)]
+        if prefix.isdigit():
+            return s
+
+    prefix = f"{exp_name}-"
+    if s.startswith(prefix):
+        tail = s[len(prefix) :]
+        if tail.isdigit():
+            return f"{tail}{suffix}"
+
     return s
 
 

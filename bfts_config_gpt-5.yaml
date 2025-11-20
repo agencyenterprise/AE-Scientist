@@ -1,15 +1,9 @@
 # path to the task data directory
-preprocess_data: False
 log_level: "DEBUG"
 
 desc_file: idea_example.json
 workspace_dir: workspaces
 log_dir: "workspaces/logs"
-data_dir: "workspaces/data"
-
-# whether to copy the data to the workspace directory (otherwise it will be symlinked)
-# copying is recommended to prevent the agent from accidentally modifying the original data
-copy_data: True
 
 exp_name: run # a random experiment name will be generated if not provided
 
@@ -48,8 +42,6 @@ agent:
   k_fold_validation: 1
   multi_seed_eval:
     num_seeds: 1 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
-  # whether to provide the agent with a preview of the data
-  data_preview: False
 
   # LLM settings for coding
   code:

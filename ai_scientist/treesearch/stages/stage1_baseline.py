@@ -56,9 +56,6 @@ class Stage1Baseline(Stage):
         instructions |= agent._prompt_environment
         prompt["Instructions"] = instructions
 
-        if agent.cfg.agent.data_preview:
-            prompt["Data Overview"] = agent.data_preview
-
         logger.debug("MinimalAgent: Getting plan and code")
         plan, code = agent.plan_and_code_query(prompt=prompt)
         logger.debug("MinimalAgent: Draft complete")
