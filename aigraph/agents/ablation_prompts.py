@@ -1,6 +1,6 @@
 
 import json
-from aigraph.utils import ROOT_DIR, Task
+from aigraph.utils import DATA_DIR, Task
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -31,7 +31,7 @@ def _task_to_prompt(task: Task) -> str:
         code = f'```python\n{task.code}\n```'
         return prompt + f"Code To Use:\n{code}\n"
 
-    example = ROOT_DIR / "example.py"
+    example = DATA_DIR / "example.py"
     if not example.exists():
         return prompt
 
@@ -264,10 +264,10 @@ def build_prompt_ablation_parser_output(code: str, stdout: str, stderr: str) -> 
     return f"""
     ## Introduction
 
-    You are an experienced AI researcher. You have written code to parse and analyze the
-    results of your ablation experiment. Now you need to evaluate the output of the
-    parser execution. Analyze the execution output, determine if there were any bugs,
-    and provide a summary of the findings.
+    You are an experienced AI researcher. You have written code to parse and
+    analyze the results of your ablation experiment. Now you need to evaluate
+    the output of the parser execution. Analyze the execution output, determine
+    if there were any bugs, and provide a summary of the findings.
 
     ## Implementation
 

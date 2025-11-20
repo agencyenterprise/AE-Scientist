@@ -1,10 +1,10 @@
 
 import json
-from aigraph.utils import ROOT_DIR, Task
+from aigraph.utils import Task
 
 
 def _task_to_prompt(task: Task) -> str:
-    prompt = f"""
+    return f"""
     You are an ambitious AI researcher who is looking to publish a paper that
     will contribute significantly to the field.
 
@@ -24,21 +24,7 @@ def _task_to_prompt(task: Task) -> str:
 
     Hypothesis:
     {task.short_hypothesis}
-
     """
-
-    if task.code:
-        code = f'```python\n{task.code}\n```'
-        return prompt + f"Code To Use:\n{code}\n"
-
-    example = ROOT_DIR / "example.py"
-    if not example.exists():
-        return prompt
-
-    code = example.read_text()
-    code = f'```python\n{code}\n```'
-    return prompt + f"Code To Use:\n{code}\n"
-
 
 def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
     return f"""
