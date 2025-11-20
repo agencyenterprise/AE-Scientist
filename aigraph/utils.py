@@ -47,12 +47,16 @@ class MetricValue(BaseModel):
 
 
 class Metric(BaseModel):
+    model_config = ConfigDict(frozen=True)  # so it becomes hashable
+
     name: str
     maximize: bool
     description: str
 
 
 class Hyperparam(BaseModel):
+    model_config = ConfigDict(frozen=True)  # so it becomes hashable
+
     name: str
     description: str
 

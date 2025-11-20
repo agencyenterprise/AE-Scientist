@@ -9,7 +9,7 @@ from langfuse.langchain import CallbackHandler
 from langgraph.graph.state import RunnableConfig
 
 from aigraph import utils
-from aigraph.agents import baseline
+from aigraph.agents import baseline, tuning
 
 task = utils.Task.model_validate(
     {
@@ -34,22 +34,32 @@ task = utils.Task.model_validate(
     }
 )
 
-
-async def main() -> None:
+async def run_baseline() -> dict:
     config = RunnableConfig(callbacks=[CallbackHandler()])
     state = baseline.State(cwd=Path("./tst"), task=task)
     # context = baseline.Context(model="gpt-4o-mini", temperature=0.0)
     context = baseline.Context(model="gpt-5-mini", temperature=0.0)
-
     graph = baseline.build()
+    return await graph.ainvoke(input=state, config=config, context=context)
 
-    result = await graph.ainvoke(
-        input=state,
-        config=config,
-        context=context,
-    )
 
-    pp(result)
+async def run_tuning(code: str) -> dict:
+    config = RunnableConfig(callbacks=[CallbackHandler()])
+    state = tuning.State(cwd=Path("./tst"), task=task, code=code)
+    # context = tuning.Context(model="gpt-4o-mini", temperature=0.0)
+    context = tuning.Context(model="gpt-5-mini", temperature=0.0)
+    graph = tuning.build()
+    return await graph.ainvoke(input=state, config=config, context=context)
+
+
+async def main() -> None:
+    r_baseline = await run_baseline()
+    pp(r_baseline)
+
+    print("=" * 80)
+
+    r_tuning = await run_tuning(r_baseline["code"])
+    pp(r_tuning)
 
 
 if __name__ == "__main__":

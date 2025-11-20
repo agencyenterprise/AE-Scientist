@@ -1,7 +1,5 @@
-
 import json
-from typing import Iterable
-from aigraph.utils import ROOT_DIR, Task, Metric
+from aigraph.utils import ROOT_DIR, Task
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -41,53 +39,58 @@ def _task_to_prompt(task: Task) -> str:
     return prompt + f"Code To Use:\n{code}\n"
 
 
-def build_prompt_baseline_metrics(task: Task) -> str:
+def build_prompt_tuning_propose(code: str, hyperparams: list[str]) -> str:
+    attempted = hyperparams or ["Nothing has been tried yet."]
+
     return f"""
-    ## Introduction
+    You are an AI researcher conducting hyperparameter tuning for baseline
+    experiments. Based on the current implementation and previous hyperparameter
+    tuning attempts (if any), propose ONE new hyperparameter tuning idea to see
+    if it improves the performance.
+    
+    You should first check if simply training longer (more epochs) improves the
+    performance. Then try tuning common hyperparameters such as learning rate,
+    batch size, etc. Only propose algorithm-specific and/or model-specific
+    hyperparameters after you have tried the above.
+    
+    ## Code
+    
+    <CODE>
+    ```python
+    {code}
+    ```
+    </CODE>
 
-    You are an AI researcher setting up experiments. Please propose meaningful
-    evaluation metrics that will help analyze the performance and
-    characteristics of solutions for this research task.
+    ## Previous Hyperparam Tuning Attempts
+    
+    <PREVIOUS_HYPERPARAM_TUNING_ATTEMPTS>
+    {"\n".join(f"- {i}" for i in attempted)}
+    </PREVIOUS_HYPERPARAM_TUNING_ATTEMPTS>
+    
+    ## Requirements
+    
+    1. Identify ONE specific hyperparameter to tune
+    2. Ensure the hyperparameter is different from previous attempts
 
-    ## Research idea
-
-    {_task_to_prompt(task)}
-
-    ## Goals
-
-    - Focus on getting basic working implementation
-    - Use a dataset appropriate to the experiment
-    - Aim for basic functional correctness
-    - If you are given "Code To Use", you can directly use it as a starting
-      point.
-
-    ## Instructions
-
-    Propose a single evaluation metric that would be useful for analyzing the
-    performance of solutions for this research task.
-
-    Note: Validation loss will be tracked separately so you don't need to
-    include it in your response.
-
-    Format your response as a list containing:
-
-      - name: The name of the metric
-      - maximize: Whether higher values are better (true/false)
-      - description: A brief explanation of what the metric measures. Your list
-        should contain only one metric.
+    ## Response format
+    
+    - Your response should start with 'HYPERPARAM NAME: <hyperparam name>' on
+      the first line to represent the name of the hyperparameter.
+    - The second line should start with 'DESCRIPTION: <description>', a brief
+      description of what hyperparameter is being tuned and why (3-5 sentences).
     """
 
 
-def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: str) -> str:
-    prompt = f"""
+def build_prompt_tuning_code(task: Task, name: str, description: str, code: str, memory: str) -> str:
+    return f"""
     ## Introduction
 
-    You are an AI researcher who is looking to publish a paper that will
-    contribute significantly to the field. Your first task is to write a python
-    script that implements a solid baseline based on the research idea provided
-    below. From data preparation to model training. Focus on getting a simple
-    but working implementation first, before any sophisticated improvements. We
-    will explore more advanced variations in later stages.
+    You are an experienced AI researcher. You are provided with a previously
+    developed baseline implementation. Your task is to implement hyperparameter
+    tuning for the following idea:
+    
+    Name: {name}
+    Description: {description}
 
     ## Instructions
 
@@ -103,16 +106,13 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
       ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. Do not
       include standard library dependencies. Only third party dependencies.
 
-    ### Baseline experiment guidelines
+    ### Hyperparameter tuning guidelines
 
-    - This first experiment design should be relatively simple, without
-      extensive hyper-parameter optimization.
-    - Take the Memory section into consideration when proposing the design.
-    - Don't suggest to do EDA.
-    - Prioritize using real public datasets (e.g., from HuggingFace) when they
-      suit the task, and only fall back to synthetic data if no suitable dataset
-      is available or synthetic generation is essential to the proposed
-      experiment.
+    - Implement the hyperparameter tuning idea described above.
+    - The code should be a single-file python program that is self-contained and
+      can be executed as-is.
+    - No parts of the code should be skipped, don't terminate the code execution
+      before finishing the script.
 
     ## Implementation guidelines
 
@@ -226,7 +226,7 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
        ```python
        print(f'Epoch {{epoch}}: validation_loss = {{val_loss:.4f}}')
        ```
-    2. Track and update ALL metrics passed below
+    2. Track and update metrics as in the original code.
     3. Update metrics at EACH epoch
     4. Save ALL metrics at the end. You must use the filename `experiment_data.json`:
        ```python
@@ -238,17 +238,15 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
 
     ## Research idea
 
-    <RESEARCH IDEA>
+    <RESEARCH_IDEA>
     {_task_to_prompt(task)}
-    </RESEARCH IDEA>
+    </RESEARCH_IDEA>
 
-    ## Evaluation metrics
-
-    <EVALUATION METRICS>
-    ```json
-    {json.dumps([i.model_dump(mode='json') for i in metrics], indent=2)}
+    ## Original Code
+    
+    ```python
+    {code}
     ```
-    </EVALUATION METRICS>
 
     ## Memory
 
@@ -256,13 +254,12 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
     {memory or 'NA'}
     </MEMORY>
     """
-    return prompt
 
 
-def build_prompt_baseline_code_output(task: Task, code: str, stdout: str, stderr: str) -> str:
+def build_prompt_tuning_code_output(task: Task, code: str, stdout: str, stderr: str) -> str:
     return f"""
     ## Introduction
-
+    
     You are an experienced AI researcher. You have written code for your
     research experiment and now need to evaluate the output of the code
     execution. Analyze the execution output, determine if there were any bugs,
@@ -270,9 +267,9 @@ def build_prompt_baseline_code_output(task: Task, code: str, stdout: str, stderr
 
     ## Research idea
 
-    <RESEARCH IDEA>
+    <RESEARCH_IDEA>
     {_task_to_prompt(task)}
-    </RESEARCH IDEA>
+    </RESEARCH_IDEA>
 
     ## Implementation
 
@@ -300,7 +297,7 @@ def build_prompt_baseline_code_output(task: Task, code: str, stdout: str, stderr
     """
 
 
-def build_prompt_baseline_parser_code(code: str, memory: str = "") -> str:
+def build_prompt_tuning_parser_code(code: str, memory: str = "") -> str:
     return f"""
     ## Introduction
 
@@ -387,7 +384,7 @@ def build_prompt_baseline_parser_code(code: str, memory: str = "") -> str:
     """
 
 
-def build_prompt_baseline_parser_output(code: str, stdout: str, stderr: str) -> str:
+def build_prompt_tuning_parser_output(code: str, stdout: str, stderr: str) -> str:
     return f"""
     ## Introduction
 
@@ -420,4 +417,3 @@ def build_prompt_baseline_parser_output(code: str, stdout: str, stderr: str) -> 
     ```
     </STDERR>
     """
-
