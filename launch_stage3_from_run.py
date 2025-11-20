@@ -174,6 +174,8 @@ def main(run_arg: str) -> None:
     manager.journals[stage3_meta.name] = Journal(
         summary_model=cfg.report.model,
         node_selection_model=cfg.agent.feedback.model,
+        summary_temperature=cfg.report.temp,
+        node_selection_temperature=cfg.agent.feedback.temp,
         event_callback=on_event,
     )
 

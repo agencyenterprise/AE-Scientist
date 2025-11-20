@@ -150,7 +150,7 @@ def get_summarizer_prompt(journal: Journal, stage_name: str) -> tuple[str, str]:
 
 
 def get_stage_summary(
-    journal: Journal, stage_name: str, model: str, client: openai.OpenAI
+    journal: Journal, stage_name: str, model: str, client: openai.OpenAI, temperature: float
 ) -> dict[str, Any] | None:
     sys_msg, prompt = get_summarizer_prompt(journal=journal, stage_name=stage_name)
     response_text, _ = get_response_from_llm(
@@ -158,7 +158,7 @@ def get_stage_summary(
         client=client,
         model=model,
         system_message=sys_msg,
-        temperature=1.0,
+        temperature=temperature,
     )
     summary_json = extract_json_between_markers(response_text)
     return summary_json
@@ -215,6 +215,7 @@ def update_summary(
     cur_summary: dict[str, Any],
     model: str,
     client: openai.OpenAI,
+    temperature: float,
     max_retry: int = 5,
 ) -> dict[str, Any]:
     prompt = stage_aggregate_prompt.format(
@@ -228,7 +229,7 @@ def update_summary(
             client=client,
             model=model,
             system_message="You are an expert machine learning researcher.",
-            temperature=1.0,
+            temperature=temperature,
         )
         summary_json = extract_json_between_markers(response_text)
         assert summary_json
@@ -242,6 +243,7 @@ def update_summary(
                 cur_summary=cur_summary,
                 model=model,
                 client=client,
+                temperature=temperature,
                 max_retry=max_retry - 1,
             )
         else:
@@ -280,7 +282,9 @@ Ensure the JSON is valid and properly formatted, as it will be automatically par
 """
 
 
-def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> None:
+def annotate_history(
+    journal: Journal, model: str, client: openai.OpenAI, temperature: float
+) -> None:
     for node in journal.nodes:
         if node.parent:
             max_retries = 3
@@ -295,7 +299,7 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
                         client=client,
                         model=model,
                         system_message=report_summarizer_sys_msg,
-                        temperature=1.0,
+                        temperature=temperature,
                     )
                     parsed = extract_json_between_markers(response_text)
                     if parsed and "overall_plan" in parsed:
@@ -316,7 +320,7 @@ def annotate_history(journal: Journal, model: str, client: openai.OpenAI) -> Non
 
 
 def overall_summarize(
-    journals: list[tuple[str, Journal]], model: str
+    journals: list[tuple[str, Journal]], model: str, temperature: float
 ) -> tuple[dict[str, Any] | list[dict[str, Any]] | None, ...]:
     client, _ = create_client(model)
 
@@ -324,7 +328,7 @@ def overall_summarize(
         idx: int, stage_tuple: tuple[str, Journal]
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
         stage_name, journal = stage_tuple
-        annotate_history(journal, model=model, client=client)
+        annotate_history(journal, model=model, client=client, temperature=temperature)
         if idx in [1, 2]:
             best_node = journal.get_best_node()
             # get multi-seed results and aggregater node
@@ -376,7 +380,13 @@ def overall_summarize(
                 ablation_summaries.append(node_log)
             return ablation_summaries
         elif idx == 0:
-            summary_json = get_stage_summary(journal, stage_name, model, client)
+            summary_json = get_stage_summary(
+                journal=journal,
+                stage_name=stage_name,
+                model=model,
+                client=client,
+                temperature=temperature,
+            )
             return summary_json
         return None
 

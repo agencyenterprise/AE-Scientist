@@ -136,6 +136,7 @@ def run_aggregator_script(
 def aggregate_plots(
     base_folder: str,
     model: str,
+    temperature: float,
     n_reflections: int = 5,
     run_dir_name: Optional[str] = None,
 ) -> None:
@@ -231,7 +232,7 @@ def aggregate_plots(
             client=client,
             model=model_name,
             system_message=AGGREGATOR_SYSTEM_MSG,
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
     except Exception:
@@ -282,7 +283,7 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
                 client=client,
                 model=model_name,
                 system_message=AGGREGATOR_SYSTEM_MSG,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history,
             )
 
@@ -345,8 +346,19 @@ def main() -> None:
         default=5,
         help="Number of reflection steps to attempt (default: 5).",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        required=True,
+        help="Sampling temperature for the plot aggregation LLM.",
+    )
     args = parser.parse_args()
-    aggregate_plots(base_folder=args.folder, model=args.model, n_reflections=args.reflections)
+    aggregate_plots(
+        base_folder=args.folder,
+        model=args.model,
+        temperature=args.temperature,
+        n_reflections=args.reflections,
+    )
 
 
 if __name__ == "__main__":

@@ -300,6 +300,7 @@ def get_citation_addition(
     current_round: int,
     total_rounds: int,
     idea_text: str,
+    temperature: float,
 ) -> str | None:
     report, citations = context
     msg_history: list[dict[str, str]] = []
@@ -398,7 +399,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "No more citations needed" in text:
@@ -444,7 +445,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "Do not add any" in text:
@@ -607,6 +608,7 @@ with "latex" syntax highlighting, like so:
 def perform_writeup(
     base_folder: str,
     model: str,
+    temperature: float,
     no_writing: bool = False,
     num_cite_rounds: int = 20,
     n_writeup_reflections: int = 3,
@@ -788,12 +790,13 @@ def perform_writeup(
                 context_for_citation = (combined_summaries_str, citations_text)
 
                 addition = get_citation_addition(
-                    client,
-                    client_model,
-                    context_for_citation,
-                    round_idx,
-                    num_cite_rounds,
-                    idea_text,
+                    client=client,
+                    model=client_model,
+                    context=context_for_citation,
+                    current_round=round_idx,
+                    total_rounds=num_cite_rounds,
+                    idea_text=idea_text,
+                    temperature=temperature,
                 )
                 if addition is None:
                     # Mark citation gathering as done in progress cache
@@ -873,7 +876,12 @@ def perform_writeup(
                     "images": [ppath],
                     "caption": "No direct caption",
                 }
-                review_data = generate_vlm_img_review(img_dict, vlm_model, vlm_client)
+                review_data = generate_vlm_img_review(
+                    img=img_dict,
+                    model=vlm_model,
+                    client=vlm_client,
+                    temperature=temperature,
+                )
                 if review_data:
                     desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
@@ -915,7 +923,7 @@ def perform_writeup(
             client=big_client,
             model=big_client_model,
             system_message=big_model_system_message,
-            temperature=1.0,
+            temperature=temperature,
         )
 
         logger.info("\n" + "=" * 80)
@@ -1008,7 +1016,7 @@ If you believe you are done, simply say: "I am done".
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history,
             )
 
@@ -1085,6 +1093,12 @@ if __name__ == "__main__":
         default=8,
         help="Target page limit for the main paper (excluding references, impact statement, etc.)",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling temperature for all writeup LLM calls.",
+    )
     args = parser.parse_args()
 
     try:
@@ -1095,6 +1109,7 @@ if __name__ == "__main__":
             model=args.model,
             n_writeup_reflections=args.writeup_reflections,
             page_limit=args.page_limit,
+            temperature=args.temperature,
         )
         if not success:
             logger.error("Writeup process did not complete successfully.")

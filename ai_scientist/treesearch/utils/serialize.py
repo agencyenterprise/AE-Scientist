@@ -71,6 +71,8 @@ def loads_json(s: str, cls: type[object]) -> object:
         journal = Journal(
             summary_model=str(obj_dict["summary_model"]),
             node_selection_model=str(obj_dict["node_selection_model"]),
+            summary_temperature=float(obj_dict.get("summary_temperature", 1.0)),
+            node_selection_temperature=float(obj_dict.get("node_selection_temperature", 1.0)),
             event_callback=lambda _event: None,
         )
         journal.nodes.extend(id_to_node.values())

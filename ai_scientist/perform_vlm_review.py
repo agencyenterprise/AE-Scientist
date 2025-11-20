@@ -346,7 +346,11 @@ def extract_abstract(text: str) -> str:
 
 
 def generate_vlm_img_cap_ref_review(
-    img: Dict[str, Any], abstract: str, model: str, client: openai.OpenAI
+    img: Dict[str, Any],
+    abstract: str,
+    model: str,
+    client: openai.OpenAI,
+    temperature: float,
 ) -> Dict[str, Any] | None:
     prompt = img_cap_ref_review_prompt.format(
         abstract=abstract,
@@ -359,14 +363,14 @@ def generate_vlm_img_cap_ref_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
-        temperature=1.0,
+        temperature=temperature,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json
 
 
 def generate_vlm_img_review(
-    img: Dict[str, Any], model: str, client: openai.OpenAI
+    img: Dict[str, Any], model: str, client: openai.OpenAI, temperature: float
 ) -> Dict[str, Any] | None:
     prompt = img_review_prompt
     content, _ = get_response_from_vlm(
@@ -375,14 +379,17 @@ def generate_vlm_img_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
-        temperature=1.0,
+        temperature=temperature,
     )
     img_review_json = extract_json_between_markers_vlm(content)
     return img_review_json
 
 
 def perform_imgs_cap_ref_review(
-    client: openai.OpenAI, client_model: str, pdf_path: str
+    client: openai.OpenAI,
+    client_model: str,
+    pdf_path: str,
+    temperature: float,
 ) -> Dict[str, Any]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
@@ -395,13 +402,22 @@ def perform_imgs_cap_ref_review(
     img_reviews: Dict[str, Any] = {}
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
-        review = generate_vlm_img_cap_ref_review(img, abstract, client_model, client)
+        review = generate_vlm_img_cap_ref_review(
+            img=img,
+            abstract=abstract,
+            model=client_model,
+            client=client,
+            temperature=temperature,
+        )
         img_reviews[img["img_name"]] = review
     return img_reviews
 
 
 def detect_duplicate_figures(
-    client: openai.OpenAI, client_model: str, pdf_path: str
+    client: openai.OpenAI,
+    client_model: str,
+    pdf_path: str,
+    temperature: float,
 ) -> str | Dict[str, str]:
     load_paper(pdf_path)
     img_folder_path = os.path.join(
@@ -432,7 +448,7 @@ def detect_duplicate_figures(
             client=client,
             model=client_model,
             system_message=system_message,
-            temperature=1.0,
+            temperature=temperature,
         )
         return content
     except Exception as e:
@@ -446,6 +462,7 @@ def generate_vlm_img_selection_review(
     model: str,
     client: openai.OpenAI,
     reflection_page_info: str,
+    temperature: float,
 ) -> Dict[str, Any] | None:
     prompt = img_cap_selection_prompt.format(
         abstract=abstract,
@@ -459,14 +476,18 @@ def generate_vlm_img_selection_review(
         client=client,
         model=model,
         system_message=reviewer_system_prompt_base,
-        temperature=1.0,
+        temperature=temperature,
     )
     img_cap_ref_review_json = extract_json_between_markers_vlm(content)
     return img_cap_ref_review_json
 
 
 def perform_imgs_cap_ref_review_selection(
-    client: openai.OpenAI, client_model: str, pdf_path: str, reflection_page_info: str
+    client: openai.OpenAI,
+    client_model: str,
+    pdf_path: str,
+    reflection_page_info: str,
+    temperature: float,
 ) -> Dict[str, Any]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
@@ -480,7 +501,12 @@ def perform_imgs_cap_ref_review_selection(
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
         review = generate_vlm_img_selection_review(
-            img, abstract, client_model, client, reflection_page_info
+            img=img,
+            abstract=abstract,
+            model=client_model,
+            client=client,
+            reflection_page_info=reflection_page_info,
+            temperature=temperature,
         )
         img_reviews[img["img_name"]] = review
     return img_reviews

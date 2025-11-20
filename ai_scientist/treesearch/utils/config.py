@@ -177,6 +177,17 @@ class ExperimentConfig:
 class WriteupConfig:
     model: str
     plot_model: str
+    temperature: float = 1.0
+    citation_model: Optional[str] = None
+    writeup_type: str = "normal"
+    writeup_retries: int = 3
+    num_cite_rounds: int = 5
+
+
+@dataclass
+class ReviewConfig:
+    model: str
+    temperature: float
 
 
 @dataclass
@@ -193,7 +204,8 @@ class Config(Hashable):
     report: StageConfig
     agent: AgentConfig
     experiment: ExperimentConfig
-    writeup: Optional[WriteupConfig]
+    writeup: Optional[WriteupConfig] = None
+    review: Optional[ReviewConfig] = None
 
 
 def _get_next_logindex(dir: Path) -> int:

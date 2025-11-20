@@ -339,6 +339,7 @@ def get_citation_addition(
     current_round: int,
     total_rounds: int,
     idea_text: str,
+    temperature: float,
 ) -> Tuple[Optional[str], bool]:
     report, citations = context
     msg_history: List[Dict[str, Any]] = []
@@ -438,7 +439,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "No more citations needed" in text:
@@ -484,7 +485,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             client=client,
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history,
         )
         if "Do not add any" in text:
@@ -819,7 +820,8 @@ def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -
 def gather_citations(
     base_folder: str,
     model: str,
-    num_cite_rounds: int = 20,
+    temperature: float,
+    num_cite_rounds: int,
     run_dir_name: Optional[str] = None,
 ) -> Optional[str]:
     """
@@ -875,12 +877,13 @@ def gather_citations(
             try:
                 context_for_citation = (filtered_summaries_str, citations_text)
                 addition, done = get_citation_addition(
-                    client,
-                    client_model,
-                    context_for_citation,
-                    round_idx,
-                    num_cite_rounds,
-                    idea_text,
+                    client=client,
+                    model=client_model,
+                    context=context_for_citation,
+                    current_round=round_idx,
+                    total_rounds=num_cite_rounds,
+                    idea_text=idea_text,
+                    temperature=temperature,
                 )
 
                 if done:
@@ -934,6 +937,7 @@ def gather_citations(
 def perform_writeup(
     base_folder: str,
     model: str,
+    temperature: float,
     citations_text: Optional[str] = None,
     no_writing: bool = False,
     num_cite_rounds: int = 20,
@@ -1034,6 +1038,7 @@ def perform_writeup(
                     model=model,
                     num_cite_rounds=num_cite_rounds,
                     run_dir_name=run_dir_name,
+                    temperature=temperature,
                 )
                 if citations_text is None:
                     logger.warning("Warning: Citation gathering failed")
@@ -1061,7 +1066,12 @@ def perform_writeup(
                     "images": [ppath],
                     "caption": "No direct caption",
                 }
-                review_data = generate_vlm_img_review(img_dict, vlm_model, vlm_client)
+                review_data = generate_vlm_img_review(
+                    img=img_dict,
+                    model=vlm_model,
+                    client=vlm_client,
+                    temperature=temperature,
+                )
                 if review_data:
                     desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
@@ -1096,7 +1106,7 @@ def perform_writeup(
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
             )
         except Exception as e:
             logger.exception(f"ERROR: Exception calling {big_client_model}: {e}")
@@ -1144,11 +1154,19 @@ def perform_writeup(
             logger.info(f"Compiling PDF for reflection {i + 1}...")
             compile_latex(latex_folder, reflection_pdf)
 
-            review_img_cap_ref = perform_imgs_cap_ref_review(vlm_client, vlm_model, reflection_pdf)
+            review_img_cap_ref = perform_imgs_cap_ref_review(
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
+            )
 
             # Detect duplicate figures between main text and appendix
             analysis_duplicate_figs = detect_duplicate_figures(
-                vlm_client, vlm_model, reflection_pdf
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
             )
             logger.debug(analysis_duplicate_figs)
 
@@ -1198,7 +1216,7 @@ Ensure proper citation usage:
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history[-1:],
             )
 
@@ -1235,7 +1253,11 @@ Ensure proper citation usage:
             # Get new reflection_page_info
             reflection_page_info = get_reflection_page_info(reflection_pdf, page_limit)
             review_img_selection = perform_imgs_cap_ref_review_selection(
-                vlm_client, vlm_model, reflection_pdf, reflection_page_info
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                reflection_page_info=reflection_page_info,
+                temperature=temperature,
             )
             img_reflection_prompt = f"""Now let's reflect on
 The following figures are currently used in the paper: {sorted(used_figs)}
@@ -1263,7 +1285,7 @@ If you believe you are done with reflection, simply say: "I am done"."""
                 client=big_client,
                 model=big_client_model,
                 system_message=big_model_system_message,
-                temperature=1.0,
+                temperature=temperature,
                 msg_history=msg_history[-1:],
             )
 
@@ -1314,7 +1336,7 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             client=big_client,
             model=big_client_model,
             system_message=big_model_system_message,
-            temperature=1.0,
+            temperature=temperature,
             msg_history=msg_history[-1:],
         )
 
@@ -1390,6 +1412,12 @@ if __name__ == "__main__":
         default=4,
         help="Target page limit for the main paper (excluding references).",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling temperature for all writeup LLM calls.",
+    )
     args = parser.parse_args()
 
     try:
@@ -1400,6 +1428,7 @@ if __name__ == "__main__":
             model=args.model,
             n_writeup_reflections=args.writeup_reflections,
             page_limit=args.page_limit,
+            temperature=args.temperature,
         )
         if not success:
             logger.error("Writeup process did not complete successfully.")
