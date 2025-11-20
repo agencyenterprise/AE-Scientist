@@ -132,6 +132,7 @@ def generate_temp_free_idea(
     client: openai.OpenAI | anthropic.Anthropic,
     model: str,
     workshop_description: str,
+    temperature: float,
     max_num_generations: int = 20,
     num_reflections: int = 5,
     reload_ideas: bool = True,
@@ -177,7 +178,7 @@ def generate_temp_free_idea(
                     client=client,
                     model=model,
                     system_message=system_prompt,
-                    temperature=1.0,
+                    temperature=temperature,
                     msg_history=msg_history,
                 )
 
@@ -296,6 +297,12 @@ if __name__ == "__main__":
         default=5,
         help="Number of reflection rounds per proposal.",
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        required=True,
+        help="Sampling temperature for the idea-generation LLM.",
+    )
     args = parser.parse_args()
 
     # Create the LLM client
@@ -322,6 +329,7 @@ if __name__ == "__main__":
         client=client,
         model=client_model,
         workshop_description=workshop_description,
+        temperature=args.temperature,
         max_num_generations=args.max_num_generations,
         num_reflections=args.num_reflections,
     )

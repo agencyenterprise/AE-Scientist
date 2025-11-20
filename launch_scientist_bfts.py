@@ -364,6 +364,8 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
         manager.journals[next_meta.name] = Journal(
             summary_model=cfg_obj.report.model,
             node_selection_model=cfg_obj.agent.feedback.model,
+            summary_temperature=cfg_obj.report.temp,
+            node_selection_temperature=cfg_obj.agent.feedback.temp,
             event_callback=on_event,
         )
 
@@ -450,6 +452,7 @@ def run_plot_aggregation(
         aggregate_plots(
             base_folder=reports_base,
             model=writeup_cfg.plot_model,
+            temperature=writeup_cfg.temperature,
             run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         )
         return True
@@ -557,7 +560,12 @@ def run_review_stage(
         num_reviews_ensemble=3,
         num_reflections=2,
     )
-    review_img_cap_ref = perform_imgs_cap_ref_review(client, client_model, pdf_path)
+    review_img_cap_ref = perform_imgs_cap_ref_review(
+        client=client,
+        client_model=client_model,
+        pdf_path=pdf_path,
+        temperature=review_cfg.temperature,
+    )
     review_out_dir = (
         osp.join(reports_base, "logs", run_dir_path.name)
         if run_dir_path is not None

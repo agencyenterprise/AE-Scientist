@@ -1066,7 +1066,12 @@ def perform_writeup(
                     "images": [ppath],
                     "caption": "No direct caption",
                 }
-                review_data = generate_vlm_img_review(img_dict, vlm_model, vlm_client)
+                review_data = generate_vlm_img_review(
+                    img=img_dict,
+                    model=vlm_model,
+                    client=vlm_client,
+                    temperature=temperature,
+                )
                 if review_data:
                     desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
@@ -1149,11 +1154,19 @@ def perform_writeup(
             logger.info(f"Compiling PDF for reflection {i + 1}...")
             compile_latex(latex_folder, reflection_pdf)
 
-            review_img_cap_ref = perform_imgs_cap_ref_review(vlm_client, vlm_model, reflection_pdf)
+            review_img_cap_ref = perform_imgs_cap_ref_review(
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
+            )
 
             # Detect duplicate figures between main text and appendix
             analysis_duplicate_figs = detect_duplicate_figures(
-                vlm_client, vlm_model, reflection_pdf
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
             )
             logger.debug(analysis_duplicate_figs)
 
@@ -1240,7 +1253,11 @@ Ensure proper citation usage:
             # Get new reflection_page_info
             reflection_page_info = get_reflection_page_info(reflection_pdf, page_limit)
             review_img_selection = perform_imgs_cap_ref_review_selection(
-                vlm_client, vlm_model, reflection_pdf, reflection_page_info
+                client=vlm_client,
+                client_model=vlm_model,
+                pdf_path=reflection_pdf,
+                reflection_page_info=reflection_page_info,
+                temperature=temperature,
             )
             img_reflection_prompt = f"""Now let's reflect on
 The following figures are currently used in the paper: {sorted(used_figs)}

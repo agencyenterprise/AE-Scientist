@@ -154,6 +154,8 @@ Your research idea:\n\n
         self.journals[initial_stage.name] = Journal(
             summary_model=self.cfg.report.model,
             node_selection_model=self.cfg.agent.feedback.model,
+            summary_temperature=self.cfg.report.temp,
+            node_selection_temperature=self.cfg.agent.feedback.temp,
             event_callback=self.event_callback,
         )
 
@@ -663,6 +665,8 @@ Your research idea:\n\n
                     self.journals[next_substage.name] = Journal(
                         summary_model=self.cfg.report.model,
                         node_selection_model=self.cfg.agent.feedback.model,
+                        summary_temperature=self.cfg.report.temp,
+                        node_selection_temperature=self.cfg.agent.feedback.temp,
                         event_callback=self.event_callback,
                     )
                     return False, next_substage
@@ -693,6 +697,8 @@ Your research idea:\n\n
             self.journals[next_main_stage.name] = Journal(
                 summary_model=self.cfg.report.model,
                 node_selection_model=self.cfg.agent.feedback.model,
+                summary_temperature=self.cfg.report.temp,
+                node_selection_temperature=self.cfg.agent.feedback.temp,
                 event_callback=self.event_callback,
             )
             self.current_stage = next_main_stage
