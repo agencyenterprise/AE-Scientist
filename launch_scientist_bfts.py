@@ -62,10 +62,16 @@ logger = logging.getLogger(__name__)
 
 
 def save_token_tracker(idea_dir: str) -> None:
-    with open(osp.join(idea_dir, "token_tracker.json"), "w") as f:
-        json.dump(token_tracker.get_summary(), f)
-    with open(osp.join(idea_dir, "token_tracker_interactions.json"), "w") as f:
-        json.dump(token_tracker.get_interactions(), f)
+    try:
+        with open(osp.join(idea_dir, "token_tracker.json"), "w") as f:
+            json.dump(token_tracker.get_summary(), f)
+    except Exception:
+        traceback.print_exc()
+    try:
+        with open(osp.join(idea_dir, "token_tracker_interactions.json"), "w") as f:
+            json.dump(token_tracker.get_interactions(), f)
+    except Exception:
+        traceback.print_exc()
 
 
 def parse_arguments() -> argparse.Namespace:

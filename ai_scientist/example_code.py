@@ -2,12 +2,12 @@ import os
 import random
 
 import matplotlib.pyplot as plt  # noqa: F401
-import torch  # type: ignore[import-not-found]
+import torch
 from datasets import Dataset, load_dataset  # type: ignore[import-untyped]
 from huggingface_hub import login
 from PIL import Image  # noqa: F401
-from torch.utils.data import DataLoader  # type: ignore[import-not-found]
-from torchvision import transforms  # type: ignore[import-not-found]  # noqa: F401
+from torch.utils.data import DataLoader  # noqa: F401
+from torchvision import transforms  # type: ignore[import-untyped] # noqa: F401
 from tqdm import tqdm
 from transformers import (  # type: ignore[import-untyped]
     AutoModelForCausalLM,

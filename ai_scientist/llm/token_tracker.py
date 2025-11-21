@@ -55,8 +55,15 @@ class TokenTracker:
     def get_interactions(self, model: Optional[str] = None) -> Dict[str, List[Dict]]:
         """Get all interactions, optionally filtered by model."""
         if model:
-            return {model: self.interactions[model]}
-        return dict(self.interactions)
+            return {
+                model: [
+                    self._json_safe_interaction(interaction=i) for i in self.interactions[model]
+                ]
+            }
+        return {
+            m: [self._json_safe_interaction(interaction=i) for i in interactions]
+            for m, interactions in self.interactions.items()
+        }
 
     def reset(self) -> None:
         """Reset all token counts and interactions."""
@@ -72,6 +79,17 @@ class TokenTracker:
         for model, tokens in self.token_counts.items():
             summary[model] = {k: v for k, v in tokens.items()}
         return summary
+
+    def _json_safe_interaction(self, *, interaction: Dict[str, Any]) -> Dict[str, Any]:
+        safe: Dict[str, Any] = dict(interaction)
+        ts = safe.get("timestamp")
+        if isinstance(ts, datetime):
+            safe["timestamp"] = ts.isoformat()
+        elif ts is not None:
+            safe["timestamp"] = str(ts)
+        else:
+            safe["timestamp"] = None
+        return safe
 
 
 # Global token tracker instance
