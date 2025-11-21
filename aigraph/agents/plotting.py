@@ -161,6 +161,11 @@ async def node_plotting_parse_plotting_output(
     return state
 
 
+class AnalyzeSinglePlotState(BaseModel):
+    task: utils.Task
+    image: Path
+
+
 async def node_plotting_prepare_analysis(state: State, runtime: Runtime[Context]) -> list[Send]:
     logger.info("Starting node_plotting_prepare_analysis")
 
@@ -170,14 +175,10 @@ async def node_plotting_prepare_analysis(state: State, runtime: Runtime[Context]
 
     sends: list[Send] = []
     for png in pngs:
-        sends.append(Send("node_plotting_analyze_single_plot", {"image": png}))
+        st = AnalyzeSinglePlotState(task=state.task, image=png)
+        sends.append(Send("node_plotting_analyze_single_plot", st))
 
     return sends
-
-
-class AnalyzeSinglePlotState(BaseModel):
-    task: utils.Task
-    image: Path
 
 
 async def node_plotting_analyze_single_plot(state: AnalyzeSinglePlotState, runtime: Runtime[Context]) -> dict:

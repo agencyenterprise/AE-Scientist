@@ -42,7 +42,7 @@ class Args(BaseSettings):
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
 
-    verbose: Annotated[CliImplicitFlag[bool], Field(validation_alias=AliasChoices('verbose', 'v'))]
+    verbose: Annotated[CliImplicitFlag[bool], Field(validation_alias=AliasChoices('verbose', 'v'))] = False
 
     async def cli_cmd(self) -> None:
         if self.verbose:
