@@ -1,8 +1,7 @@
-from typing import Any
 
 from aigraph import utils
 
-def _task_to_prompt(task: Task) -> str:
+def _task_to_prompt(task: utils.Task) -> str:
     return f"""
     You are an ambitious AI researcher who is looking to publish a paper that
     will contribute significantly to the field.
