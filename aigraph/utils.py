@@ -147,6 +147,7 @@ async def exec(*args: str, cwd: Path) -> Exec:
 async def exec_code(cwd: str | Path, filename: str, code: str, deps: list[str]) -> RunCodeResult:
     file = Path(cwd) / filename
     file = file.absolute()
+    file.touch(exist_ok=True)
     file.write_text(_to_script(code, deps))
 
     result = await exec('uv', 'run', str(file), cwd=Path(cwd))
