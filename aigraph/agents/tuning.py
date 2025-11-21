@@ -90,6 +90,8 @@ async def node_tuning_propose_hyperparam(state: State, runtime: Runtime[Context]
     state.last_hyperparam = hp
     state.hyperparams = set([hp])
 
+    logger.debug(f"hyperparam_name: {hp.name}")
+    logger.debug(f"hyperparam_description: {hp.description[:32]!r}")
     logger.info("Finished node_tuning_propose_hyperparam")
     return state
 
@@ -288,6 +290,8 @@ async def node_tuning_parse_metrics_output(state: State, runtime: Runtime[Contex
     state.parse_valid_metrics_received = response.valid_metrics_received
     state.parse_metric_names = response.metric_names
 
+    logger.debug(f"parse_valid_metrics_received: {state.parse_valid_metrics_received}")
+    logger.debug(f"parse_metric_names: {[m.name for m in state.parse_metric_names]}")
     logger.info("Finished node_tuning_parse_metrics_output")
     return state
 
