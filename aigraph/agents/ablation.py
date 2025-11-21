@@ -287,7 +287,6 @@ async def node_ablation_exec_metrics_parser(state: State, runtime: Runtime[Conte
 
 async def node_ablation_parse_metrics_output(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_ablation_parse_metrics_output")
-    assert state.parser_stdout, "parser_stdout is required"
 
     class Schema(BaseModel):
         is_bug: bool
