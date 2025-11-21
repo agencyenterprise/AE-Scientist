@@ -81,6 +81,7 @@ async def node_baseline_define_metrics(state: State, runtime: Runtime[Context]) 
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
     state.metrics = set(response.metrics)
 
+    logger.debug(f"metrics: {[m.name for m in state.metrics]}")
     logger.info("Finished node_baseline_define_metrics")
     return state
 
@@ -287,6 +288,8 @@ async def node_baseline_parse_metrics_output(state: State, runtime: Runtime[Cont
     state.parse_is_bug = response.is_bug
     state.parse_summary = response.summary
 
+    logger.debug(f"parse_is_bug: {state.parse_is_bug}")
+    logger.debug(f"parse_summary: {state.parse_summary[:32]!r}")
     logger.info("Finished node_baseline_parse_metrics_output")
     return state
 

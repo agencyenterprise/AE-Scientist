@@ -96,6 +96,8 @@ async def node_ablation_propose_ablation(state: State, runtime: Runtime[Context]
     state.last_ablation = ablation
     state.ablations = [ablation]
 
+    logger.debug(f"ablation_name: {ablation.name}")
+    logger.debug(f"ablation_description: {ablation.description[:32]!r}")
     logger.info("Finished node_ablation_propose_ablation")
     return state
 
