@@ -6,6 +6,43 @@ Graph implementation based on [Sakana][1]
 
 Scientific research automation using LangGraph agents.
 
+## Development
+
+```bash
+uv sync
+```
+
+## Running Scripts
+
+Execute individual agents:
+
+- `uv run -m aigraph.scripts.run_baseline` - Define metrics, run baseline
+- `uv run -m aigraph.scripts.run_tuning` - Hyperparameter optimization
+- `uv run -m aigraph.scripts.run_ablation` - Ablation studies
+- `uv run -m aigraph.scripts.run_plotting` - Generate plots and analysis
+- `uv run -m aigraph.scripts.run_writeup` - Generate LaTeX document
+- `uv run -m aigraph.scripts.run_all` - Execute complete pipeline
+
+## Complete Pipeline (run_all)
+
+Sequential execution with data flow between graphs:
+
+```mermaid
+graph TD
+    START([START]) --> Baseline[Baseline Graph]
+    START --> |cwd, task| Baseline
+    Baseline --> |experiment_code| Tuning[Tuning Graph]
+    START --> |cwd, task| Tuning
+    Tuning --> |tuning_code| Ablation[Ablation Graph]
+    START --> |cwd, task| Ablation
+    Ablation --> |ablation_code| Plotting[Plotting Graph]
+    START --> |cwd, task| Plotting
+    Plotting --> |plots| Writeup[Writeup Graph]
+    Ablation --> |ablation_code, parser_code| Writeup
+    START --> |cwd, task| Writeup
+    Writeup --> END([END])
+```
+
 ## Agent Architectures
 
 ### 1. Baseline Agent
