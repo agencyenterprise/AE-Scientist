@@ -1,5 +1,3 @@
-# AE-Scientist
-
 A collaborative platform that transforms LLM conversations into structured research ideas and automated AI-driven scientific experiments.
 
 ## Project Overview
