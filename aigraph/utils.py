@@ -2,7 +2,6 @@ import asyncio
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Annotated, NamedTuple
 import logging
 
@@ -23,15 +22,37 @@ class Task(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    name: Annotated[str, Field(alias="Name")]
-    title: Annotated[str, Field(alias="Title")]
-    short_hypothesis: Annotated[str, Field(alias="Short Hypothesis")]
-    related_work: Annotated[str, Field(alias="Related Work")]
-    abstract: Annotated[str, Field(alias="Abstract")]
-    code: Annotated[str | None, Field(default=None, alias="Code")]
-    experiments: Annotated[str | list[str], Field(alias="Experiments")]
+    name: Annotated[
+        str,
+        Field(alias="Name"),
+    ]
+    title: Annotated[
+        str,
+        Field(alias="Title"),
+    ]
+    short_hypothesis: Annotated[
+        str,
+        Field(alias="Short Hypothesis"),
+    ]
+    related_work: Annotated[
+        str,
+        Field(alias="Related Work"),
+    ]
+    abstract: Annotated[
+        str,
+        Field(alias="Abstract"),
+    ]
+    code: Annotated[
+        str | None,
+        Field(default=None, alias="Code"),
+    ]
+    experiments: Annotated[
+        list[str],
+        Field(alias="Experiments", default_factory=list),
+    ]
     risk_factors_and_limitations: Annotated[
-        str | list[str], Field(alias="Risk Factors and Limitations")
+        list[str],
+        Field(alias="Risk Factors and Limitations", default_factory=list),
     ]
 
 
@@ -146,13 +167,15 @@ async def exec(*args: str, cwd: Path) -> Exec:
     return Exec(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-async def exec_code(cwd: str | Path, filename: str, code: str, deps: list[str]) -> RunCodeResult:
+async def exec_code(
+    cwd: str | Path, filename: str, code: str, deps: list[str]
+) -> RunCodeResult:
     file = Path(cwd) / filename
     file = file.absolute()
     file.touch(exist_ok=True)
     file.write_text(_to_script(code, deps))
 
-    result = await exec('uv', 'run', str(file), cwd=Path(cwd))
+    result = await exec("uv", "run", str(file), cwd=Path(cwd))
 
     return RunCodeResult(
         stdout=result.stdout,
@@ -164,19 +187,19 @@ async def exec_code(cwd: str | Path, filename: str, code: str, deps: list[str]) 
 
 
 async def compile(cwd: Path, file: Path) -> Exec:
-    first = await exec('pdflatex', '-interaction=nonstopmode', file.name, cwd=cwd)
+    first = await exec("pdflatex", "-interaction=nonstopmode", file.name, cwd=cwd)
     if first.returncode != 0:
         return first
 
-    second = await exec('bibtex', file.stem, cwd=cwd)
+    second = await exec("bibtex", file.stem, cwd=cwd)
     if second.returncode != 0:
         return second
 
-    third = await exec('pdflatex', '-interaction=nonstopmode', file.name, cwd=cwd)
+    third = await exec("pdflatex", "-interaction=nonstopmode", file.name, cwd=cwd)
     if third.returncode != 0:
         return third
 
-    fourth = await exec('pdflatex', '-interaction=nonstopmode', file.name, cwd=cwd)
+    fourth = await exec("pdflatex", "-interaction=nonstopmode", file.name, cwd=cwd)
     if fourth.returncode != 0:
         return fourth
 

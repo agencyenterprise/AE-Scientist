@@ -14,6 +14,9 @@ def _task_to_prompt(task: Task) -> str:
 
     Your research idea:
 
+    Name:
+    {task.name}
+
     Title:
     {task.title}
 
@@ -22,6 +25,15 @@ def _task_to_prompt(task: Task) -> str:
 
     Hypothesis:
     {task.short_hypothesis}
+
+    Related Work:
+    {task.related_work}
+
+    Experiments:
+    {'\n'.join(f"- {exp}" for exp in task.experiments)}
+
+    Risk Factors and Limitations:
+    {'\n'.join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
 
     """
 
