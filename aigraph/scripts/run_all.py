@@ -223,8 +223,9 @@ class Args(BaseSettings):
         if self.verbose:
             log.init()
         print('thread_id:', self.thread_id)
-        
-        config = RunnableConfig(callbacks=[CallbackHandler()], thread_id=self.thread_id) # type: ignore
+
+        configurable = {"thread_id": self.thread_id}
+        config = RunnableConfig(callbacks=[CallbackHandler()], configurable=configurable)
         state = State(cwd=self.cwd, task=task)
         context = Context(model=self.model, temperature=self.temperature)
 
