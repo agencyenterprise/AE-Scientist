@@ -135,13 +135,12 @@ async def node_baseline_code_experiment(state: State, runtime: Runtime[Context])
 
 async def node_baseline_exec_experiment(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_baseline_exec_experiment")
-    assert state.experiment_code, "experiment_code is required"
 
     response = await utils.exec_code(
         state.cwd,
         'baseline.py',
-        state.experiment_code,
-        state.experiment_deps,
+        state.experiment_code or "NA",
+        state.experiment_deps or [],
     )
 
     state.experiment_stdout = response.stdout
@@ -201,7 +200,6 @@ async def node_baseline_should_retry_code_from_output(
 
 async def node_baseline_code_metrics_parser(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_baseline_code_metrics_parser")
-    assert state.experiment_code, "experiment_code is required"
 
     class Schema(BaseModel):
         code: str
@@ -225,7 +223,7 @@ async def node_baseline_code_metrics_parser(state: State, runtime: Runtime[Conte
         memory += f"```\n{state.parse_stderr or 'NA'}\n```\n\n"
 
     prompt = prompts.build_prompt_baseline_parser_code(
-        state.experiment_code,
+        state.experiment_code or "NA",
         memory=memory,
     )
 
@@ -247,13 +245,12 @@ async def node_baseline_code_metrics_parser(state: State, runtime: Runtime[Conte
 
 async def node_baseline_exec_metrics_parser(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_baseline_exec_metrics_parser")
-    assert state.parse_code, "parse_code is required"
 
     response = await utils.exec_code(
         state.cwd,
         'baseline_parser.py',
-        state.parse_code,
-        state.parse_deps,
+        state.parse_code or "NA",
+        state.parse_deps or [],
     )
 
     state.parse_stdout = response.stdout

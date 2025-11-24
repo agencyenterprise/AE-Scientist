@@ -273,16 +273,15 @@ async def node_tuning_exec_metrics_parser(state: State, runtime: Runtime[Context
 
 async def node_tuning_parse_metrics_output(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_tuning_parse_metrics_output")
-    assert state.parser_stdout, "parser_stdout is required"
 
     class Schema(BaseModel):
         valid_metrics_received: bool
         metric_names: list[utils.MetricValue]
 
     prompt = prompts.build_prompt_tuning_parser_output(
-        state.parser_code or "",
-        state.parser_stdout or "",
-        state.parser_stderr or "",
+        state.parser_code or "NA",
+        state.parser_stdout or "NA",
+        state.parser_stderr or "NA",
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)

@@ -103,13 +103,12 @@ async def node_plotting_code_plotting(state: State, runtime: Runtime[Context]) -
 
 async def node_plotting_exec_plotting(state: State, runtime: Runtime[Context]) -> State:
     logger.info("Starting node_plotting_exec_plotting")
-    assert state.plotting_code, "plotting_code is required"
 
     response = await utils.exec_code(
         state.cwd,
         "plotting.py",
-        state.plotting_code,
-        state.plotting_deps,
+        state.plotting_code or "NA",
+        state.plotting_deps or [],
     )
 
     state.plotting_stdout = response.stdout
