@@ -12,6 +12,52 @@ Scientific research automation using LangGraph agents.
 uv sync
 ```
 
+### LangGraph Core Concepts
+
+- **Context**: Passes runtime dependencies (database connections)
+- **State**: Holds graph data relevant to execution
+- **Config**: Configures LangChain/LangGraph (e.g., `thread_id`)
+- **Checkpointer**: Persists state at each super-step
+
+**Use Cases**:
+- Human-in-the-loop: Pause for intervention at nodes
+- Memory: Retain conversation history across sessions
+- Time travel: Revert to previous execution states
+- Fault tolerance: Resume from last checkpoint
+
+**Example**:
+
+```python
+from langgraph.graph import StateGraph
+from langgraph.checkpoint.memory import MemorySaver
+
+# Define state
+class State(TypedDict):
+    messages: list[str]
+
+# Node with context access
+def process(state: State, context):
+    db = context["db"]  # Access runtime dependency
+    # Use db connection here
+    return {"messages": state["messages"] + ["done"]}
+
+# Build graph
+graph = StateGraph(State)
+graph.add_node("process", process)
+graph.set_entry_point("process")
+graph.set_finish_point("process")
+
+# Compile with checkpointer
+app = graph.compile(checkpointer=MemorySaver())
+
+# Invoke with config and context
+result = app.invoke(
+    {"messages": ["start"]},
+    config={"configurable": {"thread_id": "1"}},
+    context={"db": db_connection}
+)
+```
+
 ## Running Scripts
 
 Execute individual agents:
