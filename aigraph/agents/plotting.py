@@ -2,7 +2,7 @@ import base64
 import logging
 import operator
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langgraph.errors import GraphRecursionError
@@ -153,29 +153,21 @@ async def node_plotting_parse_plotting_output(
     return state
 
 
-async def node_plotting_should_retry_from_output(
-    state: State, runtime: Runtime[Context]
-) -> Literal["node_plotting_code_plotting", "node_plotting_prepare_analysis"]:
-    logger.info("Starting node_plotting_should_retry_from_output")
-    
-    if state.plotting_is_bug is True:
-        logger.info("Going to `node_plotting_code_plotting`")
-        return "node_plotting_code_plotting"
-    
-    logger.info("Going to `node_plotting_prepare_analysis`")
-    return "node_plotting_prepare_analysis"
-
-
 class StateSinglePlot(BaseModel):
     task: utils.Task
     image: Path
 
 
-async def node_plotting_prepare_analysis(
+async def node_plotting_should_retry_from_output(
     state: State, runtime: Runtime[Context]
-) -> list[Send]:
-    logger.info("Starting node_plotting_prepare_analysis")
+) -> Literal["node_plotting_code_plotting"] | list[Send]:
+    logger.info("Starting node_plotting_should_retry_from_output")
 
+    if state.plotting_is_bug is True:
+        logger.info("Going to `node_plotting_code_plotting`")
+        return "node_plotting_code_plotting"
+
+    logger.info("Preparing analysis sends")
     pngs = sorted(list(state.cwd.glob("*.png")))
     for png in pngs:
         logger.debug(f"Found PNG file: {png}")
@@ -244,7 +236,6 @@ def build() -> CompiledStateGraph[State, Context]:
     builder.add_node(
         "node_plotting_parse_plotting_output", node_plotting_parse_plotting_output
     )
-    builder.add_node("node_plotting_prepare_analysis", node_plotting_prepare_analysis)
     builder.add_node(
         "node_plotting_analyze_single_plot", node_plotting_analyze_single_plot
     )
@@ -258,12 +249,8 @@ def build() -> CompiledStateGraph[State, Context]:
     builder.add_conditional_edges(
         "node_plotting_parse_plotting_output",
         node_plotting_should_retry_from_output,
-    )
-    builder.add_conditional_edges(
-        "node_plotting_prepare_analysis",
-        node_plotting_prepare_analysis,
-        ["node_plotting_analyze_single_plot"],
+        ["node_plotting_code_plotting", "node_plotting_analyze_single_plot"],
     )
     builder.add_edge("node_plotting_analyze_single_plot", END)
 
-    return builder.compile(name="graph_plotting", checkpointer=True) # type: ignore
+    return builder.compile(name="graph_plotting", checkpointer=True)  # type: ignore
