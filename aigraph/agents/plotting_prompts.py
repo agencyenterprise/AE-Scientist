@@ -70,8 +70,9 @@ def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
     - code: A python script in plain python. DO NOT USE FENCES. EG:
       \\`\\`\\`python ... \\`\\`\\`
     - dependencies: A list of dependencies required for the code to run. EG:
-      ["matplotlib", "seaborn", "numpy", "pandas"]. Do not include standard
-      library dependencies.
+      ["matplotlib", "seaborn", "numpy", "pandas"]. NEVER include Python
+      standard library dependencies (e.g., json, os, sys, pathlib). ALWAYS only
+      include third-party packages.
 
     ### Coding Guidelines
 

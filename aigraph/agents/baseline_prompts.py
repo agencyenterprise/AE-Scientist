@@ -100,8 +100,9 @@ def build_prompt_baseline_code(task: Task, metrics: Iterable[Metric], memory: st
     - code: A python script in plain python. DO NOT USE FENCES. EG:
       \\`\\`\\`python ... \\`\\`\\`
     - dependencies: A list of dependencies required for the code to run. EG:
-      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. Do not
-      include standard library dependencies. Only third party dependencies.
+      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. NEVER
+      include Python standard library dependencies (e.g., json, os, sys, pathlib).
+      ALWAYS only include third-party packages.
 
     ### Baseline experiment guidelines
 
@@ -336,8 +337,9 @@ def build_prompt_baseline_parser_code(code: str, memory: str = "") -> str:
     - code: A python script in plain python. DO NOT USE FENCES. EG:
       \\`\\`\\`python ... \\`\\`\\`
     - dependencies: A list of dependencies required for the code to run. EG:
-      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. Do not
-      include standard library dependencies. Only third party dependencies.
+      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. NEVER
+      include Python standard library dependencies (e.g., json, os, sys, pathlib).
+      ALWAYS only include third-party packages.
 
     ## Instructions
 

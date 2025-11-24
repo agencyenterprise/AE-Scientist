@@ -106,8 +106,9 @@ def build_prompt_code_ablation(name: str, description: str, code: str, memory: s
     - code: A python script in plain python. DO NOT USE FENCES. EG:
       \\`\\`\\`python ... \\`\\`\\`
     - dependencies: A list of dependencies required for the code to run. EG:
-      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. Do not
-      include standard library dependencies. Only third party dependencies.
+      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. NEVER
+      include Python standard library dependencies (e.g., json, os, sys, pathlib).
+      ALWAYS only include third-party packages.
 
     ### Ablation study guidelines
 
@@ -244,12 +245,16 @@ def build_prompt_ablation_parser_code(code: str, memory: str = "") -> str:
     
     ## Response format
     
-    Your response should be a brief outline/sketch of your proposed solution in
-    natural language (3-5 sentences), followed by a single markdown code block
-    (using the format ```python ... ```) which implements the full code for the
-    metric parsing. There should be no additional headings or text in your
-    response. Just natural language text followed by a newline and then the
-    markdown code block. Your generated code should be complete and executable.
+    Your response should use structured json outputs in the following format:
+
+    - plan: A brief outline/sketch of your proposed solution in natural language
+      (7-10 sentences)
+    - code: A python script in plain python. DO NOT USE FENCES. EG:
+      \\`\\`\\`python ... \\`\\`\\`
+    - dependencies: A list of dependencies required for the code to run. EG:
+      ["torch", "torchvision", "numpy", "pandas", "scikit-learn"]. NEVER
+      include Python standard library dependencies (e.g., json, os, sys, pathlib).
+      ALWAYS only include third-party packages.
 
     ## Memory
 
