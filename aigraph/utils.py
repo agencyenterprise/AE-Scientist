@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Annotated, NamedTuple
@@ -109,6 +110,7 @@ async def exec(*args: str, cwd: Path) -> Exec:
     proc = await asyncio.create_subprocess_exec(
         *args,
         cwd=cwd,
+        env=os.environ.copy() | {"TQDM_DISABLE": "1"},
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
