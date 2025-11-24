@@ -9,7 +9,7 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
-from langgraph.types import Send
+from langgraph.types import Checkpointer, Send
 from pydantic import BaseModel
 
 from aigraph import utils
@@ -227,7 +227,7 @@ async def node_plotting_analyze_single_plot(
     return {"plots": set([plot])}
 
 
-def build() -> CompiledStateGraph[State, Context]:
+def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Context]:
     builder = StateGraph(State, Context)
 
     # Add nodes
@@ -253,4 +253,4 @@ def build() -> CompiledStateGraph[State, Context]:
     )
     builder.add_edge("node_plotting_analyze_single_plot", END)
 
-    return builder.compile(name="graph_plotting", checkpointer=True)  # type: ignore
+    return builder.compile(name="graph_plotting", checkpointer=checkpointer)  # type: ignore

@@ -1,9 +1,11 @@
 import json
+import uuid
 from pathlib import Path
-from pprint import pp
 from typing import Annotated
 
+import aiosqlite
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langfuse.langchain import CallbackHandler
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, CliApp, CliImplicitFlag, CliPositionalArg
@@ -37,6 +39,8 @@ task = utils.Task.model_validate(
 
 class Args(BaseSettings):
     cwd: CliPositionalArg[Path]
+    thread_id: Annotated[str, Field(default_factory=lambda: str(uuid.uuid4()))]
+    checkpoint_id: str | None = None
 
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
@@ -46,14 +50,22 @@ class Args(BaseSettings):
     async def cli_cmd(self) -> None:
         if self.verbose:
             log.init()
+        print('thread_id:', self.thread_id)
+        if self.checkpoint_id:
+            print('checkpoint_id:', self.checkpoint_id)
 
-        config = RunnableConfig(callbacks=[CallbackHandler()])
+        configurable = {"thread_id": self.thread_id}
+        if self.checkpoint_id:
+            configurable["checkpoint_id"] = self.checkpoint_id
+        config = RunnableConfig(callbacks=[CallbackHandler()], configurable=configurable)
         state = baseline.State(cwd=self.cwd, task=task)
         context = baseline.Context(model=self.model, temperature=self.temperature)
 
-        graph = baseline.build()
-        result = await graph.ainvoke(input=state, context=context, config=config)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        async with aiosqlite.connect("checkpoints.db") as conn:
+            checkpointer = AsyncSqliteSaver(conn=conn)
+            graph = baseline.build(checkpointer=checkpointer)
+            result = await graph.ainvoke(input=state, context=context, config=config)
+            print(json.dumps(result, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
