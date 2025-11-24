@@ -72,7 +72,7 @@ async def node_baseline(state: State, runtime: Runtime[Context]) -> State:
         temperature=runtime.context.temperature,
     )
 
-    graph = baseline.build()
+    graph = baseline.build(checkpointer=True)
     result = await graph.ainvoke(
         input=baseline_state,
         context=baseline_context,
@@ -97,7 +97,7 @@ async def node_tuning(state: State, runtime: Runtime[Context]) -> State:
         temperature=runtime.context.temperature,
     )
 
-    graph = tuning.build()
+    graph = tuning.build(checkpointer=True)
     result = await graph.ainvoke(
         input=tuning_state,
         context=tuning_context,
@@ -122,7 +122,7 @@ async def node_ablation(state: State, runtime: Runtime[Context]) -> State:
         temperature=runtime.context.temperature,
     )
 
-    graph = ablation.build()
+    graph = ablation.build(checkpointer=True)
     result = await graph.ainvoke(
         input=ablation_state,
         context=ablation_context,
@@ -147,7 +147,7 @@ async def node_plotting(state: State, runtime: Runtime[Context]) -> State:
         temperature=runtime.context.temperature,
     )
 
-    graph = plotting.build()
+    graph = plotting.build(checkpointer=True)
     result = await graph.ainvoke(
         input=plotting_state,
         context=plotting_context,
@@ -175,7 +175,7 @@ async def node_writeup(state: State, runtime: Runtime[Context]) -> State:
         temperature=runtime.context.temperature,
     )
 
-    graph = writeup.build()
+    graph = writeup.build(checkpointer=True)
     result = await graph.ainvoke(
         input=writeup_state,
         context=writeup_context,
@@ -211,6 +211,7 @@ def build(conn: aiosqlite.Connection) -> CompiledStateGraph[State, Context, Stat
 class Args(BaseSettings):
     cwd: CliPositionalArg[Path]
     thread_id: Annotated[str, Field(default_factory=lambda: str(uuid.uuid4()))]
+    checkpoint_id: str | None = None
 
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
@@ -223,8 +224,12 @@ class Args(BaseSettings):
         if self.verbose:
             log.init()
         print('thread_id:', self.thread_id)
+        if self.checkpoint_id:
+            print('checkpoint_id:', self.checkpoint_id)
 
         configurable = {"thread_id": self.thread_id}
+        if self.checkpoint_id:
+            configurable["checkpoint_id"] = self.checkpoint_id
         config = RunnableConfig(callbacks=[CallbackHandler()], configurable=configurable)
         state = State(cwd=self.cwd, task=task)
         context = Context(model=self.model, temperature=self.temperature)

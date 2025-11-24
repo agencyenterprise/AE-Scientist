@@ -8,6 +8,7 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import Checkpointer
 from pydantic import BaseModel
 
 from aigraph import utils
@@ -323,7 +324,7 @@ async def node_ablation_should_retry_parser_from_output(
     return '__end__'
 
 
-def build() -> CompiledStateGraph[State, Context, State, State]:
+def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Context, State, State]:
     """Build the Stage 4 ablation studies graph."""
     builder = StateGraph(state_schema=State, context_schema=Context)
 
@@ -352,4 +353,4 @@ def build() -> CompiledStateGraph[State, Context, State, State]:
         node_ablation_should_retry_parser_from_output,
     )
 
-    return builder.compile(name="graph_ablation", checkpointer=True) # type: ignore
+    return builder.compile(name="graph_ablation", checkpointer=checkpointer) # type: ignore

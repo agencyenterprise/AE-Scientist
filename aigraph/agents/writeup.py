@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import Checkpointer
 from pydantic import BaseModel
 
 from aigraph import utils
@@ -172,7 +173,7 @@ async def node_should_retry_compile(
     return "__end__"
 
 
-def build() -> CompiledStateGraph[State, Context, State, State]:
+def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Context, State, State]:
     builder = StateGraph(State, Context)
 
     builder.add_node("node_writeup_setup_writeup", node_writeup_setup_writeup)
@@ -188,4 +189,4 @@ def build() -> CompiledStateGraph[State, Context, State, State]:
         "node_parse_compile_output", node_should_retry_compile
     )
 
-    return builder.compile(name="graph_writeup", checkpointer=True) # type: ignore
+    return builder.compile(name="graph_writeup", checkpointer=checkpointer) # type: ignore
