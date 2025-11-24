@@ -1,0 +1,10 @@
+{
+    "mcpServers": {
+      "langgraph-repo": {
+        "url": "https://gitmcp.io/langchain-ai/langgraph"
+      },
+      "langchain-repo": {
+        "url": "https://gitmcp.io/langchain-ai/langchain"
+      }
+    }
+  }

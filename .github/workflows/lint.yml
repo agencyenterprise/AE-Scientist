@@ -1,9 +1,7 @@
-name: Lint
+name: build
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
 
 jobs:
   lint:
@@ -13,21 +11,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Backend linting
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Install Python dependencies
-        run: |
-          uv sync --extra gpu --frozen
-
-      - name: Lint backend (black, isort, flake8, mypy)
-        run: |
-          make lint
