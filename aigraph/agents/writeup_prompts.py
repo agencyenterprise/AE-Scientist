@@ -51,20 +51,22 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
 
     Here are some tips for each section of the paper:
 
-    ## Title
+    ## Paper
+
+    ### Title
 
     - Title should be catchy and informative. It should give a good idea of what
       the paper is about.
     - Try to keep it under 2 lines.
 
-    ## Abstract
+    ### Abstract
 
     - TL;DR of the paper.
     - What are we trying to do and why is it relevant?
     - Make sure the abstract reads smoothly and is well-motivated. This should
       be one continuous paragraph.
 
-    ## Introduction
+    ### Introduction
 
     - Longer version of the Abstract, i.e., an overview of the entire paper.
     - Provide context to the study and explain its relevance.
@@ -74,7 +76,7 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
     - Summarize your contributions, highlighting pertinent findings, insights,
       or proposed methods.
 
-    ## Related Work
+    ### Related Work
 
     - Academic siblings of our work, i.e., alternative attempts in literature at
       trying to address the same or similar problems.
@@ -82,14 +84,14 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
       similarities.
     - Ensure proper citations are provided.
 
-    ## Background
+    ### Background
 
     - Present foundational concepts or prior work needed to understand your
       method.
     - This should include necessary definitions, the problem setting, or
       relevant theoretical constructs.
 
-    ## Method
+    ### Method
 
     - Clearly detail what you propose to do and why. If your study aims to
       address certain hypotheses, describe them and how your method is
@@ -97,13 +99,13 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
     - If results are negative or inconclusive, you may suggest improvements or
       discuss possible causes.
 
-    ## Experimental Setup
+    ### Experimental Setup
 
     - Explain how you tested your method or hypothesis.
     - Describe necessary details such as data, environment, and baselines, but
       omit hardware details unless explicitly mentioned.
 
-    ## Experiments
+    ### Experiments
 
     - Present the results truthfully according to the data you have. If outcomes
       are not as expected, discuss it transparently.
@@ -112,7 +114,7 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
     - Try to include all relevant plots and tables. Consider combining multiple
       plots into one figure if they are related.
 
-    ## Conclusion
+    ### Conclusion
 
     - Summarize the entire paper, including key strengths or findings.
     - If results are strong, highlight how they might address the research
@@ -120,21 +122,14 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
     - If results are negative or inconclusive, highlight potential improvements
       or reasons and propose future directions.
 
-    ## Appendix
+    ### Appendix
 
     - Place for supplementary material that did not fit in the main paper.
 
-    Ensure you are always writing good compilable LaTeX code. Common mistakes
-    that should be fixed include:
-    
-    - LaTeX syntax errors (unenclosed math, unmatched braces, etc.).
-    - Duplicate figure labels or references.
-    - Unescaped special characters: & % $ # _ {{ }} ~ ^ \\
-    - Proper table/figure closure.
-    - Do not hallucinate new citations or any results not in the logs.
+    ## Output
 
-    When returning final code, place it in fenced triple backticks with 'latex'
-    syntax highlighting.
+    When returning final code, return ONLY the raw LaTeX code without fenced
+    code blocks or triple backticks.
 
     ## Research idea
 
