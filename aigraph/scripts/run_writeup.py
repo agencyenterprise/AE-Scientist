@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Annotated
@@ -12,6 +13,8 @@ from pydantic_settings import BaseSettings, CliApp, CliImplicitFlag, CliPosition
 
 from aigraph import utils, log
 from aigraph.agents import writeup
+
+logger = logging.getLogger(__name__)
 
 task = utils.Task.model_validate(
     {
@@ -404,21 +407,41 @@ class Args(BaseSettings):
     cwd: CliPositionalArg[Path]
     experiment_code: CliPositionalArg[Path]
     parser_code: CliPositionalArg[Path]
-    thread_id: Annotated[str, Field(default_factory=lambda: str(uuid.uuid4()))]
-    checkpoint_id: str | None = None
-
-    model: str = "gpt-4o-mini"
-    temperature: float = 0.0
-
-    verbose: Annotated[CliImplicitFlag[bool], Field(validation_alias=AliasChoices('verbose', 'v'))] = False
+    thread_id: Annotated[
+        str,
+        Field(default_factory=lambda: str(uuid.uuid4())),
+    ]
+    checkpoint_id: Annotated[
+        str | None,
+        Field(default=None),
+    ]
+    checkpoint_db: Annotated[
+        Path,
+        Field(default=Path("checkpoints.db")),
+    ]
+    model: Annotated[
+        str,
+        Field(default="gpt-4o-mini"),
+    ]
+    temperature: Annotated[
+        float,
+        Field(default=0.0),
+    ]
+    verbose: Annotated[
+        CliImplicitFlag[bool],
+        Field(validation_alias=AliasChoices("verbose", "v"), default=False),
+    ]
 
     async def cli_cmd(self) -> None:
+        self.cwd.mkdir(parents=True, exist_ok=True)
+
         if self.verbose:
             log.init()
-        print('thread_id:', self.thread_id)
+
+        logger.info("thread_id:", self.thread_id)
         if self.checkpoint_id:
-            print('checkpoint_id:', self.checkpoint_id)
-        
+            logger.info("checkpoint_id:", self.checkpoint_id)
+
         exp_code_content = self.experiment_code.read_text()
         parse_code_content = self.parser_code.read_text()
 
@@ -435,7 +458,7 @@ class Args(BaseSettings):
         )
         context = writeup.Context(model=self.model, temperature=self.temperature)
 
-        async with aiosqlite.connect("checkpoints.db") as conn:
+        async with aiosqlite.connect(self.checkpoint_db) as conn:
             checkpointer = AsyncSqliteSaver(conn=conn)
             graph = writeup.build(checkpointer=checkpointer)
             result = await graph.ainvoke(input=state, context=context, config=config)

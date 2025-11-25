@@ -1,22 +1,20 @@
 import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Annotated
-import uuid
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
 from langfuse.langchain import CallbackHandler
-from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, CliApp, CliImplicitFlag, CliPositionalArg
 
-from pydantic import BaseModel
-
-from aigraph import utils, log
+from aigraph import log, utils
 from aigraph.agents import ablation, baseline, plotting, tuning, writeup
 
 logger = logging.getLogger(__name__)
@@ -214,22 +212,40 @@ def build(
 
 class Args(BaseSettings):
     cwd: CliPositionalArg[Path]
-    thread_id: Annotated[str, Field(default_factory=lambda: str(uuid.uuid4()))]
-    checkpoint_id: str | None = None
-
-    model: str = "gpt-4o-mini"
-    temperature: float = 0.0
-
+    thread_id: Annotated[
+        str,
+        Field(default_factory=lambda: str(uuid.uuid4())),
+    ]
+    checkpoint_id: Annotated[
+        str | None,
+        Field(default=None),
+    ]
+    checkpoint_db: Annotated[
+        Path,
+        Field(default=Path("checkpoints.db")),
+    ]
+    model: Annotated[
+        str,
+        Field(default="gpt-4o-mini"),
+    ]
+    temperature: Annotated[
+        float,
+        Field(default=0.0),
+    ]
     verbose: Annotated[
-        CliImplicitFlag[bool], Field(validation_alias=AliasChoices("verbose", "v"))
-    ] = False
+        CliImplicitFlag[bool],
+        Field(validation_alias=AliasChoices("verbose", "v"), default=False),
+    ]
 
     async def cli_cmd(self) -> None:
+        self.cwd.mkdir(parents=True, exist_ok=True)
+
         if self.verbose:
             log.init()
-        print("thread_id:", self.thread_id)
+
+        logger.info("thread_id:", self.thread_id)
         if self.checkpoint_id:
-            print("checkpoint_id:", self.checkpoint_id)
+            logger.info("checkpoint_id:", self.checkpoint_id)
 
         configurable = {"thread_id": self.thread_id}
         if self.checkpoint_id:
@@ -243,7 +259,7 @@ class Args(BaseSettings):
         state = State(cwd=self.cwd, task=task)
         context = Context(model=self.model, temperature=self.temperature)
 
-        async with aiosqlite.connect("checkpoints.db") as conn:
+        async with aiosqlite.connect(self.checkpoint_db) as conn:
             graph = build(conn)
             result = await graph.ainvoke(input=state, context=context, config=config)
             print(json.dumps(result, indent=2, sort_keys=True, default=str))
