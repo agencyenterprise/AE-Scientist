@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -15,7 +15,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, CliApp, CliImplicitFlag, CliPositionalArg
 
 from aigraph import log, utils
-from aigraph.agents import ablation, baseline, plotting, tuning, writeup
+from aigraph.agents import ablation, baseline, plotting, research, tuning, writeup
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ class State(BaseModel):
     cwd: Path
     task: utils.Task
 
+    state_research: research.State | None = None
     state_baseline: baseline.State | None = None
     state_tuning: tuning.State | None = None
     state_ablation: ablation.State | None = None
@@ -37,7 +38,19 @@ class Context(BaseModel):
     temperature: float = 0.0
 
 
-async def node_baseline(state: State, runtime: Runtime[Context]) -> State:
+async def node_research(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    research_state = research.State(
+        cwd=state.cwd,
+        task=state.task,
+    )
+
+    graph = research.build(checkpointer=True)
+    result = await graph.ainvoke(input=research_state)
+
+    return {"state_research": result}
+
+
+async def node_baseline(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     baseline_state = baseline.State(
         cwd=state.cwd,
         task=state.task,
@@ -53,12 +66,10 @@ async def node_baseline(state: State, runtime: Runtime[Context]) -> State:
         context=baseline_context,
     )
 
-    state.state_baseline = baseline.State.model_validate(result)
-
-    return state
+    return {"state_baseline": result}
 
 
-async def node_tuning(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     assert state.state_baseline
     assert state.state_baseline.experiment_code
 
@@ -78,12 +89,10 @@ async def node_tuning(state: State, runtime: Runtime[Context]) -> State:
         context=tuning_context,
     )
 
-    state.state_tuning = tuning.State.model_validate(result)
-
-    return state
+    return {"state_tuning": result}
 
 
-async def node_ablation(state: State, runtime: Runtime[Context]) -> State:
+async def node_ablation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     assert state.state_tuning
     assert state.state_tuning.tuning_code
 
@@ -103,12 +112,10 @@ async def node_ablation(state: State, runtime: Runtime[Context]) -> State:
         context=ablation_context,
     )
 
-    state.state_ablation = ablation.State.model_validate(result)
-
-    return state
+    return {"state_ablation": result}
 
 
-async def node_plotting(state: State, runtime: Runtime[Context]) -> State:
+async def node_plotting(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     assert state.state_ablation
     assert state.state_ablation.ablation_code
 
@@ -127,12 +134,11 @@ async def node_plotting(state: State, runtime: Runtime[Context]) -> State:
         input=plotting_state,
         context=plotting_context,
     )
-    state.state_plotting = plotting.State.model_validate(result)
 
-    return state
+    return {"state_plotting": result}
 
 
-async def node_writeup(state: State, runtime: Runtime[Context]) -> State:
+async def node_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     assert state.state_plotting
     assert state.state_ablation
     assert state.state_ablation.ablation_code
@@ -156,9 +162,7 @@ async def node_writeup(state: State, runtime: Runtime[Context]) -> State:
         context=writeup_context,
     )
 
-    state.state_writeup = writeup.State.model_validate(result)
-
-    return state
+    return {"state_writeup": result}
 
 
 def build(
@@ -167,6 +171,7 @@ def build(
     builder = StateGraph(state_schema=State, context_schema=Context)
 
     # Add nodes
+    builder.add_node("node_research", node_research)
     builder.add_node("node_baseline", node_baseline)
     builder.add_node("node_tuning", node_tuning)
     builder.add_node("node_ablation", node_ablation)
@@ -174,11 +179,15 @@ def build(
     builder.add_node("node_writeup", node_writeup)
 
     # Add edges
+    # Research and baseline start in parallel
+    builder.add_edge(START, "node_research")
     builder.add_edge(START, "node_baseline")
+    # Sequential flow: baseline → tuning → ablation → plotting
     builder.add_edge("node_baseline", "node_tuning")
     builder.add_edge("node_tuning", "node_ablation")
     builder.add_edge("node_ablation", "node_plotting")
-    builder.add_edge("node_plotting", "node_writeup")
+    # Writeup waits for both research and plotting to complete
+    builder.add_edge(["node_research", "node_plotting"], "node_writeup")
     builder.add_edge("node_writeup", END)
 
     checkpointer = AsyncSqliteSaver(conn=conn)
