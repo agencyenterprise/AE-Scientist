@@ -16,5 +16,6 @@ jobs:
         with:
           enable-cache: true
       
+      - run: uv sync --frozen
       - run: uv run --frozen mypy -p aigraph
       - run: uv run --frozen ruff check aigraph
