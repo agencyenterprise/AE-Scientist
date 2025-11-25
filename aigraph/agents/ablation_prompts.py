@@ -42,7 +42,7 @@ def _task_to_prompt(task: Task) -> str:
         code = f'```python\n{task.code}\n```'
         return prompt + f"Code To Use:\n{code}\n"
 
-    example = DATA_DIR / "example.py"
+    example = DATA_DIR / "code.py.txt"
     if not example.exists():
         return prompt
 
