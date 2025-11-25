@@ -163,6 +163,7 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
 def build_writeup_prompt(
     code_experiment: str,
     code_parser: str,
+    parser_stdout: str | None,
     plots: Iterable[utils.Plot],
     memory: str = "",
 ) -> str:
@@ -184,6 +185,12 @@ def build_writeup_prompt(
     <PARSER_CODE>
     {code_parser}
     </PARSER_CODE>
+
+    ## Parser output
+
+    <PARSER_OUTPUT>
+    {parser_stdout or "NA"}
+    </PARSER_OUTPUT>
 
     ## Images
 

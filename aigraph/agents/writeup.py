@@ -23,6 +23,7 @@ class State(BaseModel):
     task: utils.Task
 
     parser_code: str
+    parser_stdout: str | None = None
     experiment_code: str
     plots: list[utils.Plot]
 
@@ -96,6 +97,7 @@ async def node_writeup_generate_writeup(
     prompt = prompts.build_writeup_prompt(
         code_experiment=state.experiment_code,
         code_parser=state.parser_code,
+        parser_stdout=state.parser_stdout,
         plots=state.plots,
         memory=memory,
     )

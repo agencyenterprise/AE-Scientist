@@ -143,12 +143,14 @@ async def node_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any
     assert state.state_ablation
     assert state.state_ablation.ablation_code
     assert state.state_ablation.parser_code
+    assert state.state_ablation.parser_stdout
 
     writeup_state = writeup.State(
         cwd=state.cwd,
         task=state.task,
         experiment_code=state.state_ablation.ablation_code,
         parser_code=state.state_ablation.parser_code,
+        parser_stdout=state.state_ablation.parser_stdout,
         plots=list(state.state_plotting.plots),
     )
     writeup_context = writeup.Context(
