@@ -220,7 +220,10 @@ async def node_ablation_should_retry_code_from_ablation_output(
     logger.info("Starting node_ablation_should_retry_code_from_ablation_output")
 
     if state.ablation_is_bug:
+        logger.info("Going to `node_ablation_code_ablation`")
         return "node_ablation_code_ablation"
+
+    logger.info("Going to `node_ablation_code_metrics_parser`")
     return "node_ablation_code_metrics_parser"
 
 
@@ -396,6 +399,7 @@ def build(
     builder.add_conditional_edges(
         "node_ablation_parse_ablation_output",
         node_ablation_should_retry_code_from_ablation_output,
+        ["node_ablation_code_ablation", "node_ablation_code_metrics_parser"],
     )
     builder.add_edge(
         "node_ablation_code_metrics_parser",
@@ -408,6 +412,7 @@ def build(
     builder.add_conditional_edges(
         "node_ablation_parse_metrics_output",
         node_ablation_should_retry_parser_from_output,
+        ["node_ablation_code_metrics_parser", "__end__"],
     )
 
     return builder.compile(name="graph_ablation", checkpointer=checkpointer)  # type: ignore
