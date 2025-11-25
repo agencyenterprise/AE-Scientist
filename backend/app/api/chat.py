@@ -7,11 +7,10 @@ This module contains FastAPI routes for retrieving chat history for a conversati
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, Response
-from pydantic import BaseModel, Field
-
 from app.models.chat import ChatMessage, FileAttachment
 from app.services import get_database
+from fastapi import APIRouter, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 

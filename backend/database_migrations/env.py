@@ -3,9 +3,11 @@
 import logging
 import os
 from logging.config import fileConfig
+from pathlib import Path
 from typing import Any, Dict
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 # this is the Alembic Config object, which provides
@@ -24,9 +26,6 @@ logger = logging.getLogger("alembic.env")
 def get_database_url() -> str:
     """Get the database URL from environment variables."""
     # Load .env file explicitly to ensure production credentials are available
-    from pathlib import Path
-
-    from dotenv import load_dotenv
 
     # Try to find .env file - first in current directory, then in parent
     env_file = Path(".env")
@@ -40,7 +39,7 @@ def get_database_url() -> str:
     # Read environment variables directly (fresh from .env file)
     postgres_host = os.getenv("POSTGRES_HOST", "localhost")
     postgres_port = os.getenv("POSTGRES_PORT", "5432")
-    postgres_db = os.getenv("POSTGRES_DB", "agi_judds_catalog")
+    postgres_db = os.getenv("POSTGRES_DB", "ae_scientist")
     postgres_user = os.getenv("POSTGRES_USER", "")
     postgres_password = os.getenv("POSTGRES_PASSWORD", "")
 

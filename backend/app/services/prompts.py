@@ -9,7 +9,6 @@ import logging
 from typing import List
 
 import requests
-
 from app.config import settings
 from app.prompt_types import PromptTypes
 from app.services.base_llm_service import FileAttachmentData

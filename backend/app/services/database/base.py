@@ -9,9 +9,8 @@ from typing import Any, Dict
 from urllib.parse import urlparse
 
 import psycopg2
-from psycopg2.extensions import connection
-
 from app.config import settings
+from psycopg2.extensions import connection
 
 logger = logging.getLogger(__name__)
 

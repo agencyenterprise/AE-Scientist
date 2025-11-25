@@ -5,12 +5,11 @@ Scrapes Grok share pages with Playwright to extract title and messages.
 """
 
 import logging
+import random
 from datetime import datetime
 from typing import Dict, List
 
 import html2text
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
-
 from app.models import (
     ImportedChat,
     ImportedChatMessage,
@@ -19,6 +18,7 @@ from app.models import (
     ParseSuccessResult,
 )
 from app.services.scraper.errors import ChatNotFound
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -221,8 +221,6 @@ class GrokParserService:
             return
 
     def _get_random_config(self) -> Dict:
-        import random
-
         return {
             "user_agent": random.choice(self.user_agents),
             "viewport": random.choice(self.viewports),
@@ -526,7 +524,7 @@ class GrokParserService:
         )
 
     async def _try_with_browser(
-        self, browser: Browser, url: str, browser_name: str
+        self, browser: Browser, url: str, _browser_name: str
     ) -> ImportedChat:
         config = self._get_random_config()
         context: BrowserContext = await browser.new_context(
@@ -579,7 +577,7 @@ class GrokParserService:
                     for attempt in range(1, 3):
                         try:
                             data = await self._try_with_browser(
-                                browser=browser, url=url, browser_name=browser_name
+                                browser=browser, url=url, _browser_name=browser_name
                             )
                             return ParseSuccessResult(success=True, data=data)
                         except ChatNotFound as e:

@@ -7,13 +7,12 @@ This module contains FastAPI routes for Linear project creation and management.
 import logging
 from typing import Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, Field
-
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import Project, ProjectCreate
 from app.services import LinearService, get_database
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 

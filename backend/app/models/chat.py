@@ -7,9 +7,8 @@ including messages, requests, and responses for LLM conversations.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
-
 from app.models.project_drafts import ProjectDraft
+from pydantic import BaseModel, Field
 
 
 class ChatMessage(BaseModel):

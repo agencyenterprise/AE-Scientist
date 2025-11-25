@@ -15,9 +15,6 @@ from pathlib import Path
 from typing import List, Tuple, Union
 
 import pytest
-from dotenv import load_dotenv
-from pytest import mark
-
 from app.models import LLMModel
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
 from app.services.anthropic_service import AnthropicService
@@ -26,6 +23,8 @@ from app.services.grok_service import GrokService
 from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
 from app.services.openai_service import OpenAIService
 from app.services.summarizer_service import SummarizerService
+from dotenv import load_dotenv
+from pytest import mark
 
 
 # Ensure tests don't fail due to missing conversation memories

@@ -10,13 +10,6 @@ import os
 import re
 from typing import Any, AsyncGenerator, Dict, List, Union, cast
 
-from openai import AsyncOpenAI
-from openai._streaming import AsyncStream
-from openai.types.chat.chat_completion_message_param import (
-    ChatCompletionSystemMessageParam,
-    ChatCompletionUserMessageParam,
-)
-
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
 from app.services import SummarizerService
@@ -33,6 +26,12 @@ from app.services.database import get_database
 from app.services.mem0_service import Mem0Service
 from app.services.openai.chat_with_project_draft import ChatWithProjectDraftStream
 from app.services.prompts import get_project_generation_prompt
+from openai import AsyncOpenAI
+from openai._streaming import AsyncStream
+from openai.types.chat.chat_completion_message_param import (
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 logger = logging.getLogger(__name__)
 mem0 = Mem0Service()
@@ -370,7 +369,7 @@ class OpenAIService(BaseLLMService):
         return collected.strip()
 
     async def generate_project_draft(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self, llm_model: str, conversation_text: str, _user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
         Generate a project draft with streaming content.

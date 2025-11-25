@@ -14,7 +14,6 @@ from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Union
 
 import anthropic
 from anthropic.types import MessageParam
-
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
 from app.services import SummarizerService
@@ -226,7 +225,7 @@ class AnthropicService(BaseLLMService):
         return out.strip()
 
     async def generate_project_draft(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self, llm_model: str, conversation_text: str, _user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
         Generate a project draft using Claude with streaming.

@@ -8,13 +8,12 @@ import logging
 import secrets
 from typing import Dict, Literal
 
-from fastapi import APIRouter, Cookie, HTTPException, Query, Request, Response
-from fastapi.responses import RedirectResponse
-
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models.auth import AuthStatus, AuthUser
 from app.services.auth_service import AuthService
+from fastapi import APIRouter, Cookie, HTTPException, Query, Request, Response
+from fastapi.responses import RedirectResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ auth_service = AuthService()
 
 
 @router.get("/login")
-async def login(request: Request) -> RedirectResponse:
+async def login(_request: Request) -> RedirectResponse:
     """
     Initiate Google OAuth login flow.
 
@@ -125,7 +124,7 @@ async def get_current_user_info(request: Request) -> AuthUser:
 
 @router.get("/status", response_model=AuthStatus)
 async def get_auth_status(
-    request: Request, session_token: str = Cookie(None, alias="session_token")
+    _request: Request, session_token: str = Cookie(None, alias="session_token")
 ) -> AuthStatus:
     """
     Check authentication status.

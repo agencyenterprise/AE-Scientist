@@ -1,7 +1,6 @@
 from typing import AsyncGenerator, List, Tuple
 
 import pytest
-
 from app.models import ChatMessageData, LLMModel
 from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMProjectGeneration
 from app.services.chat_models import (

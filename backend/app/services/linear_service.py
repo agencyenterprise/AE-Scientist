@@ -9,7 +9,6 @@ import logging
 from typing import Any, Dict, NamedTuple, Optional, cast
 
 import aiohttp
-
 from app.config import settings
 
 logger = logging.getLogger(__name__)

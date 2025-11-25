@@ -10,11 +10,10 @@ and only overrides the client initialization with Grok-specific configuration.
 import logging
 import os
 
-from openai import AsyncOpenAI
-
 from app.models import LLMModel
 from app.services import SummarizerService
 from app.services.openai_service import OpenAIService
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 

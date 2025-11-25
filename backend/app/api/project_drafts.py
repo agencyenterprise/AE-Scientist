@@ -7,13 +7,12 @@ This module contains FastAPI routes for project draft management and AI refineme
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, Field
-
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import ProjectDraft, ProjectDraftCreateRequest, ProjectDraftVersion
 from app.services import ChunkingService, EmbeddingsService, SearchIndexer, get_database
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 logger = logging.getLogger(__name__)

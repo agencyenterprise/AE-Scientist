@@ -1,12 +1,11 @@
 import logging
 from typing import Dict
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 def configure_logging() -> None:

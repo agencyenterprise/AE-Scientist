@@ -3,6 +3,27 @@ import logging
 import traceback
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union, cast
 
+from app.config import settings
+from app.models import ChatMessageData, LLMModel
+from app.services import SummarizerService
+from app.services.base_llm_service import BaseLLMService, FileAttachmentData
+from app.services.chat_models import (
+    ChatStatus,
+    StreamContentEvent,
+    StreamConversationLockedEvent,
+    StreamDoneData,
+    StreamDoneEvent,
+    StreamErrorEvent,
+    StreamingResult,
+    StreamProjectUpdateEvent,
+    StreamStatusEvent,
+    ToolCallResult,
+)
+from app.services.database import DatabaseManager, get_database
+from app.services.linear_service import LinearService
+from app.services.pdf_service import PDFService
+from app.services.prompts import format_pdf_content_for_context, get_chat_system_prompt
+from app.services.s3_service import get_s3_service
 from openai import AsyncOpenAI
 from openai._streaming import AsyncStream
 from openai.types.chat.chat_completion_chunk import (
@@ -30,28 +51,6 @@ from openai.types.responses import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 from openai.types.shared_params.function_parameters import FunctionParameters
-
-from app.config import settings
-from app.models import ChatMessageData, LLMModel
-from app.services import SummarizerService
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData
-from app.services.chat_models import (
-    ChatStatus,
-    StreamContentEvent,
-    StreamConversationLockedEvent,
-    StreamDoneData,
-    StreamDoneEvent,
-    StreamErrorEvent,
-    StreamingResult,
-    StreamProjectUpdateEvent,
-    StreamStatusEvent,
-    ToolCallResult,
-)
-from app.services.database import DatabaseManager, get_database
-from app.services.linear_service import LinearService
-from app.services.pdf_service import PDFService
-from app.services.prompts import format_pdf_content_for_context, get_chat_system_prompt
-from app.services.s3_service import get_s3_service
 
 logger = logging.getLogger(__name__)
 

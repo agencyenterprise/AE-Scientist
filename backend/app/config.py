@@ -66,7 +66,7 @@ class Settings:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
     POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "agi_judds_catalog")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "ae_scientist")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
 

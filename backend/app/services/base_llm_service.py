@@ -11,8 +11,6 @@ from datetime import datetime
 from logging import getLogger
 from typing import AsyncGenerator, List, NamedTuple, Optional
 
-from pydantic import BaseModel, Field
-
 from app.models import ChatMessageData
 from app.models.llm_prompts import LLMModel
 from app.services.chat_models import (
@@ -23,6 +21,7 @@ from app.services.chat_models import (
     StreamProjectUpdateEvent,
     StreamStatusEvent,
 )
+from pydantic import BaseModel, Field
 
 logger = getLogger(__name__)
 

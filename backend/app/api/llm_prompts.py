@@ -7,9 +7,6 @@ This module contains FastAPI routes for LLM prompt management.
 import logging
 from typing import Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models import LLMPromptCreateRequest, LLMPromptDeleteResponse, LLMPromptResponse
 from app.prompt_types import PromptTypes
@@ -18,6 +15,8 @@ from app.services.prompts import (
     get_default_chat_system_prompt,
     get_default_project_generation_prompt,
 )
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/llm-prompts")
 logger = logging.getLogger(__name__)

@@ -9,10 +9,6 @@ import asyncio
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models.chat import FileAttachment
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
@@ -26,6 +22,9 @@ from app.services.openai_service import OpenAIService
 from app.services.pdf_service import PDFService
 from app.services.s3_service import S3Service
 from app.services.summarizer_service import SummarizerService
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 

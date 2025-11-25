@@ -10,8 +10,6 @@ from typing import Any, AsyncGenerator, List, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from openai import AsyncOpenAI
-
 from app.models import LLMModel
 from app.services.base_llm_service import FileAttachmentData
 from app.services.chat_models import (
@@ -20,6 +18,7 @@ from app.services.chat_models import (
     StreamDoneEvent,
     StreamingResult,
 )
+from openai import AsyncOpenAI
 
 
 class _FakeCompletions:

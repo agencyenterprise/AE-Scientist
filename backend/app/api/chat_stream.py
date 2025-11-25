@@ -8,10 +8,6 @@ import json
 import logging
 from typing import AsyncGenerator, Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models import ChatMessageData, ChatRequest
 from app.services import (
@@ -29,6 +25,9 @@ from app.services.base_llm_service import FileAttachmentData
 from app.services.chat_models import StreamDoneEvent
 from app.services.grok_service import SUPPORTED_MODELS as GROK_MODELS
 from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 

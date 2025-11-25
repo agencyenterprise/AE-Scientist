@@ -95,8 +95,28 @@ def check_file(file_path: Path) -> list[dict[str, Union[str, int]]]:
                 "message": f"Syntax error: {e.msg}",
             }
         ]
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         return [{"line": 0, "col": 0, "type": "error", "message": f"Error parsing file: {e}"}]
+
+
+def normalize_exclude_patterns(patterns: list[str]) -> list[str]:
+    """Split comma-separated patterns and trim whitespace."""
+    normalized: list[str] = []
+    for pattern in patterns:
+        for part in pattern.split(sep=","):
+            trimmed = part.strip()
+            if trimmed:
+                normalized.append(trimmed)
+    return normalized
+
+
+def is_excluded(file_path: Path, patterns: list[str]) -> bool:
+    """Return True when the file path matches any exclude pattern."""
+    path_str = file_path.as_posix()
+    for pattern in patterns:
+        if pattern and pattern in path_str:
+            return True
+    return False
 
 
 def main() -> None:
@@ -120,7 +140,8 @@ def main() -> None:
         files_to_check = list(Path(".").rglob("*.py"))
 
     # Build list of patterns to exclude
-    exclude_patterns = [".venv", "__pycache__", ".git", "node_modules"] + args.exclude
+    exclude_patterns = [".venv", "__pycache__", ".git", "node_modules"]
+    exclude_patterns.extend(normalize_exclude_patterns(patterns=args.exclude))
 
     total_errors = 0
 
@@ -129,7 +150,7 @@ def main() -> None:
             continue
 
         # Skip excluded directories and patterns
-        if any(pattern in file_path.parts for pattern in exclude_patterns):
+        if is_excluded(file_path=file_path, patterns=exclude_patterns):
             continue
 
         errors = check_file(file_path)

@@ -9,10 +9,9 @@ import logging
 import time
 from typing import Dict, List
 
+from app.services.search_service import SearchService
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
-
-from app.services.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/search")
