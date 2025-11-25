@@ -80,6 +80,11 @@ def build_prompt_baseline_code(
       suit the task, and only fall back to synthetic data if no suitable dataset
       is available or synthetic generation is essential to the proposed
       experiment.
+    - You MUST evaluate your solution on at least 3 different datasets to ensure
+      robustness. Use standard benchmark datasets when available (e.g., MNIST,
+      CIFAR-10, ImageNet, GLUE, SQuAD, etc.). Each dataset should be evaluated
+      separately and results should be tracked per dataset in the experiment_data
+      structure.
 
     ## Implementation guidelines
 

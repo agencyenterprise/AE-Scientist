@@ -130,6 +130,11 @@ def build_prompt_code_ablation(
       can be executed as-is.
     - No parts of the code should be skipped, don't terminate the code execution
       before finishing the script.
+    - You MUST evaluate your solution on at least 3 different datasets to ensure
+      robustness. Use standard benchmark datasets when available (e.g., MNIST,
+      CIFAR-10, ImageNet, GLUE, SQuAD, etc.). Each dataset should be evaluated
+      separately and results should be tracked per dataset in the experiment_data
+      structure.
 
     ### Implementation guidelines
 
