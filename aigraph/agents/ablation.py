@@ -1,7 +1,7 @@
 import logging
 import operator
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langgraph.errors import GraphRecursionError
@@ -77,7 +77,7 @@ class Context(BaseModel):
 
 async def node_ablation_propose_ablation(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_propose_ablation")
 
     class Schema(BaseModel):
@@ -96,16 +96,19 @@ async def node_ablation_propose_ablation(
         name=response.name,
         description=response.description,
     )
-    state.last_ablation = ablation
-    state.ablations = [ablation]
 
     logger.debug(f"ablation_name: {ablation.name}")
     logger.debug(f"ablation_description: {ablation.description[:32]!r}")
     logger.info("Finished node_ablation_propose_ablation")
-    return state
+    return {
+        "last_ablation": ablation,
+        "ablations": [ablation],
+    }
 
 
-async def node_ablation_code_ablation(state: State, runtime: Runtime[Context]) -> State:
+async def node_ablation_code_ablation(
+    state: State, runtime: Runtime[Context]
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_code_ablation")
 
     class Schema(BaseModel):
@@ -141,21 +144,24 @@ async def node_ablation_code_ablation(state: State, runtime: Runtime[Context]) -
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
-    state.ablation_code = response.code
-    state.ablation_plan = response.plan
-    state.ablation_deps = response.dependencies
-    state.ablation_retry_count += 1
 
-    logger.debug(f"ablation_plan: {state.ablation_plan[:32]!r}")
-    logger.debug(f"ablation_code: {state.ablation_code[:32]!r}")
-    logger.debug(f"ablation_deps: {state.ablation_deps}")
-    logger.debug(f"ablation_retry_count: {state.ablation_retry_count}")
+    logger.debug(f"ablation_plan: {response.plan[:32]!r}")
+    logger.debug(f"ablation_code: {response.code[:32]!r}")
+    logger.debug(f"ablation_deps: {response.dependencies}")
+    logger.debug(f"ablation_retry_count: {state.ablation_retry_count + 1}")
 
     logger.info("Finished node_ablation_code_ablation")
-    return state
+    return {
+        "ablation_code": response.code,
+        "ablation_plan": response.plan,
+        "ablation_deps": response.dependencies,
+        "ablation_retry_count": state.ablation_retry_count + 1,
+    }
 
 
-async def node_ablation_exec_ablation(state: State, runtime: Runtime[Context]) -> State:
+async def node_ablation_exec_ablation(
+    state: State, runtime: Runtime[Context]
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_exec_ablation")
     assert state.ablation_code, "ablation_code is required"
 
@@ -163,23 +169,23 @@ async def node_ablation_exec_ablation(state: State, runtime: Runtime[Context]) -
         state.cwd, "ablation.py", state.ablation_code, state.ablation_deps
     )
 
-    state.ablation_stdout = result.stdout
-    state.ablation_stderr = result.stderr
-    state.ablation_returncode = result.returncode
-    state.ablation_filename = result.filename
-
-    logger.debug(f"ablation_stdout: {state.ablation_stdout[:32]!r}")
-    logger.debug(f"ablation_stderr: {state.ablation_stderr[:32]!r}")
-    logger.debug(f"ablation_returncode: {state.ablation_returncode}")
-    logger.debug(f"ablation_filename: {state.ablation_filename}")
+    logger.debug(f"ablation_stdout: {result.stdout[:32]!r}")
+    logger.debug(f"ablation_stderr: {result.stderr[:32]!r}")
+    logger.debug(f"ablation_returncode: {result.returncode}")
+    logger.debug(f"ablation_filename: {result.filename}")
 
     logger.info("Finished node_ablation_exec_ablation")
-    return state
+    return {
+        "ablation_stdout": result.stdout,
+        "ablation_stderr": result.stderr,
+        "ablation_returncode": result.returncode,
+        "ablation_filename": result.filename,
+    }
 
 
 async def node_ablation_parse_ablation_output(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_parse_ablation_output")
     assert state.ablation_code, "ablation_code is required"
 
@@ -196,16 +202,17 @@ async def node_ablation_parse_ablation_output(
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
-    state.ablation_is_bug = response.is_bug
-    state.ablation_summary = response.summary
 
-    logger.debug(f"ablation_is_bug: {state.ablation_is_bug}")
-    logger.debug(f"ablation_summary: {state.ablation_summary[:32]!r}")
+    logger.debug(f"ablation_is_bug: {response.is_bug}")
+    logger.debug(f"ablation_summary: {response.summary[:32]!r}")
 
     logger.info(
         f"Finished node_ablation_parse_ablation_output. Is bug: {response.is_bug}"
     )
-    return state
+    return {
+        "ablation_is_bug": response.is_bug,
+        "ablation_summary": response.summary,
+    }
 
 
 async def node_ablation_should_retry_code_from_ablation_output(
@@ -220,7 +227,7 @@ async def node_ablation_should_retry_code_from_ablation_output(
 
 async def node_ablation_code_metrics_parser(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_code_metrics_parser")
     assert state.ablation_code, "ablation_code is required"
 
@@ -251,23 +258,24 @@ async def node_ablation_code_metrics_parser(
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
-    state.parser_code = response.code
-    state.parser_plan = response.plan
-    state.parser_deps = response.dependencies
-    state.parser_retry_count += 1
 
-    logger.debug(f"parser_code: {state.parser_code[:32]!r}")
-    logger.debug(f"parser_plan: {state.parser_plan[:32]!r}")
-    logger.debug(f"parser_deps: {state.parser_deps}")
-    logger.debug(f"parser_retry_count: {state.parser_retry_count}")
+    logger.debug(f"parser_code: {response.code[:32]!r}")
+    logger.debug(f"parser_plan: {response.plan[:32]!r}")
+    logger.debug(f"parser_deps: {response.dependencies}")
+    logger.debug(f"parser_retry_count: {state.parser_retry_count + 1}")
 
     logger.info("Finished node_ablation_code_metrics_parser")
-    return state
+    return {
+        "parser_code": response.code,
+        "parser_plan": response.plan,
+        "parser_deps": response.dependencies,
+        "parser_retry_count": state.parser_retry_count + 1,
+    }
 
 
 async def node_ablation_exec_metrics_parser(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_exec_metrics_parser")
     assert state.parser_code, "parser_code is required"
 
@@ -278,23 +286,23 @@ async def node_ablation_exec_metrics_parser(
         state.parser_deps,
     )
 
-    state.parser_stdout = result.stdout
-    state.parser_stderr = result.stderr
-    state.parser_returncode = result.returncode
-    state.parser_filename = result.filename
-
-    logger.debug(f"parser_stdout: {state.parser_stdout[:32]!r}")
-    logger.debug(f"parser_stderr: {state.parser_stderr[:32]!r}")
-    logger.debug(f"parser_returncode: {state.parser_returncode}")
-    logger.debug(f"parser_filename: {state.parser_filename}")
+    logger.debug(f"parser_stdout: {result.stdout[:32]!r}")
+    logger.debug(f"parser_stderr: {result.stderr[:32]!r}")
+    logger.debug(f"parser_returncode: {result.returncode}")
+    logger.debug(f"parser_filename: {result.filename}")
 
     logger.info("Finished node_ablation_exec_metrics_parser")
-    return state
+    return {
+        "parser_stdout": result.stdout,
+        "parser_stderr": result.stderr,
+        "parser_returncode": result.returncode,
+        "parser_filename": result.filename,
+    }
 
 
 async def node_ablation_parse_metrics_output(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_ablation_parse_metrics_output")
 
     class Schema(BaseModel):
@@ -309,14 +317,15 @@ async def node_ablation_parse_metrics_output(
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
-    state.parse_is_bug = response.is_bug
-    state.parse_summary = response.summary
 
-    logger.debug(f"parse_is_bug: {state.parse_is_bug}")
-    logger.debug(f"parse_summary: {state.parse_summary[:32]!r}")
+    logger.debug(f"parse_is_bug: {response.is_bug}")
+    logger.debug(f"parse_summary: {response.summary[:32]!r}")
 
     logger.info("Finished node_ablation_parse_metrics_output")
-    return state
+    return {
+        "parse_is_bug": response.is_bug,
+        "parse_summary": response.summary,
+    }
 
 
 async def node_ablation_should_retry_parser_from_output(
@@ -339,38 +348,63 @@ def build(
     builder = StateGraph(state_schema=State, context_schema=Context)
 
     # Add nodes
-    builder.add_node("node_ablation_propose_ablation", node_ablation_propose_ablation)
-    builder.add_node("node_ablation_code_ablation", node_ablation_code_ablation)
-    builder.add_node("node_ablation_exec_ablation", node_ablation_exec_ablation)
     builder.add_node(
-        "node_ablation_parse_ablation_output", node_ablation_parse_ablation_output
+        "node_ablation_propose_ablation",
+        node_ablation_propose_ablation,
     )
     builder.add_node(
-        "node_ablation_code_metrics_parser", node_ablation_code_metrics_parser
+        "node_ablation_code_ablation",
+        node_ablation_code_ablation,
     )
     builder.add_node(
-        "node_ablation_exec_metrics_parser", node_ablation_exec_metrics_parser
+        "node_ablation_exec_ablation",
+        node_ablation_exec_ablation,
     )
     builder.add_node(
-        "node_ablation_parse_metrics_output", node_ablation_parse_metrics_output
+        "node_ablation_parse_ablation_output",
+        node_ablation_parse_ablation_output,
+    )
+    builder.add_node(
+        "node_ablation_code_metrics_parser",
+        node_ablation_code_metrics_parser,
+    )
+    builder.add_node(
+        "node_ablation_exec_metrics_parser",
+        node_ablation_exec_metrics_parser,
+    )
+    builder.add_node(
+        "node_ablation_parse_metrics_output",
+        node_ablation_parse_metrics_output,
     )
 
     # Add edges
-    builder.add_edge(START, "node_ablation_propose_ablation")
-    builder.add_edge("node_ablation_propose_ablation", "node_ablation_code_ablation")
-    builder.add_edge("node_ablation_code_ablation", "node_ablation_exec_ablation")
     builder.add_edge(
-        "node_ablation_exec_ablation", "node_ablation_parse_ablation_output"
+        START,
+        "node_ablation_propose_ablation",
+    )
+    builder.add_edge(
+        "node_ablation_propose_ablation",
+        "node_ablation_code_ablation",
+    )
+    builder.add_edge(
+        "node_ablation_code_ablation",
+        "node_ablation_exec_ablation",
+    )
+    builder.add_edge(
+        "node_ablation_exec_ablation",
+        "node_ablation_parse_ablation_output",
     )
     builder.add_conditional_edges(
         "node_ablation_parse_ablation_output",
         node_ablation_should_retry_code_from_ablation_output,
     )
     builder.add_edge(
-        "node_ablation_code_metrics_parser", "node_ablation_exec_metrics_parser"
+        "node_ablation_code_metrics_parser",
+        "node_ablation_exec_metrics_parser",
     )
     builder.add_edge(
-        "node_ablation_exec_metrics_parser", "node_ablation_parse_metrics_output"
+        "node_ablation_exec_metrics_parser",
+        "node_ablation_parse_metrics_output",
     )
     builder.add_conditional_edges(
         "node_ablation_parse_metrics_output",

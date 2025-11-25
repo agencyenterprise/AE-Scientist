@@ -1,7 +1,7 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -51,7 +51,7 @@ class Context(BaseModel):
         return init_chat_model(model=self.model, temperature=self.temperature)
 
 
-async def node_writeup_setup_writeup(state: State, runtime: Runtime[Context]) -> State:
+async def node_writeup_setup_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     logger.info("Starting node_writeup_setup_writeup")
 
     src = utils.DATA_DIR / "template.tex"
@@ -60,12 +60,12 @@ async def node_writeup_setup_writeup(state: State, runtime: Runtime[Context]) ->
     logger.debug(f"Copied {src} to {dst}")
 
     logger.info("Finished node_writeup_setup_writeup")
-    return state
+    return {}
 
 
 async def node_writeup_generate_writeup(
     state: State, runtime: Runtime[Context]
-) -> State:
+) -> dict[str, Any]:
     logger.info("Starting node_writeup_generate_writeup")
     from langgraph.errors import GraphRecursionError
 
@@ -105,17 +105,18 @@ async def node_writeup_generate_writeup(
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(messages)  # type: ignore
-    state.latex_content = response.content
-    state.writeup_retry_count += 1
 
     logger.debug(f"latex_content: {response.content[:32]!r}")
-    logger.debug(f"writeup_retry_count: {state.writeup_retry_count}")
+    logger.debug(f"writeup_retry_count: {state.writeup_retry_count + 1}")
 
     logger.info("Finished node_writeup_generate_writeup")
-    return state
+    return {
+        "latex_content": response.content,
+        "writeup_retry_count": state.writeup_retry_count + 1,
+    }
 
 
-async def node_compile_writeup(state: State, runtime: Runtime[Context]) -> State:
+async def node_compile_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     logger.info("Starting node_compile_writeup")
     assert state.latex_content, "latex_content is required"
 
@@ -123,19 +124,20 @@ async def node_compile_writeup(state: State, runtime: Runtime[Context]) -> State
     file.write_text(state.latex_content)
 
     result = await utils.compile(state.cwd, file)
-    state.compile_stdout = result.stdout
-    state.compile_stderr = result.stderr
-    state.compile_returncode = result.returncode
 
-    logger.debug(f"compile_stdout: {state.compile_stdout[:32]!r}")
-    logger.debug(f"compile_stderr: {state.compile_stderr[:32]!r}")
-    logger.debug(f"compile_returncode: {state.compile_returncode}")
+    logger.debug(f"compile_stdout: {result.stdout[:32]!r}")
+    logger.debug(f"compile_stderr: {result.stderr[:32]!r}")
+    logger.debug(f"compile_returncode: {result.returncode}")
 
     logger.info("Finished node_compile_writeup")
-    return state
+    return {
+        "compile_stdout": result.stdout,
+        "compile_stderr": result.stderr,
+        "compile_returncode": result.returncode,
+    }
 
 
-async def node_parse_compile_output(state: State, runtime: Runtime[Context]) -> State:
+async def node_parse_compile_output(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     logger.info("Starting node_parse_compile_output")
 
     class Schema(BaseModel):
@@ -150,14 +152,15 @@ async def node_parse_compile_output(state: State, runtime: Runtime[Context]) -> 
 
     llms = runtime.context.llm.with_structured_output(Schema)
     response: Schema = await llms.ainvoke(prompt)  # type: ignore
-    state.compile_is_bug = response.is_bug
-    state.compile_summary = response.summary
 
-    logger.debug(f"compile_is_bug: {state.compile_is_bug}")
-    logger.debug(f"compile_summary: {state.compile_summary[:32]!r}")
+    logger.debug(f"compile_is_bug: {response.is_bug}")
+    logger.debug(f"compile_summary: {response.summary[:32]!r}")
 
     logger.info("Finished node_parse_compile_output")
-    return state
+    return {
+        "compile_is_bug": response.is_bug,
+        "compile_summary": response.summary,
+    }
 
 
 async def node_should_retry_compile(
