@@ -51,7 +51,9 @@ class Context(BaseModel):
         return init_chat_model(model=self.model, temperature=self.temperature)
 
 
-async def node_writeup_setup_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+async def node_writeup_setup_writeup(
+    state: State, runtime: Runtime[Context]
+) -> dict[str, Any]:
     logger.info("Starting node_writeup_setup_writeup")
 
     src = utils.DATA_DIR / "template.tex"
@@ -116,7 +118,9 @@ async def node_writeup_generate_writeup(
     }
 
 
-async def node_compile_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+async def node_compile_writeup(
+    state: State, runtime: Runtime[Context]
+) -> dict[str, Any]:
     logger.info("Starting node_compile_writeup")
     assert state.latex_content, "latex_content is required"
 
@@ -137,7 +141,9 @@ async def node_compile_writeup(state: State, runtime: Runtime[Context]) -> dict[
     }
 
 
-async def node_parse_compile_output(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+async def node_parse_compile_output(
+    state: State, runtime: Runtime[Context]
+) -> dict[str, Any]:
     logger.info("Starting node_parse_compile_output")
 
     class Schema(BaseModel):

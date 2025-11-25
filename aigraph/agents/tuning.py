@@ -1,7 +1,6 @@
 import logging
-import operator
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langgraph.errors import GraphRecursionError
@@ -23,7 +22,7 @@ class State(BaseModel):
     task: utils.Task
     code: str
 
-    hyperparams: Annotated[set[utils.Hyperparam], operator.or_] = set()
+    hyperparams: list[utils.Hyperparam] = []
     last_hyperparam: utils.Hyperparam | None = None
 
     # counts how many times we tried to code the tuning
@@ -101,7 +100,7 @@ async def node_tuning_propose_hyperparam(
     logger.info("Finished node_tuning_propose_hyperparam")
     return {
         "last_hyperparam": hp,
-        "hyperparams": set([hp]),
+        "hyperparams": [hp],
     }
 
 

@@ -1,7 +1,6 @@
 import logging
-import operator
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langgraph.errors import GraphRecursionError
@@ -23,7 +22,7 @@ class State(BaseModel):
     task: utils.Task
     code: str
 
-    ablations: Annotated[list[utils.Ablation], operator.add] = []
+    ablations: list[utils.Ablation] = []
     last_ablation: utils.Ablation | None = None
 
     # counts how many times we tried to code the ablation
