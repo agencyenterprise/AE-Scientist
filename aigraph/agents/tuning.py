@@ -74,7 +74,9 @@ class Context(BaseModel):
         return init_chat_model(model=self.model, temperature=self.temperature)
 
 
-async def node_tuning_propose_hyperparam(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning_propose_hyperparam(
+    state: State, runtime: Runtime[Context]
+) -> State:
     logger.info("Starting node_tuning_propose_hyperparam")
 
     class Schema(BaseModel):
@@ -160,10 +162,7 @@ async def node_tuning_exec_tuning(state: State, runtime: Runtime[Context]) -> St
     assert state.tuning_code, "tuning_code is required"
 
     result = await utils.exec_code(
-        state.cwd, 
-        'tuning.py', 
-        state.tuning_code, 
-        state.tuning_deps
+        state.cwd, "tuning.py", state.tuning_code, state.tuning_deps
     )
 
     state.tuning_stdout = result.stdout
@@ -180,7 +179,9 @@ async def node_tuning_exec_tuning(state: State, runtime: Runtime[Context]) -> St
     return state
 
 
-async def node_tuning_parse_tuning_output(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning_parse_tuning_output(
+    state: State, runtime: Runtime[Context]
+) -> State:
     logger.info("Starting node_tuning_parse_tuning_output")
     assert state.tuning_code, "tuning_code is required"
 
@@ -217,7 +218,9 @@ async def node_tuning_should_retry_code_from_tuning_output(
     return "node_tuning_code_metrics_parser"
 
 
-async def node_tuning_code_metrics_parser(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning_code_metrics_parser(
+    state: State, runtime: Runtime[Context]
+) -> State:
     logger.info("Starting node_tuning_code_metrics_parser")
     assert state.tuning_code, "tuning_code is required"
 
@@ -260,13 +263,15 @@ async def node_tuning_code_metrics_parser(state: State, runtime: Runtime[Context
     return state
 
 
-async def node_tuning_exec_metrics_parser(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning_exec_metrics_parser(
+    state: State, runtime: Runtime[Context]
+) -> State:
     logger.info("Starting node_tuning_exec_metrics_parser")
     assert state.parser_code, "parser_code is required"
 
     result = await utils.exec_code(
         state.cwd,
-        'tuning_parser.py',
+        "tuning_parser.py",
         state.parser_code,
         state.parser_deps,
     )
@@ -285,7 +290,9 @@ async def node_tuning_exec_metrics_parser(state: State, runtime: Runtime[Context
     return state
 
 
-async def node_tuning_parse_metrics_output(state: State, runtime: Runtime[Context]) -> State:
+async def node_tuning_parse_metrics_output(
+    state: State, runtime: Runtime[Context]
+) -> State:
     logger.info("Starting node_tuning_parse_metrics_output")
 
     class Schema(BaseModel):
@@ -311,18 +318,20 @@ async def node_tuning_parse_metrics_output(state: State, runtime: Runtime[Contex
 
 async def node_tuning_should_retry_parser_from_output(
     state: State, runtime: Runtime[Context]
-) -> Literal["node_tuning_code_metrics_parser", '__end__']:
+) -> Literal["node_tuning_code_metrics_parser", "__end__"]:
     logger.info("Starting node_tuning_should_retry_parser_from_output")
 
     if state.parse_is_bug is True:
-        logger.info('Going to `node_tuning_code_metrics_parser`')
+        logger.info("Going to `node_tuning_code_metrics_parser`")
         return "node_tuning_code_metrics_parser"
 
-    logger.info('Going to `__end__`')
-    return '__end__'
+    logger.info("Going to `__end__`")
+    return "__end__"
 
 
-def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Context, State, State]:
+def build(
+    checkpointer: Checkpointer = None,
+) -> CompiledStateGraph[State, Context, State, State]:
     """Build the Stage 2 hyperparameter tuning graph."""
     builder = StateGraph(state_schema=State, context_schema=Context)
 
@@ -333,7 +342,9 @@ def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Contex
     builder.add_node("node_tuning_parse_tuning_output", node_tuning_parse_tuning_output)
     builder.add_node("node_tuning_code_metrics_parser", node_tuning_code_metrics_parser)
     builder.add_node("node_tuning_exec_metrics_parser", node_tuning_exec_metrics_parser)
-    builder.add_node("node_tuning_parse_metrics_output", node_tuning_parse_metrics_output)
+    builder.add_node(
+        "node_tuning_parse_metrics_output", node_tuning_parse_metrics_output
+    )
 
     # Add edges
     builder.add_edge(START, "node_tuning_propose_hyperparam")
@@ -344,12 +355,15 @@ def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Contex
         "node_tuning_parse_tuning_output",
         node_tuning_should_retry_code_from_tuning_output,
     )
-    builder.add_edge("node_tuning_code_metrics_parser", "node_tuning_exec_metrics_parser")
-    builder.add_edge("node_tuning_exec_metrics_parser", "node_tuning_parse_metrics_output")
+    builder.add_edge(
+        "node_tuning_code_metrics_parser", "node_tuning_exec_metrics_parser"
+    )
+    builder.add_edge(
+        "node_tuning_exec_metrics_parser", "node_tuning_parse_metrics_output"
+    )
     builder.add_conditional_edges(
         "node_tuning_parse_metrics_output",
         node_tuning_should_retry_parser_from_output,
     )
 
-    return builder.compile(name="graph_tuning", checkpointer=checkpointer) # type: ignore
-
+    return builder.compile(name="graph_tuning", checkpointer=checkpointer)  # type: ignore

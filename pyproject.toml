@@ -10,9 +10,13 @@ dependencies = [
     "langfuse>=3.10.0",
     "langgraph-checkpoint-sqlite>=3.0.0",
     "langgraph>=1.0.3",
+    "open-deep-research",
     "pydantic-settings>=2.12.0",
     "pydantic==2.12.4",
 ]
+
+[tool.uv.sources]
+open-deep-research = { git = "https://github.com/langchain-ai/open_deep_research.git" }
 
 
 [dependency-groups]
@@ -33,3 +37,4 @@ warn_return_any = true
 warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
+

@@ -1,4 +1,3 @@
-
 from aigraph.utils import Task
 
 
@@ -31,11 +30,12 @@ def _task_to_prompt(task: Task) -> str:
     {task.related_work}
 
     Experiments:
-    {'\n'.join(f"- {exp}" for exp in task.experiments)}
+    {"\n".join(f"- {exp}" for exp in task.experiments)}
 
     Risk Factors and Limitations:
-    {'\n'.join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
+    {"\n".join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
     """
+
 
 def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
     return f"""
@@ -121,7 +121,9 @@ def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
     """
 
 
-def build_prompt_plotting_output(task: Task, code: str, stdout: str, stderr: str) -> str:
+def build_prompt_plotting_output(
+    task: Task, code: str, stdout: str, stderr: str
+) -> str:
     return f"""
     ## Introduction
 

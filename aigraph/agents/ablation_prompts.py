@@ -1,4 +1,3 @@
-
 from aigraph.utils import DATA_DIR, Task
 
 
@@ -31,15 +30,15 @@ def _task_to_prompt(task: Task) -> str:
     {task.related_work}
 
     Experiments:
-    {'\n'.join(f"- {exp}" for exp in task.experiments)}
+    {"\n".join(f"- {exp}" for exp in task.experiments)}
 
     Risk Factors and Limitations:
-    {'\n'.join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
+    {"\n".join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
 
     """
 
     if task.code:
-        code = f'```python\n{task.code}\n```'
+        code = f"```python\n{task.code}\n```"
         return prompt + f"Code To Use:\n{code}\n"
 
     example = DATA_DIR / "code.py.txt"
@@ -47,7 +46,7 @@ def _task_to_prompt(task: Task) -> str:
         return prompt
 
     code = example.read_text()
-    code = f'```python\n{code}\n```'
+    code = f"```python\n{code}\n```"
     return prompt + f"Code To Use:\n{code}\n"
 
 
@@ -92,7 +91,9 @@ def build_prompt_propose_ablation(code: str, ablations: list[str]) -> str:
     """
 
 
-def build_prompt_code_ablation(name: str, description: str, code: str, memory: str) -> str:
+def build_prompt_code_ablation(
+    name: str, description: str, code: str, memory: str
+) -> str:
     return f"""
     You are an experienced AI researcher. You are provided with a previously
     developed baseline implementation. Your task is to implement the ablation
@@ -160,12 +161,14 @@ def build_prompt_code_ablation(name: str, description: str, code: str, memory: s
     ## Memory
 
     <MEMORY>
-    {memory or 'NA'}
+    {memory or "NA"}
     </MEMORY>
     """
 
 
-def build_prompt_ablation_output(task: Task, code: str, stdout: str, stderr: str) -> str:
+def build_prompt_ablation_output(
+    task: Task, code: str, stdout: str, stderr: str
+) -> str:
     return f"""
     ## Introduction
     
@@ -269,7 +272,7 @@ def build_prompt_ablation_parser_code(code: str, memory: str = "") -> str:
     ## Memory
 
     <MEMORY>
-    {memory or 'NA'}
+    {memory or "NA"}
     </MEMORY>
     """
 

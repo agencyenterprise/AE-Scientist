@@ -1,0 +1,31 @@
+{
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        },
+    },
+    "[json]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.prettier": "explicit"
+        },
+    },
+    "[jsonc]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.prettier": "explicit"
+        },
+    },
+    "[toml]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "tamasfe.even-better-toml",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.toml": "explicit"
+        },
+    },
+}

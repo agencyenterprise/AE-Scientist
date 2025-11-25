@@ -1,4 +1,5 @@
 from typing import Iterable
+
 from aigraph import utils
 
 
@@ -31,10 +32,10 @@ def _task_to_prompt(task: utils.Task) -> str:
     {task.related_work}
 
     Experiments:
-    {'\n'.join(f"- {exp}" for exp in task.experiments)}
+    {"\n".join(f"- {exp}" for exp in task.experiments)}
 
     Risk Factors and Limitations:
-    {'\n'.join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
+    {"\n".join(f"- {risk}" for risk in task.risk_factors_and_limitations)}
     """
 
 
