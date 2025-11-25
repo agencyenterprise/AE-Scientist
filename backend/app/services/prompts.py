@@ -9,8 +9,6 @@ import logging
 from typing import List
 
 import requests
-
-from app.config import settings
 from app.prompt_types import PromptTypes
 from app.services.base_llm_service import FileAttachmentData
 from app.services.database import DatabaseManager
@@ -20,31 +18,41 @@ from app.services.s3_service import S3Service
 logger = logging.getLogger(__name__)
 
 
-def get_default_project_generation_prompt() -> str:
+def get_default_idea_generation_prompt() -> str:
     """
-    Get the default system prompt for project draft generation.
+    Get the default system prompt for research idea generation.
 
     Returns:
-        str: The default system prompt for project generation
+        str: The default system prompt for idea generation
     """
     return (
-        f"You are an AI project manager specialized in transforming conversational ideas into structured experiment projects for AGI research teams. "
-        "Analyze the conversation and extract actionable project concepts that could be experimented by a team of AGI researchers. "
-        "Focus on technical experiments, research directions, implementation challenges, or innovative approaches discussed. "
-        f"Generate a clear, concise project title (MAXIMUM {settings.MAX_PROJECT_TITLE_LENGTH} characters - this is a hard limit for Linear compatibility) and a detailed description that captures the core experimental value. "
-        "The project should be something that can be worked on by a research team, not just a discussion topic. "
-        "Keep titles short and punchy while still being descriptive. "
+        "You are an AI research assistant specialized in transforming conversational ideas into structured research proposals for AGI research teams. "
+        "Analyze the conversation and extract actionable research ideas that could be investigated by AGI researchers. "
+        "Focus on novel hypotheses, experimental designs, theoretical frameworks, or innovative approaches discussed. "
         "\n\nAdditional context from prior conversations (memories):\n"
         "{{context}}\n"
         "\nIMPORTANT: You must respond in this exact format:\n"
-        "<title>Your project title here</title>\n"
-        "<description>Your detailed project description here. Use markdown formatting for bullet points, lists, and other formatting.</description>"
+        "<title>Research Idea Title</title>\n"
+        "<short_hypothesis>Brief 1-2 sentence hypothesis statement</short_hypothesis>\n"
+        "<related_work>Discussion of related work, background, and how this builds on existing research</related_work>\n"
+        "<abstract>Detailed abstract explaining the research idea, its motivation, and potential impact</abstract>\n"
+        "<experiments>[\n"
+        '  "Experiment 1: Description of first experiment",\n'
+        '  "Experiment 2: Description of second experiment",\n'
+        '  "Experiment 3: Description of third experiment"\n'
+        "]</experiments>\n"
+        "<expected_outcome>Expected outcome of the research and what it would demonstrate</expected_outcome>\n"
+        "<risk_factors_and_limitations>[\n"
+        '  "Risk/Limitation 1: Description",\n'
+        '  "Risk/Limitation 2: Description"\n'
+        "]</risk_factors_and_limitations>\n\n"
+        "Use proper JSON array format for experiments and risk_factors_and_limitations fields (include quotes and commas)."
     )
 
 
-def get_project_generation_prompt(db: DatabaseManager, context: str) -> str:
+def get_idea_generation_prompt(db: DatabaseManager, context: str) -> str:
     """
-    Get the system prompt for project draft generation.
+    Get the system prompt for research idea generation.
 
     Checks database for active custom prompt first, falls back to default if none found.
 
@@ -53,17 +61,17 @@ def get_project_generation_prompt(db: DatabaseManager, context: str) -> str:
         context: Pre-formatted context string to inject (e.g., memories)
 
     Returns:
-        str: The system prompt to use for project generation
+        str: The system prompt to use for idea generation
     """
     try:
-        prompt_data = db.get_active_prompt(PromptTypes.PROJECT_DRAFT_GENERATION.value)
+        prompt_data = db.get_active_prompt(PromptTypes.IDEA_GENERATION.value)
         if prompt_data:
             base_prompt = prompt_data.system_prompt
         else:
-            base_prompt = get_default_project_generation_prompt()
+            base_prompt = get_default_idea_generation_prompt()
     except Exception as e:
-        logger.warning(f"Failed to get custom project generation prompt: {e}")
-        base_prompt = get_default_project_generation_prompt()
+        logger.warning(f"Failed to get custom idea generation prompt: {e}")
+        base_prompt = get_default_idea_generation_prompt()
 
     return base_prompt.replace("{{context}}", context or "")
 
@@ -76,26 +84,24 @@ def get_default_chat_system_prompt() -> str:
         str: The default system prompt to use for chat
     """
     return (
-        "You are an AI project manager specialized in helping AGI research teams refine and develop project drafts. "
-        "You have access to tools that allow you to update the project draft and create Linear projects when ready. "
+        "You are an AI research assistant specialized in helping AGI research teams refine and develop research ideas. "
+        "You have access to tools that allow you to update the research idea with improvements. "
         "\n\nAvailable tools:\n"
-        "- update_project_draft: Update the title/description with improvements\n"
-        "- create_linear_project: Create a Linear project (requires user confirmation)\n"
+        "- update_idea: Update all fields of the research idea with improvements\n"
         "\n\nKey Guidelines:\n"
         "- Be conversational and helpful - ask clarifying questions to understand user needs\n"
         "- Focus on practical improvements - suggest specific, actionable enhancements\n"
-        "- Use the tools provided to interact with project drafts and create Linear projects\n"
-        "- Wait for user confirmation before creating Linear projects (this action locks the conversation)\n"
-        "- Use markdown formatting in project descriptions for better readability\n"
-        "- Break down complex projects into manageable components\n"
+        "- Use the tools provided to update research ideas\n"
+        "- Help refine experiments, hypotheses, and identify potential limitations\n"
+        "- Break down complex research questions into manageable experiments\n"
         "- Consider technical feasibility and resource requirements\n"
         "- Ask clarifying questions when needed to better understand the research goals\n"
-        "- When user wants to create a Linear project, always ask for confirmation first"
-        "\n\nCurrent project draft you are working on:\n"
-        "{{current_project_draft}}"
-        "\n\nOriginal imported conversation that inspired this project draft:\n"
+        "- When updating experiments or risk factors, provide them as complete JSON arrays"
+        "\n\nCurrent research idea you are working on:\n"
+        "{{current_idea}}"
+        "\n\nOriginal imported conversation that inspired this idea:\n"
         "---\n{{original_conversation_summary}}\n---\n\n"
-        "Use this original conversation as context when discussing and improving the project draft."
+        "Use this original conversation as context when discussing and improving the research idea."
         "\n\nAdditional context from prior conversations (memories):\n"
         "{{memories_context}}\n"
     )
@@ -146,20 +152,20 @@ def format_pdf_content_for_context(
 
 def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
     """
-    Get the system prompt for project chat.
+    Get the system prompt for idea chat.
 
     Checks database for active custom prompt first, falls back to default if none found.
-    Includes the original conversation context and current project draft.
+    Includes the original conversation context and current research idea.
 
     Args:
         db: Database manager instance
-        conversation_id: Conversation ID to include original context and get project draft
+        conversation_id: Conversation ID to include original context and get idea
 
     Returns:
         str: The system prompt to use for chat
     """
     try:
-        prompt_data = db.get_active_prompt(PromptTypes.PROJECT_DRAFT_CHAT.value)
+        prompt_data = db.get_active_prompt(PromptTypes.IDEA_CHAT.value)
         if prompt_data and prompt_data.system_prompt:
             base_prompt = prompt_data.system_prompt
         else:
@@ -168,19 +174,29 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
         logger.warning(f"Failed to get custom chat system prompt: {e}")
         base_prompt = get_default_chat_system_prompt()
 
-    # Retrieve the current project draft
-    current_project_draft_text = ""
+    # Retrieve the current research idea
+    current_idea_text = ""
     try:
-        project_draft = db.get_project_draft_by_conversation_id(conversation_id)
-        if project_draft:
-            current_project_draft_text = (
-                f"Title: {project_draft.title}\n" f"Description: {project_draft.description}"
+        idea = db.get_idea_by_conversation_id(conversation_id)
+        if idea:
+            experiments_formatted = "\n".join([f"  - {exp}" for exp in idea.experiments])
+            risks_formatted = "\n".join(
+                [f"  - {risk}" for risk in idea.risk_factors_and_limitations]
+            )
+            current_idea_text = (
+                f"Title: {idea.title}\n\n"
+                f"Short Hypothesis: {idea.short_hypothesis}\n\n"
+                f"Related Work: {idea.related_work}\n\n"
+                f"Abstract: {idea.abstract}\n\n"
+                f"Experiments:\n{experiments_formatted}\n\n"
+                f"Expected Outcome: {idea.expected_outcome}\n\n"
+                f"Risk Factors and Limitations:\n{risks_formatted}"
             )
         else:
-            current_project_draft_text = "No project draft found."
+            current_idea_text = "No research idea found."
     except Exception as e:
-        logger.warning(f"Failed to get project draft for conversation ID {conversation_id}: {e}")
-        current_project_draft_text = "Error retrieving project draft."
+        logger.warning(f"Failed to get idea for conversation ID {conversation_id}: {e}")
+        current_idea_text = "Error retrieving research idea."
 
     # Retrieve memories
     stored_memories = db.get_memories_block(conversation_id=conversation_id, source="imported_chat")
@@ -204,7 +220,7 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
         summary = generated_summary.summary
 
     # Replace placeholders
-    result = base_prompt.replace("{{current_project_draft}}", current_project_draft_text)
+    result = base_prompt.replace("{{current_idea}}", current_idea_text)
     result = result.replace("{{original_conversation_summary}}", summary)
     result = result.replace("{{memories_context}}", memories_context)
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ProjectDraft } from "@/types";
+import type { Idea } from "@/types";
 import { isNewVersionCreated } from "../utils/versionUtils";
 
 interface UseAnimationsReturn {
@@ -7,9 +7,9 @@ interface UseAnimationsReturn {
   newVersionAnimation: boolean;
   triggerUpdateAnimation: () => void;
   handleExternalUpdate: (
-    externalUpdate: ProjectDraft | null,
-    currentProjectDraft: ProjectDraft | null,
-    setProjectDraft: (draft: ProjectDraft) => void,
+    externalUpdate: Idea | null,
+    currentIdea: Idea | null,
+    setIdea: (draft: Idea) => void,
     setSelectedVersionForComparison: (version: number | null) => void,
     setShowDiffs: (show: boolean) => void,
     loadVersions: () => Promise<void>
@@ -26,9 +26,9 @@ export function useAnimations(): UseAnimationsReturn {
   };
 
   const handleExternalUpdate = async (
-    externalUpdate: ProjectDraft | null,
-    currentProjectDraft: ProjectDraft | null,
-    setProjectDraft: (draft: ProjectDraft) => void,
+    externalUpdate: Idea | null,
+    currentIdea: Idea | null,
+    setIdea: (draft: Idea) => void,
     setSelectedVersionForComparison: (version: number | null) => void,
     setShowDiffs: (show: boolean) => void,
     loadVersions: () => Promise<void>
@@ -36,9 +36,9 @@ export function useAnimations(): UseAnimationsReturn {
     if (!externalUpdate) return;
 
     // Store the previous version number before updating
-    const previousVersionNumber = currentProjectDraft?.active_version?.version_number;
+    const previousVersionNumber = currentIdea?.active_version?.version_number;
 
-    setProjectDraft(externalUpdate);
+    setIdea(externalUpdate);
     triggerUpdateAnimation();
 
     // Check if a new version was created

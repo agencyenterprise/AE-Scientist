@@ -18,7 +18,6 @@ export function ConversationsTable({ conversations, onSelect }: ConversationsTab
       user: c.userName || c.userEmail,
       imported: new Date(c.importDate).toLocaleString(),
       updated: new Date(c.updatedAt).toLocaleString(),
-      locked: c.isLocked,
       hasImages: false,
       hasPdfs: false,
     }));
@@ -73,14 +72,7 @@ export function ConversationsTable({ conversations, onSelect }: ConversationsTab
                   onClick={() => handleRowClick(row.conversation)}
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      {row.locked ? (
-                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                          Locked
-                        </span>
-                      ) : null}
-                      <span className="text-sm font-medium text-gray-900">{row.title}</span>
-                    </div>
+                    <span className="text-sm font-medium text-gray-900">{row.title}</span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{row.user}</td>
                   <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">

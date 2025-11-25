@@ -26,10 +26,6 @@ interface ConversationCardProps {
   importedChatMatch?: SearchMatch | null;
 }
 
-function classNames(...tokens: Array<string | false | null | undefined>): string {
-  return tokens.filter(Boolean).join(" ");
-}
-
 function getRelativeTime(dateIso: string): string {
   const date = new Date(dateIso);
   const diffMs = Date.now() - date.getTime();
@@ -63,7 +59,6 @@ export function ConversationCard({
   projectDraftMatch,
   importedChatMatch,
 }: ConversationCardProps): React.JSX.Element {
-  const isCompleted = Boolean(conversation.linearUrl);
   const updatedRel = useMemo(
     () => getRelativeTime(conversation.updatedAt),
     [conversation.updatedAt]
@@ -72,7 +67,7 @@ export function ConversationCard({
     () => getRelativeTime(conversation.importDate),
     [conversation.importDate]
   );
-  const descriptionPreview = (conversation.projectDraftDescription ?? "").slice(0, 500);
+  const abstractPreview = (conversation.ideaAbstract ?? "").slice(0, 500);
   const lastUser = (conversation.lastUserMessageContent ?? "").slice(0, 120);
   const lastAssistant = (conversation.lastAssistantMessageContent ?? "").slice(0, 120);
   const isGrid = false;
@@ -134,12 +129,7 @@ export function ConversationCard({
 
   return (
     <div
-      className={classNames(
-        "group relative border rounded-lg p-4 cursor-pointer transition-all shadow-sm hover:shadow-md",
-        isCompleted
-          ? "border-green-200 bg-green-50/40 hover:bg-green-50"
-          : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--muted)]"
-      )}
+      className="group relative border rounded-lg p-4 cursor-pointer transition-all shadow-sm hover:shadow-md border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--muted)]"
       onClick={() => onSelect(conversation)}
     >
       <div className={"flex flex-col md:flex-row md:items-start md:gap-6"}>
@@ -151,26 +141,19 @@ export function ConversationCard({
                 ? highlightInline(conversation.title, searchMatch.query)
                 : conversation.title}
             </h3>
-            <div className="flex items-center gap-2">
-              {isCompleted && (
-                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                  Completed
-                </span>
-              )}
-            </div>
           </div>
 
           {/* conversation match snippet moved to bottom full-width */}
 
-          {/* Project draft preview - always visible when present or when there's a match */}
-          {(conversation.projectDraftTitle ||
-            conversation.projectDraftDescription ||
+          {/* Idea preview - always visible when present or when there's a match */}
+          {(conversation.ideaTitle ||
+            conversation.ideaAbstract ||
             projectDraftMatch ||
             (searchMatch && searchMatch.contentType === "project_draft")) && (
             <div className="mt-3 bg-gray-50/60 border border-gray-200 rounded p-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                  Project Draft
+                  Idea
                 </h4>
                 {(searchMatch?.contentType === "project_draft" || projectDraftMatch) && (
                   <span className={`ml-2 ${badgeClass(isProjectMax)} text-xs`}>
@@ -183,9 +166,9 @@ export function ConversationCard({
                   </span>
                 )}
               </div>
-              {conversation.projectDraftTitle && (
+              {conversation.ideaTitle && (
                 <p className="text-sm font-medium text-gray-900 mt-1 line-clamp-1">
-                  {conversation.projectDraftTitle}
+                  {conversation.ideaTitle}
                 </p>
               )}
               {(searchMatch && searchMatch.contentType === "project_draft") || projectDraftMatch ? (
@@ -204,10 +187,10 @@ export function ConversationCard({
                   </ReactMarkdown>
                 </div>
               ) : (
-                conversation.projectDraftDescription && (
+                conversation.ideaAbstract && (
                   <p className="text-xs text-gray-700 mt-1 line-clamp-4">
-                    {descriptionPreview}
-                    {conversation.projectDraftDescription.length > 500 ? "…" : ""}
+                    {abstractPreview}
+                    {conversation.ideaAbstract.length > 500 ? "…" : ""}
                   </p>
                 )
               )}
@@ -365,26 +348,6 @@ export function ConversationCard({
             </svg>
             {!isGrid && <span>Imported Chat</span>}
           </a>
-          {conversation.linearUrl && (
-            <a
-              href={conversation.linearUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={e => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-green-700 hover:text-green-900"
-              title="Open Linear project"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M14 3h7v7m0-7L10 14m1 7H3v-8"
-                />
-              </svg>
-              {!isGrid && <span>Linear</span>}
-            </a>
-          )}
         </div>
         <div className="flex items-center gap-3 whitespace-nowrap">
           <span title={new Date(conversation.updatedAt).toISOString()}>Updated {updatedRel}</span>

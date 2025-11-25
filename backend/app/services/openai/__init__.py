@@ -12,11 +12,11 @@ from app.services.chat_models import (
     StreamDoneData,
     StreamDoneEvent,
     StreamErrorEvent,
-    StreamProjectUpdateEvent,
+    StreamIdeaUpdateEvent,
     StreamStatusEvent,
     ToolCallResult,
 )
-from app.services.openai.chat_with_project_draft import ChatWithProjectDraftStream
+from app.services.openai.chat_with_idea import ChatWithIdeaStream
 
 __all__ = [
     "ChatStatus",
@@ -25,8 +25,8 @@ __all__ = [
     "StreamDoneData",
     "StreamDoneEvent",
     "StreamErrorEvent",
-    "StreamProjectUpdateEvent",
+    "StreamIdeaUpdateEvent",
     "StreamStatusEvent",
     "ToolCallResult",
-    "ChatWithProjectDraftStream",
+    "ChatWithIdeaStream",
 ]

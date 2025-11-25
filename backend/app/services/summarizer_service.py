@@ -12,7 +12,6 @@ import re
 from typing import Awaitable, Callable, Dict, List, Optional, Tuple
 
 import httpx
-
 from app.models import ChatMessageData, ImportedChatMessage
 from app.services.database import DatabaseManager
 
@@ -256,9 +255,7 @@ class SummarizerService:
         recent_messages = [m for m in chat_history if m.id > latest_message_id]
         return summary_row.summary, recent_messages
 
-    async def add_messages_to_chat_summary(
-        self, conversation_id: int, project_draft_id: int
-    ) -> None:
+    async def add_messages_to_chat_summary(self, conversation_id: int, idea_id: int) -> None:
         """Add new chat messages to external conversation and update the polling target.
 
         Loads authoritative chat history from the database, determines which messages
@@ -272,7 +269,7 @@ class SummarizerService:
         - Only enqueue messages when there are at least MIN_BACKLOG_TO_SEND unsent messages.
         """
         try:
-            all_messages = self.db.get_chat_messages(project_draft_id)
+            all_messages = self.db.get_chat_messages(idea_id)
 
             # Filter messages to allowed roles and produce index mapping by ID
             allowed_roles = {"user", "assistant", "system"}
@@ -293,7 +290,7 @@ class SummarizerService:
                 model_messages = [
                     ChatMessageData(
                         id=m.id,
-                        project_draft_id=m.project_draft_id,
+                        idea_id=m.idea_id,
                         role=m.role,
                         content=m.content,
                         sequence_number=m.sequence_number,

@@ -482,7 +482,7 @@ export function ImportModal({
                   <h3 className="text-lg font-medium text-gray-900">Import Conversation</h3>
                   <div className="flex items-center space-x-2">
                     <ModelSelector
-                      promptType={PromptTypes.PROJECT_DRAFT_GENERATION}
+                      promptType={PromptTypes.IDEA_GENERATION}
                       onModelChange={handleModelChange}
                       onDefaultsChange={handleModelDefaults}
                       selectedModel={selectedModel}
@@ -593,7 +593,7 @@ export function ImportModal({
       <PromptEditModal
         isOpen={isPromptModalOpen}
         onClose={handleClosePromptModal}
-        promptType={PromptTypes.PROJECT_DRAFT_GENERATION}
+        promptType={PromptTypes.IDEA_GENERATION}
       />
     </>
   );

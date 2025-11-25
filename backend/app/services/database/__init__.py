@@ -1,5 +1,5 @@
 """
-Database module for AGI Judd's Idea Catalog.
+Database module for AE Scientist
 
 Provides a modular database management system organized by domain.
 Each domain has its own mixin class with specialized methods.
@@ -10,13 +10,11 @@ from .chat_messages import ChatMessagesMixin
 from .chat_summaries import ChatSummariesMixin
 from .conversations import ConversationsMixin
 from .file_attachments import FileAttachmentsMixin
+from .ideas import IdeasMixin
 from .imported_conversation_summaries import ImportedConversationSummariesMixin
 from .llm_defaults import LLMDefaultsMixin
 from .memories import ConversationMemoriesMixin
-from .project_drafts import ProjectDraftsMixin
-from .projects import ProjectsMixin
 from .prompts import PromptsMixin
-from .search_chunks import SearchChunksMixin
 from .service_keys import ServiceKeysDatabaseMixin
 from .users import UsersDatabaseMixin
 
@@ -24,17 +22,15 @@ from .users import UsersDatabaseMixin
 class DatabaseManager(
     BaseDatabaseManager,
     ConversationsMixin,
-    ProjectDraftsMixin,
+    IdeasMixin,
     ChatMessagesMixin,
     PromptsMixin,
-    ProjectsMixin,
     FileAttachmentsMixin,
     LLMDefaultsMixin,
     UsersDatabaseMixin,
     ServiceKeysDatabaseMixin,
     ImportedConversationSummariesMixin,
     ChatSummariesMixin,
-    SearchChunksMixin,
     ConversationMemoriesMixin,
 ):
     """

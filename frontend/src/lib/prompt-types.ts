@@ -5,8 +5,8 @@
  */
 
 export const PromptTypes = {
-  PROJECT_DRAFT_CHAT: "project_draft_chat",
-  PROJECT_DRAFT_GENERATION: "project_draft_generation",
+  IDEA_CHAT: "idea_chat",
+  IDEA_GENERATION: "idea_generation",
   IMPORTED_CHAT_SUMMARY: "imported_chat_summary",
 } as const;
 

@@ -7,9 +7,7 @@ This module contains FastAPI routes for managing default LLM model and provider 
 import logging
 from typing import Optional, Union
 
-from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, Field
-
+from app.middleware.auth import get_current_user
 from app.models import (
     LLMDefault,
     LLMDefaultsResponse,
@@ -22,6 +20,8 @@ from app.services import get_database
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
 from app.services.grok_service import SUPPORTED_MODELS as GROK_MODELS
 from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/llm-defaults")
 logger = logging.getLogger(__name__)
@@ -142,8 +142,6 @@ async def update_llm_defaults(
         )
 
     # Get authenticated user
-    from app.middleware.auth import get_current_user
-
     user = get_current_user(request)
 
     db = get_database()

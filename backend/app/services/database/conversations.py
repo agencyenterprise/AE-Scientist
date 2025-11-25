@@ -38,7 +38,6 @@ class FullConversation(NamedTuple):
     url: str
     title: str
     import_date: str
-    is_locked: bool
     created_at: datetime
     updated_at: datetime
     has_images: Optional[bool]
@@ -56,15 +55,13 @@ class DashboardConversation(NamedTuple):
     url: str
     title: str
     import_date: str
-    is_locked: bool
     created_at: datetime
     updated_at: datetime
     user_id: int
     user_name: str
     user_email: str
-    project_draft_title: Optional[str]
-    project_draft_description: Optional[str]
-    linear_url: Optional[str]
+    idea_title: Optional[str]
+    idea_abstract: Optional[str]
     last_user_message_content: Optional[str]
     last_assistant_message_content: Optional[str]
 
@@ -119,7 +116,7 @@ class ConversationsMixin:
                 cursor.execute(
                     """
                     SELECT c.id, c.url, c.title, c.import_date, c.imported_chat,
-                           c.is_locked, c.created_at, c.updated_at,
+                           c.created_at, c.updated_at,
                            u.id as user_id, u.name as user_name, u.email as user_email,
                            EXISTS(
                                SELECT 1 FROM file_attachments fa
@@ -158,7 +155,6 @@ class ConversationsMixin:
             url=row["url"],
             title=row["title"],
             import_date=row["import_date"].isoformat(),
-            is_locked=row["is_locked"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             has_images=row["has_images"],
@@ -246,9 +242,9 @@ class ConversationsMixin:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT id, url, title, import_date, is_locked, created_at, updated_at,
+                    SELECT id, url, title, import_date, created_at, updated_at,
                            user_id, user_name, user_email,
-                           project_draft_title, project_draft_description, linear_url,
+                           idea_title, idea_abstract,
                            last_user_message_content, last_assistant_message_content
                     FROM conversation_dashboard_view
                     ORDER BY updated_at DESC
@@ -264,15 +260,13 @@ class ConversationsMixin:
                 url=row["url"],
                 title=row["title"],
                 import_date=row["import_date"].isoformat(),
-                is_locked=row["is_locked"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
                 user_id=row["user_id"],
                 user_name=row["user_name"],
                 user_email=row["user_email"],
-                project_draft_title=row.get("project_draft_title"),
-                project_draft_description=row.get("project_draft_description"),
-                linear_url=row.get("linear_url"),
+                idea_title=row.get("idea_title"),
+                idea_abstract=row.get("idea_abstract"),
                 last_user_message_content=row.get("last_user_message_content"),
                 last_assistant_message_content=row.get("last_assistant_message_content"),
             )
@@ -322,12 +316,7 @@ class ConversationsMixin:
 
         return True
 
-    def conversation_is_locked(self, conversation_id: int) -> bool:
-        """Check if a conversation is locked (has an associated project)."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT COUNT(*) FROM projects WHERE conversation_id = %s", (conversation_id,)
-                )
-                result = cursor.fetchone()
-                return bool(result[0] > 0 if result else False)
+    def conversation_is_locked(self, _conversation_id: int) -> bool:
+        """Check if a conversation is locked (deprecated - always returns False)."""
+        # Conversations are no longer locked since Linear integration was removed
+        return False

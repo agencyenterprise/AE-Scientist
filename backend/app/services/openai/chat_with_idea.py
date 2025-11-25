@@ -3,6 +3,26 @@ import logging
 import traceback
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union, cast
 
+from app.config import settings
+from app.models import ChatMessageData, LLMModel
+from app.services import SummarizerService
+from app.services.base_llm_service import BaseLLMService, FileAttachmentData
+from app.services.chat_models import (
+    ChatStatus,
+    StreamContentEvent,
+    StreamConversationLockedEvent,
+    StreamDoneData,
+    StreamDoneEvent,
+    StreamErrorEvent,
+    StreamIdeaUpdateEvent,
+    StreamingResult,
+    StreamStatusEvent,
+    ToolCallResult,
+)
+from app.services.database import DatabaseManager, get_database
+from app.services.pdf_service import PDFService
+from app.services.prompts import format_pdf_content_for_context, get_chat_system_prompt
+from app.services.s3_service import get_s3_service
 from openai import AsyncOpenAI
 from openai._streaming import AsyncStream
 from openai.types.chat.chat_completion_chunk import (
@@ -30,28 +50,6 @@ from openai.types.responses import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 from openai.types.shared_params.function_parameters import FunctionParameters
-
-from app.config import settings
-from app.models import ChatMessageData, LLMModel
-from app.services import SummarizerService
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData
-from app.services.chat_models import (
-    ChatStatus,
-    StreamContentEvent,
-    StreamConversationLockedEvent,
-    StreamDoneData,
-    StreamDoneEvent,
-    StreamErrorEvent,
-    StreamingResult,
-    StreamProjectUpdateEvent,
-    StreamStatusEvent,
-    ToolCallResult,
-)
-from app.services.database import DatabaseManager, get_database
-from app.services.linear_service import LinearService
-from app.services.pdf_service import PDFService
-from app.services.prompts import format_pdf_content_for_context, get_chat_system_prompt
-from app.services.s3_service import get_s3_service
 
 logger = logging.getLogger(__name__)
 
@@ -100,39 +98,52 @@ def _get_chat_tools() -> List[ChatCompletionToolParam]:
     Get the tools for chat.
     """
     # Define tools for OpenAI
-    update_project_draft_params: FunctionParameters = {
+    update_idea_params: FunctionParameters = {
         "type": "object",
         "properties": {
-            "title": {"type": "string", "description": "The updated project title"},
-            "description": {
+            "title": {"type": "string", "description": "The updated idea title"},
+            "short_hypothesis": {"type": "string", "description": "Short hypothesis of the idea"},
+            "related_work": {
                 "type": "string",
-                "description": "The updated project description. Use markdown formatting for bullet points, lists, and other formatting.",
+                "description": "Related work or background. Use markdown formatting.",
+            },
+            "abstract": {
+                "type": "string",
+                "description": "Abstract of the idea. Use markdown formatting.",
+            },
+            "experiments": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of experiments",
+            },
+            "expected_outcome": {
+                "type": "string",
+                "description": "Expected outcome of the experiments",
+            },
+            "risk_factors_and_limitations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Risk factors and limitations",
             },
         },
-        "required": ["title", "description"],
-    }
-
-    create_linear_project_params: FunctionParameters = {
-        "type": "object",
-        "properties": {},
-        "required": [],
+        "required": [
+            "title",
+            "short_hypothesis",
+            "related_work",
+            "abstract",
+            "experiments",
+            "expected_outcome",
+            "risk_factors_and_limitations",
+        ],
     }
 
     tools: List[ChatCompletionToolParam] = [
         ChatCompletionToolParam(
             type="function",
             function=FunctionDefinition(
-                name="update_project_draft",
-                description="Update the project draft with improved title and description. This is the primary deliverable - use when concrete improvements are ready or when the user requests updates. Use markdown formatting for bullet points, lists, and other formatting.",
-                parameters=update_project_draft_params,
-            ),
-        ),
-        ChatCompletionToolParam(
-            type="function",
-            function=FunctionDefinition(
-                name="create_linear_project",
-                description="Create a Linear project using the current project draft. IMPORTANT: Only use this tool after explicitly asking the user for confirmation, as this action cannot be undone and will lock the conversation.",
-                parameters=create_linear_project_params,
+                name="update_idea",
+                description="Update the research idea with improved content. This is the primary deliverable - use when concrete improvements are ready or when the user requests updates. Use markdown formatting for bullet points, lists, and other formatting.",
+                parameters=update_idea_params,
             ),
         ),
     ]
@@ -144,29 +155,29 @@ async def _process_tool_calls(
     valid_tool_calls: List[ChoiceDeltaToolCall],
     collected_content: str,
     conversation_id: int,
-    project_draft_id: int,
+    idea_id: int,
     user_id: int,
     messages: List[ChatCompletionMessageParam],
 ) -> AsyncGenerator[
-    Union[
-        StreamStatusEvent, StreamProjectUpdateEvent, StreamConversationLockedEvent, ToolCallResult
-    ],
+    Union[StreamStatusEvent, StreamIdeaUpdateEvent, StreamConversationLockedEvent, ToolCallResult],
     None,
 ]:
     """
     Process tool calls and update messages list with tool responses.
 
     Args:
+        db: Database manager instance
         valid_tool_calls: List of valid tool calls to process
         collected_content: Content collected from streaming response
         conversation_id: ID of the conversation
-        project_draft_id: ID of the project draft
+        idea_id: ID of the idea
+        user_id: ID of the user
         messages: Messages list to append tool responses to
 
     Yields:
         Status and project update events, then boolean indicating if project was updated
     """
-    project_draft_updated = False
+    idea_updated = False
 
     yield StreamStatusEvent("status", ChatStatus.EXECUTING_TOOLS.value)
 
@@ -218,14 +229,21 @@ async def _process_tool_calls(
             continue
 
         # Execute tool functions
-        if function_name == "update_project_draft":
-            yield StreamStatusEvent("status", ChatStatus.UPDATING_PROJECT_DRAFT.value)
-            title = function_args.get("title", "")
-            description = function_args.get("description", "")
+        if function_name == "update_idea":
+            yield StreamStatusEvent("status", ChatStatus.UPDATING_IDEA.value)
 
-            # Validate title length before proceeding
-            if len(title) > settings.MAX_PROJECT_TITLE_LENGTH:
-                error_message = f"❌ Project title validation failed: Title '{title}' is {len(title)} characters long, but maximum allowed is {settings.MAX_PROJECT_TITLE_LENGTH} characters for Linear compatibility. Please create a shorter, more concise title."
+            # Get all required fields
+            title = function_args.get("title", "")
+            short_hypothesis = function_args.get("short_hypothesis", "")
+            related_work = function_args.get("related_work", "")
+            abstract = function_args.get("abstract", "")
+            experiments = function_args.get("experiments", [])
+            expected_outcome = function_args.get("expected_outcome", "")
+            risk_factors_and_limitations = function_args.get("risk_factors_and_limitations", [])
+
+            # Validate required fields
+            if not title or not short_hypothesis or not abstract:
+                error_message = "❌ Tool validation failed: update_idea requires non-empty 'title', 'short_hypothesis', and 'abstract'"
                 messages.append(
                     ChatCompletionToolMessageParam(
                         role="tool",
@@ -233,28 +251,48 @@ async def _process_tool_calls(
                         tool_call_id=tool_call.id or "",
                     )
                 )
-                logger.warning(
-                    f"Title validation failed - length: {len(title)}, limit: {settings.MAX_PROJECT_TITLE_LENGTH}"
+                logger.error(
+                    f"Empty required arguments for update_idea: title='{title}', short_hypothesis='{short_hypothesis}', abstract length={len(abstract)}"
+                )
+                continue
+
+            # Validate experiments and risks are lists
+            if not isinstance(experiments, list) or not isinstance(
+                risk_factors_and_limitations, list
+            ):
+                error_message = "❌ Tool validation failed: experiments and risk_factors_and_limitations must be arrays"
+                messages.append(
+                    ChatCompletionToolMessageParam(
+                        role="tool",
+                        content=error_message,
+                        tool_call_id=tool_call.id or "",
+                    )
+                )
+                logger.error(
+                    f"Type validation failed for update_idea: experiments={type(experiments)}, risks={type(risk_factors_and_limitations)}"
                 )
                 continue
 
             try:
-                db.create_project_draft_version(
-                    project_draft_id=project_draft_id,
+                db.create_idea_version(
+                    idea_id=idea_id,
                     title=title,
-                    description=description,
+                    short_hypothesis=short_hypothesis,
+                    related_work=related_work,
+                    abstract=abstract,
+                    experiments=experiments,
+                    expected_outcome=expected_outcome,
+                    risk_factors_and_limitations=risk_factors_and_limitations,
                     is_manual_edit=False,
                     created_by_user_id=user_id,
                 )
-                project_draft_updated = True
+                idea_updated = True
 
-                updated_project_draft = db.get_project_draft_by_conversation_id(conversation_id)
-                if updated_project_draft:
-                    yield StreamProjectUpdateEvent("project_updated", "true")
+                updated_idea = db.get_idea_by_conversation_id(conversation_id)
+                if updated_idea:
+                    yield StreamIdeaUpdateEvent("idea_updated", "true")
 
-                success_message = (
-                    f"✅ Project draft updated successfully: {title} ({len(title)} chars)"
-                )
+                success_message = f"✅ Idea updated successfully: {title}"
                 messages.append(
                     ChatCompletionToolMessageParam(
                         role="tool",
@@ -263,65 +301,11 @@ async def _process_tool_calls(
                     )
                 )
             except Exception as e:
-                error_message = f"❌ Failed to update project draft: {str(e)}"
+                error_message = f"❌ Failed to update idea: {str(e)}"
                 messages.append(
                     ChatCompletionToolMessageParam(
                         role="tool",
                         content=error_message,
-                        tool_call_id=tool_call.id or "",
-                    )
-                )
-
-        elif function_name == "create_linear_project":
-            yield StreamStatusEvent("status", "creating_linear_project")
-            try:
-                # Get current project draft
-                current_draft = db.get_project_draft_by_conversation_id(conversation_id)
-                if not current_draft:
-                    messages.append(
-                        ChatCompletionToolMessageParam(
-                            role="tool",
-                            content="❌ No project draft found to create Linear project from",
-                            tool_call_id=tool_call.id or "",
-                        )
-                    )
-                    continue
-
-                linear_service = LinearService()
-
-                # Create Linear project
-                linear_project = await linear_service.create_project(
-                    title=current_draft.title,
-                    description=current_draft.description,
-                )
-
-                # Save project to database and lock conversation
-                db.create_project(
-                    conversation_id=conversation_id,
-                    linear_project_id=linear_project.id,
-                    title=linear_project.name,
-                    description=linear_project.content,
-                    linear_url=linear_project.url,
-                    created_by_user_id=user_id,
-                )
-
-                # Notify frontend that conversation is locked
-                yield StreamConversationLockedEvent("conversation_locked", linear_project.url)
-
-                success_message = f"✅ Linear project created successfully! The conversation is now locked. View your project: {linear_project.url}"
-                messages.append(
-                    ChatCompletionToolMessageParam(
-                        role="tool",
-                        content=success_message,
-                        tool_call_id=tool_call.id or "",
-                    )
-                )
-
-            except Exception as e:
-                messages.append(
-                    ChatCompletionToolMessageParam(
-                        role="tool",
-                        content=f"❌ Failed to create Linear project: {str(e)}",
                         tool_call_id=tool_call.id or "",
                     )
                 )
@@ -329,7 +313,7 @@ async def _process_tool_calls(
     logger.info(f"Finished processing all {len(valid_tool_calls)} tool calls")
     logger.debug(f"Messages now: {len(messages)} total")
 
-    yield ToolCallResult(project_updated=project_draft_updated, tool_results=[])
+    yield ToolCallResult(idea_updated=idea_updated, tool_results=[])
 
 
 async def _collect_streaming_response(
@@ -421,7 +405,7 @@ async def _collect_streaming_response(
     yield StreamingResult(collected_content=collected_content, valid_tool_calls=valid_tool_calls)
 
 
-class ChatWithProjectDraftStream:
+class ChatWithIdeaStream:
     def __init__(self, service: BaseLLMService, summarizer_service: SummarizerService):
         self.service = service
         self.summarizer_service = summarizer_service
@@ -439,7 +423,7 @@ class ChatWithProjectDraftStream:
 
         Args:
             db: Database manager instance
-            conversation_id: ID of the conversation to get original context and project draft
+            conversation_id: ID of the conversation to get original context and idea
             user_message: Current user message
             chat_history: Previous chat messages
             attached_files: List of FileAttachmentData objects
@@ -556,7 +540,7 @@ class ChatWithProjectDraftStream:
 
         Args:
             db: Database manager instance
-            conversation_id: ID of the conversation to get original context and project draft
+            conversation_id: ID of the conversation to get original context and idea
             user_message: Current user message
             chat_history: Previous chat messages
             attached_files: List of FileAttachmentData objects
@@ -666,12 +650,12 @@ class ChatWithProjectDraftStream:
 
         return input_messages
 
-    async def chat_with_project_draft_stream(
+    async def chat_with_idea_stream(
         self,
         client: AsyncOpenAI,
         model: LLMModel,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_message: str,
         chat_history: List[ChatMessageData],
         attached_files: List[FileAttachmentData],
@@ -680,14 +664,14 @@ class ChatWithProjectDraftStream:
         Union[
             StreamStatusEvent,
             StreamContentEvent,
-            StreamProjectUpdateEvent,
+            StreamIdeaUpdateEvent,
             StreamConversationLockedEvent,
             StreamErrorEvent,
             StreamDoneEvent,
         ],
         None,
     ]:
-        project_draft_updated = False
+        idea_updated = False
         full_assistant_response = ""
 
         # Build messages using helper function
@@ -775,7 +759,7 @@ class ChatWithProjectDraftStream:
                             messages=messages,
                             tools=tools,
                             stream=True,
-                            max_completion_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+                            max_completion_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
                         )
                     else:
                         response = await client.chat.completions.create(
@@ -783,7 +767,7 @@ class ChatWithProjectDraftStream:
                             messages=messages,
                             tools=tools,
                             stream=True,
-                            max_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+                            max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
                         )
 
                 logger.debug(
@@ -897,14 +881,14 @@ class ChatWithProjectDraftStream:
                         valid_tool_calls=valid_tool_calls,
                         collected_content=collected_content,
                         conversation_id=conversation_id,
-                        project_draft_id=project_draft_id,
+                        idea_id=idea_id,
                         user_id=user_id,
                         messages=messages,
                     ):
                         if isinstance(tool_item, ToolCallResult):
-                            # This is the final result with project update status
-                            if tool_item.project_updated:
-                                project_draft_updated = True
+                            # This is the final result with idea update status
+                            if tool_item.idea_updated:
+                                idea_updated = True
                         elif isinstance(tool_item, StreamConversationLockedEvent):
                             # Forward conversation locked event and stop processing
                             yield tool_item
@@ -912,7 +896,7 @@ class ChatWithProjectDraftStream:
                             yield StreamDoneEvent(
                                 "done",
                                 StreamDoneData(
-                                    project_updated=project_draft_updated,
+                                    idea_updated=idea_updated,
                                     assistant_response=full_assistant_response,
                                 ),
                             )
@@ -930,7 +914,7 @@ class ChatWithProjectDraftStream:
                         yield StreamDoneEvent(
                             "done",
                             StreamDoneData(
-                                project_updated=project_draft_updated,
+                                idea_updated=idea_updated,
                                 assistant_response=full_assistant_response,
                             ),
                         )
@@ -949,16 +933,16 @@ class ChatWithProjectDraftStream:
             yield StreamStatusEvent("status", ChatStatus.DONE.value)
 
             logger.info(
-                f"Sending done event - project_updated: {project_draft_updated}, response length: {len(full_assistant_response)}"
+                f"Sending done event - idea_updated: {idea_updated}, response length: {len(full_assistant_response)}"
             )
             yield StreamDoneEvent(
                 "done",
                 StreamDoneData(
-                    project_updated=project_draft_updated,
+                    idea_updated=idea_updated,
                     assistant_response=full_assistant_response,
                 ),
             )
 
         except Exception as e:
-            logger.exception(f"Error in chat_with_project_draft_stream: {str(e)}")
+            logger.exception(f"Error in chat_with_idea_stream: {str(e)}")
             yield StreamErrorEvent("error", f"An error occurred: {str(e)}")

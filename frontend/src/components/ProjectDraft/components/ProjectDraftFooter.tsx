@@ -1,16 +1,15 @@
 import React from "react";
-import type { ProjectDraft, ProjectDraftVersion } from "@/types";
+import type { Idea, IdeaVersion } from "@/types";
 import { VersionNavigationPanel } from "./VersionNavigationPanel";
-import { isProjectDraftGenerating } from "../utils/versionUtils";
+import { isIdeaGenerating } from "../utils/versionUtils";
 
 interface ProjectDraftFooterProps {
-  projectDraft: ProjectDraft;
+  projectDraft: Idea;
   isEditing: boolean;
-  isLocked?: boolean;
   showDiffs: boolean;
-  comparisonVersion: ProjectDraftVersion | null;
-  nextVersion: ProjectDraftVersion | null;
-  allVersions: ProjectDraftVersion[];
+  comparisonVersion: IdeaVersion | null;
+  nextVersion: IdeaVersion | null;
+  allVersions: IdeaVersion[];
   canNavigatePrevious: boolean;
   canNavigateNext: boolean;
   newVersionAnimation: boolean;
@@ -23,7 +22,6 @@ interface ProjectDraftFooterProps {
 export function ProjectDraftFooter({
   projectDraft,
   isEditing,
-  isLocked,
   showDiffs,
   comparisonVersion,
   nextVersion,
@@ -36,36 +34,34 @@ export function ProjectDraftFooter({
   onRevertChanges,
   onCreateProject,
 }: ProjectDraftFooterProps): React.JSX.Element {
-  const isGenerating = isProjectDraftGenerating(projectDraft);
+  const isGenerating = isIdeaGenerating(projectDraft);
 
   return (
     <>
       {/* Version Info and Diff Legend */}
-      {!isLocked && (
-        <div className="flex-shrink-0 py-2 text-xs text-gray-500 flex items-center justify-between">
-          <div>
-            {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating
-              ? `Changes from version ${comparisonVersion.version_number} to ${nextVersion.version_number}`
-              : `Version ${projectDraft.active_version?.version_number || "?"}`}{" "}
-            • {projectDraft.active_version?.is_manual_edit ? "Manual edit" : "AI generated"} •{" "}
-            {projectDraft.active_version?.created_at
-              ? new Date(projectDraft.active_version.created_at).toLocaleDateString()
-              : "Unknown date"}
-          </div>
-          {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating && (
-            <div>
-              <span className="inline-flex items-center">
-                <span className="w-3 h-3 bg-red-100 border border-red-200 rounded mr-2"></span>
-                Removed
-              </span>
-              <span className="inline-flex items-center ml-4">
-                <span className="w-3 h-3 bg-green-100 border border-green-200 rounded mr-2"></span>
-                Added
-              </span>
-            </div>
-          )}
+      <div className="flex-shrink-0 py-2 text-xs text-gray-500 flex items-center justify-between">
+        <div>
+          {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating
+            ? `Changes from version ${comparisonVersion.version_number} to ${nextVersion.version_number}`
+            : `Version ${projectDraft.active_version?.version_number || "?"}`}{" "}
+          • {projectDraft.active_version?.is_manual_edit ? "Manual edit" : "AI generated"} •{" "}
+          {projectDraft.active_version?.created_at
+            ? new Date(projectDraft.active_version.created_at).toLocaleDateString()
+            : "Unknown date"}
         </div>
-      )}
+        {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating && (
+          <div>
+            <span className="inline-flex items-center">
+              <span className="w-3 h-3 bg-red-100 border border-red-200 rounded mr-2"></span>
+              Removed
+            </span>
+            <span className="inline-flex items-center ml-4">
+              <span className="w-3 h-3 bg-green-100 border border-green-200 rounded mr-2"></span>
+              Added
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Footer with Navigation, Revert Button and Create Project Button */}
       <div className="flex-shrink-0 py-3 border-gray-200 flex items-center justify-between">
@@ -95,32 +91,25 @@ export function ProjectDraftFooter({
           </div>
         )}
 
-        {/* Create Project button (hidden when locked) */}
-        {!isLocked && (
-          <button
-            onClick={onCreateProject}
-            disabled={isGenerating}
-            className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-              isGenerating
-                ? "bg-gray-400 text-gray-600 cursor-not-allowed"
-                : "bg-green-600 text-white hover:bg-green-700"
-            } ${
-              !showDiffs || !comparisonVersion || !nextVersion || isEditing || isGenerating
-                ? "ml-auto"
-                : ""
-            }`}
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span>Create Project</span>
-          </button>
-        )}
+        {/* Create Project button */}
+        <button
+          onClick={onCreateProject}
+          disabled={isGenerating}
+          className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
+            isGenerating
+              ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+              : "bg-green-600 text-white hover:bg-green-700"
+          } ${
+            !showDiffs || !comparisonVersion || !nextVersion || isEditing || isGenerating
+              ? "ml-auto"
+              : ""
+          }`}
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Create Project</span>
+        </button>
       </div>
     </>
   );

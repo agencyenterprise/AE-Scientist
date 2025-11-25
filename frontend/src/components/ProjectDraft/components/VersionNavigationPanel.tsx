@@ -1,8 +1,8 @@
 import React from "react";
-import type { ProjectDraftVersion } from "@/types";
+import type { IdeaVersion } from "@/types";
 
 interface VersionNavigationPanelProps {
-  comparisonVersion: ProjectDraftVersion;
+  comparisonVersion: IdeaVersion;
   canNavigatePrevious: boolean;
   canNavigateNext: boolean;
   onPreviousVersion: () => void;

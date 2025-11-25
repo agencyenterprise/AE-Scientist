@@ -10,9 +10,8 @@ import traceback
 from typing import Dict, List, Optional
 
 import aiohttp
-from pydantic import BaseModel
-
 from app.config import settings
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

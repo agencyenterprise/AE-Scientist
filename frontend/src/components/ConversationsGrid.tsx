@@ -14,18 +14,11 @@ interface ConversationsGridProps {
 // LinearFilter now lives in DashboardContext
 
 export function ConversationsGrid({ conversations, onSelect }: ConversationsGridProps) {
-  const { linearFilter, sortKey, sortDir } = useDashboard();
+  const { sortKey, sortDir } = useDashboard();
 
   const filtered = useMemo(() => {
-    let items = conversations;
-    // Linear filter
-    if (linearFilter === "completed") {
-      items = items.filter(c => Boolean(c.linearUrl));
-    } else if (linearFilter === "in_progress") {
-      items = items.filter(c => !c.linearUrl);
-    }
     // Sort
-    const sorted = [...items].sort((a, b) => {
+    const sorted = [...conversations].sort((a, b) => {
       if (sortKey === "title") {
         return (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" });
       }
@@ -38,7 +31,7 @@ export function ConversationsGrid({ conversations, onSelect }: ConversationsGrid
     });
     if (sortDir === "desc") sorted.reverse();
     return sorted;
-  }, [conversations, linearFilter, sortKey, sortDir]);
+  }, [conversations, sortKey, sortDir]);
 
   return (
     <div className="h-full flex flex-col">

@@ -9,10 +9,6 @@ import asyncio
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile
-from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models.chat import FileAttachment
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
@@ -26,6 +22,9 @@ from app.services.openai_service import OpenAIService
 from app.services.pdf_service import PDFService
 from app.services.s3_service import S3Service
 from app.services.summarizer_service import SummarizerService
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 
@@ -364,9 +363,9 @@ async def list_conversation_files(
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
-        # Get all chat messages for this conversation's project draft
-        project_draft_data = db.get_project_draft_by_conversation_id(conversation_id)
-        if not project_draft_data:
+        # Get all chat messages for this conversation's idea
+        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        if not idea_data:
             return FileListResponse(files=[], file_count=0)
 
         # Get all file attachments for this conversation

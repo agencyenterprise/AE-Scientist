@@ -1,38 +1,38 @@
 """
-OpenAI service for generating conversation summaries and project drafts.
+OpenAI service for generating conversation summaries and ideas.
 
 This module handles communication with OpenAI API to generate summaries
-of conversations and transform them into structured project proposals.
+of conversations and transform them into structured research ideas.
 """
 
+import json
 import logging
 import os
 import re
 from typing import Any, AsyncGenerator, Dict, List, Union, cast
 
+from app.config import settings
+from app.models import ChatMessageData, LLMModel
+from app.services import SummarizerService
+from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMIdeaGeneration
+from app.services.chat_models import (
+    StreamContentEvent,
+    StreamConversationLockedEvent,
+    StreamDoneEvent,
+    StreamErrorEvent,
+    StreamIdeaUpdateEvent,
+    StreamStatusEvent,
+)
+from app.services.database import get_database
+from app.services.mem0_service import Mem0Service
+from app.services.openai.chat_with_idea import ChatWithIdeaStream
+from app.services.prompts import get_idea_generation_prompt
 from openai import AsyncOpenAI
 from openai._streaming import AsyncStream
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
 )
-
-from app.config import settings
-from app.models import ChatMessageData, LLMModel
-from app.services import SummarizerService
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMProjectGeneration
-from app.services.chat_models import (
-    StreamContentEvent,
-    StreamConversationLockedEvent,
-    StreamDoneEvent,
-    StreamErrorEvent,
-    StreamProjectUpdateEvent,
-    StreamStatusEvent,
-)
-from app.services.database import get_database
-from app.services.mem0_service import Mem0Service
-from app.services.openai.chat_with_project_draft import ChatWithProjectDraftStream
-from app.services.prompts import get_project_generation_prompt
 
 logger = logging.getLogger(__name__)
 mem0 = Mem0Service()
@@ -281,33 +281,71 @@ class OpenAIService(BaseLLMService):
         if not any_yielded:
             logger.warning("Chat completions stream yielded no content for model %s", model_id)
 
-    def _parse_project_draft_response(self, content: str) -> LLMProjectGeneration:
-        """Parse project draft from streamed content with title/description tags."""
+    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
+        """Parse research idea from streamed content with XML-style tags."""
+        logger.debug(f"Parsing idea response: {content[:500]}...")
 
-        # Extract title
-        logger.debug(f"Parsing project draft response: {content}")
+        # Extract all fields
         title_match = re.search(r"<title>(.*?)</title>", content, re.DOTALL)
         title = title_match.group(1).strip() if title_match else ""
 
-        if len(title) > settings.MAX_PROJECT_TITLE_LENGTH:
-            title = title[: settings.MAX_PROJECT_TITLE_LENGTH - 3] + "..."
-            logger.warning(
-                f"Truncated project title from {len(title)} to {settings.MAX_PROJECT_TITLE_LENGTH} characters for Linear compatibility"
-            )
+        short_hypothesis_match = re.search(
+            r"<short_hypothesis>(.*?)</short_hypothesis>", content, re.DOTALL
+        )
+        short_hypothesis = short_hypothesis_match.group(1).strip() if short_hypothesis_match else ""
 
-        # Extract description
-        description_match = re.search(r"<description>(.*?)</description>", content, re.DOTALL)
-        description = description_match.group(1).strip() if description_match else ""
+        related_work_match = re.search(r"<related_work>(.*?)</related_work>", content, re.DOTALL)
+        related_work = related_work_match.group(1).strip() if related_work_match else ""
+
+        abstract_match = re.search(r"<abstract>(.*?)</abstract>", content, re.DOTALL)
+        abstract = abstract_match.group(1).strip() if abstract_match else ""
+
+        experiments_match = re.search(r"<experiments>(.*?)</experiments>", content, re.DOTALL)
+        experiments_raw = experiments_match.group(1).strip() if experiments_match else "[]"
+        try:
+            experiments = json.loads(experiments_raw)
+            if not isinstance(experiments, list):
+                experiments = [str(experiments)]
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse experiments as JSON: {experiments_raw[:100]}")
+            experiments = [experiments_raw]
+
+        expected_outcome_match = re.search(
+            r"<expected_outcome>(.*?)</expected_outcome>", content, re.DOTALL
+        )
+        expected_outcome = expected_outcome_match.group(1).strip() if expected_outcome_match else ""
+
+        risk_factors_match = re.search(
+            r"<risk_factors_and_limitations>(.*?)</risk_factors_and_limitations>",
+            content,
+            re.DOTALL,
+        )
+        risk_factors_raw = risk_factors_match.group(1).strip() if risk_factors_match else "[]"
+        try:
+            risk_factors_and_limitations = json.loads(risk_factors_raw)
+            if not isinstance(risk_factors_and_limitations, list):
+                risk_factors_and_limitations = [str(risk_factors_and_limitations)]
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse risk factors as JSON: {risk_factors_raw[:100]}")
+            risk_factors_and_limitations = [risk_factors_raw]
 
         logger.debug(f"Parsed title: {title}")
-        logger.debug(f"Parsed description: {description}")
+        logger.debug(f"Parsed experiments count: {len(experiments)}")
 
-        if not title or not description:
+        if not title or not short_hypothesis or not abstract:
             raise ValueError(
-                f"Failed to parse title or description from response. Content: {content[:200]}..."
+                f"Failed to parse required fields from response. Content: {content[:200]}..."
             )
 
-        return LLMProjectGeneration(title=title, description=description)
+        return LLMIdeaGeneration(
+            title=title,
+            short_hypothesis=short_hypothesis,
+            related_work=related_work,
+            abstract=abstract,
+            experiments=experiments,
+            expected_outcome=expected_outcome,
+            risk_factors_and_limitations=risk_factors_and_limitations,
+        )
 
     async def generate_text_single_call(
         self,
@@ -364,19 +402,22 @@ class OpenAIService(BaseLLMService):
         async for piece in self._openai_unified_stream(
             model_id=llm_model.id,
             messages=messages,
-            max_completion_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+            max_completion_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
         ):
             collected += piece
         return collected.strip()
 
-    async def generate_project_draft(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+    async def generate_idea(
+        self, llm_model: str, conversation_text: str, _user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
-        Generate a project draft with streaming content.
+        Generate a research idea with streaming content.
 
         Args:
-            messages: List of conversation messages
+            llm_model: The model to use
+            conversation_text: The conversation text to analyze
+            _user_id: The user ID
+            conversation_id: The conversation ID
 
         Yields:
             Content chunks as they are generated
@@ -393,7 +434,7 @@ class OpenAIService(BaseLLMService):
                 memories.append(f"{idx}. {m['memory']}")
             except KeyError:
                 continue
-        system_prompt = get_project_generation_prompt(db=db, context="\n".join(memories))
+        system_prompt = get_idea_generation_prompt(db=db, context="\n".join(memories))
 
         logger.debug(f"System prompt: {system_prompt}")
 
@@ -404,26 +445,26 @@ class OpenAIService(BaseLLMService):
             ),
             ChatCompletionUserMessageParam(
                 role="user",
-                content=f"Analyze this conversation and generate a project draft:\n\n{conversation_text}",
+                content=f"Analyze this conversation and generate a research idea:\n\n{conversation_text}",
             ),
         ]
 
-        logger.info("Sending streaming project draft generation request")
+        logger.info("Sending streaming idea generation request")
         logger.debug(f"Model: {llm_model}")
 
         async for content in self._openai_unified_stream(
             model_id=llm_model,
             messages=api_messages,
-            max_completion_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+            max_completion_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
         ):
             logger.debug(f"Content chunk: {content}")
             yield content
 
-    async def chat_with_project_draft_stream(
+    async def chat_with_idea_stream(
         self,
         llm_model: LLMModel,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_message: str,
         chat_history: List[ChatMessageData],
         attached_files: List[FileAttachmentData],
@@ -432,19 +473,19 @@ class OpenAIService(BaseLLMService):
         Union[
             StreamStatusEvent,
             StreamContentEvent,
-            StreamProjectUpdateEvent,
+            StreamIdeaUpdateEvent,
             StreamConversationLockedEvent,
             StreamErrorEvent,
             StreamDoneEvent,
         ],
         None,
     ]:
-        chat_wiht_project_draft_stream = ChatWithProjectDraftStream(self, self.summarizer_service)
-        async for item in chat_wiht_project_draft_stream.chat_with_project_draft_stream(
+        chat_with_idea_stream = ChatWithIdeaStream(self, self.summarizer_service)
+        async for item in chat_with_idea_stream.chat_with_idea_stream(
             self.client,
             llm_model,
             conversation_id=conversation_id,
-            project_draft_id=project_draft_id,
+            idea_id=idea_id,
             user_message=user_message,
             chat_history=chat_history,
             attached_files=attached_files,

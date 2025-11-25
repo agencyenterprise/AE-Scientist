@@ -1,23 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type {
-  ConversationDetail,
-  Project,
-  ProjectDraft,
-  ProjectDraftGetResponse,
-  ProjectGetResponse,
-} from "@/types";
+import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
 import { config, constants } from "@/lib/config";
-import { isProjectDraftGenerating } from "../utils/versionUtils";
+import { isIdeaGenerating } from "../utils/versionUtils";
 
 interface UseProjectDraftStateProps {
   conversation: ConversationDetail;
 }
 
 interface UseProjectDraftStateReturn {
-  projectDraft: ProjectDraft | null;
-  setProjectDraft: (draft: ProjectDraft) => void;
-  project: Project | null;
-  setProject: (project: Project) => void;
+  projectDraft: Idea | null;
+  setProjectDraft: (draft: Idea) => void;
   isLoading: boolean;
   isEditing: boolean;
   setIsEditing: (editing: boolean) => void;
@@ -38,14 +30,21 @@ interface UseProjectDraftStateReturn {
   handleCreateProject: () => void;
   handleCloseCreateModal: () => void;
   handleConfirmCreateProject: () => Promise<void>;
-  updateProjectDraft: (title: string, description: string) => Promise<void>;
+  updateProjectDraft: (ideaData: {
+    title: string;
+    short_hypothesis: string;
+    related_work: string;
+    abstract: string;
+    experiments: string[];
+    expected_outcome: string;
+    risk_factors_and_limitations: string[];
+  }) => Promise<void>;
 }
 
 export function useProjectDraftState({
   conversation,
 }: UseProjectDraftStateProps): UseProjectDraftStateReturn {
-  const [projectDraft, setProjectDraft] = useState<ProjectDraft | null>(null);
-  const [project, setProject] = useState<Project | null>(null);
+  const [projectDraft, setProjectDraft] = useState<Idea | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -55,37 +54,37 @@ export function useProjectDraftState({
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const isLocked = conversation.is_locked;
-
   const updateProjectDraft = useCallback(
-    async (title: string, description: string): Promise<void> => {
+    async (ideaData: {
+      title: string;
+      short_hypothesis: string;
+      related_work: string;
+      abstract: string;
+      experiments: string[];
+      expected_outcome: string;
+      risk_factors_and_limitations: string[];
+    }): Promise<void> => {
       setIsUpdating(true);
       try {
-        const response = await fetch(
-          `${config.apiUrl}/conversations/${conversation.id}/project-draft`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({
-              title: title,
-              description: description,
-            } satisfies import("@/types").ApiComponents["schemas"]["ProjectDraftCreateRequest"]),
-          }
-        );
+        const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/idea`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(ideaData),
+        });
 
         if (response.ok) {
-          const result: ProjectDraftGetResponse = await response.json();
-          setProjectDraft(result.project_draft);
+          const result: IdeaGetResponse = await response.json();
+          setProjectDraft(result.idea);
           return;
         }
         const errorResult = await response.json();
-        throw new Error(errorResult.error || "Failed to update project draft");
+        throw new Error(errorResult.error || "Failed to update idea");
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.error("Failed to update project draft:", error);
+        console.error("Failed to update idea:", error);
         throw error;
       } finally {
         setIsUpdating(false);
@@ -95,8 +94,24 @@ export function useProjectDraftState({
   );
 
   const handleEdit = (): void => {
-    setEditTitle(projectDraft?.active_version?.title || "");
-    setEditDescription(projectDraft?.active_version?.description || "");
+    if (!projectDraft?.active_version) return;
+
+    setEditTitle(projectDraft.active_version.title || "");
+    // Serialize all idea fields as JSON for editing
+    const ideaJson = JSON.stringify(
+      {
+        title: projectDraft.active_version.title,
+        short_hypothesis: projectDraft.active_version.short_hypothesis,
+        related_work: projectDraft.active_version.related_work,
+        abstract: projectDraft.active_version.abstract,
+        experiments: projectDraft.active_version.experiments,
+        expected_outcome: projectDraft.active_version.expected_outcome,
+        risk_factors_and_limitations: projectDraft.active_version.risk_factors_and_limitations,
+      },
+      null,
+      2
+    );
+    setEditDescription(ideaJson);
     setIsEditing(true);
   };
 
@@ -107,12 +122,18 @@ export function useProjectDraftState({
     if (!trimmedTitle || !trimmedDescription) return;
 
     try {
-      await updateProjectDraft(trimmedTitle, trimmedDescription);
+      // Parse the JSON from editDescription
+      const ideaData = JSON.parse(trimmedDescription);
+      // Override title from the title field
+      ideaData.title = trimmedTitle;
+      await updateProjectDraft(ideaData);
       setIsEditing(false);
       setEditTitle("");
       setEditDescription("");
-    } catch {
-      // Error handling is done in updateProjectDraft
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to parse or save idea:", error);
+      throw error;
     }
   };
 
@@ -139,66 +160,24 @@ export function useProjectDraftState({
   };
 
   const handleConfirmCreateProject = async (): Promise<void> => {
-    if (!projectDraft?.active_version) return;
-
-    setIsCreatingProject(true);
-    try {
-      const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/project`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          title: projectDraft.active_version.title,
-          description: projectDraft.active_version.description,
-        }),
-      });
-
-      if (response.ok) {
-        const result: ProjectGetResponse = await response.json();
-        setProject(result.project);
-        setIsCreateModalOpen(false);
-        return;
-      }
-      const errorResult = await response.json();
-      throw new Error(errorResult.error || "Failed to create project");
-    } catch (error) {
-      // Re-throw error so the modal can display it
-      throw error;
-    } finally {
-      setIsCreatingProject(false);
-    }
+    // Project creation functionality removed (Linear integration removed)
+    setIsCreateModalOpen(false);
   };
 
   // Load initial data
   useEffect(() => {
     const loadData = async (): Promise<void> => {
       try {
-        // Always load project draft, even when locked (read-only display)
+        // Load idea
         const draftResponse = await fetch(
-          `${config.apiUrl}/conversations/${conversation.id}/project-draft`,
+          `${config.apiUrl}/conversations/${conversation.id}/idea`,
           {
             credentials: "include",
           }
         );
         if (draftResponse.ok) {
-          const draftResult: ProjectDraftGetResponse = await draftResponse.json();
-          setProjectDraft(draftResult.project_draft);
-        }
-
-        // Additionally load project details when locked (for Linear link/title)
-        if (isLocked) {
-          const projectResponse = await fetch(
-            `${config.apiUrl}/conversations/${conversation.id}/project`,
-            {
-              credentials: "include",
-            }
-          );
-          if (projectResponse.ok) {
-            const projectResult: ProjectGetResponse = await projectResponse.json();
-            setProject(projectResult.project);
-          }
+          const draftResult: IdeaGetResponse = await draftResponse.json();
+          setProjectDraft(draftResult.idea);
         }
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -209,29 +188,22 @@ export function useProjectDraftState({
     };
 
     loadData();
-  }, [conversation.id, isLocked]);
+  }, [conversation.id]);
 
-  // Poll for project draft updates when project is being generated
+  // Poll for idea updates when idea is being generated
   useEffect(() => {
-    if (isLocked) {
-      return;
-    }
-
     const checkAndPoll = async () => {
       try {
-        const response = await fetch(
-          `${config.apiUrl}/conversations/${conversation.id}/project-draft`,
-          {
-            credentials: "include",
-          }
-        );
+        const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/idea`, {
+          credentials: "include",
+        });
         if (response.ok) {
-          const result: ProjectDraftGetResponse = await response.json();
-          const draft = result.project_draft;
+          const result: IdeaGetResponse = await response.json();
+          const draft = result.idea;
           setProjectDraft(draft);
 
-          // Only continue polling if draft is still being generated
-          if (isProjectDraftGenerating(draft)) {
+          // Only continue polling if idea is still being generated
+          if (isIdeaGenerating(draft)) {
             return true; // Continue polling
           }
         }
@@ -252,7 +224,7 @@ export function useProjectDraftState({
     return () => {
       clearInterval(pollInterval);
     };
-  }, [conversation.id, isLocked]);
+  }, [conversation.id]);
 
   // Scroll to bottom when component mounts or project draft loads
   useEffect(() => {
@@ -269,8 +241,6 @@ export function useProjectDraftState({
   return {
     projectDraft,
     setProjectDraft,
-    project,
-    setProject,
     isLoading,
     isEditing,
     setIsEditing,

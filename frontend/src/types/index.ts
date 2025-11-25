@@ -18,20 +18,12 @@ export type ChatRequest = import("./api.gen").components["schemas"]["ChatRequest
 export type FileAttachment = import("./api.gen").components["schemas"]["FileAttachment"];
 export type FileListResponse = import("./api.gen").components["schemas"]["FileListResponse"];
 export type FileMetadata = import("./api.gen").components["schemas"]["FileMetadata"];
-export type Project = import("./api.gen").components["schemas"]["Project"];
-export type ProjectCreateResponse =
-  import("./api.gen").components["schemas"]["ProjectCreateResponse"];
-export type ProjectGetResponse = import("./api.gen").components["schemas"]["ProjectGetResponse"];
-export type ProjectDraft = import("./api.gen").components["schemas"]["ProjectDraft"];
-export type ProjectDraftVersion = import("./api.gen").components["schemas"]["ProjectDraftVersion"];
-export type ProjectDraftGetResponse =
-  import("./api.gen").components["schemas"]["ProjectDraftGetResponse"];
-export type ProjectDraftUpdateResponse =
-  import("./api.gen").components["schemas"]["ProjectDraftUpdateResponse"];
-export type ProjectDraftVersionsCleanResponse =
-  import("./api.gen").components["schemas"]["ProjectDraftVersionsResponse"];
-export type ProjectDraftCreateRequest =
-  import("./api.gen").components["schemas"]["ProjectDraftCreateRequest"];
+export type Idea = import("./api.gen").components["schemas"]["Idea"];
+export type IdeaVersion = import("./api.gen").components["schemas"]["IdeaVersion"];
+export type IdeaGetResponse = import("./api.gen").components["schemas"]["IdeaGetResponse"];
+export type IdeaUpdateResponse = import("./api.gen").components["schemas"]["IdeaUpdateResponse"];
+export type IdeaVersionsResponse =
+  import("./api.gen").components["schemas"]["IdeaVersionsResponse"];
 export type LLMDefault = import("./api.gen").components["schemas"]["LLMDefault"];
 export type LLMDefaultsResponse = import("./api.gen").components["schemas"]["LLMDefaultsResponse"];
 export type LLMDefaultsUpdateResponse =
@@ -53,8 +45,8 @@ export type LLMPromptCreateRequest =
 export enum ChatStatus {
   ANALYZING_REQUEST = "analyzing_request",
   EXECUTING_TOOLS = "executing_tools",
-  GETTING_PROJECT_DRAFT = "getting_project_draft",
-  UPDATING_PROJECT_DRAFT = "updating_project_draft",
+  GETTING_IDEA = "getting_idea",
+  UPDATING_IDEA = "updating_idea",
   GENERATING_RESPONSE = "generating_response",
   DONE = "done",
 }

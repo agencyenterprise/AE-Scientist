@@ -1,5 +1,5 @@
 """
-ChatGPT Scraper for the AGI Judd's Idea Catalog.
+ChatGPT Scraper for the AE Scientist
 
 This module contains the ChatGPT conversation scraper using Playwright
 for parsing and extracting content from ChatGPT share URLs.
@@ -11,8 +11,6 @@ from datetime import datetime
 from typing import Dict, List
 
 import html2text
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
-
 from app.models import (
     ImportedChat,
     ImportedChatMessage,
@@ -21,6 +19,7 @@ from app.models import (
     ParseSuccessResult,
 )
 from app.services.scraper.errors import ChatNotFound
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 logger = logging.getLogger(__name__)
 

@@ -9,12 +9,11 @@ Provides dual authentication support:
 import logging
 from typing import Callable, Optional
 
+from app.services.auth_service import AuthService
+from app.services.database.users import UserData
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-
-from app.services.auth_service import AuthService
-from app.services.database.users import UserData
 
 logger = logging.getLogger(__name__)
 

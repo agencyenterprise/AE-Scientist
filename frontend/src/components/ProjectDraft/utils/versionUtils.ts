@@ -1,12 +1,12 @@
-import type { ProjectDraftVersion, ProjectDraft } from "@/types";
+import type { IdeaVersion, Idea } from "@/types";
 
 /**
  * Find a version by its version number
  */
 export function findVersionByNumber(
-  versions: ProjectDraftVersion[],
+  versions: IdeaVersion[],
   versionNumber: number
-): ProjectDraftVersion | null {
+): IdeaVersion | null {
   return versions.find(v => v.version_number === versionNumber) || null;
 }
 
@@ -14,10 +14,10 @@ export function findVersionByNumber(
  * Get the comparison version based on selected version or default to previous
  */
 export function getComparisonVersion(
-  projectDraft: ProjectDraft | null,
-  allVersions: ProjectDraftVersion[],
+  projectDraft: Idea | null,
+  allVersions: IdeaVersion[],
   selectedVersionForComparison: number | null
-): ProjectDraftVersion | null {
+): IdeaVersion | null {
   if (!projectDraft?.active_version || allVersions.length < 2) {
     return null;
   }
@@ -36,9 +36,9 @@ export function getComparisonVersion(
  * Get the "next" version after the comparison version (the "to" version in the diff)
  */
 export function getNextVersion(
-  comparisonVersion: ProjectDraftVersion | null,
-  allVersions: ProjectDraftVersion[]
-): ProjectDraftVersion | null {
+  comparisonVersion: IdeaVersion | null,
+  allVersions: IdeaVersion[]
+): IdeaVersion | null {
   if (!comparisonVersion) {
     return null;
   }
@@ -51,7 +51,7 @@ export function getNextVersion(
 /**
  * Check if navigation to previous version is possible
  */
-export function canNavigateToPrevious(comparisonVersion: ProjectDraftVersion | null): boolean {
+export function canNavigateToPrevious(comparisonVersion: IdeaVersion | null): boolean {
   return !!(comparisonVersion && comparisonVersion.version_number > 1);
 }
 
@@ -59,8 +59,8 @@ export function canNavigateToPrevious(comparisonVersion: ProjectDraftVersion | n
  * Check if navigation to next version is possible
  */
 export function canNavigateToNext(
-  comparisonVersion: ProjectDraftVersion | null,
-  projectDraft: ProjectDraft | null
+  comparisonVersion: IdeaVersion | null,
+  projectDraft: Idea | null
 ): boolean {
   return !!(
     comparisonVersion &&
@@ -72,9 +72,7 @@ export function canNavigateToNext(
 /**
  * Get the previous version number for navigation
  */
-export function getPreviousVersionNumber(
-  comparisonVersion: ProjectDraftVersion | null
-): number | null {
+export function getPreviousVersionNumber(comparisonVersion: IdeaVersion | null): number | null {
   if (!comparisonVersion) return null;
 
   const previousVersionNumber = comparisonVersion.version_number - 1;
@@ -85,8 +83,8 @@ export function getPreviousVersionNumber(
  * Get the next version number for navigation
  */
 export function getNextVersionNumber(
-  comparisonVersion: ProjectDraftVersion | null,
-  projectDraft: ProjectDraft | null
+  comparisonVersion: IdeaVersion | null,
+  projectDraft: Idea | null
 ): number | null {
   if (!comparisonVersion || !projectDraft?.active_version) return null;
 
@@ -97,7 +95,7 @@ export function getNextVersionNumber(
 /**
  * Check if a project draft is currently being generated
  */
-export function isProjectDraftGenerating(draft: ProjectDraft | null): boolean {
+export function isIdeaGenerating(draft: Idea | null): boolean {
   return !!(
     draft?.active_version?.title === "Generating..." && draft?.active_version?.version_number === 1
   );

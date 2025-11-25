@@ -10,15 +10,13 @@ import logging
 import re
 from typing import AsyncGenerator, List, Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-
 from app.config import settings
 from app.middleware.auth import get_current_service, get_current_user
 from app.models import (
     ConversationResponse,
     ConversationUpdate,
+    Idea,
+    IdeaVersion,
     ImportChatCreateNew,
     ImportChatGPTConversation,
     ImportChatPrompt,
@@ -27,19 +25,14 @@ from app.models import (
     ImportedConversationSummaryUpdate,
     ParseErrorResult,
     ParseSuccessResult,
-    ProjectDraft,
-    ProjectDraftVersion,
     SlackImportRequest,
 )
 from app.prompt_types import PromptTypes
 from app.services import (
     AnthropicService,
-    ChunkingService,
-    EmbeddingsService,
     GrokService,
     Mem0Service,
     OpenAIService,
-    SearchIndexer,
     SummarizerService,
     get_database,
 )
@@ -49,8 +42,11 @@ from app.services.database.conversations import DashboardConversation as DBDashb
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.parser_router import ParserRouterService
-from app.services.prompts import get_project_generation_prompt
+from app.services.prompts import get_idea_generation_prompt
 from app.services.scraper.errors import ChatNotFound
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 
@@ -60,9 +56,6 @@ summarizer_service = SummarizerService()
 openai_service = OpenAIService(summarizer_service)
 anthropic_service = AnthropicService(summarizer_service)
 grok_service = GrokService(summarizer_service)
-embeddings_service = EmbeddingsService()
-chunking_service = ChunkingService()
-search_indexer = SearchIndexer(embeddings_service, chunking_service)
 mem0_service = Mem0Service()
 
 logger = logging.getLogger(__name__)
@@ -106,13 +99,11 @@ class ConversationListItem(BaseModel):
     import_date: str
     created_at: str
     updated_at: str
-    is_locked: bool
     user_id: int
     user_name: str
     user_email: str
-    project_draft_title: Optional[str] = None
-    project_draft_description: Optional[str] = None
-    linear_url: Optional[str] = None
+    idea_title: Optional[str] = None
+    idea_abstract: Optional[str] = None
     last_user_message_content: Optional[str] = None
     last_assistant_message_content: Optional[str] = None
 
@@ -155,7 +146,6 @@ def convert_db_to_api_response(db_conversation: DBFullConversation) -> Conversat
         url=db_conversation.url,
         title=db_conversation.title,
         import_date=db_conversation.import_date,
-        is_locked=db_conversation.is_locked,
         created_at=db_conversation.created_at.isoformat(),
         updated_at=db_conversation.updated_at.isoformat(),
         has_images=db_conversation.has_images,
@@ -216,7 +206,7 @@ async def _generate_imported_chat_keywords(
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
 
 
-async def _generate_project_draft(
+async def _generate_idea(
     db: DatabaseManager,
     llm_provider: str,
     llm_model: str,
@@ -224,57 +214,63 @@ async def _generate_project_draft(
     imported_conversation: str,
     user_id: int,
 ) -> AsyncGenerator[str, None]:
-    """Generate project draft, streaming the response."""
+    """Generate idea, streaming the response."""
     yield json.dumps({"type": "state", "data": "generating"}) + "\n"
     collected_content = ""
     if llm_provider == "openai":
-        async for content_chunk in openai_service.generate_project_draft(
+        async for content_chunk in openai_service.generate_idea(
             llm_model, imported_conversation, user_id, conversation_id
         ):
             collected_content += content_chunk
             yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_project = openai_service._parse_project_draft_response(collected_content)
+        llm_idea = openai_service._parse_idea_response(collected_content)
     elif llm_provider == "grok":
-        async for content_chunk in grok_service.generate_project_draft(
+        async for content_chunk in grok_service.generate_idea(
             llm_model, imported_conversation, user_id, conversation_id
         ):
             collected_content += content_chunk
             yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_project = grok_service._parse_project_draft_response(collected_content)
+        llm_idea = grok_service._parse_idea_response(collected_content)
     elif llm_provider == "anthropic":
-        async for content_chunk in anthropic_service.generate_project_draft(
+        async for content_chunk in anthropic_service.generate_idea(
             llm_model, imported_conversation, user_id, conversation_id
         ):
             collected_content += content_chunk
             yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_project = anthropic_service._parse_project_draft_response(collected_content)
+        llm_idea = anthropic_service._parse_idea_response(collected_content)
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
 
-    existing_draft = db.get_project_draft_by_conversation_id(conversation_id)
-    if existing_draft is None:
-        # Save project draft to database
-        project_draft_id = db.create_project_draft(
+    existing_idea = db.get_idea_by_conversation_id(conversation_id)
+    if existing_idea is None:
+        # Save idea to database
+        db.create_idea(
             conversation_id=conversation_id,
-            title=llm_project.title,
-            description=llm_project.description,
+            title=llm_idea.title,
+            short_hypothesis=llm_idea.short_hypothesis,
+            related_work=llm_idea.related_work,
+            abstract=llm_idea.abstract,
+            experiments=llm_idea.experiments,
+            expected_outcome=llm_idea.expected_outcome,
+            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
             created_by_user_id=user_id,
         )
     else:
-        project_draft_id = existing_draft.project_draft_id
-        db.update_project_draft_version(
-            project_draft_id=existing_draft.project_draft_id,
-            version_id=existing_draft.version_id,
-            title=llm_project.title,
-            description=llm_project.description,
+        db.update_idea_version(
+            idea_id=existing_idea.idea_id,
+            version_id=existing_idea.version_id,
+            title=llm_idea.title,
+            short_hypothesis=llm_idea.short_hypothesis,
+            related_work=llm_idea.related_work,
+            abstract=llm_idea.abstract,
+            experiments=llm_idea.experiments,
+            expected_outcome=llm_idea.expected_outcome,
+            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
             is_manual_edit=False,
         )
 
-    # Index active project draft
-    search_indexer.index_active_project_draft(project_draft_id=project_draft_id)
 
-
-async def _generate_project_draft_consuming_yields(
+async def _generate_idea_consuming_yields(
     db: DatabaseManager,
     llm_provider: str,
     llm_model: str,
@@ -282,8 +278,8 @@ async def _generate_project_draft_consuming_yields(
     imported_conversation: str,
     user_id: int,
 ) -> None:
-    """Generate project draft, consuming yields."""
-    async for _ in _generate_project_draft(
+    """Generate idea, consuming yields."""
+    async for _ in _generate_idea(
         db, llm_provider, llm_model, conversation_id, imported_conversation, user_id
     ):
         pass
@@ -318,11 +314,11 @@ def _must_summarize(
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
 
     ctx_tokens = _get_context_window_tokens()
-    system_prompt = get_project_generation_prompt(db, memories_block)
+    system_prompt = get_idea_generation_prompt(db, memories_block)
     system_prompt_tokens = max(len(system_prompt) // 4, 0)
     message_tokens = _estimate_tokens_from_messages()
     overhead_tokens = 256
-    planned_completion_tokens = settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS
+    planned_completion_tokens = settings.IDEA_MAX_COMPLETION_TOKENS
     total_planned = (
         message_tokens + system_prompt_tokens + overhead_tokens + planned_completion_tokens
     )
@@ -339,7 +335,7 @@ async def _process_import_background(
     messages: List[ImportedChatMessage],
     user_id: int,
 ) -> None:
-    """Run memories generation and schedule summarization/project draft in the background."""
+    """Run memories generation and schedule summarization/idea generation in the background."""
     try:
         imported_chat_keywords = await _generate_imported_chat_keywords(
             llm_provider=llm_provider,
@@ -372,7 +368,7 @@ async def _process_import_background(
 
             async def callback_function(summary_text: str) -> None:
                 try:
-                    await _generate_project_draft_consuming_yields(
+                    await _generate_idea_consuming_yields(
                         db=db,
                         llm_provider=llm_provider,
                         llm_model=llm_model,
@@ -382,19 +378,22 @@ async def _process_import_background(
                     )
                 except Exception as e:
                     logger.exception(
-                        f"Failed to generate project draft after summarization for conversation {conversation_id}: {e}"
+                        f"Failed to generate idea after summarization for conversation {conversation_id}: {e}"
                     )
                     try:
-                        db.create_project_draft(
+                        db.create_idea(
                             conversation_id=conversation_id,
-                            title="Failed to Generate Project Draft",
-                            description=(
-                                f"Project draft generation failed: {str(e)}\n\nPlease try regenerating the project draft manually."
-                            ),
+                            title="Failed to Generate Idea",
+                            short_hypothesis="Generation failed",
+                            related_work="",
+                            abstract=f"Idea generation failed: {str(e)}\n\nPlease try regenerating the idea manually.",
+                            experiments=[],
+                            expected_outcome="",
+                            risk_factors_and_limitations=[],
                             created_by_user_id=user_id,
                         )
                     except Exception:
-                        logger.exception("Failed to create failure placeholder project draft")
+                        logger.exception("Failed to create failure placeholder idea")
 
             asyncio.create_task(
                 summarizer_service.create_imported_chat_summary(
@@ -405,7 +404,7 @@ async def _process_import_background(
             )
         else:
             asyncio.create_task(
-                _generate_project_draft_consuming_yields(
+                _generate_idea_consuming_yields(
                     db=db,
                     llm_provider=llm_provider,
                     llm_model=llm_model,
@@ -433,26 +432,31 @@ async def _generate_response_for_conversation(
     """Generate response for conversation."""
     conversation = db.get_conversation_by_id(conversation_id)
     assert conversation is not None
-    project_draft_data = db.get_project_draft_by_conversation_id(conversation_id)
-    assert project_draft_data is not None
-    active_version = ProjectDraftVersion(
-        version_id=project_draft_data.version_id,
-        title=project_draft_data.title,
-        description=project_draft_data.description,
-        is_manual_edit=project_draft_data.is_manual_edit,
-        version_number=project_draft_data.version_number,
-        created_at=project_draft_data.version_created_at.isoformat(),
+    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    assert idea_data is not None
+    active_version = IdeaVersion(
+        version_id=idea_data.version_id,
+        title=idea_data.title,
+        short_hypothesis=idea_data.short_hypothesis,
+        related_work=idea_data.related_work,
+        abstract=idea_data.abstract,
+        experiments=idea_data.experiments,
+        expected_outcome=idea_data.expected_outcome,
+        risk_factors_and_limitations=idea_data.risk_factors_and_limitations,
+        is_manual_edit=idea_data.is_manual_edit,
+        version_number=idea_data.version_number,
+        created_at=idea_data.version_created_at.isoformat(),
     )
-    project_draft = ProjectDraft(
-        project_draft_id=project_draft_data.project_draft_id,
-        conversation_id=project_draft_data.conversation_id,
+    idea = Idea(
+        idea_id=idea_data.idea_id,
+        conversation_id=idea_data.conversation_id,
         active_version=active_version,
-        created_at=project_draft_data.created_at.isoformat(),
-        updated_at=project_draft_data.updated_at.isoformat(),
+        created_at=idea_data.created_at.isoformat(),
+        updated_at=idea_data.updated_at.isoformat(),
     )
     response_content = {
         "conversation": convert_db_to_api_response(conversation).model_dump(),
-        "project_draft": project_draft.model_dump(),
+        "idea": idea.model_dump(),
     }
     yield json.dumps({"type": "done", "data": response_content}) + "\n"
 
@@ -481,15 +485,13 @@ async def _handle_existing_conversation(
         summarizer_service.create_imported_chat_summary(existing_conversation_id, messages)
     )
 
-    search_indexer.index_imported_chat(conversation_id=existing_conversation_id)
-
 
 @router.post("/import")
 async def import_conversation(
     import_data: ImportChatGPTConversation, request: Request
 ) -> StreamingResponse:
     """
-    Import a conversation from a share URL and automatically generate a project draft with streaming.
+    Import a conversation from a share URL and automatically generate an idea with streaming.
     """
     url = import_data.url.strip()
     llm_model = import_data.llm_model
@@ -652,17 +654,20 @@ async def import_conversation(
                 memories_block=raw_memory_results,
             )
 
-            search_indexer.index_imported_chat(conversation_id=conversation.id)
-
             if must_summarize and accept_summarization:
                 # The frontend has accepted to summarize, so we can proceed
-                # Inform frontend and create placeholder draft, then background summarize+generate
+                # Inform frontend and create placeholder idea, then background summarize+generate
                 yield json.dumps({"type": "state", "data": "summarizing"}) + "\n"
 
-                db.create_project_draft(
+                db.create_idea(
                     conversation_id=conversation.id,
                     title="Generating...",
-                    description="Generating project draft...",
+                    short_hypothesis="Generating idea...",
+                    related_work="",
+                    abstract="Generating idea...",
+                    experiments=[],
+                    expected_outcome="",
+                    risk_factors_and_limitations=[],
                     created_by_user_id=user.id,
                 )
 
@@ -671,15 +676,20 @@ async def import_conversation(
                         f"Summarization callback function called for conversation {conversation.id}"
                     )
                     try:
-                        await _generate_project_draft_consuming_yields(
+                        await _generate_idea_consuming_yields(
                             db, llm_provider, llm_model, conversation.id, summary_text, user.id
                         )
                     except Exception as e:
-                        logger.exception(f"Failed to generate project draft: {e}")
-                        db.create_project_draft(
+                        logger.exception(f"Failed to generate idea: {e}")
+                        db.create_idea(
                             conversation_id=conversation.id,
-                            title="Failed to Generate Project Draft",
-                            description=f"Project draft generation failed: {str(e)}\n\nPlease try regenerating the project draft manually.",
+                            title="Failed to Generate Idea",
+                            short_hypothesis="Generation failed",
+                            related_work="",
+                            abstract=f"Idea generation failed: {str(e)}\n\nPlease try regenerating the idea manually.",
+                            experiments=[],
+                            expected_outcome="",
+                            risk_factors_and_limitations=[],
                             created_by_user_id=user.id,
                         )
 
@@ -691,14 +701,14 @@ async def import_conversation(
                     )
                 )
 
-                # here we will return the placeholder draft
+                # here we will return the placeholder idea
                 async for chunk in _generate_response_for_conversation(db, conversation.id):
                     yield chunk
                 return
 
             # Happy path, the conversation is not too long for the selected model context
-            # Generating a project draft
-            async for chunk in _generate_project_draft(
+            # Generating an idea
+            async for chunk in _generate_idea(
                 db, llm_provider, llm_model, conversation.id, imported_conversation_text, user.id
             ):
                 yield chunk
@@ -710,23 +720,28 @@ async def import_conversation(
                     callback_function=None,
                 )
             )
-            # finished generating a project draft
+            # finished generating an idea
 
             async for chunk in _generate_response_for_conversation(db, conversation.id):
                 yield chunk
             return
 
         except Exception as e:
-            logger.exception(f"Failed to generate project draft: {e}")
-            # Create placeholder project draft
+            logger.exception(f"Failed to generate idea: {e}")
+            # Create placeholder idea
             if not conversation:
                 logger.error(f"Conversation not found after import: {e}")
                 return
 
-            db.create_project_draft(
+            db.create_idea(
                 conversation_id=conversation.id,
-                title="Failed to Generate Project Draft",
-                description=f"Project draft generation failed: {str(e)}\n\nPlease try regenerating the project draft manually.",
+                title="Failed to Generate Idea",
+                short_hypothesis="Generation failed",
+                related_work="",
+                abstract=f"Idea generation failed: {str(e)}\n\nPlease try regenerating the idea manually.",
+                experiments=[],
+                expected_outcome="",
+                risk_factors_and_limitations=[],
                 created_by_user_id=user.id,
             )
 
@@ -771,13 +786,11 @@ async def list_conversations(
                 import_date=conv.import_date,
                 created_at=conv.created_at.isoformat(),
                 updated_at=conv.updated_at.isoformat(),
-                is_locked=conv.is_locked,
                 user_id=conv.user_id,
                 user_name=conv.user_name,
                 user_email=conv.user_email,
-                project_draft_title=conv.project_draft_title,
-                project_draft_description=conv.project_draft_description,
-                linear_url=conv.linear_url,
+                idea_title=conv.idea_title,
+                idea_abstract=conv.idea_abstract,
                 last_user_message_content=conv.last_user_message_content,
                 last_assistant_message_content=conv.last_assistant_message_content,
             )
@@ -1011,15 +1024,20 @@ async def import_from_slack(
                 response.status_code = 500
                 return ErrorResponse(error="Import failed", detail=str(e))
 
-        db.create_project_draft(
+        db.create_idea(
             conversation_id=conversation_id,
             title="Generating...",
-            description="Generating project draft...",
+            short_hypothesis="Generating idea...",
+            related_work="",
+            abstract="Generating idea...",
+            experiments=[],
+            expected_outcome="",
+            risk_factors_and_limitations=[],
             created_by_user_id=import_request.user_id,
         )
 
         # Start background processing: memories + summarize/generate
-        llm_parameters = db.get_default_llm_parameters(PromptTypes.PROJECT_DRAFT_GENERATION)
+        llm_parameters = db.get_default_llm_parameters(PromptTypes.IDEA_GENERATION)
         imported_conversation_text = _imported_chat_messages_to_text(parse_result.data.content)
         try:
             asyncio.create_task(

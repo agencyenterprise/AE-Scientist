@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 import { ReactElement } from "react";
-import type { ProjectDraftVersion } from "@/types";
+import type { IdeaVersion } from "@/types";
 import { generateTitleDiff, generateDescriptionDiff, canCompareVersions } from "../utils/diffUtils";
 
 interface UseDiffGenerationProps {
   showDiffs: boolean;
-  comparisonVersion: ProjectDraftVersion | null;
-  nextVersion: ProjectDraftVersion | null;
+  comparisonVersion: IdeaVersion | null;
+  nextVersion: IdeaVersion | null;
 }
 
 interface UseDiffGenerationReturn {

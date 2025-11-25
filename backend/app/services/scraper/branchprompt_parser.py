@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import List
 
 import httpx
-
 from app.models import (
     ImportedChat,
     ImportedChatMessage,

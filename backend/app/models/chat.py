@@ -7,9 +7,8 @@ including messages, requests, and responses for LLM conversations.
 
 from typing import List, Optional
 
+from app.models.ideas import Idea
 from pydantic import BaseModel, Field
-
-from app.models.project_drafts import ProjectDraft
 
 
 class ChatMessage(BaseModel):
@@ -54,10 +53,8 @@ class ChatResponse(BaseModel):
 
     success: bool = Field(..., description="Whether the operation was successful")
     llm_response: str = Field(..., description="LLM's response message")
-    project_draft_updated: bool = Field(..., description="Whether the project draft was updated")
-    new_project_draft: Optional[ProjectDraft] = Field(
-        None, description="Updated project draft if it was modified"
-    )
+    idea_updated: bool = Field(..., description="Whether the idea was updated")
+    new_idea: Optional[Idea] = Field(None, description="Updated idea if it was modified")
     chat_messages: List[ChatMessage] = Field(
         default_factory=list, description="Complete chat message history"
     )

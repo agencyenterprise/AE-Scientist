@@ -1,17 +1,16 @@
 import React, { ReactElement } from "react";
-import type { ProjectDraft, ProjectDraftVersion } from "@/types";
-import { isProjectDraftGenerating } from "../utils/versionUtils";
+import type { Idea, IdeaVersion } from "@/types";
+import { isIdeaGenerating } from "../utils/versionUtils";
 
 interface ProjectDraftHeaderProps {
-  projectDraft: ProjectDraft;
+  projectDraft: Idea;
   isEditing: boolean;
   editTitle: string;
   setEditTitle: (title: string) => void;
-  isLocked?: boolean;
   showDiffs: boolean;
   setShowDiffs: (show: boolean) => void;
-  comparisonVersion: ProjectDraftVersion | null;
-  nextVersion: ProjectDraftVersion | null;
+  comparisonVersion: IdeaVersion | null;
+  nextVersion: IdeaVersion | null;
   titleDiffContent: ReactElement[] | null;
   onEdit: () => void;
   onKeyDown: (event: React.KeyboardEvent, action: () => void) => void;
@@ -24,7 +23,6 @@ export function ProjectDraftHeader({
   isEditing,
   editTitle,
   setEditTitle,
-  isLocked,
   showDiffs,
   setShowDiffs,
   comparisonVersion,
@@ -35,15 +33,15 @@ export function ProjectDraftHeader({
   onSave,
   onCancelEdit,
 }: ProjectDraftHeaderProps): React.JSX.Element {
-  const isGenerating = isProjectDraftGenerating(projectDraft);
+  const isGenerating = isIdeaGenerating(projectDraft);
 
   return (
     <div className="flex-shrink-0 py-4">
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-gray-700">Title</label>
         <div className="flex items-center space-x-2">
-          {/* Show diffs toggle (hidden when locked or when no comparison available) */}
-          {!isLocked && !isEditing && !isGenerating && comparisonVersion && nextVersion && (
+          {/* Show diffs toggle (hidden when no comparison available) */}
+          {!isEditing && !isGenerating && comparisonVersion && nextVersion && (
             <button
               onClick={() => setShowDiffs(!showDiffs)}
               disabled={!comparisonVersion || !nextVersion}
@@ -65,8 +63,8 @@ export function ProjectDraftHeader({
             </button>
           )}
 
-          {/* Edit button (hidden when locked) */}
-          {!isLocked && !isEditing && !isGenerating && (
+          {/* Edit button */}
+          {!isEditing && !isGenerating && (
             <button
               onClick={onEdit}
               disabled={
@@ -91,7 +89,7 @@ export function ProjectDraftHeader({
                 projectDraft?.active_version &&
                 nextVersion.version_number !== projectDraft.active_version.version_number
                   ? "Cannot edit when viewing older version comparison"
-                  : "Edit project draft"
+                  : "Edit idea"
               }
             >
               <span>✏️</span>
@@ -109,7 +107,7 @@ export function ProjectDraftHeader({
             onChange={e => setEditTitle(e.target.value)}
             onKeyDown={e => onKeyDown(e, onSave)}
             className="w-full px-3 py-2 text-base font-semibold border border-[var(--border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent bg-[var(--surface)] text-[var(--foreground)]"
-            placeholder="Enter project title..."
+            placeholder="Enter idea title..."
             autoFocus
           />
           <div className="flex justify-end space-x-2 mt-2">

@@ -7,11 +7,10 @@ Handles Google OAuth flow, token exchange, and user information retrieval.
 import logging
 from typing import Optional
 
+from app.config import settings
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 

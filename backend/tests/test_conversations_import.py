@@ -16,9 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
 from app.models import ImportedChatMessage
+from fastapi.testclient import TestClient
 
 
 def _build_messages(total_chars: int) -> list[ImportedChatMessage]:

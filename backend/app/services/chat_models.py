@@ -16,8 +16,8 @@ class ChatStatus(Enum):
 
     ANALYZING_REQUEST = "analyzing_request"
     EXECUTING_TOOLS = "executing_tools"
-    GETTING_PROJECT_DRAFT = "getting_project_draft"
-    UPDATING_PROJECT_DRAFT = "updating_project_draft"
+    GETTING_IDEA = "getting_idea"
+    UPDATING_IDEA = "updating_idea"
     GENERATING_RESPONSE = "generating_response"
     DONE = "done"
 
@@ -36,10 +36,10 @@ class StreamContentEvent(NamedTuple):
     data: str
 
 
-class StreamProjectUpdateEvent(NamedTuple):
-    """Project update event for streaming chat."""
+class StreamIdeaUpdateEvent(NamedTuple):
+    """Idea update event for streaming chat."""
 
-    type: Literal["project_updated"]
+    type: Literal["idea_updated"]
     data: str
 
 
@@ -53,7 +53,7 @@ class StreamErrorEvent(NamedTuple):
 class StreamDoneData(NamedTuple):
     """Data payload for done event."""
 
-    project_updated: bool
+    idea_updated: bool
     assistant_response: str
 
 
@@ -74,7 +74,7 @@ class StreamConversationLockedEvent(NamedTuple):
 class ToolCallResult(NamedTuple):
     """Result from tool call processing."""
 
-    project_updated: bool
+    idea_updated: bool
     tool_results: List[Any]
 
 

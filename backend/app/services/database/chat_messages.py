@@ -19,7 +19,7 @@ class ChatMessageData(NamedTuple):
     """Chat message data."""
 
     id: int
-    project_draft_id: int
+    idea_id: int
     role: str
     content: str
     sequence_number: int
@@ -32,47 +32,47 @@ class ChatMessageData(NamedTuple):
 class ChatMessagesMixin:
     """Database operations for chat messages."""
 
-    def get_chat_messages(self, project_draft_id: int) -> List[ChatMessageData]:
-        """Get all chat messages for a project draft, ordered by sequence number."""
+    def get_chat_messages(self, idea_id: int) -> List[ChatMessageData]:
+        """Get all chat messages for an idea, ordered by sequence number."""
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT cm.id, cm.project_draft_id, cm.role, cm.content,
+                    SELECT cm.id, cm.idea_id, cm.role, cm.content,
                            cm.sequence_number, cm.created_at, cm.sent_by_user_id,
                            u.name as sent_by_user_name, u.email as sent_by_user_email
                     FROM chat_messages cm
                     JOIN users u ON cm.sent_by_user_id = u.id
-                    WHERE cm.project_draft_id = %s
+                    WHERE cm.idea_id = %s
                     ORDER BY cm.sequence_number ASC
                     """,
-                    (project_draft_id,),
+                    (idea_id,),
                 )
                 return [ChatMessageData(**row) for row in cursor.fetchall()]
 
     def create_chat_message(
-        self, project_draft_id: int, role: str, content: str, sent_by_user_id: int
+        self, idea_id: int, role: str, content: str, sent_by_user_id: int
     ) -> int:
         """Create a new chat message with the next sequence number."""
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
             with conn.cursor() as cursor:
                 # Get the next sequence number
-                sequence_number = self._get_next_sequence_number(cursor, project_draft_id)
+                sequence_number = self._get_next_sequence_number(cursor, idea_id)
 
                 cursor.execute(
-                    "INSERT INTO chat_messages (project_draft_id, role, content, sequence_number, sent_by_user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                    (project_draft_id, role, content, sequence_number, sent_by_user_id),
+                    "INSERT INTO chat_messages (idea_id, role, content, sequence_number, sent_by_user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                    (idea_id, role, content, sequence_number, sent_by_user_id),
                 )
                 result = cursor.fetchone()
                 message_id = int(result[0]) if result else 0
                 conn.commit()
                 return message_id
 
-    def _get_next_sequence_number(self, cursor: cursor, project_draft_id: int) -> int:
-        """Get the next sequence number for a project draft."""
+    def _get_next_sequence_number(self, cursor: cursor, idea_id: int) -> int:
+        """Get the next sequence number for an idea."""
         cursor.execute(
-            "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM chat_messages WHERE project_draft_id = %s",
-            (project_draft_id,),
+            "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM chat_messages WHERE idea_id = %s",
+            (idea_id,),
         )
         result = cursor.fetchone()
         return int(result[0]) if result else 1
@@ -85,7 +85,7 @@ class ChatMessagesMixin:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT cm.id, cm.project_draft_id, cm.role, cm.content,
+                    SELECT cm.id, cm.idea_id, cm.role, cm.content,
                            cm.sequence_number, cm.created_at, cm.sent_by_user_id,
                            u.name as sent_by_user_name, u.email as sent_by_user_email
                     FROM chat_messages cm

@@ -17,7 +17,6 @@ from typing import Any, Callable, Iterable, List, Optional, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from app.models import LLMModel
 from app.services.base_llm_service import FileAttachmentData
 from app.services.chat_models import (

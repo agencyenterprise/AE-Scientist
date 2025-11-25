@@ -11,7 +11,6 @@ import re
 from typing import Generator, List
 
 import pytest
-
 from app.services.chunking_service import ChunkingService
 from app.services.database import DatabaseManager, get_database
 from app.services.database.conversations import Conversation, ImportedChatMessage

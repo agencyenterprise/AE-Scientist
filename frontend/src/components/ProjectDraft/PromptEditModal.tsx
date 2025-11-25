@@ -234,10 +234,10 @@ export function PromptEditModal({
 
   const getTitleForPromptType = (type: string): string => {
     switch (type) {
-      case PromptTypes.PROJECT_DRAFT_GENERATION:
+      case PromptTypes.IDEA_GENERATION:
         return "Edit import chat prompt";
-      case PromptTypes.PROJECT_DRAFT_CHAT:
-        return "Edit project draft refinement prompt";
+      case PromptTypes.IDEA_CHAT:
+        return "Edit idea refinement prompt";
       default:
         return "Edit prompt";
     }

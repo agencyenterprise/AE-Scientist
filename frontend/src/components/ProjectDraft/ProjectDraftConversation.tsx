@@ -8,25 +8,17 @@ import { FileUpload } from "@/components/FileUpload";
 import { ModelSelector } from "@/components/ModelSelector";
 import { config } from "@/lib/config";
 import { PromptTypes } from "@/lib/prompt-types";
-import type {
-  ChatMessage,
-  ChatRequest,
-  FileAttachment,
-  ProjectDraft,
-  FileMetadata,
-  Project,
-} from "@/types";
+import type { ChatMessage, ChatRequest, FileAttachment, Idea, FileMetadata } from "@/types";
 import { isErrorResponse } from "@/lib/api-adapters";
 import { ChatStatus } from "@/types";
-import { isProjectDraftGenerating } from "./utils/versionUtils";
+import { isIdeaGenerating } from "./utils/versionUtils";
 import { useAuth } from "@/hooks/useAuth";
 
 interface ProjectDraftConversationProps {
   conversationId: number;
   isLocked: boolean;
-  currentProjectDraft?: ProjectDraft | null;
-  project?: Project | null;
-  onProjectDraftUpdate?: (updatedDraft: ProjectDraft) => void;
+  currentProjectDraft?: Idea | null;
+  onProjectDraftUpdate?: (updatedDraft: Idea) => void;
   onOpenPromptModal?: () => void;
   onConversationLocked?: () => void;
   conversationCapabilities?: {
@@ -40,8 +32,8 @@ interface ProjectDraftConversationProps {
 const STATUS_MESSAGES: Record<ChatStatus, string> = {
   [ChatStatus.ANALYZING_REQUEST]: "🔄 Analyzing your request...",
   [ChatStatus.EXECUTING_TOOLS]: "🔧 Processing...",
-  [ChatStatus.GETTING_PROJECT_DRAFT]: "📄 Getting current project draft...",
-  [ChatStatus.UPDATING_PROJECT_DRAFT]: "📝 Updating project draft...",
+  [ChatStatus.GETTING_IDEA]: "📄 Getting current idea...",
+  [ChatStatus.UPDATING_IDEA]: "📝 Updating idea...",
   [ChatStatus.GENERATING_RESPONSE]: "🤔 Generating response...",
   [ChatStatus.DONE]: "",
 };
@@ -175,7 +167,7 @@ export function ProjectDraftConversation({
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Check if project draft is currently being generated
-  const isGenerating = isProjectDraftGenerating(currentProjectDraft || null);
+  const isGenerating = isIdeaGenerating(currentProjectDraft || null);
   const isReadOnly = isLocked || isGenerating;
 
   // Compute effective capabilities by merging conversation capabilities with current session uploads
@@ -224,13 +216,10 @@ export function ProjectDraftConversation({
       setError(null);
 
       try {
-        const response = await fetch(
-          `${config.apiUrl}/conversations/${conversationId}/project-draft/chat`,
-          {
-            method: "GET",
-            credentials: "include",
-          }
-        );
+        const response = await fetch(`${config.apiUrl}/conversations/${conversationId}/idea/chat`, {
+          method: "GET",
+          credentials: "include",
+        });
 
         if (response.ok) {
           const result = await response.json();
@@ -371,7 +360,7 @@ export function ProjectDraftConversation({
       // Use fetch for streaming POST request with timeout
 
       const response = await fetch(
-        `${config.apiUrl}/conversations/${conversationId}/project-draft/chat/stream`,
+        `${config.apiUrl}/conversations/${conversationId}/idea/chat/stream`,
         {
           method: "POST",
           headers: {
@@ -438,9 +427,9 @@ export function ProjectDraftConversation({
               accumulatedContent += content;
 
               setStreamingContent(accumulatedContent);
-            } else if (eventType === "project_updated") {
+            } else if (eventType === "idea_updated") {
               projectUpdated = true;
-              setStatusMessage("📝 Project draft updated!");
+              setStatusMessage("📝 Idea updated!");
             } else if (eventType === "conversation_locked") {
               setStatusMessage("🔒 Project created successfully!");
               // Notify parent component that conversation is locked
@@ -477,25 +466,22 @@ export function ProjectDraftConversation({
         setMessages(prev => [...prev, assistantMessage]);
       }
 
-      // Trigger project draft update if needed
+      // Trigger idea update if needed
       if (projectUpdated && onProjectDraftUpdate) {
-        // Fetch the latest project draft data
+        // Fetch the latest idea data
         try {
-          const response = await fetch(
-            `${config.apiUrl}/conversations/${conversationId}/project-draft`,
-            {
-              credentials: "include",
-            }
-          );
+          const response = await fetch(`${config.apiUrl}/conversations/${conversationId}/idea`, {
+            credentials: "include",
+          });
           if (response.ok) {
             const result = await response.json();
-            if (!isErrorResponse(result) && result.project_draft) {
-              onProjectDraftUpdate(result.project_draft);
+            if (!isErrorResponse(result) && result.idea) {
+              onProjectDraftUpdate(result.idea);
             }
           }
         } catch (err) {
           // eslint-disable-next-line no-console
-          console.error("Failed to fetch updated project draft:", err);
+          console.error("Failed to fetch updated idea:", err);
         }
       }
     } catch (err) {
@@ -569,7 +555,7 @@ export function ProjectDraftConversation({
           </div>
           <div className="flex items-center space-x-2 md:mt-0 mt-1">
             <ModelSelector
-              promptType={PromptTypes.PROJECT_DRAFT_CHAT}
+              promptType={PromptTypes.IDEA_CHAT}
               onModelChange={handleModelChange}
               onDefaultsChange={handleModelDefaults}
               onCapabilitiesChange={handleModelCapabilities}

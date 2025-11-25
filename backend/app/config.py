@@ -9,7 +9,7 @@ load_dotenv()
 
 class Settings:
     # Project info
-    PROJECT_NAME: str = os.getenv("PROJECT_NAME", "AGI Judd's Idea Catalog")
+    PROJECT_NAME: str = os.getenv("PROJECT_NAME", "AE Scientist")
     VERSION: str = os.getenv("VERSION", "1.0.0")
 
     # API settings
@@ -44,9 +44,6 @@ class Settings:
     # xAI/Grok settings
     XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
 
-    # Linear settings
-    LINEAR_ACCESS_KEY: str = os.getenv("LINEAR_ACCESS_KEY", "")
-
     # Mem0 Memory Search settings
     MEM0_API_URL: str = os.getenv("MEM0_API_URL", "")
     MEM0_USER_ID: str = os.getenv("MEM0_USER_ID", "")
@@ -54,19 +51,14 @@ class Settings:
     # Logging settings
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    # Project constraints
-    MAX_PROJECT_TITLE_LENGTH: int = 80
-
     # LLM generation constraints
-    PROJECT_DRAFT_MAX_COMPLETION_TOKENS: int = int(
-        os.getenv("PROJECT_DRAFT_MAX_COMPLETION_TOKENS", "2048")
-    )
+    IDEA_MAX_COMPLETION_TOKENS: int = int(os.getenv("IDEA_MAX_COMPLETION_TOKENS", "2048"))
 
     # Database settings (PostgreSQL only)
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
     POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "agi_judds_catalog")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "ae_scientist")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
 

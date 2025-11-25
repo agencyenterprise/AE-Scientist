@@ -32,13 +32,11 @@ export interface Conversation {
   importDate: string;
   createdAt: string;
   updatedAt: string;
-  isLocked: boolean;
   userId: number;
   userName: string;
   userEmail: string;
-  projectDraftTitle?: string | null;
-  projectDraftDescription?: string | null;
-  linearUrl?: string | null;
+  ideaTitle?: string | null;
+  ideaAbstract?: string | null;
   lastUserMessageContent?: string | null;
   lastAssistantMessageContent?: string | null;
 }
@@ -57,13 +55,11 @@ export function convertApiConversation(apiConversation: ConversationListItem): C
     importDate: apiConversation.import_date,
     createdAt: apiConversation.created_at,
     updatedAt: apiConversation.updated_at,
-    isLocked: apiConversation.is_locked,
     userId: apiConversation.user_id,
     userName: apiConversation.user_name,
     userEmail: apiConversation.user_email,
-    projectDraftTitle: apiConversation.project_draft_title ?? null,
-    projectDraftDescription: apiConversation.project_draft_description ?? null,
-    linearUrl: apiConversation.linear_url ?? null,
+    ideaTitle: apiConversation.idea_title ?? null,
+    ideaAbstract: apiConversation.idea_abstract ?? null,
     lastUserMessageContent: apiConversation.last_user_message_content ?? null,
     lastAssistantMessageContent: apiConversation.last_assistant_message_content ?? null,
   };

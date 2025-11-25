@@ -12,9 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
-
 from app.services.chat_models import StreamContentEvent, StreamDoneData, StreamDoneEvent
+from fastapi.testclient import TestClient
 
 
 def _is_stream_error_with_message(line: dict[str, object], substring: str) -> bool:

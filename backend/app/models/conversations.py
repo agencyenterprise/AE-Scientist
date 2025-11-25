@@ -84,7 +84,6 @@ class ConversationResponse(BaseModel):
     import_date: str = Field(..., description="ISO format import timestamp")
     created_at: str = Field(..., description="ISO format creation timestamp")
     updated_at: str = Field(..., description="ISO format last update timestamp")
-    is_locked: bool = Field(..., description="Whether the conversation is locked")
     has_images: Optional[bool] = Field(None, description="Whether conversation contains images")
     has_pdfs: Optional[bool] = Field(None, description="Whether conversation contains PDFs")
     user_id: int = Field(..., description="ID of the user who imported the conversation")
@@ -116,7 +115,7 @@ class ChatMessageData(NamedTuple):
     """Chat message data."""
 
     id: int
-    project_draft_id: int
+    idea_id: int
     role: str
     content: str
     sequence_number: int

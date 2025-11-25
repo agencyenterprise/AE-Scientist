@@ -1,12 +1,11 @@
 import logging
 from typing import Dict
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 def configure_logging() -> None:
@@ -47,9 +46,9 @@ def configure_logging() -> None:
 configure_logging()
 
 app = FastAPI(
-    title="AGI Judd's Idea Catalog API",
+    title="AE Scientist API",
     version=settings.VERSION,
-    description="Transform LLM conversations into actionable Linear projects",
+    description="Transform LLM conversations into actionable AE ideas",
 )
 
 # Set up CORS

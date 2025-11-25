@@ -7,17 +7,13 @@ This module contains FastAPI routes for LLM prompt management.
 import logging
 from typing import Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models import LLMPromptCreateRequest, LLMPromptDeleteResponse, LLMPromptResponse
 from app.prompt_types import PromptTypes
 from app.services import get_database
-from app.services.prompts import (
-    get_default_chat_system_prompt,
-    get_default_project_generation_prompt,
-)
+from app.services.prompts import get_default_chat_system_prompt, get_default_idea_generation_prompt
+from fastapi import APIRouter, Request, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/llm-prompts")
 logger = logging.getLogger(__name__)
@@ -36,15 +32,15 @@ def get_default_prompt(prompt_type: str) -> str:
     Get the default system promptsfor a given prompt type.
 
     Args:
-        prompt_type: The type of prompt (e.g., PromptTypes.PROJECT_DRAFT_CHAT)
+        prompt_type: The type of prompt (e.g., PromptTypes.IDEA_CHAT)
 
     Returns:
         str: The system prompt to use for chat
     """
-    if prompt_type == PromptTypes.PROJECT_DRAFT_CHAT:
+    if prompt_type == PromptTypes.IDEA_CHAT:
         return get_default_chat_system_prompt()
-    elif prompt_type == PromptTypes.PROJECT_DRAFT_GENERATION:
-        return get_default_project_generation_prompt()
+    elif prompt_type == PromptTypes.IDEA_GENERATION:
+        return get_default_idea_generation_prompt()
     else:
         return ""
 

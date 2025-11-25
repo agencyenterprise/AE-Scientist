@@ -1,5 +1,5 @@
 """
-Middleware module for AGI Judd's Idea Catalog.
+Middleware module for AE Scientist
 
 This module contains all middleware components including authentication.
 """

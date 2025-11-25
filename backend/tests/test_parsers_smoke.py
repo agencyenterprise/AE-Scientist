@@ -14,7 +14,6 @@ import logging
 import os
 
 import pytest
-
 from app.models import ImportedChat, ParseResult, ParseSuccessResult
 from app.services.scraper.branchprompt_parser import BranchPromptParserService
 from app.services.scraper.chat_gpt_parser import ChatGPTParserService

@@ -1,8 +1,8 @@
 """
-Grok service for generating conversation summaries and project drafts.
+Grok service for generating conversation summaries and ideas.
 
 This module handles communication with xAI's Grok API to generate summaries
-of conversations and transform them into structured project proposals.
+of conversations and transform them into structured research ideas.
 Since Grok API is OpenAI-compatible, this service extends OpenAIService
 and only overrides the client initialization with Grok-specific configuration.
 """
@@ -10,11 +10,10 @@ and only overrides the client initialization with Grok-specific configuration.
 import logging
 import os
 
-from openai import AsyncOpenAI
-
 from app.models import LLMModel
 from app.services import SummarizerService
 from app.services.openai_service import OpenAIService
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 

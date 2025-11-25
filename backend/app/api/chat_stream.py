@@ -8,19 +8,12 @@ import json
 import logging
 from typing import AsyncGenerator, Optional, Union
 
-from fastapi import APIRouter, Request, Response
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-
 from app.middleware.auth import get_current_user
 from app.models import ChatMessageData, ChatRequest
 from app.services import (
     AnthropicService,
-    ChunkingService,
-    EmbeddingsService,
     GrokService,
     OpenAIService,
-    SearchIndexer,
     SummarizerService,
     get_database,
 )
@@ -29,6 +22,9 @@ from app.services.base_llm_service import FileAttachmentData
 from app.services.chat_models import StreamDoneEvent
 from app.services.grok_service import SUPPORTED_MODELS as GROK_MODELS
 from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
+from fastapi import APIRouter, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 
@@ -37,9 +33,6 @@ summarizer_service = SummarizerService()
 openai_service = OpenAIService(summarizer_service)
 anthropic_service = AnthropicService(summarizer_service)
 grok_service = GrokService(summarizer_service)
-embeddings_service = EmbeddingsService()
-chunking_service = ChunkingService()
-search_indexer = SearchIndexer(embeddings_service, chunking_service)
 logger = logging.getLogger(__name__)
 
 
@@ -51,8 +44,8 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = Field(None, description="Additional error details")
 
 
-@router.post("/{conversation_id}/project-draft/chat/stream", response_model=None)
-async def stream_chat_with_project_draft(
+@router.post("/{conversation_id}/idea/chat/stream", response_model=None)
+async def stream_chat_with_idea(
     conversation_id: int, request_data: ChatRequest, request: Request, response: Response
 ) -> Union[StreamingResponse, ErrorResponse]:
     """
@@ -74,32 +67,34 @@ async def stream_chat_with_project_draft(
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
         user = get_current_user(request)
-        # Get project draft
-        project_draft_data = db.get_project_draft_by_conversation_id(conversation_id)
-        if not project_draft_data:
-            project_draft_id = db.create_project_draft(
+        # Get idea
+        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        if not idea_data:
+            idea_id = db.create_idea(
                 conversation_id=conversation_id,
-                title="Failed to Generate Project Draft",
-                description="Project draft generation failed.\n\nPlease try regenerating the project draft manually.",
+                title="Failed to Generate Idea",
+                short_hypothesis="Idea generation failed.",
+                related_work="N/A",
+                abstract="Idea generation failed.\n\nPlease try regenerating the idea manually.",
+                experiments=["N/A"],
+                expected_outcome="N/A",
+                risk_factors_and_limitations=["N/A"],
                 created_by_user_id=user.id,
             )
         else:
-            project_draft_id = project_draft_data.project_draft_id
+            idea_id = idea_data.idea_id
 
         # Get chat history
-        chat_history = db.get_chat_messages(project_draft_id)
+        chat_history = db.get_chat_messages(idea_id)
 
         # Store user message in database
         user_msg_id = db.create_chat_message(
-            project_draft_id=project_draft_id,
+            idea_id=idea_id,
             role="user",
             content=request_data.message,
             sent_by_user_id=user.id,
         )
         logger.info(f"Stored user message with ID: {user_msg_id}")
-
-        # Index the newly created user chat message
-        search_indexer.index_chat_message(chat_message_id=user_msg_id)
 
         # Process file attachments if provided
         attached_files = []
@@ -172,15 +167,15 @@ async def stream_chat_with_project_draft(
 
                 # Route to appropriate service based on provider
                 if llm_provider == "openai":
-                    async for event_data in openai_service.chat_with_project_draft_stream(
+                    async for event_data in openai_service.chat_with_idea_stream(
                         llm_model=next(m for m in OPENAI_MODELS if m.id == llm_model),
                         conversation_id=conversation_id,
-                        project_draft_id=project_draft_id,
+                        idea_id=idea_id,
                         user_message=request_data.message,
                         chat_history=[
                             ChatMessageData(
                                 id=msg.id,
-                                project_draft_id=project_draft_id,
+                                idea_id=idea_id,
                                 role=msg.role,
                                 content=msg.content,
                                 sequence_number=msg.sequence_number,
@@ -222,27 +217,26 @@ async def stream_chat_with_project_draft(
                                 yield error_json
                                 return
                             else:
-                                message_id = db.create_chat_message(
-                                    project_draft_id=project_draft_id,
+                                db.create_chat_message(
+                                    idea_id=idea_id,
                                     role="assistant",
                                     content=event_data.data.assistant_response,
                                     sent_by_user_id=user.id,
                                 )
-                                search_indexer.index_chat_message(chat_message_id=message_id)
 
                         json_data = json.dumps(event_data._asdict()) + "\n"
                         logger.debug(f"Yielding: {repr(json_data[:100])}")
                         yield json_data
                 elif llm_provider == "grok":
-                    async for event_data in grok_service.chat_with_project_draft_stream(
+                    async for event_data in grok_service.chat_with_idea_stream(
                         llm_model=next(m for m in GROK_MODELS if m.id == llm_model),
                         conversation_id=conversation_id,
-                        project_draft_id=project_draft_id,
+                        idea_id=idea_id,
                         user_message=request_data.message,
                         chat_history=[
                             ChatMessageData(
                                 id=msg.id,
-                                project_draft_id=project_draft_id,
+                                idea_id=idea_id,
                                 role=msg.role,
                                 content=msg.content,
                                 sequence_number=msg.sequence_number,
@@ -283,27 +277,26 @@ async def stream_chat_with_project_draft(
                                 yield error_json
                                 return
                             else:
-                                message_id = db.create_chat_message(
-                                    project_draft_id=project_draft_id,
+                                db.create_chat_message(
+                                    idea_id=idea_id,
                                     role="assistant",
                                     content=event_data.data.assistant_response,
                                     sent_by_user_id=user.id,
                                 )
-                                search_indexer.index_chat_message(chat_message_id=message_id)
 
                         json_data = json.dumps(event_data._asdict()) + "\n"
                         logger.debug(f"Yielding: {repr(json_data[:100])}")
                         yield json_data
                 elif llm_provider == "anthropic":
-                    async for event_data in anthropic_service.chat_with_project_draft_stream(
+                    async for event_data in anthropic_service.chat_with_idea_stream(
                         llm_model=next(m for m in ANTHROPIC_MODELS if m.id == llm_model),
                         conversation_id=conversation_id,
-                        project_draft_id=project_draft_id,
+                        idea_id=idea_id,
                         user_message=request_data.message,
                         chat_history=[
                             ChatMessageData(
                                 id=msg.id,
-                                project_draft_id=project_draft_id,
+                                idea_id=idea_id,
                                 role=msg.role,
                                 content=msg.content,
                                 sequence_number=msg.sequence_number,
@@ -343,13 +336,12 @@ async def stream_chat_with_project_draft(
                                 yield error_json
                                 return
                             else:
-                                message_id = db.create_chat_message(
-                                    project_draft_id=project_draft_id,
+                                db.create_chat_message(
+                                    idea_id=idea_id,
                                     role="assistant",
                                     content=event_data.data.assistant_response,
                                     sent_by_user_id=user.id,
                                 )
-                                search_indexer.index_chat_message(chat_message_id=message_id)
 
                         json_data = json.dumps(event_data._asdict()) + "\n"
                         logger.debug(f"Yielding: {repr(json_data[:100])}")
@@ -368,7 +360,7 @@ async def stream_chat_with_project_draft(
             finally:
                 logger.info(f"Adding messages to chat summary for conversation {conversation_id}")
                 await summarizer_service.add_messages_to_chat_summary(
-                    project_draft_id=project_draft_id,
+                    idea_id=idea_id,
                     conversation_id=conversation_id,
                 )
 
@@ -383,6 +375,6 @@ async def stream_chat_with_project_draft(
         )
 
     except Exception as e:
-        logger.exception(f"Error in stream_chat_with_project_draft: {e}")
+        logger.exception(f"Error in stream_chat_with_idea: {e}")
         response.status_code = 500
         return ErrorResponse(error="Stream failed", detail=f"Failed to stream chat: {str(e)}")

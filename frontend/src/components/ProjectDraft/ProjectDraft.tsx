@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { ConversationDetail, ProjectDraft as ProjectDraftType } from "@/types";
+import type { ConversationDetail, Idea as IdeaType } from "@/types";
 import { config } from "@/lib/config";
 import { isErrorResponse } from "@/lib/api-adapters";
 import { CreateProjectModal } from "./CreateProjectModal";
@@ -19,7 +19,7 @@ import { ProjectDraftFooter } from "./components/ProjectDraftFooter";
 
 interface ProjectDraftProps {
   conversation: ConversationDetail;
-  externalUpdate?: ProjectDraftType | null;
+  externalUpdate?: IdeaType | null;
   onConversationLocked?: () => void;
 }
 
@@ -32,7 +32,6 @@ export function ProjectDraft({
   const projectState = useProjectDraftState({ conversation });
   const versionState = useVersionManagement({
     conversationId: conversation.id.toString(),
-    isLocked: conversation.is_locked,
     projectDraft: projectState.projectDraft,
   });
   const diffState = useDiffGeneration({
@@ -64,11 +63,11 @@ export function ProjectDraft({
 
   // Load versions on mount and when data changes
   useEffect(() => {
-    if (projectState.projectDraft && !conversation.is_locked) {
+    if (projectState.projectDraft) {
       versionState.loadVersions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectState.projectDraft, conversation.is_locked]);
+  }, [projectState.projectDraft]);
 
   // Handle revert changes
   const handleRevertChanges = async (): Promise<void> => {
@@ -79,7 +78,7 @@ export function ProjectDraft({
 
     try {
       const response = await fetch(
-        `${config.apiUrl}/conversations/${conversation.id}/project-draft/versions/${versionState.comparisonVersion.version_id}/activate`,
+        `${config.apiUrl}/conversations/${conversation.id}/idea/versions/${versionState.comparisonVersion.version_id}/activate`,
         {
           method: "POST",
           credentials: "include",
@@ -87,8 +86,8 @@ export function ProjectDraft({
       );
 
       const result = await response.json();
-      if (!isErrorResponse(result) && result.project_draft) {
-        projectState.setProjectDraft(result.project_draft);
+      if (!isErrorResponse(result) && result.idea) {
+        projectState.setProjectDraft(result.idea);
         animations.triggerUpdateAnimation();
         // Reload versions after revert
         await versionState.loadVersions();
@@ -141,19 +140,17 @@ export function ProjectDraft({
       <div className="h-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)] mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600">Loading project draft...</p>
+          <p className="text-sm text-gray-600">Loading idea...</p>
         </div>
       </div>
     );
   }
 
-  // When locked, we still render the read-only project draft content; the banner moves to bottom
-
   if (!projectState.projectDraft) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <p className="text-sm text-gray-600">No project draft available</p>
+          <p className="text-sm text-gray-600">No idea available</p>
         </div>
       </div>
     );
@@ -162,7 +159,7 @@ export function ProjectDraft({
   return (
     <>
       <div ref={projectState.containerRef} className="h-full flex flex-col">
-        {/* Project Draft Content with animation */}
+        {/* Idea Content with animation */}
         <div
           className={`flex-1 flex flex-col min-h-0 transition-all duration-500 ${
             animations.updateAnimation
@@ -177,7 +174,6 @@ export function ProjectDraft({
               isEditing={projectState.isEditing}
               editTitle={projectState.editTitle}
               setEditTitle={projectState.setEditTitle}
-              isLocked={conversation.is_locked}
               showDiffs={versionState.showDiffs}
               setShowDiffs={versionState.setShowDiffs}
               comparisonVersion={versionState.comparisonVersion}
@@ -195,10 +191,6 @@ export function ProjectDraft({
               isEditing={projectState.isEditing}
               editDescription={projectState.editDescription}
               setEditDescription={projectState.setEditDescription}
-              showDiffs={versionState.showDiffs}
-              comparisonVersion={versionState.comparisonVersion}
-              nextVersion={versionState.nextVersion}
-              descriptionDiffContent={diffState.descriptionDiffContent}
               onKeyDown={projectState.handleKeyDown}
               onSave={handleSaveAndRefreshDiffs}
               onCancelEdit={projectState.handleCancelEdit}
@@ -208,7 +200,6 @@ export function ProjectDraft({
             <ProjectDraftFooter
               projectDraft={projectState.projectDraft}
               isEditing={projectState.isEditing}
-              isLocked={conversation.is_locked}
               showDiffs={versionState.showDiffs}
               comparisonVersion={versionState.comparisonVersion}
               nextVersion={versionState.nextVersion}

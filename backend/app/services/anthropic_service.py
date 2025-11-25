@@ -1,8 +1,8 @@
 """
-Anthropic (Claude) service for generating conversation summaries and project drafts.
+Anthropic (Claude) service for generating conversation summaries and ideas.
 
 This module handles communication with Anthropic API to generate summaries
-of conversations and transform them into structured project proposals.
+of conversations and transform them into structured research ideas.
 """
 
 import base64
@@ -14,25 +14,23 @@ from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Union
 
 import anthropic
 from anthropic.types import MessageParam
-
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
 from app.services import SummarizerService
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMProjectGeneration
+from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMIdeaGeneration
 from app.services.chat_models import (
     StreamContentEvent,
     StreamConversationLockedEvent,
     StreamDoneData,
     StreamDoneEvent,
     StreamErrorEvent,
-    StreamProjectUpdateEvent,
+    StreamIdeaUpdateEvent,
     StreamStatusEvent,
     ToolCallResult,
 )
 from app.services.database import DatabaseManager, get_database
-from app.services.linear_service import LinearService
 from app.services.mem0_service import Mem0Service
-from app.services.prompts import get_chat_system_prompt, get_project_generation_prompt
+from app.services.prompts import get_chat_system_prompt, get_idea_generation_prompt
 from app.services.s3_service import get_s3_service
 
 logger = logging.getLogger(__name__)
@@ -173,33 +171,74 @@ class AnthropicService(BaseLLMService):
                 return model.context_window_tokens
         raise ValueError(f"Unknown Anthropic model for context window: {llm_model}")
 
-    def _parse_project_draft_response(self, content: str) -> LLMProjectGeneration:
-        """Parse project draft from streamed content with title/description tags."""
+    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
+        """Parse idea from streamed content with XML tags."""
 
-        # Extract title
-        logger.debug(f"Parsing project draft response: {content}")
+        logger.debug(f"Parsing idea response: {content}")
+
+        # Extract all fields
         title_match = re.search(r"<title>(.*?)</title>", content, re.DOTALL)
         title = title_match.group(1).strip() if title_match else ""
 
-        if len(title) > settings.MAX_PROJECT_TITLE_LENGTH:
-            title = title[: settings.MAX_PROJECT_TITLE_LENGTH - 3] + "..."
-            logger.warning(
-                f"Truncated project title from {len(title)} to {settings.MAX_PROJECT_TITLE_LENGTH} characters for Linear compatibility"
-            )
+        short_hypothesis_match = re.search(
+            r"<short_hypothesis>(.*?)</short_hypothesis>", content, re.DOTALL
+        )
+        short_hypothesis = short_hypothesis_match.group(1).strip() if short_hypothesis_match else ""
 
-        # Extract description
-        description_match = re.search(r"<description>(.*?)</description>", content, re.DOTALL)
-        description = description_match.group(1).strip() if description_match else ""
+        related_work_match = re.search(r"<related_work>(.*?)</related_work>", content, re.DOTALL)
+        related_work = related_work_match.group(1).strip() if related_work_match else ""
+
+        abstract_match = re.search(r"<abstract>(.*?)</abstract>", content, re.DOTALL)
+        abstract = abstract_match.group(1).strip() if abstract_match else ""
+
+        # Parse experiments list
+        experiments_match = re.search(r"<experiments>(.*?)</experiments>", content, re.DOTALL)
+        experiments: List[str] = []
+        if experiments_match:
+            experiments_content = experiments_match.group(1).strip()
+            experiment_matches = re.findall(
+                r"<experiment>(.*?)</experiment>", experiments_content, re.DOTALL
+            )
+            experiments = [exp.strip() for exp in experiment_matches if exp.strip()]
+
+        expected_outcome_match = re.search(
+            r"<expected_outcome>(.*?)</expected_outcome>", content, re.DOTALL
+        )
+        expected_outcome = expected_outcome_match.group(1).strip() if expected_outcome_match else ""
+
+        # Parse risk factors and limitations list
+        risk_match = re.search(
+            r"<risk_factors_and_limitations>(.*?)</risk_factors_and_limitations>",
+            content,
+            re.DOTALL,
+        )
+        risk_factors_and_limitations: List[str] = []
+        if risk_match:
+            risk_content = risk_match.group(1).strip()
+            risk_matches = re.findall(
+                r"<(?:risk|limitation)>(.*?)</(?:risk|limitation)>", risk_content, re.DOTALL
+            )
+            risk_factors_and_limitations = [r.strip() for r in risk_matches if r.strip()]
 
         logger.debug(f"Parsed title: {title}")
-        logger.debug(f"Parsed description: {description}")
+        logger.debug(f"Parsed short_hypothesis: {short_hypothesis}")
+        logger.debug(f"Parsed experiments count: {len(experiments)}")
+        logger.debug(f"Parsed risks/limitations count: {len(risk_factors_and_limitations)}")
 
-        if not title or not description:
+        if not title or not short_hypothesis or not abstract:
             raise ValueError(
-                f"Failed to parse title or description from response. Content: {content[:200]}..."
+                f"Failed to parse required fields from response. Content: {content[:200]}..."
             )
 
-        return LLMProjectGeneration(title=title, description=description)
+        return LLMIdeaGeneration(
+            title=title,
+            short_hypothesis=short_hypothesis,
+            related_work=related_work,
+            abstract=abstract,
+            experiments=experiments,
+            expected_outcome=expected_outcome,
+            risk_factors_and_limitations=risk_factors_and_limitations,
+        )
 
     async def generate_text_single_call(
         self,
@@ -225,20 +264,20 @@ class AnthropicService(BaseLLMService):
                     out += block.text
         return out.strip()
 
-    async def generate_project_draft(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+    async def generate_idea(
+        self, llm_model: str, conversation_text: str, _user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
-        Generate a project draft using Claude with streaming.
+        Generate an idea using Claude with streaming.
 
         Args:
             llm_model: Claude model to use
-            messages: List of conversation messages
-            user_id: the user id
+            conversation_text: Text of the conversation
+            _user_id: the user id
             conversation_id: the conversation id
 
         Yields:
-            Chunks of generated project draft content
+            Chunks of generated idea content
 
         Raises:
             Exception: If Claude API call fails
@@ -255,17 +294,17 @@ class AnthropicService(BaseLLMService):
             except KeyError:
                 continue
 
-        system_prompt = get_project_generation_prompt(db=db, context="\n".join(memories))
+        system_prompt = get_idea_generation_prompt(db=db, context="\n".join(memories))
 
         # Claude API format
         api_messages: List[MessageParam] = [
             {
                 "role": "user",
-                "content": f"Please analyze this conversation and create a project proposal:\n\n{conversation_text}",
+                "content": f"Please analyze this conversation and create a research idea:\n\n{conversation_text}",
             }
         ]
 
-        logger.info("Starting project draft generation with Claude")
+        logger.info("Starting idea generation with Claude")
         logger.debug(f"Model: {llm_model}")
         logger.debug(f"System prompt length: {len(system_prompt)}")
         logger.debug(f"Conversation length: {len(conversation_text)}")
@@ -273,7 +312,7 @@ class AnthropicService(BaseLLMService):
         # Use streaming with Claude
         async with self.client.messages.stream(
             model=llm_model,
-            max_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+            max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
             system=system_prompt,
             messages=api_messages,
         ) as stream:
@@ -282,11 +321,11 @@ class AnthropicService(BaseLLMService):
                     if chunk.delta.type == "text_delta":
                         yield chunk.delta.text
 
-    async def chat_with_project_draft_stream(
+    async def chat_with_idea_stream(
         self,
         llm_model: LLMModel,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_message: str,
         chat_history: List[ChatMessageData],
         attached_files: List,
@@ -295,7 +334,7 @@ class AnthropicService(BaseLLMService):
         Union[
             StreamStatusEvent,
             StreamContentEvent,
-            StreamProjectUpdateEvent,
+            StreamIdeaUpdateEvent,
             StreamConversationLockedEvent,
             StreamErrorEvent,
             StreamDoneEvent,
@@ -308,7 +347,7 @@ class AnthropicService(BaseLLMService):
         Args:
             llm_model: Claude model to use
             conversation_id: ID of the conversation
-            project_draft_id: ID of the project draft
+            idea_id: ID of the idea
             user_message: User's message
             chat_history: Previous chat messages
             attached_files: List of FileAttachmentData objects
@@ -318,7 +357,7 @@ class AnthropicService(BaseLLMService):
             Stream events for the chat response
         """
 
-        project_draft_updated = False
+        idea_updated = False
         full_assistant_response = ""
         just_executed_tools = False  # Track if we just finished executing tools
 
@@ -351,7 +390,7 @@ class AnthropicService(BaseLLMService):
 
                 async with self.client.messages.stream(
                     model=llm_model.id,
-                    max_tokens=settings.PROJECT_DRAFT_MAX_COMPLETION_TOKENS,
+                    max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
                     system=system_prompt,
                     messages=claude_messages,
                     tools=claude_tools,  # type: ignore
@@ -451,13 +490,13 @@ class AnthropicService(BaseLLMService):
                         db=db,
                         tool_calls=tool_calls,
                         conversation_id=conversation_id,
-                        project_draft_id=project_draft_id,
+                        idea_id=idea_id,
                         user_id=user_id,
                     ):
                         if isinstance(tool_item, ToolCallResult):
-                            # This is the final result with project update status
-                            if tool_item.project_updated:
-                                project_draft_updated = True
+                            # This is the final result with idea update status
+                            if tool_item.idea_updated:
+                                idea_updated = True
                             # tool_results are collected in _process_claude_tool_calls
                             tool_results = tool_item.tool_results
                         elif isinstance(tool_item, StreamConversationLockedEvent):
@@ -477,7 +516,7 @@ class AnthropicService(BaseLLMService):
                         yield StreamDoneEvent(
                             "done",
                             StreamDoneData(
-                                project_updated=project_draft_updated,
+                                idea_updated=idea_updated,
                                 assistant_response=full_assistant_response,
                             ),
                         )
@@ -504,7 +543,7 @@ class AnthropicService(BaseLLMService):
             yield StreamDoneEvent(
                 "done",
                 StreamDoneData(
-                    project_updated=project_draft_updated,
+                    idea_updated=idea_updated,
                     assistant_response=full_assistant_response,
                 ),
             )
@@ -526,7 +565,7 @@ class AnthropicService(BaseLLMService):
 
         Args:
             db: Database manager instance
-            conversation_id: ID of the conversation to get original context and project draft
+            conversation_id: ID of the conversation to get original context and idea
             user_message: Current user message
             chat_history: Previous chat messages
             attached_files: list of FileAttachmentData objects
@@ -687,27 +726,48 @@ class AnthropicService(BaseLLMService):
         """
         return [
             {
-                "name": "update_project_draft",
-                "description": "Update the project draft with improved title and description. This is the primary deliverable - use when concrete improvements are ready or when the user requests updates. Use markdown formatting for bullet points, lists, and other formatting.",
+                "name": "update_idea",
+                "description": "Update the research idea with improved content. This is the primary deliverable - use when concrete improvements are ready or when the user requests updates. Use markdown formatting for bullet points, lists, and other formatting.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "title": {"type": "string", "description": "The updated project title"},
-                        "description": {
+                        "title": {"type": "string", "description": "The updated idea title"},
+                        "short_hypothesis": {
                             "type": "string",
-                            "description": "The updated project description. Use markdown formatting for bullet points, lists, and other formatting.",
+                            "description": "Short hypothesis of the idea",
+                        },
+                        "related_work": {
+                            "type": "string",
+                            "description": "Related work or background. Use markdown formatting.",
+                        },
+                        "abstract": {
+                            "type": "string",
+                            "description": "Abstract of the idea. Use markdown formatting.",
+                        },
+                        "experiments": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of experiments",
+                        },
+                        "expected_outcome": {
+                            "type": "string",
+                            "description": "Expected outcome of the experiments",
+                        },
+                        "risk_factors_and_limitations": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Risk factors and limitations",
                         },
                     },
-                    "required": ["title", "description"],
-                },
-            },
-            {
-                "name": "create_linear_project",
-                "description": "Create a Linear project using the current project draft. IMPORTANT: Only use this tool after explicitly asking the user for confirmation, as this action cannot be undone and will lock the conversation.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
+                    "required": [
+                        "title",
+                        "short_hypothesis",
+                        "related_work",
+                        "abstract",
+                        "experiments",
+                        "expected_outcome",
+                        "risk_factors_and_limitations",
+                    ],
                 },
             },
         ]
@@ -717,12 +777,12 @@ class AnthropicService(BaseLLMService):
         db: DatabaseManager,
         tool_calls: List,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_id: int,
     ) -> AsyncGenerator[
         Union[
             StreamStatusEvent,
-            StreamProjectUpdateEvent,
+            StreamIdeaUpdateEvent,
             StreamConversationLockedEvent,
             ToolCallResult,
         ],
@@ -735,12 +795,13 @@ class AnthropicService(BaseLLMService):
             db: Database manager instance
             tool_calls: List of Claude tool calls to process
             conversation_id: ID of the conversation
-            project_draft_id: ID of the project draft
+            idea_id: ID of the idea
+            user_id: ID of the user
 
         Yields:
             Status and project update events, then ToolCallResult with collected tool results
         """
-        project_draft_updated = False
+        idea_updated = False
         tool_results = []
 
         yield StreamStatusEvent("status", "executing_tools")
@@ -752,12 +813,22 @@ class AnthropicService(BaseLLMService):
             logger.info(f"Executing tool: {function_name} with args: {function_args}")
 
             try:
-                if function_name == "update_project_draft":
-                    yield StreamStatusEvent("status", "updating_project_draft")
+                if function_name == "update_idea":
+                    yield StreamStatusEvent("status", "updating_idea")
 
                     # Validate required arguments
-                    if "title" not in function_args or "description" not in function_args:
-                        error_message = f"❌ Tool validation failed: update_project_draft requires 'title' and 'description' arguments. Received: {list(function_args.keys())}"
+                    required_fields = [
+                        "title",
+                        "short_hypothesis",
+                        "related_work",
+                        "abstract",
+                        "experiments",
+                        "expected_outcome",
+                        "risk_factors_and_limitations",
+                    ]
+                    missing_fields = [f for f in required_fields if f not in function_args]
+                    if missing_fields:
+                        error_message = f"❌ Tool validation failed: update_idea requires all fields. Missing: {missing_fields}"
                         tool_results.append(
                             {
                                 "type": "tool_result",
@@ -766,16 +837,21 @@ class AnthropicService(BaseLLMService):
                             }
                         )
                         logger.error(
-                            f"Missing required arguments for update_project_draft: {function_args}"
+                            f"Missing required arguments for update_idea: {missing_fields}"
                         )
                         continue
 
                     title = function_args["title"]
-                    description = function_args["description"]
+                    short_hypothesis = function_args["short_hypothesis"]
+                    related_work = function_args["related_work"]
+                    abstract = function_args["abstract"]
+                    experiments = function_args["experiments"]
+                    expected_outcome = function_args["expected_outcome"]
+                    risk_factors_and_limitations = function_args["risk_factors_and_limitations"]
 
                     # Validate arguments are not empty
-                    if not title or not description:
-                        error_message = f"❌ Tool validation failed: update_project_draft requires non-empty 'title' and 'description'. Title: '{title}', Description length: {len(description)}"
+                    if not title or not short_hypothesis or not abstract:
+                        error_message = "❌ Tool validation failed: update_idea requires non-empty 'title', 'short_hypothesis', and 'abstract'"
                         tool_results.append(
                             {
                                 "type": "tool_result",
@@ -784,13 +860,15 @@ class AnthropicService(BaseLLMService):
                             }
                         )
                         logger.error(
-                            f"Empty arguments for update_project_draft: title='{title}', description length={len(description)}"
+                            f"Empty required arguments for update_idea: title='{title}', short_hypothesis='{short_hypothesis}', abstract length={len(abstract)}"
                         )
                         continue
 
-                    # Validate title length before proceeding
-                    if len(title) > settings.MAX_PROJECT_TITLE_LENGTH:
-                        error_message = f"❌ Project title validation failed: Title '{title}' is {len(title)} characters long, but maximum allowed is {settings.MAX_PROJECT_TITLE_LENGTH} characters for Linear compatibility. Please create a shorter, more concise title."
+                    # Validate experiments and risks are lists
+                    if not isinstance(experiments, list) or not isinstance(
+                        risk_factors_and_limitations, list
+                    ):
+                        error_message = "❌ Tool validation failed: experiments and risk_factors_and_limitations must be arrays"
                         tool_results.append(
                             {
                                 "type": "tool_result",
@@ -798,30 +876,31 @@ class AnthropicService(BaseLLMService):
                                 "content": error_message,
                             }
                         )
-                        logger.warning(
-                            f"Title validation failed - length: {len(title)}, limit: {settings.MAX_PROJECT_TITLE_LENGTH}"
+                        logger.error(
+                            f"Type validation failed for update_idea: experiments={type(experiments)}, risks={type(risk_factors_and_limitations)}"
                         )
                         continue
 
                     try:
-                        db.create_project_draft_version(
-                            project_draft_id=project_draft_id,
+                        db.create_idea_version(
+                            idea_id=idea_id,
                             title=title,
-                            description=description,
+                            short_hypothesis=short_hypothesis,
+                            related_work=related_work,
+                            abstract=abstract,
+                            experiments=experiments,
+                            expected_outcome=expected_outcome,
+                            risk_factors_and_limitations=risk_factors_and_limitations,
                             is_manual_edit=False,
                             created_by_user_id=user_id,
                         )
-                        project_draft_updated = True
+                        idea_updated = True
 
-                        updated_project_draft = db.get_project_draft_by_conversation_id(
-                            conversation_id
-                        )
-                        if updated_project_draft:
-                            yield StreamProjectUpdateEvent("project_updated", "true")
+                        updated_idea = db.get_idea_by_conversation_id(conversation_id)
+                        if updated_idea:
+                            yield StreamIdeaUpdateEvent("idea_updated", "true")
 
-                        success_message = (
-                            f"✅ Project draft updated successfully: {title} ({len(title)} chars)"
-                        )
+                        success_message = f"✅ Idea updated successfully: {title}"
                         tool_results.append(
                             {
                                 "type": "tool_result",
@@ -830,68 +909,12 @@ class AnthropicService(BaseLLMService):
                             }
                         )
                     except Exception as e:
-                        error_message = f"❌ Failed to update project draft: {str(e)}"
+                        error_message = f"❌ Failed to update idea: {str(e)}"
                         tool_results.append(
                             {
                                 "type": "tool_result",
                                 "tool_use_id": tool_call.id,
                                 "content": error_message,
-                            }
-                        )
-
-                elif function_name == "create_linear_project":
-                    yield StreamStatusEvent("status", "creating_linear_project")
-                    try:
-                        # Get current project draft
-                        current_draft = db.get_project_draft_by_conversation_id(conversation_id)
-                        if not current_draft:
-                            tool_results.append(
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_call.id,
-                                    "content": "❌ No project draft found to create Linear project from",
-                                }
-                            )
-                            continue
-
-                        linear_service = LinearService()
-
-                        # Create Linear project
-                        linear_project = await linear_service.create_project(
-                            title=current_draft.title,
-                            description=current_draft.description,
-                        )
-
-                        # Save project to database and lock conversation
-                        db.create_project(
-                            conversation_id=conversation_id,
-                            linear_project_id=linear_project.id,
-                            title=linear_project.name,
-                            description=linear_project.content,
-                            linear_url=linear_project.url,
-                            created_by_user_id=user_id,
-                        )
-
-                        # Notify frontend that conversation is locked
-                        yield StreamConversationLockedEvent(
-                            "conversation_locked", linear_project.url
-                        )
-
-                        success_message = f"✅ Linear project created successfully! The conversation is now locked. View your project: {linear_project.url}"
-                        tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_call.id,
-                                "content": success_message,
-                            }
-                        )
-
-                    except Exception as e:
-                        tool_results.append(
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_call.id,
-                                "content": f"❌ Failed to create Linear project: {str(e)}",
                             }
                         )
 
@@ -918,4 +941,4 @@ class AnthropicService(BaseLLMService):
                 )
 
         logger.info(f"Finished processing all {len(tool_calls)} tool calls")
-        yield ToolCallResult(project_updated=project_draft_updated, tool_results=tool_results)
+        yield ToolCallResult(idea_updated=idea_updated, tool_results=tool_results)

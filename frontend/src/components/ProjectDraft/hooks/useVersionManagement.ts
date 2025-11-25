@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { ProjectDraft, ProjectDraftVersion, ProjectDraftVersionsCleanResponse } from "@/types";
+import type { Idea, IdeaVersion, IdeaVersionsResponse } from "@/types";
 import { config } from "@/lib/config";
 import {
   getComparisonVersion,
@@ -12,18 +12,17 @@ import {
 
 interface UseVersionManagementProps {
   conversationId: string;
-  isLocked: boolean;
-  projectDraft: ProjectDraft | null;
+  projectDraft: Idea | null;
 }
 
 interface UseVersionManagementReturn {
   showDiffs: boolean;
   setShowDiffs: (show: boolean) => void;
-  allVersions: ProjectDraftVersion[];
+  allVersions: IdeaVersion[];
   selectedVersionForComparison: number | null;
   setSelectedVersionForComparison: (version: number | null) => void;
-  comparisonVersion: ProjectDraftVersion | null;
-  nextVersion: ProjectDraftVersion | null;
+  comparisonVersion: IdeaVersion | null;
+  nextVersion: IdeaVersion | null;
   canNavigatePrevious: boolean;
   canNavigateNext: boolean;
   handlePreviousVersion: () => void;
@@ -33,22 +32,21 @@ interface UseVersionManagementReturn {
 
 export function useVersionManagement({
   conversationId,
-  isLocked,
   projectDraft,
 }: UseVersionManagementProps): UseVersionManagementReturn {
   const [showDiffs, setShowDiffs] = useState(true);
-  const [allVersions, setAllVersions] = useState<ProjectDraftVersion[]>([]);
+  const [allVersions, setAllVersions] = useState<IdeaVersion[]>([]);
   const [selectedVersionForComparison, setSelectedVersionForComparison] = useState<number | null>(
     null
   );
 
   // Get comparison version for diff (either selected or default to previous)
-  const comparisonVersion = useMemo((): ProjectDraftVersion | null => {
+  const comparisonVersion = useMemo((): IdeaVersion | null => {
     return getComparisonVersion(projectDraft, allVersions, selectedVersionForComparison);
   }, [projectDraft, allVersions, selectedVersionForComparison]);
 
   // Get the "next" version after the comparison version (the "to" version in the diff)
-  const nextVersion = useMemo((): ProjectDraftVersion | null => {
+  const nextVersion = useMemo((): IdeaVersion | null => {
     return getNextVersion(comparisonVersion, allVersions);
   }, [comparisonVersion, allVersions]);
 
@@ -71,26 +69,24 @@ export function useVersionManagement({
     }
   };
 
-  // Load project draft versions
+  // Load idea versions
   const loadVersions = useCallback(async (): Promise<void> => {
-    if (isLocked) return; // Don't load versions for locked conversations
-
     try {
       const response = await fetch(
-        `${config.apiUrl}/conversations/${conversationId}/project-draft/versions`,
+        `${config.apiUrl}/conversations/${conversationId}/idea/versions`,
         {
           credentials: "include",
         }
       );
       if (response.ok) {
-        const result: ProjectDraftVersionsCleanResponse = await response.json();
+        const result: IdeaVersionsResponse = await response.json();
         setAllVersions(result.versions);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to load versions:", error);
     }
-  }, [conversationId, isLocked]);
+  }, [conversationId]);
 
   // Reset version selection when switching out of diff mode or when conversation changes
   useEffect(() => {

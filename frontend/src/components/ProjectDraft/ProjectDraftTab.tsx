@@ -7,7 +7,7 @@ import { ProjectDraftConversation } from "./ProjectDraftConversation";
 import { PromptEditModal } from "./PromptEditModal";
 import { useProjectDraftState } from "./hooks/useProjectDraftState";
 import { PromptTypes } from "@/lib/prompt-types";
-import type { ConversationDetail, ProjectDraft as ProjectDraftType } from "@/types";
+import type { ConversationDetail, Idea as IdeaType } from "@/types";
 
 interface ProjectDraftTabProps {
   conversation: ConversationDetail;
@@ -23,13 +23,13 @@ export function ProjectDraftTab({
   onMobileViewChange,
 }: ProjectDraftTabProps) {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
-  const [updatedProjectDraft, setUpdatedProjectDraft] = useState<ProjectDraftType | null>(null);
+  const [updatedProjectDraft, setUpdatedProjectDraft] = useState<IdeaType | null>(null);
 
-  // Get current project draft state for read-only detection
+  // Get current idea state for read-only detection
   const projectDraftState = useProjectDraftState({ conversation });
 
-  const handleProjectDraftUpdate = (updatedDraft: ProjectDraftType): void => {
-    // Pass the updated project draft to the ProjectDraft component
+  const handleProjectDraftUpdate = (updatedDraft: IdeaType): void => {
+    // Pass the updated idea to the Idea component
     setUpdatedProjectDraft(updatedDraft);
     // Clear the update after a brief moment to allow for future updates
     setTimeout(() => setUpdatedProjectDraft(null), 100);
@@ -93,9 +93,8 @@ export function ProjectDraftTab({
         >
           <ProjectDraftConversation
             conversationId={conversation.id}
-            isLocked={conversation.is_locked}
+            isLocked={false}
             currentProjectDraft={projectDraftState.projectDraft}
-            project={projectDraftState.project}
             onProjectDraftUpdate={handleProjectDraftUpdate}
             onOpenPromptModal={handleOpenPromptModal}
             onConversationLocked={onConversationLocked}
@@ -121,63 +120,11 @@ export function ProjectDraftTab({
         </div>
       </div>
 
-      {/* Single shared banner spanning below both columns */}
-      {conversation.is_locked && projectDraftState.project && (
-        <div className="px-3 sm:px-6 py-3 flex-shrink-0 border-t border-[var(--border)] bg-[var(--surface)]">
-          <div className="w-full rounded-lg border border-green-200 bg-green-50 p-4 flex flex-col sm:flex-row items-center justify-center gap-3 text-center">
-            <div className="flex items-center gap-3 justify-center">
-              <svg
-                className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <div className="text-center">
-                <div className="text-sm font-semibold text-green-800">
-                  Project created:{" "}
-                  <a
-                    href={projectDraftState.project.linear_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold inline-flex items-center hover:underline"
-                  >
-                    {projectDraftState.project.title}
-                    <svg
-                      className="w-3 h-3 ml-1"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
-                  </a>
-                </div>
-                <div className="text-xs text-green-900/80 mt-0.5">
-                  This conversation is locked. View the Linear project for ongoing updates.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Prompt Edit Modal */}
       <PromptEditModal
         isOpen={isPromptModalOpen}
         onClose={handleClosePromptModal}
-        promptType={PromptTypes.PROJECT_DRAFT_CHAT}
+        promptType={PromptTypes.IDEA_CHAT}
       />
     </div>
   );

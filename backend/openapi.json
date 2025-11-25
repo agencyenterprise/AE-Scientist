@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "AGI Judd's Idea Catalog API",
-    "description": "Transform LLM conversations into actionable Linear projects",
+    "title": "AE Scientist API",
+    "description": "Transform LLM conversations into actionable AE ideas",
     "version": "1.0.0"
   },
   "paths": {
@@ -229,11 +229,11 @@
         }
       }
     },
-    "/api/conversations/{conversation_id}/project-draft/chat": {
+    "/api/conversations/{conversation_id}/idea/chat": {
       "get": {
         "summary": "Get Chat History",
-        "description": "Get chat history for a conversation's project draft.",
-        "operationId": "get_chat_history_api_conversations__conversation_id__project_draft_chat_get",
+        "description": "Get chat history for a conversation's idea.",
+        "operationId": "get_chat_history_api_conversations__conversation_id__idea_chat_get",
         "parameters": [
           {
             "name": "conversation_id",
@@ -259,7 +259,7 @@
                       "$ref": "#/components/schemas/ErrorResponse"
                     }
                   ],
-                  "title": "Response Get Chat History Api Conversations  Conversation Id  Project Draft Chat Get"
+                  "title": "Response Get Chat History Api Conversations  Conversation Id  Idea Chat Get"
                 }
               }
             }
@@ -277,11 +277,11 @@
         }
       }
     },
-    "/api/conversations/{conversation_id}/project-draft/chat/stream": {
+    "/api/conversations/{conversation_id}/idea/chat/stream": {
       "post": {
-        "summary": "Stream Chat With Project Draft",
+        "summary": "Stream Chat With Idea",
         "description": "Stream chat messages with real-time updates via Server-Sent Events.",
-        "operationId": "stream_chat_with_project_draft_api_conversations__conversation_id__project_draft_chat_stream_post",
+        "operationId": "stream_chat_with_idea_api_conversations__conversation_id__idea_chat_stream_post",
         "parameters": [
           {
             "name": "conversation_id",
@@ -328,7 +328,7 @@
     "/api/conversations/import": {
       "post": {
         "summary": "Import Conversation",
-        "description": "Import a conversation from a share URL and automatically generate a project draft with streaming.",
+        "description": "Import a conversation from a share URL and automatically generate an idea with streaming.",
         "operationId": "import_conversation_api_conversations_import_post",
         "requestBody": {
           "content": {
@@ -885,6 +885,215 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea": {
+      "get": {
+        "summary": "Get Idea",
+        "description": "Get the idea for a conversation.",
+        "operationId": "get_idea_api_conversations__conversation_id__idea_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaGetResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Idea Api Conversations  Conversation Id  Idea Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Idea",
+        "description": "Manually update an idea with all fields.",
+        "operationId": "update_idea_api_conversations__conversation_id__idea_patch",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaRefinementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Idea Api Conversations  Conversation Id  Idea Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/versions": {
+      "get": {
+        "summary": "Get Idea Versions",
+        "description": "Get all versions of an idea for a conversation.",
+        "operationId": "get_idea_versions_api_conversations__conversation_id__idea_versions_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaVersionsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Idea Versions Api Conversations  Conversation Id  Idea Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/versions/{version_id}/activate": {
+      "post": {
+        "summary": "Activate Idea Version",
+        "description": "Recover a previous version by creating a new version with the same content.",
+        "operationId": "activate_idea_version_api_conversations__conversation_id__idea_versions__version_id__activate_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Activate Idea Version Api Conversations  Conversation Id  Idea Versions  Version Id  Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/llm-defaults/providers": {
       "get": {
         "summary": "Get Llm Providers",
@@ -1214,410 +1423,6 @@
         }
       }
     },
-    "/api/conversations/{conversation_id}/project-draft": {
-      "get": {
-        "summary": "Get Project Draft",
-        "description": "Get the project draft for a conversation.",
-        "operationId": "get_project_draft_api_conversations__conversation_id__project_draft_get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectDraftGetResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Get Project Draft Api Conversations  Conversation Id  Project Draft Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "summary": "Update Project Draft",
-        "description": "Manually update a project draft's title and description.",
-        "operationId": "update_project_draft_api_conversations__conversation_id__project_draft_patch",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectDraftCreateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectDraftUpdateResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Update Project Draft Api Conversations  Conversation Id  Project Draft Patch"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{conversation_id}/project-draft/versions": {
-      "get": {
-        "summary": "Get Project Draft Versions",
-        "description": "Get all versions of a project draft for a conversation.",
-        "operationId": "get_project_draft_versions_api_conversations__conversation_id__project_draft_versions_get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectDraftVersionsResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Get Project Draft Versions Api Conversations  Conversation Id  Project Draft Versions Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{conversation_id}/project-draft/versions/{version_id}/activate": {
-      "post": {
-        "summary": "Activate Project Draft Version",
-        "description": "Recover a previous version by creating a new version with the same content.",
-        "operationId": "activate_project_draft_version_api_conversations__conversation_id__project_draft_versions__version_id__activate_post",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          },
-          {
-            "name": "version_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Version Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectDraftUpdateResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Activate Project Draft Version Api Conversations  Conversation Id  Project Draft Versions  Version Id  Activate Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{conversation_id}/project": {
-      "post": {
-        "summary": "Create Project",
-        "description": "Create a new Linear project for a conversation.",
-        "operationId": "create_project_api_conversations__conversation_id__project_post",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectCreateResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Create Project Api Conversations  Conversation Id  Project Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "get": {
-        "summary": "Get Project",
-        "description": "Get the Linear project for a conversation.",
-        "operationId": "get_project_api_conversations__conversation_id__project_get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/ProjectGetResponse"
-                    },
-                    {
-                      "$ref": "#/components/schemas/ErrorResponse"
-                    }
-                  ],
-                  "title": "Response Get Project Api Conversations  Conversation Id  Project Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/search": {
-      "get": {
-        "summary": "Search",
-        "operationId": "search_api_search_get",
-        "parameters": [
-          {
-            "name": "q",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "title": "Q"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "title": "Offset"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^(all|in_progress|completed)$",
-              "title": "Status"
-            }
-          },
-          {
-            "name": "sort_by",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^(updated|imported|title|relevance|score)$",
-              "title": "Sort By"
-            }
-          },
-          {
-            "name": "sort_dir",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^(asc|desc)$",
-              "title": "Sort Dir"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchResponseModel"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/": {
       "get": {
         "summary": "Root",
@@ -1885,10 +1690,6 @@
             "type": "string",
             "title": "Updated At"
           },
-          "is_locked": {
-            "type": "boolean",
-            "title": "Is Locked"
-          },
           "user_id": {
             "type": "integer",
             "title": "User Id"
@@ -1901,7 +1702,7 @@
             "type": "string",
             "title": "User Email"
           },
-          "project_draft_title": {
+          "idea_title": {
             "anyOf": [
               {
                 "type": "string"
@@ -1910,9 +1711,9 @@
                 "type": "null"
               }
             ],
-            "title": "Project Draft Title"
+            "title": "Idea Title"
           },
-          "project_draft_description": {
+          "idea_abstract": {
             "anyOf": [
               {
                 "type": "string"
@@ -1921,18 +1722,7 @@
                 "type": "null"
               }
             ],
-            "title": "Project Draft Description"
-          },
-          "linear_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Linear Url"
+            "title": "Idea Abstract"
           },
           "last_user_message_content": {
             "anyOf": [
@@ -1965,7 +1755,6 @@
           "import_date",
           "created_at",
           "updated_at",
-          "is_locked",
           "user_id",
           "user_name",
           "user_email"
@@ -2022,11 +1811,6 @@
             "type": "string",
             "title": "Updated At",
             "description": "ISO format last update timestamp"
-          },
-          "is_locked": {
-            "type": "boolean",
-            "title": "Is Locked",
-            "description": "Whether the conversation is locked"
           },
           "has_images": {
             "anyOf": [
@@ -2091,7 +1875,6 @@
           "import_date",
           "created_at",
           "updated_at",
-          "is_locked",
           "user_id",
           "user_name",
           "user_email"
@@ -2323,6 +2106,234 @@
         ],
         "title": "IdMessageResponse",
         "description": "Response with ID and message."
+      },
+      "Idea": {
+        "properties": {
+          "idea_id": {
+            "type": "integer",
+            "title": "Idea Id",
+            "description": "Idea ID"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id",
+            "description": "Associated conversation ID"
+          },
+          "active_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdeaVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Currently active version"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO format last update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea_id",
+          "conversation_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Idea",
+        "description": "Represents a research idea with its active version."
+      },
+      "IdeaGetResponse": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea",
+            "description": "Retrieved idea"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea"
+        ],
+        "title": "IdeaGetResponse",
+        "description": "Get idea response."
+      },
+      "IdeaRefinementRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Idea title"
+          },
+          "short_hypothesis": {
+            "type": "string",
+            "title": "Short Hypothesis",
+            "description": "Short hypothesis of the idea"
+          },
+          "related_work": {
+            "type": "string",
+            "title": "Related Work",
+            "description": "Related work or background"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract",
+            "description": "Abstract of the idea"
+          },
+          "experiments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiments",
+            "description": "List of experiments"
+          },
+          "expected_outcome": {
+            "type": "string",
+            "title": "Expected Outcome",
+            "description": "Expected outcome of the experiments"
+          },
+          "risk_factors_and_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Factors And Limitations",
+            "description": "Risk factors and limitations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "short_hypothesis",
+          "related_work",
+          "abstract",
+          "experiments",
+          "expected_outcome",
+          "risk_factors_and_limitations"
+        ],
+        "title": "IdeaRefinementRequest",
+        "description": "Request model for manually updating an idea with all fields."
+      },
+      "IdeaUpdateResponse": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea",
+            "description": "Updated idea"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea"
+        ],
+        "title": "IdeaUpdateResponse",
+        "description": "Update idea response."
+      },
+      "IdeaVersion": {
+        "properties": {
+          "version_id": {
+            "type": "integer",
+            "title": "Version Id",
+            "description": "Version ID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Research idea title"
+          },
+          "short_hypothesis": {
+            "type": "string",
+            "title": "Short Hypothesis",
+            "description": "Short hypothesis statement"
+          },
+          "related_work": {
+            "type": "string",
+            "title": "Related Work",
+            "description": "Related work and background"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract",
+            "description": "Detailed abstract of the idea"
+          },
+          "experiments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiments",
+            "description": "List of proposed experiments"
+          },
+          "expected_outcome": {
+            "type": "string",
+            "title": "Expected Outcome",
+            "description": "Expected outcome of the research"
+          },
+          "risk_factors_and_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Factors And Limitations",
+            "description": "Risk factors and limitations"
+          },
+          "is_manual_edit": {
+            "type": "boolean",
+            "title": "Is Manual Edit",
+            "description": "Whether this version was manually edited by user"
+          },
+          "version_number": {
+            "type": "integer",
+            "title": "Version Number",
+            "description": "Version number for ordering"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "title",
+          "short_hypothesis",
+          "related_work",
+          "abstract",
+          "experiments",
+          "expected_outcome",
+          "risk_factors_and_limitations",
+          "is_manual_edit",
+          "version_number",
+          "created_at"
+        ],
+        "title": "IdeaVersion",
+        "description": "Represents a single version of a research idea."
+      },
+      "IdeaVersionsResponse": {
+        "properties": {
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/IdeaVersion"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "List of idea versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "title": "IdeaVersionsResponse",
+        "description": "Get idea versions response."
       },
       "ImportChatCreateNew": {
         "properties": {
@@ -2706,394 +2717,6 @@
         ],
         "title": "MessageResponse",
         "description": "Simple message response."
-      },
-      "Project": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Database project ID"
-          },
-          "conversation_id": {
-            "type": "integer",
-            "title": "Conversation Id",
-            "description": "Associated conversation ID"
-          },
-          "linear_project_id": {
-            "type": "string",
-            "title": "Linear Project Id",
-            "description": "Linear project ID"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "description": "Project title"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Project description"
-          },
-          "linear_url": {
-            "type": "string",
-            "title": "Linear Url",
-            "description": "Linear project URL"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO format creation timestamp"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "conversation_id",
-          "linear_project_id",
-          "title",
-          "description",
-          "linear_url",
-          "created_at"
-        ],
-        "title": "Project",
-        "description": "Represents a Linear project."
-      },
-      "ProjectCreate": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Title",
-            "description": "Project title"
-          },
-          "description": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Description",
-            "description": "Project description"
-          }
-        },
-        "type": "object",
-        "required": [
-          "title",
-          "description"
-        ],
-        "title": "ProjectCreate",
-        "description": "Request model for creating a new project."
-      },
-      "ProjectCreateResponse": {
-        "properties": {
-          "project": {
-            "$ref": "#/components/schemas/Project",
-            "description": "Created project"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project"
-        ],
-        "title": "ProjectCreateResponse",
-        "description": "Create project response."
-      },
-      "ProjectDraft": {
-        "properties": {
-          "project_draft_id": {
-            "type": "integer",
-            "title": "Project Draft Id",
-            "description": "Project draft ID"
-          },
-          "conversation_id": {
-            "type": "integer",
-            "title": "Conversation Id",
-            "description": "Associated conversation ID"
-          },
-          "active_version": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ProjectDraftVersion"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Currently active version"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO format creation timestamp"
-          },
-          "updated_at": {
-            "type": "string",
-            "title": "Updated At",
-            "description": "ISO format last update timestamp"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project_draft_id",
-          "conversation_id",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "ProjectDraft",
-        "description": "Represents a project draft with its active version."
-      },
-      "ProjectDraftCreateRequest": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Title",
-            "description": "Project title"
-          },
-          "description": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Description",
-            "description": "Project description"
-          },
-          "user_prompt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Prompt",
-            "description": "User prompt that generated this refinement"
-          }
-        },
-        "type": "object",
-        "required": [
-          "title",
-          "description"
-        ],
-        "title": "ProjectDraftCreateRequest",
-        "description": "Request model for manually creating/updating project draft."
-      },
-      "ProjectDraftGetResponse": {
-        "properties": {
-          "project_draft": {
-            "$ref": "#/components/schemas/ProjectDraft",
-            "description": "Retrieved project draft"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project_draft"
-        ],
-        "title": "ProjectDraftGetResponse",
-        "description": "Get project draft response."
-      },
-      "ProjectDraftUpdateResponse": {
-        "properties": {
-          "project_draft": {
-            "$ref": "#/components/schemas/ProjectDraft",
-            "description": "Updated project draft"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project_draft"
-        ],
-        "title": "ProjectDraftUpdateResponse",
-        "description": "Update project draft response."
-      },
-      "ProjectDraftVersion": {
-        "properties": {
-          "version_id": {
-            "type": "integer",
-            "title": "Version Id",
-            "description": "Version ID"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "description": "Project title"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description",
-            "description": "Project description"
-          },
-          "is_manual_edit": {
-            "type": "boolean",
-            "title": "Is Manual Edit",
-            "description": "Whether this version was manually edited by user"
-          },
-          "version_number": {
-            "type": "integer",
-            "title": "Version Number",
-            "description": "Version number for ordering"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO format creation timestamp"
-          }
-        },
-        "type": "object",
-        "required": [
-          "version_id",
-          "title",
-          "description",
-          "is_manual_edit",
-          "version_number",
-          "created_at"
-        ],
-        "title": "ProjectDraftVersion",
-        "description": "Represents a single version of a project draft."
-      },
-      "ProjectDraftVersionsResponse": {
-        "properties": {
-          "versions": {
-            "items": {
-              "$ref": "#/components/schemas/ProjectDraftVersion"
-            },
-            "type": "array",
-            "title": "Versions",
-            "description": "List of project draft versions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "versions"
-        ],
-        "title": "ProjectDraftVersionsResponse",
-        "description": "Get project draft versions response."
-      },
-      "ProjectGetResponse": {
-        "properties": {
-          "project": {
-            "$ref": "#/components/schemas/Project",
-            "description": "Retrieved project"
-          }
-        },
-        "type": "object",
-        "required": [
-          "project"
-        ],
-        "title": "ProjectGetResponse",
-        "description": "Get project response."
-      },
-      "SearchResponseModel": {
-        "properties": {
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/SearchResultModel"
-            },
-            "type": "array",
-            "title": "Results"
-          },
-          "stats": {
-            "$ref": "#/components/schemas/SearchStatsModel"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          },
-          "has_more": {
-            "type": "boolean",
-            "title": "Has More"
-          }
-        },
-        "type": "object",
-        "required": [
-          "results",
-          "stats",
-          "total_count",
-          "has_more"
-        ],
-        "title": "SearchResponseModel"
-      },
-      "SearchResultModel": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "content_type": {
-            "type": "string",
-            "title": "Content Type"
-          },
-          "content_snippet": {
-            "type": "string",
-            "title": "Content Snippet"
-          },
-          "score": {
-            "type": "number",
-            "title": "Score"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
-          },
-          "conversation_id": {
-            "type": "integer",
-            "title": "Conversation Id"
-          },
-          "conversation_title": {
-            "type": "string",
-            "title": "Conversation Title"
-          },
-          "created_by_user_name": {
-            "type": "string",
-            "title": "Created By User Name"
-          },
-          "created_by_user_email": {
-            "type": "string",
-            "title": "Created By User Email"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "content_type",
-          "content_snippet",
-          "score",
-          "created_at",
-          "conversation_id",
-          "conversation_title",
-          "created_by_user_name",
-          "created_by_user_email"
-        ],
-        "title": "SearchResultModel"
-      },
-      "SearchStatsModel": {
-        "properties": {
-          "query": {
-            "type": "string",
-            "title": "Query"
-          },
-          "total_results": {
-            "type": "integer",
-            "title": "Total Results"
-          },
-          "execution_time_ms": {
-            "type": "number",
-            "title": "Execution Time Ms"
-          },
-          "results_by_type": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "type": "object",
-            "title": "Results By Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "query",
-          "total_results",
-          "execution_time_ms",
-          "results_by_type"
-        ],
-        "title": "SearchStatsModel"
       },
       "SlackImportRequest": {
         "properties": {

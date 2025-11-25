@@ -1,17 +1,16 @@
 """
-Chat API endpoints for project draft conversations.
+Chat API endpoints for idea conversations.
 
-This module contains FastAPI routes for retrieving chat history for a conversation's project draft.
+This module contains FastAPI routes for retrieving chat history for a conversation's idea.
 """
 
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, Response
-from pydantic import BaseModel, Field
-
 from app.models.chat import ChatMessage, FileAttachment
 from app.services import get_database
+from fastapi import APIRouter, Response
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/conversations")
 
@@ -32,12 +31,12 @@ class ChatHistoryResponse(BaseModel):
     chat_messages: List[ChatMessage] = Field(..., description="List of chat messages")
 
 
-@router.get("/{conversation_id}/project-draft/chat")
+@router.get("/{conversation_id}/idea/chat")
 async def get_chat_history(
     conversation_id: int, response: Response
 ) -> Union[ChatHistoryResponse, ErrorResponse]:
     """
-    Get chat history for a conversation's project draft.
+    Get chat history for a conversation's idea.
     """
     if conversation_id <= 0:
         response.status_code = 400
@@ -54,14 +53,14 @@ async def get_chat_history(
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
-        # Check if project draft exists
-        project_draft_data = db.get_project_draft_by_conversation_id(conversation_id)
-        if not project_draft_data:
-            # Return empty chat history if no project draft exists yet
+        # Check if idea exists
+        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        if not idea_data:
+            # Return empty chat history if no idea exists yet
             return ChatHistoryResponse(chat_messages=[])
 
         # Get chat messages from database
-        chat_messages_data = db.get_chat_messages(project_draft_data.project_draft_id)
+        chat_messages_data = db.get_chat_messages(idea_data.idea_id)
         file_attachments = db.get_file_attachments_by_message_ids(
             [msg.id for msg in chat_messages_data]
         )

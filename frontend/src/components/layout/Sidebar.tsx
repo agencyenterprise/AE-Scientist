@@ -43,10 +43,7 @@ export function Sidebar({
   const isDashboardActive = pathname === "/";
 
   const filteredConversations = conversations.sort((a, b) => {
-    // Sort: unlocked conversations first, then locked ones
-    if (a.isLocked && !b.isLocked) return 1;
-    if (!a.isLocked && b.isLocked) return -1;
-    // Within each group, sort by creation date (newest first)
+    // Sort by creation date (newest first)
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
@@ -155,13 +152,9 @@ export function Sidebar({
                 <div
                   key={conversation.id}
                   onClick={() => onConversationSelect(conversation)}
-                  className={`px-4 py-2 cursor-pointer transition-all duration-150 relative ${
-                    conversation.isLocked ? "bg-gray-200 hover:bg-gray-300" : "hover:bg-gray-100"
-                  } ${
+                  className={`px-4 py-2 cursor-pointer transition-all duration-150 relative hover:bg-gray-100 ${
                     isSelected
-                      ? conversation.isLocked
-                        ? "bg-gray-300 border-r-2 border-gray-500"
-                        : "bg-[color-mix(in_srgb,var(--primary),transparent_90%)] border-r-2 border-[var(--primary)]"
+                      ? "bg-[color-mix(in_srgb,var(--primary),transparent_90%)] border-r-2 border-[var(--primary)]"
                       : ""
                   }`}
                 >
@@ -174,34 +167,14 @@ export function Sidebar({
 
                   <div className="flex items-start justify-between">
                     <h3
-                      className={`font-medium truncate text-sm flex items-center ${
-                        conversation.isLocked ? "text-gray-600" : "text-gray-900"
-                      } ${isLoadingThis ? "opacity-50" : ""}`}
+                      className={`font-medium truncate text-sm flex items-center text-gray-900 ${isLoadingThis ? "opacity-50" : ""}`}
                     >
-                      {conversation.isLocked && (
-                        <svg
-                          className="w-3 h-3 mr-1 flex-shrink-0 text-gray-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 15v2m-6 0h12a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10-12a2 2 0 11-4 0 2 2 0 014 0z"
-                          />
-                        </svg>
-                      )}
                       <span className="truncate">{conversation.title}</span>
                     </h3>
                   </div>
                   <div className="flex justify-between items-center mt-1">
-                    <span
-                      className={`text-xs ${conversation.isLocked ? "text-gray-400" : "text-gray-500"} ${isLoadingThis ? "opacity-50" : ""}`}
-                    >
+                    <span className={`text-xs text-gray-500 ${isLoadingThis ? "opacity-50" : ""}`}>
                       {conversation.userName}
-                      {conversation.isLocked && " • Project Created"}
                     </span>
                     <span className={`text-xs text-gray-400 ${isLoadingThis ? "opacity-50" : ""}`}>
                       {new Date(conversation.createdAt).toLocaleDateString()}

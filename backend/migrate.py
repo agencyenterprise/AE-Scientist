@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Database migration utility for AGI Judd's Idea Catalog."""
+"""Database migration utility for AE Scientist"""
 
 import subprocess
 import sys

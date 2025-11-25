@@ -159,7 +159,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{conversation_id}/project-draft/chat": {
+    "/api/conversations/{conversation_id}/idea/chat": {
         parameters: {
             query?: never;
             header?: never;
@@ -168,9 +168,9 @@ export interface paths {
         };
         /**
          * Get Chat History
-         * @description Get chat history for a conversation's project draft.
+         * @description Get chat history for a conversation's idea.
          */
-        get: operations["get_chat_history_api_conversations__conversation_id__project_draft_chat_get"];
+        get: operations["get_chat_history_api_conversations__conversation_id__idea_chat_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -179,7 +179,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{conversation_id}/project-draft/chat/stream": {
+    "/api/conversations/{conversation_id}/idea/chat/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -189,10 +189,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Stream Chat With Project Draft
+         * Stream Chat With Idea
          * @description Stream chat messages with real-time updates via Server-Sent Events.
          */
-        post: operations["stream_chat_with_project_draft_api_conversations__conversation_id__project_draft_chat_stream_post"];
+        post: operations["stream_chat_with_idea_api_conversations__conversation_id__idea_chat_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -210,7 +210,7 @@ export interface paths {
         put?: never;
         /**
          * Import Conversation
-         * @description Import a conversation from a share URL and automatically generate a project draft with streaming.
+         * @description Import a conversation from a share URL and automatically generate an idea with streaming.
          */
         post: operations["import_conversation_api_conversations_import_post"];
         delete?: never;
@@ -404,6 +404,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Idea
+         * @description Get the idea for a conversation.
+         */
+        get: operations["get_idea_api_conversations__conversation_id__idea_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Idea
+         * @description Manually update an idea with all fields.
+         */
+        patch: operations["update_idea_api_conversations__conversation_id__idea_patch"];
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Idea Versions
+         * @description Get all versions of an idea for a conversation.
+         */
+        get: operations["get_idea_versions_api_conversations__conversation_id__idea_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/versions/{version_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Idea Version
+         * @description Recover a previous version by creating a new version with the same content.
+         */
+        post: operations["activate_idea_version_api_conversations__conversation_id__idea_versions__version_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/llm-defaults/providers": {
         parameters: {
             query?: never;
@@ -492,111 +556,6 @@ export interface paths {
          *     This always returns the hardcoded default prompt, ignoring any custom prompts.
          */
         get: operations["get_default_llm_prompt_api_llm_prompts__prompt_type__default_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/project-draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Project Draft
-         * @description Get the project draft for a conversation.
-         */
-        get: operations["get_project_draft_api_conversations__conversation_id__project_draft_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update Project Draft
-         * @description Manually update a project draft's title and description.
-         */
-        patch: operations["update_project_draft_api_conversations__conversation_id__project_draft_patch"];
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/project-draft/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Project Draft Versions
-         * @description Get all versions of a project draft for a conversation.
-         */
-        get: operations["get_project_draft_versions_api_conversations__conversation_id__project_draft_versions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/project-draft/versions/{version_id}/activate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Activate Project Draft Version
-         * @description Recover a previous version by creating a new version with the same content.
-         */
-        post: operations["activate_project_draft_version_api_conversations__conversation_id__project_draft_versions__version_id__activate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/project": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Project
-         * @description Get the Linear project for a conversation.
-         */
-        get: operations["get_project_api_conversations__conversation_id__project_get"];
-        put?: never;
-        /**
-         * Create Project
-         * @description Create a new Linear project for a conversation.
-         */
-        post: operations["create_project_api_conversations__conversation_id__project_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Search */
-        get: operations["search_api_search_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -795,20 +754,16 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
-            /** Is Locked */
-            is_locked: boolean;
             /** User Id */
             user_id: number;
             /** User Name */
             user_name: string;
             /** User Email */
             user_email: string;
-            /** Project Draft Title */
-            project_draft_title?: string | null;
-            /** Project Draft Description */
-            project_draft_description?: string | null;
-            /** Linear Url */
-            linear_url?: string | null;
+            /** Idea Title */
+            idea_title?: string | null;
+            /** Idea Abstract */
+            idea_abstract?: string | null;
             /** Last User Message Content */
             last_user_message_content?: string | null;
             /** Last Assistant Message Content */
@@ -860,11 +815,6 @@ export interface components {
              * @description ISO format last update timestamp
              */
             updated_at: string;
-            /**
-             * Is Locked
-             * @description Whether the conversation is locked
-             */
-            is_locked: boolean;
             /**
              * Has Images
              * @description Whether conversation contains images
@@ -1052,6 +1002,163 @@ export interface components {
              * @description Response message
              */
             message: string;
+        };
+        /**
+         * Idea
+         * @description Represents a research idea with its active version.
+         */
+        Idea: {
+            /**
+             * Idea Id
+             * @description Idea ID
+             */
+            idea_id: number;
+            /**
+             * Conversation Id
+             * @description Associated conversation ID
+             */
+            conversation_id: number;
+            /** @description Currently active version */
+            active_version?: components["schemas"]["IdeaVersion"] | null;
+            /**
+             * Created At
+             * @description ISO format creation timestamp
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO format last update timestamp
+             */
+            updated_at: string;
+        };
+        /**
+         * IdeaGetResponse
+         * @description Get idea response.
+         */
+        IdeaGetResponse: {
+            /** @description Retrieved idea */
+            idea: components["schemas"]["Idea"];
+        };
+        /**
+         * IdeaRefinementRequest
+         * @description Request model for manually updating an idea with all fields.
+         */
+        IdeaRefinementRequest: {
+            /**
+             * Title
+             * @description Idea title
+             */
+            title: string;
+            /**
+             * Short Hypothesis
+             * @description Short hypothesis of the idea
+             */
+            short_hypothesis: string;
+            /**
+             * Related Work
+             * @description Related work or background
+             */
+            related_work: string;
+            /**
+             * Abstract
+             * @description Abstract of the idea
+             */
+            abstract: string;
+            /**
+             * Experiments
+             * @description List of experiments
+             */
+            experiments: string[];
+            /**
+             * Expected Outcome
+             * @description Expected outcome of the experiments
+             */
+            expected_outcome: string;
+            /**
+             * Risk Factors And Limitations
+             * @description Risk factors and limitations
+             */
+            risk_factors_and_limitations: string[];
+        };
+        /**
+         * IdeaUpdateResponse
+         * @description Update idea response.
+         */
+        IdeaUpdateResponse: {
+            /** @description Updated idea */
+            idea: components["schemas"]["Idea"];
+        };
+        /**
+         * IdeaVersion
+         * @description Represents a single version of a research idea.
+         */
+        IdeaVersion: {
+            /**
+             * Version Id
+             * @description Version ID
+             */
+            version_id: number;
+            /**
+             * Title
+             * @description Research idea title
+             */
+            title: string;
+            /**
+             * Short Hypothesis
+             * @description Short hypothesis statement
+             */
+            short_hypothesis: string;
+            /**
+             * Related Work
+             * @description Related work and background
+             */
+            related_work: string;
+            /**
+             * Abstract
+             * @description Detailed abstract of the idea
+             */
+            abstract: string;
+            /**
+             * Experiments
+             * @description List of proposed experiments
+             */
+            experiments: string[];
+            /**
+             * Expected Outcome
+             * @description Expected outcome of the research
+             */
+            expected_outcome: string;
+            /**
+             * Risk Factors And Limitations
+             * @description Risk factors and limitations
+             */
+            risk_factors_and_limitations: string[];
+            /**
+             * Is Manual Edit
+             * @description Whether this version was manually edited by user
+             */
+            is_manual_edit: boolean;
+            /**
+             * Version Number
+             * @description Version number for ordering
+             */
+            version_number: number;
+            /**
+             * Created At
+             * @description ISO format creation timestamp
+             */
+            created_at: string;
+        };
+        /**
+         * IdeaVersionsResponse
+         * @description Get idea versions response.
+         */
+        IdeaVersionsResponse: {
+            /**
+             * Versions
+             * @description List of idea versions
+             */
+            versions: components["schemas"]["IdeaVersion"][];
         };
         /** ImportChatCreateNew */
         ImportChatCreateNew: {
@@ -1326,235 +1433,6 @@ export interface components {
             message: string;
         };
         /**
-         * Project
-         * @description Represents a Linear project.
-         */
-        Project: {
-            /**
-             * Id
-             * @description Database project ID
-             */
-            id: number;
-            /**
-             * Conversation Id
-             * @description Associated conversation ID
-             */
-            conversation_id: number;
-            /**
-             * Linear Project Id
-             * @description Linear project ID
-             */
-            linear_project_id: string;
-            /**
-             * Title
-             * @description Project title
-             */
-            title: string;
-            /**
-             * Description
-             * @description Project description
-             */
-            description: string;
-            /**
-             * Linear Url
-             * @description Linear project URL
-             */
-            linear_url: string;
-            /**
-             * Created At
-             * @description ISO format creation timestamp
-             */
-            created_at: string;
-        };
-        /**
-         * ProjectCreate
-         * @description Request model for creating a new project.
-         */
-        ProjectCreate: {
-            /**
-             * Title
-             * @description Project title
-             */
-            title: string;
-            /**
-             * Description
-             * @description Project description
-             */
-            description: string;
-        };
-        /**
-         * ProjectCreateResponse
-         * @description Create project response.
-         */
-        ProjectCreateResponse: {
-            /** @description Created project */
-            project: components["schemas"]["Project"];
-        };
-        /**
-         * ProjectDraft
-         * @description Represents a project draft with its active version.
-         */
-        ProjectDraft: {
-            /**
-             * Project Draft Id
-             * @description Project draft ID
-             */
-            project_draft_id: number;
-            /**
-             * Conversation Id
-             * @description Associated conversation ID
-             */
-            conversation_id: number;
-            /** @description Currently active version */
-            active_version?: components["schemas"]["ProjectDraftVersion"] | null;
-            /**
-             * Created At
-             * @description ISO format creation timestamp
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * @description ISO format last update timestamp
-             */
-            updated_at: string;
-        };
-        /**
-         * ProjectDraftCreateRequest
-         * @description Request model for manually creating/updating project draft.
-         */
-        ProjectDraftCreateRequest: {
-            /**
-             * Title
-             * @description Project title
-             */
-            title: string;
-            /**
-             * Description
-             * @description Project description
-             */
-            description: string;
-            /**
-             * User Prompt
-             * @description User prompt that generated this refinement
-             */
-            user_prompt?: string | null;
-        };
-        /**
-         * ProjectDraftGetResponse
-         * @description Get project draft response.
-         */
-        ProjectDraftGetResponse: {
-            /** @description Retrieved project draft */
-            project_draft: components["schemas"]["ProjectDraft"];
-        };
-        /**
-         * ProjectDraftUpdateResponse
-         * @description Update project draft response.
-         */
-        ProjectDraftUpdateResponse: {
-            /** @description Updated project draft */
-            project_draft: components["schemas"]["ProjectDraft"];
-        };
-        /**
-         * ProjectDraftVersion
-         * @description Represents a single version of a project draft.
-         */
-        ProjectDraftVersion: {
-            /**
-             * Version Id
-             * @description Version ID
-             */
-            version_id: number;
-            /**
-             * Title
-             * @description Project title
-             */
-            title: string;
-            /**
-             * Description
-             * @description Project description
-             */
-            description: string;
-            /**
-             * Is Manual Edit
-             * @description Whether this version was manually edited by user
-             */
-            is_manual_edit: boolean;
-            /**
-             * Version Number
-             * @description Version number for ordering
-             */
-            version_number: number;
-            /**
-             * Created At
-             * @description ISO format creation timestamp
-             */
-            created_at: string;
-        };
-        /**
-         * ProjectDraftVersionsResponse
-         * @description Get project draft versions response.
-         */
-        ProjectDraftVersionsResponse: {
-            /**
-             * Versions
-             * @description List of project draft versions
-             */
-            versions: components["schemas"]["ProjectDraftVersion"][];
-        };
-        /**
-         * ProjectGetResponse
-         * @description Get project response.
-         */
-        ProjectGetResponse: {
-            /** @description Retrieved project */
-            project: components["schemas"]["Project"];
-        };
-        /** SearchResponseModel */
-        SearchResponseModel: {
-            /** Results */
-            results: components["schemas"]["SearchResultModel"][];
-            stats: components["schemas"]["SearchStatsModel"];
-            /** Total Count */
-            total_count: number;
-            /** Has More */
-            has_more: boolean;
-        };
-        /** SearchResultModel */
-        SearchResultModel: {
-            /** Id */
-            id: number;
-            /** Content Type */
-            content_type: string;
-            /** Content Snippet */
-            content_snippet: string;
-            /** Score */
-            score: number;
-            /** Created At */
-            created_at: string;
-            /** Conversation Id */
-            conversation_id: number;
-            /** Conversation Title */
-            conversation_title: string;
-            /** Created By User Name */
-            created_by_user_name: string;
-            /** Created By User Email */
-            created_by_user_email: string;
-        };
-        /** SearchStatsModel */
-        SearchStatsModel: {
-            /** Query */
-            query: string;
-            /** Total Results */
-            total_results: number;
-            /** Execution Time Ms */
-            execution_time_ms: number;
-            /** Results By Type */
-            results_by_type: {
-                [key: string]: number;
-            };
-        };
-        /**
          * SlackImportRequest
          * @description Data sent from Slack for conversation import.
          */
@@ -1761,7 +1639,7 @@ export interface operations {
             };
         };
     };
-    get_chat_history_api_conversations__conversation_id__project_draft_chat_get: {
+    get_chat_history_api_conversations__conversation_id__idea_chat_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1792,7 +1670,7 @@ export interface operations {
             };
         };
     };
-    stream_chat_with_project_draft_api_conversations__conversation_id__project_draft_chat_stream_post: {
+    stream_chat_with_idea_api_conversations__conversation_id__idea_chat_stream_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2185,6 +2063,135 @@ export interface operations {
             };
         };
     };
+    get_idea_api_conversations__conversation_id__idea_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaGetResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_idea_api_conversations__conversation_id__idea_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdeaRefinementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaUpdateResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_idea_versions_api_conversations__conversation_id__idea_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaVersionsResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_idea_version_api_conversations__conversation_id__idea_versions__version_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                version_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdeaUpdateResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_llm_providers_api_llm_defaults_providers_get: {
         parameters: {
             query?: never;
@@ -2386,237 +2393,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LLMPromptResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_draft_api_conversations__conversation_id__project_draft_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDraftGetResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_project_draft_api_conversations__conversation_id__project_draft_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProjectDraftCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDraftUpdateResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_draft_versions_api_conversations__conversation_id__project_draft_versions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDraftVersionsResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    activate_project_draft_version_api_conversations__conversation_id__project_draft_versions__version_id__activate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-                version_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectDraftUpdateResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_api_conversations__conversation_id__project_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectGetResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_project_api_conversations__conversation_id__project_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProjectCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectCreateResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    search_api_search_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit: number;
-                offset: number;
-                status: string;
-                sort_by: string;
-                sort_dir: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchResponseModel"];
                 };
             };
             /** @description Validation Error */

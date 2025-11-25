@@ -1,5 +1,5 @@
 """
-Models module for the AGI Judd's Idea Catalog.
+Models module for the AE Scientist
 
 This module exports all Pydantic models for data validation and API contracts.
 """
@@ -33,6 +33,18 @@ from app.models.conversations import (
     ParseSuccessResult,
     SlackImportRequest,
 )
+
+# Idea models
+from app.models.ideas import (
+    Idea,
+    IdeaCreateRequest,
+    IdeaRefinementRequest,
+    IdeaRefinementResponse,
+    IdeaRefinementSuggestion,
+    IdeaResponse,
+    IdeaVersion,
+    IdeaVersionsResponse,
+)
 from app.models.imported_conversation_summary import ImportedConversationSummaryUpdate
 
 # LLM prompt models
@@ -48,21 +60,6 @@ from app.models.llm_prompts import (
     LLMPromptResponse,
     LLMProvidersResponse,
 )
-
-# Project draft models
-from app.models.project_drafts import (
-    ProjectDraft,
-    ProjectDraftCreateRequest,
-    ProjectDraftRefinementRequest,
-    ProjectDraftRefinementResponse,
-    ProjectDraftRefinementSuggestion,
-    ProjectDraftResponse,
-    ProjectDraftVersion,
-    ProjectDraftVersionsResponse,
-)
-
-# Project models
-from app.models.projects import Project, ProjectCreate, ProjectResponse
 
 __all__ = [
     # Conversation models
@@ -80,15 +77,15 @@ __all__ = [
     "ParseSuccessResult",
     "ParseErrorResult",
     "ParseResult",
-    # Project draft models
-    "ProjectDraftVersion",
-    "ProjectDraft",
-    "ProjectDraftCreateRequest",
-    "ProjectDraftRefinementRequest",
-    "ProjectDraftRefinementSuggestion",
-    "ProjectDraftResponse",
-    "ProjectDraftVersionsResponse",
-    "ProjectDraftRefinementResponse",
+    # Idea models
+    "IdeaVersion",
+    "Idea",
+    "IdeaCreateRequest",
+    "IdeaRefinementRequest",
+    "IdeaRefinementSuggestion",
+    "IdeaResponse",
+    "IdeaVersionsResponse",
+    "IdeaRefinementResponse",
     # LLM prompt models
     "LLMDefault",
     "LLMDefaultsResponse",
@@ -104,10 +101,6 @@ __all__ = [
     "ChatMessage",
     "ChatRequest",
     "ChatResponse",
-    # Project models
-    "Project",
-    "ProjectCreate",
-    "ProjectResponse",
     # Auth models
     "User",
     "UserSession",

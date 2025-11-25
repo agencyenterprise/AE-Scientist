@@ -10,7 +10,6 @@ from typing import NamedTuple
 
 import psycopg2
 import psycopg2.extras
-
 from app.prompt_types import PromptTypes
 
 logger = logging.getLogger(__name__)

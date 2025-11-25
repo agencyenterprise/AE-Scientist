@@ -11,8 +11,6 @@ from datetime import datetime
 from logging import getLogger
 from typing import AsyncGenerator, List, NamedTuple, Optional
 
-from pydantic import BaseModel, Field
-
 from app.models import ChatMessageData
 from app.models.llm_prompts import LLMModel
 from app.services.chat_models import (
@@ -20,9 +18,10 @@ from app.services.chat_models import (
     StreamConversationLockedEvent,
     StreamDoneEvent,
     StreamErrorEvent,
-    StreamProjectUpdateEvent,
+    StreamIdeaUpdateEvent,
     StreamStatusEvent,
 )
+from pydantic import BaseModel, Field
 
 logger = getLogger(__name__)
 
@@ -40,11 +39,18 @@ class FileAttachmentData(NamedTuple):
     created_at: datetime
 
 
-class LLMProjectGeneration(BaseModel):
-    """OpenAI structured output model for initial project generation."""
+class LLMIdeaGeneration(BaseModel):
+    """LLM structured output model for idea generation."""
 
-    title: str = Field(..., description="Generated project title")
-    description: str = Field(..., description="Generated project description")
+    title: str = Field(..., description="Generated idea title")
+    short_hypothesis: str = Field(..., description="Generated short hypothesis")
+    related_work: str = Field(..., description="Generated related work section")
+    abstract: str = Field(..., description="Generated abstract")
+    experiments: List[str] = Field(..., description="Generated list of experiments")
+    expected_outcome: str = Field(..., description="Generated expected outcome")
+    risk_factors_and_limitations: List[str] = Field(
+        ..., description="Generated risk factors and limitations"
+    )
 
 
 class BaseLLMService(ABC):
@@ -56,11 +62,11 @@ class BaseLLMService(ABC):
     """
 
     @abstractmethod
-    def generate_project_draft(
+    def generate_idea(
         self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
-        Generate a project draft by streaming the response.
+        Generate a research idea by streaming the response.
 
         Args:
             llm_model: The LLM model to use for generation
@@ -69,7 +75,7 @@ class BaseLLMService(ABC):
             conversation_id: the conversation id
 
         Yields:
-            str: Chunks of the generated project draft content
+            str: Chunks of the generated idea content
 
         Raises:
             Exception: If the LLM API call fails
@@ -77,15 +83,15 @@ class BaseLLMService(ABC):
         pass
 
     @abstractmethod
-    def _parse_project_draft_response(self, content: str) -> LLMProjectGeneration:
+    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
         """
-        Parse the project draft response from the LLM.
+        Parse the idea response from the LLM.
 
         Args:
             content: The raw string content from the LLM
 
         Returns:
-            LLMProjectGeneration: Parsed project draft with title and description
+            LLMIdeaGeneration: Parsed idea with all fields
 
         Raises:
             ValueError: If the response format is invalid
@@ -93,11 +99,11 @@ class BaseLLMService(ABC):
         pass
 
     @abstractmethod
-    def chat_with_project_draft_stream(
+    def chat_with_idea_stream(
         self,
         llm_model: LLMModel,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_message: str,
         chat_history: List[ChatMessageData],
         attached_files: List[FileAttachmentData],
@@ -105,19 +111,19 @@ class BaseLLMService(ABC):
     ) -> AsyncGenerator[
         StreamContentEvent
         | StreamStatusEvent
-        | StreamProjectUpdateEvent
+        | StreamIdeaUpdateEvent
         | StreamConversationLockedEvent
         | StreamErrorEvent
         | StreamDoneEvent,
         None,
     ]:
         """
-        Stream chat responses with project draft context and tool calling.
+        Stream chat responses with idea context and tool calling.
 
         Args:
             llm_model: The LLM model to use
             conversation_id: ID of the conversation
-            project_draft_id: ID of the project draft
+            idea_id: ID of the idea
             user_message: User's message
             chat_history: Previous chat messages
             attached_files: List of FileAttachmentData objects
