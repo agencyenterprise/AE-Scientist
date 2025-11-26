@@ -1,0 +1,9 @@
+/* Tailwind v4 Configuration File */
+
+/* This file ensures Tailwind v4 works consistently */
+/* Keep these settings EXACTLY as they are */
+
+@config "./src/app/globals.css";
+
+/* Content sources for Tailwind to scan */
+@source "./src/**/*.{js,ts,jsx,tsx}";

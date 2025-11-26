@@ -1,0 +1,21 @@
+[flake8]
+max-line-length = 100
+exclude = 
+    .git,
+    __pycache__,
+    .venv,
+    .eggs,
+    *.egg,
+    build,
+    dist
+ignore = 
+    E203,
+    W503,
+    E501,
+    D100,
+    D103,
+    D104,
+    SC100,
+    SC200
+# Enable ANN401 to prevent Any usage - this error should NOT be ignored
+select = E,W,F,ANN401

@@ -1,0 +1,94 @@
+[project]
+name = "AE-Scientist-API"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.12.15",
+    "alembic==1.16.5",
+    "anthropic==0.64.0",
+    "boto3==1.40.19",
+    "fastapi==0.116.1",
+    "google-auth==2.40.3",
+    "google-auth-oauthlib==1.2.2",
+    "html2text==2024.2.26",
+    "httpx==0.27.2",
+    "openai==1.101.0",
+    "pdfplumber==0.11.7",
+    "playwright==1.40.0",
+    "psycopg2-binary==2.9.9",
+    "python-dotenv==1.0.1",
+    "python-magic==0.4.27",
+    "python-multipart==0.0.20",
+    "requests==2.32.5",
+    "types-psycopg2==2.9.21.20",
+    "types-requests==2.32.4.20250809",
+    "uvicorn[standard]==0.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "black==25.9.0",
+    "isort==5.13.2",
+    "mypy==1.11.2",
+    "ruff>=0.14.3",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | outputs
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+skip = [".venv", "venv"]
+skip_glob = ["**/.venv/**", "**/venv/**"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes (includes unused imports/vars)
+    "ARG", # flake8-unused-arguments (unused function/method args)
+]
+extend-select = ["ANN401"]
+ignore = ["E501", "G004"]  # Line too long, allow f-strings in logging statements
+
+[tool.pylint.messages_control]
+disable = ["logging-fstring-interpolation", "broad-except"]

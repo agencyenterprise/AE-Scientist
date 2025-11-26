@@ -1,0 +1,2703 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AE Scientist API",
+    "description": "Transform LLM conversations into actionable AE ideas",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Login",
+        "description": "Initiate Google OAuth login flow.\n\nReturns:\n    Redirect response to Google OAuth authorization URL",
+        "operationId": "login_api_auth_login_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/callback": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Auth Callback",
+        "description": "Handle Google OAuth callback.\n\nArgs:\n    response: FastAPI response object\n    code: Authorization code from Google\n    state: State parameter for verification\n    error: Error parameter if OAuth failed\n\nReturns:\n    Redirect response to frontend dashboard or login page",
+        "operationId": "auth_callback_api_auth_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Authorization code from Google",
+              "title": "Code"
+            },
+            "description": "Authorization code from Google"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "State parameter for security",
+              "title": "State"
+            },
+            "description": "State parameter for security"
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Error from OAuth provider",
+              "title": "Error"
+            },
+            "description": "Error from OAuth provider"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Get Current User Info",
+        "description": "Get current authenticated user information.\n\nArgs:\n    request: Current request\n\nReturns:\n    Current user information",
+        "operationId": "get_current_user_info_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUser"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/status": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Get Auth Status",
+        "description": "Check authentication status.\n\nArgs:\n    request: Current request\n    session_token: Session token from cookie\n\nReturns:\n    Authentication status and user info if authenticated",
+        "operationId": "get_auth_status_api_auth_status_get",
+        "parameters": [
+          {
+            "name": "session_token",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Session Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Logout",
+        "description": "Log out current user.\n\nArgs:\n    response: FastAPI response object\n    session_token: Session token from cookie\n\nReturns:\n    Success message",
+        "operationId": "logout_api_auth_logout_post",
+        "parameters": [
+          {
+            "name": "session_token",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Session Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Logout Api Auth Logout Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/cleanup": {
+      "delete": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Cleanup Expired Sessions",
+        "description": "Clean up expired sessions (admin endpoint).\n\nReturns:\n    Cleanup result message",
+        "operationId": "cleanup_expired_sessions_api_auth_cleanup_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Cleanup Expired Sessions Api Auth Cleanup Delete"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/chat": {
+      "get": {
+        "summary": "Get Chat History",
+        "description": "Get chat history for a conversation's idea.",
+        "operationId": "get_chat_history_api_conversations__conversation_id__idea_chat_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatHistoryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Chat History Api Conversations  Conversation Id  Idea Chat Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/chat/stream": {
+      "post": {
+        "summary": "Stream Chat With Idea",
+        "description": "Stream chat messages with real-time updates via Server-Sent Events.",
+        "operationId": "stream_chat_with_idea_api_conversations__conversation_id__idea_chat_stream_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/import": {
+      "post": {
+        "summary": "Import Conversation",
+        "description": "Import a conversation from a share URL and automatically generate an idea with streaming.",
+        "operationId": "import_conversation_api_conversations_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ImportChatPrompt"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ImportChatCreateNew"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ImportChatUpdateExisting"
+                  }
+                ],
+                "title": "Import Data",
+                "discriminator": {
+                  "propertyName": "duplicate_resolution",
+                  "mapping": {
+                    "prompt": "#/components/schemas/ImportChatPrompt",
+                    "create_new": "#/components/schemas/ImportChatCreateNew",
+                    "update_existing": "#/components/schemas/ImportChatUpdateExisting"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations": {
+      "get": {
+        "summary": "List Conversations",
+        "description": "Get a paginated list of all imported conversations.",
+        "operationId": "list_conversations_api_conversations_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationListResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response List Conversations Api Conversations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}": {
+      "get": {
+        "summary": "Get Conversation",
+        "description": "Get a specific conversation by ID with complete details.",
+        "operationId": "get_conversation_api_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Conversation Api Conversations  Conversation Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Conversation",
+        "description": "Delete a specific conversation by ID.",
+        "operationId": "delete_conversation_api_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/MessageResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Delete Conversation Api Conversations  Conversation Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Conversation",
+        "description": "Update a conversation's title.",
+        "operationId": "update_conversation_api_conversations__conversation_id__patch",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Conversation Api Conversations  Conversation Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/imported_chat_summary": {
+      "get": {
+        "summary": "Get Conversation Summary",
+        "description": "Get the current summary for a conversation.\n\nPrefers the imported conversation summary, falls back to chat summary, then to\nconcatenated imported chat messages if neither exists.",
+        "operationId": "get_conversation_summary_api_conversations__conversation_id__imported_chat_summary_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SummaryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Conversation Summary Api Conversations  Conversation Id  Imported Chat Summary Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/summary": {
+      "patch": {
+        "summary": "Update Conversation Summary",
+        "description": "Update a conversation's summary.",
+        "operationId": "update_conversation_summary_api_conversations__conversation_id__summary_patch",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportedConversationSummaryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SummaryResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Conversation Summary Api Conversations  Conversation Id  Summary Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/files": {
+      "post": {
+        "summary": "Upload File",
+        "description": "Upload a file attachment for a conversation.\n\nArgs:\n    conversation_id: ID of the conversation\n    file: File to upload (multipart/form-data)\n    llm_model: LLM model to use for processing\n    llm_provider: LLM provider to use for processing\n\nReturns:\n    JSON response with file metadata\n\nRaises:\n    HTTPException: If validation fails or upload fails",
+        "operationId": "upload_file_api_conversations__conversation_id__files_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_conversations__conversation_id__files_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FileUploadResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Upload File Api Conversations  Conversation Id  Files Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Conversation Files",
+        "description": "List all file attachments for a conversation.\n\nArgs:\n    conversation_id: ID of the conversation\n\nReturns:\n    JSON response with list of file attachments\n\nRaises:\n    HTTPException: If conversation not found",
+        "operationId": "list_conversation_files_api_conversations__conversation_id__files_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FileListResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response List Conversation Files Api Conversations  Conversation Id  Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/files/{file_id}/download": {
+      "get": {
+        "summary": "Download File",
+        "description": "Download a file attachment via temporary signed URL.\n\nArgs:\n    file_id: ID of the file attachment\n\nReturns:\n    Redirect response to S3 signed URL\n\nRaises:\n    HTTPException: If file not found or download fails",
+        "operationId": "download_file_api_conversations_files__file_id__download_get",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea": {
+      "get": {
+        "summary": "Get Idea",
+        "description": "Get the idea for a conversation.",
+        "operationId": "get_idea_api_conversations__conversation_id__idea_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaGetResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Idea Api Conversations  Conversation Id  Idea Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Idea",
+        "description": "Manually update an idea with all fields.",
+        "operationId": "update_idea_api_conversations__conversation_id__idea_patch",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdeaRefinementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Idea Api Conversations  Conversation Id  Idea Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/versions": {
+      "get": {
+        "summary": "Get Idea Versions",
+        "description": "Get all versions of an idea for a conversation.",
+        "operationId": "get_idea_versions_api_conversations__conversation_id__idea_versions_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaVersionsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Idea Versions Api Conversations  Conversation Id  Idea Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/versions/{version_id}/activate": {
+      "post": {
+        "summary": "Activate Idea Version",
+        "description": "Recover a previous version by creating a new version with the same content.",
+        "operationId": "activate_idea_version_api_conversations__conversation_id__idea_versions__version_id__activate_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/IdeaUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Activate Idea Version Api Conversations  Conversation Id  Idea Versions  Version Id  Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm-defaults/providers": {
+      "get": {
+        "summary": "Get Llm Providers",
+        "description": "Get all available LLM providers and their supported models.",
+        "operationId": "get_llm_providers_api_llm_defaults_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMProvidersResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Llm Providers Api Llm Defaults Providers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm-defaults/{prompt_type}": {
+      "get": {
+        "summary": "Get Llm Defaults",
+        "description": "Get the current default LLM settings for a specific prompt type.",
+        "operationId": "get_llm_defaults_api_llm_defaults__prompt_type__get",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMDefaultsResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Llm Defaults Api Llm Defaults  Prompt Type  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update Llm Defaults",
+        "description": "Update the default LLM settings for a specific prompt type.",
+        "operationId": "update_llm_defaults_api_llm_defaults__prompt_type__put",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMDefaultsUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMDefaultsUpdateResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Llm Defaults Api Llm Defaults  Prompt Type  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm-prompts/{prompt_type}": {
+      "get": {
+        "summary": "Get Llm Prompt",
+        "description": "Get the active LLM prompt for a given type.\nReturns the prompt from database if available, otherwise indicates default is being used.",
+        "operationId": "get_llm_prompt_api_llm_prompts__prompt_type__get",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMPromptResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Llm Prompt Api Llm Prompts  Prompt Type  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Llm Prompt",
+        "description": "Create or update an LLM prompt for a given type.\nThis will deactivate any existing active prompt of the same type.",
+        "operationId": "create_llm_prompt_api_llm_prompts__prompt_type__post",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMPromptCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMPromptResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Create Llm Prompt Api Llm Prompts  Prompt Type  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Llm Prompt",
+        "description": "Deactivate the active LLM prompt for a given type.\nThis will revert to using the default prompt from code.",
+        "operationId": "delete_llm_prompt_api_llm_prompts__prompt_type__delete",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMPromptDeleteResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Delete Llm Prompt Api Llm Prompts  Prompt Type  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm-prompts/{prompt_type}/default": {
+      "get": {
+        "summary": "Get Default Llm Prompt",
+        "description": "Get the default LLM prompt for a given type.\nThis always returns the hardcoded default prompt, ignoring any custom prompts.",
+        "operationId": "get_default_llm_prompt_api_llm_prompts__prompt_type__default_get",
+        "parameters": [
+          {
+            "name": "prompt_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LLMPromptResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Default Llm Prompt Api Llm Prompts  Prompt Type  Default Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "description": "Get basic API information.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Root  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Check API health status.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthStatus": {
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "title": "Authenticated",
+            "description": "Whether the user is authenticated"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthUser"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "User information if authenticated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authenticated"
+        ],
+        "title": "AuthStatus",
+        "description": "Authentication status response."
+      },
+      "AuthUser": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Database user ID"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "User email address"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "User display name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "AuthUser",
+        "description": "User information returned by authentication endpoints."
+      },
+      "Body_upload_file_api_conversations__conversation_id__files_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "llm_model": {
+            "type": "string",
+            "title": "Llm Model"
+          },
+          "llm_provider": {
+            "type": "string",
+            "title": "Llm Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "llm_model",
+          "llm_provider"
+        ],
+        "title": "Body_upload_file_api_conversations__conversation_id__files_post"
+      },
+      "ChatHistoryResponse": {
+        "properties": {
+          "chat_messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "title": "Chat Messages",
+            "description": "List of chat messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chat_messages"
+        ],
+        "title": "ChatHistoryResponse",
+        "description": "Chat history response."
+      },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Message role ('user' or 'assistant')"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Message content"
+          },
+          "sequence_number": {
+            "type": "integer",
+            "title": "Sequence Number",
+            "description": "Sequence number for ordering"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          },
+          "sent_by_user_id": {
+            "type": "integer",
+            "title": "Sent By User Id",
+            "description": "ID of the user who sent this message"
+          },
+          "sent_by_user_name": {
+            "type": "string",
+            "title": "Sent By User Name",
+            "description": "Name of the user who sent this message"
+          },
+          "sent_by_user_email": {
+            "type": "string",
+            "title": "Sent By User Email",
+            "description": "Email of the user who sent this message"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/FileAttachment"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "description": "File attachments for this message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content",
+          "sequence_number",
+          "created_at",
+          "sent_by_user_id",
+          "sent_by_user_name",
+          "sent_by_user_email"
+        ],
+        "title": "ChatMessage",
+        "description": "Represents a single chat message."
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message",
+            "description": "User message content"
+          },
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider to use"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model to use"
+          },
+          "attachment_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Attachment Ids",
+            "description": "List of file attachment IDs to include with this message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "llm_provider",
+          "llm_model"
+        ],
+        "title": "ChatRequest",
+        "description": "Request model for sending a chat message."
+      },
+      "ConversationListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "import_date": {
+            "type": "string",
+            "title": "Import Date"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "user_name": {
+            "type": "string",
+            "title": "User Name"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
+          "idea_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idea Title"
+          },
+          "idea_abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idea Abstract"
+          },
+          "last_user_message_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last User Message Content"
+          },
+          "last_assistant_message_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Assistant Message Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "title",
+          "import_date",
+          "created_at",
+          "updated_at",
+          "user_id",
+          "user_name",
+          "user_email"
+        ],
+        "title": "ConversationListItem",
+        "description": "Response model for dashboard list view."
+      },
+      "ConversationListResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationListItem"
+            },
+            "type": "array",
+            "title": "Conversations",
+            "description": "List of conversations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "title": "ConversationListResponse",
+        "description": "Response for listing conversations."
+      },
+      "ConversationResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Database ID of the conversation"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Original conversation share URL"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Conversation title"
+          },
+          "import_date": {
+            "type": "string",
+            "title": "Import Date",
+            "description": "ISO format import timestamp"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO format last update timestamp"
+          },
+          "has_images": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Images",
+            "description": "Whether conversation contains images"
+          },
+          "has_pdfs": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Pdfs",
+            "description": "Whether conversation contains PDFs"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id",
+            "description": "ID of the user who imported the conversation"
+          },
+          "user_name": {
+            "type": "string",
+            "title": "User Name",
+            "description": "Name of the user who imported the conversation"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email",
+            "description": "Email of the user who imported the conversation"
+          },
+          "imported_chat": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ImportedChatMessage"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imported Chat",
+            "description": "Conversation messages (optional)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "title",
+          "import_date",
+          "created_at",
+          "updated_at",
+          "user_id",
+          "user_name",
+          "user_email"
+        ],
+        "title": "ConversationResponse",
+        "description": "Response model for conversation API endpoints."
+      },
+      "ConversationUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "New title for the conversation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "ConversationUpdate",
+        "description": "Data required to update a conversation."
+      },
+      "ConversationUpdateResponse": {
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/ConversationResponse",
+            "description": "Updated conversation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation"
+        ],
+        "title": "ConversationUpdateResponse",
+        "description": "Response for conversation updates."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "Error message"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "Additional error details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "description": "Standard error response schema."
+      },
+      "FileAttachment": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique attachment ID"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size",
+            "description": "File size in bytes"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type",
+            "description": "MIME type of the file"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key",
+            "description": "S3 storage key"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "file_size",
+          "file_type",
+          "s3_key",
+          "created_at"
+        ],
+        "title": "FileAttachment",
+        "description": "File attachment model for chat messages."
+      },
+      "FileListResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileAttachment"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "List of file attachments"
+          },
+          "file_count": {
+            "type": "integer",
+            "title": "File Count",
+            "description": "Number of files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "file_count"
+        ],
+        "title": "FileListResponse",
+        "description": "File list response."
+      },
+      "FileMetadata": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "File attachment ID"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key",
+            "description": "S3 storage key"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size",
+            "description": "File size in bytes"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type",
+            "description": "MIME type"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id",
+            "description": "Associated conversation ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "s3_key",
+          "filename",
+          "file_size",
+          "file_type",
+          "conversation_id"
+        ],
+        "title": "FileMetadata",
+        "description": "File metadata response."
+      },
+      "FileUploadResponse": {
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileMetadata",
+            "description": "Uploaded file metadata"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Success message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "message"
+        ],
+        "title": "FileUploadResponse",
+        "description": "File upload response."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Idea": {
+        "properties": {
+          "idea_id": {
+            "type": "integer",
+            "title": "Idea Id",
+            "description": "Idea ID"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id",
+            "description": "Associated conversation ID"
+          },
+          "active_version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IdeaVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Currently active version"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO format last update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea_id",
+          "conversation_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Idea",
+        "description": "Represents a research idea with its active version."
+      },
+      "IdeaGetResponse": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea",
+            "description": "Retrieved idea"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea"
+        ],
+        "title": "IdeaGetResponse",
+        "description": "Get idea response."
+      },
+      "IdeaRefinementRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Idea title"
+          },
+          "short_hypothesis": {
+            "type": "string",
+            "title": "Short Hypothesis",
+            "description": "Short hypothesis of the idea"
+          },
+          "related_work": {
+            "type": "string",
+            "title": "Related Work",
+            "description": "Related work or background"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract",
+            "description": "Abstract of the idea"
+          },
+          "experiments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiments",
+            "description": "List of experiments"
+          },
+          "expected_outcome": {
+            "type": "string",
+            "title": "Expected Outcome",
+            "description": "Expected outcome of the experiments"
+          },
+          "risk_factors_and_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Factors And Limitations",
+            "description": "Risk factors and limitations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "short_hypothesis",
+          "related_work",
+          "abstract",
+          "experiments",
+          "expected_outcome",
+          "risk_factors_and_limitations"
+        ],
+        "title": "IdeaRefinementRequest",
+        "description": "Request model for manually updating an idea with all fields."
+      },
+      "IdeaUpdateResponse": {
+        "properties": {
+          "idea": {
+            "$ref": "#/components/schemas/Idea",
+            "description": "Updated idea"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea"
+        ],
+        "title": "IdeaUpdateResponse",
+        "description": "Update idea response."
+      },
+      "IdeaVersion": {
+        "properties": {
+          "version_id": {
+            "type": "integer",
+            "title": "Version Id",
+            "description": "Version ID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Research idea title"
+          },
+          "short_hypothesis": {
+            "type": "string",
+            "title": "Short Hypothesis",
+            "description": "Short hypothesis statement"
+          },
+          "related_work": {
+            "type": "string",
+            "title": "Related Work",
+            "description": "Related work and background"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract",
+            "description": "Detailed abstract of the idea"
+          },
+          "experiments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Experiments",
+            "description": "List of proposed experiments"
+          },
+          "expected_outcome": {
+            "type": "string",
+            "title": "Expected Outcome",
+            "description": "Expected outcome of the research"
+          },
+          "risk_factors_and_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Factors And Limitations",
+            "description": "Risk factors and limitations"
+          },
+          "is_manual_edit": {
+            "type": "boolean",
+            "title": "Is Manual Edit",
+            "description": "Whether this version was manually edited by user"
+          },
+          "version_number": {
+            "type": "integer",
+            "title": "Version Number",
+            "description": "Version number for ordering"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO format creation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_id",
+          "title",
+          "short_hypothesis",
+          "related_work",
+          "abstract",
+          "experiments",
+          "expected_outcome",
+          "risk_factors_and_limitations",
+          "is_manual_edit",
+          "version_number",
+          "created_at"
+        ],
+        "title": "IdeaVersion",
+        "description": "Represents a single version of a research idea."
+      },
+      "IdeaVersionsResponse": {
+        "properties": {
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/IdeaVersion"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "List of idea versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "title": "IdeaVersionsResponse",
+        "description": "Get idea versions response."
+      },
+      "ImportChatCreateNew": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Share URL to import (ChatGPT or BranchPrompt)"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model to use"
+          },
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider to use"
+          },
+          "accept_summarization": {
+            "type": "boolean",
+            "title": "Accept Summarization",
+            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
+          },
+          "duplicate_resolution": {
+            "type": "string",
+            "const": "create_new",
+            "title": "Duplicate Resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "llm_model",
+          "llm_provider",
+          "accept_summarization",
+          "duplicate_resolution"
+        ],
+        "title": "ImportChatCreateNew"
+      },
+      "ImportChatPrompt": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Share URL to import (ChatGPT or BranchPrompt)"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model to use"
+          },
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider to use"
+          },
+          "accept_summarization": {
+            "type": "boolean",
+            "title": "Accept Summarization",
+            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
+          },
+          "duplicate_resolution": {
+            "type": "string",
+            "const": "prompt",
+            "title": "Duplicate Resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "llm_model",
+          "llm_provider",
+          "accept_summarization",
+          "duplicate_resolution"
+        ],
+        "title": "ImportChatPrompt"
+      },
+      "ImportChatUpdateExisting": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Share URL to import (ChatGPT or BranchPrompt)"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model to use"
+          },
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider to use"
+          },
+          "accept_summarization": {
+            "type": "boolean",
+            "title": "Accept Summarization",
+            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
+          },
+          "duplicate_resolution": {
+            "type": "string",
+            "const": "update_existing",
+            "title": "Duplicate Resolution"
+          },
+          "target_conversation_id": {
+            "type": "integer",
+            "title": "Target Conversation Id",
+            "description": "Conversation ID to update when duplicate_resolution is update_existing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "llm_model",
+          "llm_provider",
+          "accept_summarization",
+          "duplicate_resolution",
+          "target_conversation_id"
+        ],
+        "title": "ImportChatUpdateExisting"
+      },
+      "ImportedChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Message role: 'user' or 'assistant'"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Message content as Markdown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ImportedChatMessage",
+        "description": "Represents a single message in a conversation."
+      },
+      "ImportedConversationSummaryUpdate": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Summary",
+            "description": "Updated summary text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "title": "ImportedConversationSummaryUpdate",
+        "description": "Data required to update a conversation summary."
+      },
+      "LLMDefault": {
+        "properties": {
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider name"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "llm_provider",
+          "llm_model"
+        ],
+        "title": "LLMDefault",
+        "description": "Model for LLM default settings."
+      },
+      "LLMDefaultsResponse": {
+        "properties": {
+          "current_default": {
+            "$ref": "#/components/schemas/LLMDefault",
+            "description": "Current default LLM settings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_default"
+        ],
+        "title": "LLMDefaultsResponse",
+        "description": "Response model for getting LLM defaults."
+      },
+      "LLMDefaultsUpdateRequest": {
+        "properties": {
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider name"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "llm_provider",
+          "llm_model"
+        ],
+        "title": "LLMDefaultsUpdateRequest",
+        "description": "Request model for updating LLM defaults."
+      },
+      "LLMDefaultsUpdateResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Success message"
+          },
+          "updated_default": {
+            "$ref": "#/components/schemas/LLMDefault",
+            "description": "The updated default settings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "updated_default"
+        ],
+        "title": "LLMDefaultsUpdateResponse",
+        "description": "Response model for updating LLM defaults."
+      },
+      "LLMModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Model ID"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "LLM provider name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Human-readable model label"
+          },
+          "supports_images": {
+            "type": "boolean",
+            "title": "Supports Images",
+            "description": "Whether the model supports images"
+          },
+          "supports_pdfs": {
+            "type": "boolean",
+            "title": "Supports Pdfs",
+            "description": "Whether the model supports PDFs"
+          },
+          "context_window_tokens": {
+            "type": "integer",
+            "title": "Context Window Tokens",
+            "description": "Approximate maximum context window size in tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider",
+          "label",
+          "supports_images",
+          "supports_pdfs",
+          "context_window_tokens"
+        ],
+        "title": "LLMModel",
+        "description": "Model representing an LLM with ID and label."
+      },
+      "LLMPromptCreateRequest": {
+        "properties": {
+          "prompt_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt Type",
+            "description": "Type of prompt"
+          },
+          "system_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "System Prompt",
+            "description": "The system prompt text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_type",
+          "system_prompt"
+        ],
+        "title": "LLMPromptCreateRequest",
+        "description": "Request model for creating a new LLM prompt."
+      },
+      "LLMPromptDeleteResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Success or error message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "LLMPromptDeleteResponse",
+        "description": "Response model for LLM prompt deletion."
+      },
+      "LLMPromptResponse": {
+        "properties": {
+          "system_prompt": {
+            "type": "string",
+            "title": "System Prompt",
+            "description": "The system prompt text"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "description": "Whether this is using the default prompt from code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "system_prompt",
+          "is_default"
+        ],
+        "title": "LLMPromptResponse",
+        "description": "Response model for LLM prompt operations."
+      },
+      "LLMProvidersResponse": {
+        "properties": {
+          "providers": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/LLMModel"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Providers",
+            "description": "Available providers and their models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "providers"
+        ],
+        "title": "LLMProvidersResponse",
+        "description": "Response model for getting available LLM providers."
+      },
+      "MessageResponse": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Response message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "MessageResponse",
+        "description": "Simple message response."
+      },
+      "SummaryResponse": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Generated or updated summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "title": "SummaryResponse",
+        "description": "Response for summary operations."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

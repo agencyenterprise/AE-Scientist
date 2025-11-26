@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ae_scientist_db
+    environment:
+      POSTGRES_USER: ae_scientist_user
+      POSTGRES_PASSWORD: your_password
+      POSTGRES_DB: ae_scientist
+    ports:
+      - "5432:5432"
+    volumes:
+      - "${POSTGRES_DATA_DIR:-./.docker/postgres}:/var/lib/postgresql/data"
+volumes:
+  postgres_data:
+

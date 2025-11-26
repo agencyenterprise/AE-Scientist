@@ -1,240 +1,291 @@
 # AE-Scientist
 
+A collaborative platform that transforms LLM conversations into structured research ideas and automated AI-driven scientific experiments.
 
-## Setup (Local)
+## Project Overview
 
-1. Clone repository and cd into it
-```bash
-git clone https://github.com/agencyenterprise/AE-Scientist.git
-cd AE-Scientist
-```
+AE-Scientist consists of three main components that work together to facilitate AI-powered research:
 
-2. Install dependencies
-```bash
-uv sync --extra gpu
-```
+### 🎨 Frontend
+**Next.js web application for conversation and project management**
+- Import and manage LLM conversations from various providers
+- Generate and refine research proposals through interactive AI dialogue
+- Track project versions with visual diff viewers
+- Search across conversations and projects
 
-3. Activate the virtual environment
-```bash
-source .venv/bin/activate
-```
+📖 [Frontend Documentation](./frontend/README.md)
 
-## Setup (RunPod)
+### 🚀 Server
+**FastAPI backend for authentication, data management, and AI orchestration**
+- Google OAuth 2.0 authentication
+- PostgreSQL database for data persistence
+- REST API for frontend integration
+- LLM integration for idea generation and refinement
+- File upload and storage (AWS S3)
 
-1. Clone repository and cd into it
-```bash
-git clone https://github.com/agencyenterprise/AE-Scientist.git
-cd AE-Scientist
-```
+📖 [Server Documentation](./server/README.md)
 
-2. Create a new virtual environment with access to system-wide packages
-```bash
-uv venv --system-site-packages
-```
+### 🔬 Research Pipeline
+**Automated AI scientist for running experiments and generating papers**
+- Multi-stage BFTS (Best-First Tree Search) experiment pipeline
+- Automatic code generation and experimentation
+- Multi-seed evaluation and ablation studies
+- LaTeX paper generation with citations
+- Support for both local and RunPod GPU execution
 
-This is important because RunPod provides images with pytorch and other gpu-related packages, 
-some of these packages may conflict with the packages listed in pyproject.toml.
+📖 [Research Pipeline Documentation](./research_pipeline/README.md)
 
-In order to use the pre-installed packages, we need to create a virtual environment with access to system-wide packages.
+## Quick Start
 
-3. Activate the virtual environment
-```bash
-source .venv/bin/activate
-```
+### Prerequisites
 
-4. Install dependencies
-```bash
-uv sync
-```
+- **Python 3.12+** (for server and research pipeline)
+- **Node.js 20+** (for frontend)
+- **PostgreSQL** (for server database)
+- **uv** (Python package manager) - [Installation guide](https://github.com/astral-sh/uv)
+- **Google OAuth credentials** (for authentication)
 
-5. Install LaTeX packages (required for paper generation)
-```bash
-apt-get update && apt-get install -y texlive-latex-base texlive-latex-extra texlive-fonts-recommended texlive-bibtex-extra biber poppler-utils chktex
-```
+### Installation
 
-6. Quick setup (alternative)
-```bash
-bash install_run_pod.sh
-```
-This script creates a virtual environment with system packages, activates it, installs dependencies, and installs LaTeX packages.
-
-## Environment Variables
-
-Before running experiments, you need to configure API keys and tokens.
-
-1. Copy the example environment file:
-```bash
-cp .env.example .env
-```
-
-2. Edit `.env` and add your API keys:
-
-### Required Variables
+Install all dependencies at once:
 
 ```bash
-# OpenAI API key (required for LLM queries)
-OPENAI_API_KEY=sk-your-openai-key
-
-# HuggingFace token (required for downloading datasets and models)
-# Get your token from: https://huggingface.co/settings/tokens
-HUGGINGFACE_HUB_TOKEN=hf_your_token
-HUGGINGFACE_API_KEY=hf_your_token
-HF_TOKEN=hf_your_token
+make install
 ```
 
-**Note:** The three HuggingFace variables should all have the same value - they're used by different libraries.
-
-### Optional Variables
+Or install each component individually:
 
 ```bash
-# Custom OpenAI-compatible endpoint (e.g., local LLM server, RunPod)
-# Only set this if NOT using the default OpenAI API
-OPENAI_BASE_URL="https://your-custom-endpoint.com/v1"
-
-# Anthropic API key - only required if using Claude models
-# (e.g., when using bfts_config_claude-haiku.yaml)
-ANTHROPIC_API_KEY=your-anthropic-key
+make install-server          # Install server dependencies
+make install-research        # Install research pipeline dependencies
+cd frontend && npm install   # Install frontend dependencies
 ```
 
-**Important:**
-- `OPENAI_BASE_URL` should **only** be set if you're using a custom OpenAI-compatible endpoint (like a local LLM server or RunPod inference). Leave it unset to use the default OpenAI API.
-- `ANTHROPIC_API_KEY` is **only** required if you plan to use Claude models (e.g., `bfts_config_claude-haiku.yaml`).
+### Configuration
 
-## Running Experiments
+Each component requires its own configuration:
 
-### Run Stage 1 Only (Initial Implementation)
+1. **Server**: 
+   ```bash
+   cp server/env.example server/.env
+   # Edit server/.env with your credentials
+   ```
 
-To run only Stage 1 of the experiment pipeline (useful for testing or debugging):
+2. **Frontend**:
+   ```bash
+   cp frontend/env.local.example frontend/.env.local
+   # Edit frontend/.env.local with API URL
+   ```
+
+3. **Research Pipeline**:
+   ```bash
+   cp research_pipeline/.env.example research_pipeline/.env
+   # Edit research_pipeline/.env with API keys
+   ```
+
+See individual README files for detailed configuration instructions.
+
+### Development
+
+Start the development servers:
 
 ```bash
-python launch_stage1_only.py <config_file>
+# Terminal 1 - Database
+make migrate-db              # Run database migrations (first time only)
+
+# Terminal 2 - Server
+make dev-server              # Start FastAPI server (http://localhost:8000)
+
+# Terminal 3 - Frontend
+make dev-frontend            # Start Next.js server (http://localhost:3000)
 ```
 
-**Example:**
+Visit [http://localhost:3000](http://localhost:3000) and sign in with Google to get started.
+
+## Available Make Commands
+
+### Installation
 ```bash
-python launch_stage1_only.py bfts_config.yaml
+make install                 # Install all dependencies
+make install-server          # Install server dependencies
+make install-research        # Install research pipeline dependencies
 ```
 
-**Available config files:**
-- `bfts_config.yaml` - Default configuration
-- `bfts_config_gpt-5.yaml` - GPT-5 model configuration
-- `bfts_config_claude-haiku.yaml` - Claude Haiku configuration
-
-**What Stage 1 does:**
-- Loads research idea from `desc_file` (specified in config)
-- Creates initial experiment implementations
-- Generates plots from experimental results
-- Uses Vision Language Model (VLM) to validate plot quality
-- Runs multi-seed evaluation on successful implementations
-- Saves results to `workspace_dir` (specified in config)
-
-**Output:**
-- Experiment artifacts saved to: `workspaces/<exp_name>/`
-- Logs saved to: `workspaces/logs/<exp_name>/`
-- Plots saved to: `workspaces/logs/<exp_name>/experiment_results/`
-- Best implementation code: `workspaces/logs/<exp_name>/stage_*/best_solution_*.py`
-
-## Creating a RunPod Container for Experiments
-
-**Note:** This is only necessary if you want to run experiments on RunPod.
-
-Requirement: make sure you have a RUNPOD_API_KEY environment variable set.
-
-1. Open orchestrator and install dependencies
+### Development
 ```bash
-cd orchestrator
-pnpm install
+make dev-server              # Start server development server
+make dev-frontend            # Start frontend development server
 ```
 
-2. Call the create_runpod.ts script
+### Linting
 ```bash
-./create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090"
-
-# Or from the root
-./orchestrator/create_runpod.ts --gpu-count 3 --branch my-branch --gpu-types "NVIDIA GeForce RTX 5090"
-
-# Use a custom pod name
-./orchestrator/create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090" --pod-name "my-pod-name"
-./orchestrator/create_runpod.ts --gpu-count 3 --branch main --gpu-types "NVIDIA GeForce RTX 5090" -n "my-pod-name"
+make lint                    # Lint all Python projects
+make lint-server             # Lint server only
+make lint-research           # Lint research pipeline only
+make lint-frontend           # Lint frontend only
 ```
 
-
-### Run Full End-to-End Pipeline
-
-To run the complete BFTS experiment workflow including all stages, plot aggregation, paper writeup, and review:
-
+### Database
 ```bash
-python launch_scientist_bfts.py <config_file>
+make migrate-db              # Run database migrations
+make export-openapi          # Export OpenAPI schema
+make gen-api-types           # Generate TypeScript types from OpenAPI schema
 ```
 
-**Required Argument:**
-- `<config_file>`: Path to the YAML configuration file (e.g., `bfts_config.yaml`)
+## Project Structure
 
-**Review Configuration:**
-- Define the review model and temperature directly in your YAML config:
-  ```
-  review:
-    model: gpt-5
-    temperature: 1.0
-  ```
-- If the `review` section is missing or incomplete, the review stage is skipped even when `--skip_review` is not set.
+```
+AE-Scientist/
+├── frontend/              # Next.js web application
+│   ├── src/              # Source code
+│   ├── public/           # Static assets
+│   └── README.md         # Frontend documentation
+│
+├── server/               # FastAPI backend server
+│   ├── app/             # Application code
+│   ├── database_migrations/  # Alembic migrations
+│   └── README.md        # Server documentation
+│
+├── research_pipeline/   # AI scientist experiment pipeline
+│   ├── ai_scientist/    # Core pipeline code
+│   └── README.md        # Research pipeline documentation
+│
+├── linter/              # Shared linting scripts
+├── Makefile             # Root makefile (delegates to sub-makefiles)
+└── README.md           # This file
+```
 
-**Writeup Configuration:**
-- Configure all writeup and aggregation settings inside the `writeup` section of your YAML config. Example:
-  ```
-  writeup:
-    model: gpt-5
-    plot_model: gpt-5
-    citation_model: gpt-5
-    temperature: 0.8
-    writeup_type: normal
-    writeup_retries: 3
-    num_cite_rounds: 5
-  ```
-- `model`: LLM for drafting the paper.
-- `plot_model`: LLM used for plot aggregation.
-- `citation_model`: LLM used for citation gathering (falls back to `model` when omitted).
-- `temperature`: Sampling temperature shared across citation, drafting, and reflection steps.
-- `writeup_type`: `normal` for 8-page or `icbinb` for 4-page writeups.
-- `writeup_retries`: Maximum number of writeup attempts.
-- `num_cite_rounds`: Maximum number of citation gathering rounds.
-- Remove the `writeup` block entirely to skip writeup and review.
+## Architecture
 
-**Optional Argument:**
-- `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); the launcher runs only the next missing stage for that run, or skips stages entirely if summaries exist, then performs aggregation/writeup per config.
+### Workflow
 
-**Example - Full Pipeline:**
+1. **Conversation Import** (Frontend → Server)
+   - User imports LLM conversation via share URL
+   - Server fetches and stores conversation in database
+
+2. **Idea Generation** (Server → AI)
+   - Server sends conversation to LLM
+   - AI generates structured research proposal
+   - Multiple refinement iterations possible
+
+3. **Experiment Execution** (Research Pipeline)
+   - Research proposal exported to pipeline
+   - Automated multi-stage experiments
+   - Results collected and papers generated
+
+4. **Results Review** (Server → Frontend)
+   - Experimental results stored in database
+   - Papers and artifacts accessible via web interface
+
+### Technology Stack
+
+**Frontend:**
+- Next.js 15 with React 19
+- TypeScript 5
+- Tailwind CSS 4
+
+**Server:**
+- FastAPI
+- PostgreSQL with Alembic migrations
+- SQLAlchemy ORM
+- Google OAuth 2.0
+
+**Research Pipeline:**
+- PyTorch for ML experiments
+- LangChain for LLM orchestration
+- Weights & Biases for experiment tracking
+- LaTeX for paper generation
+
+## Development Guidelines
+
+### Python Projects (Server & Research Pipeline)
+
+Both Python projects use the same strict linting configuration:
+
+- **black**: Code formatting (100 char line length)
+- **isort**: Import sorting
+- **ruff**: Fast linting (pycodestyle, pyflakes, unused arguments)
+- **mypy**: Strict type checking
+
+Run linting:
 ```bash
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml
+make lint-server        # Lint server
+make lint-research      # Lint research pipeline
+make lint              # Lint both
 ```
 
-**Example - Resume From Specific Run:**
+### Frontend
+
+- **ESLint**: Code linting
+- **Prettier**: Code formatting
+- **Stylelint**: CSS linting
+- **TypeScript**: Type checking
+
+Run linting:
 ```bash
-# Resume run "4-run" (or pass just 4). If stage 2/3/4 are missing, the launcher will run the next missing stage.
-# If all summaries exist under logs/4-run, it will skip stages and perform aggregation/writeup only.
-python launch_scientist_bfts.py bfts_config_gpt-5.yaml --resume 1
+make lint-frontend     # Lint frontend
 ```
 
-**What the Full Pipeline Does:**
-1. **Loads research idea** from the JSON file specified in config's `desc_file`
-2. **Runs all BFTS stages** via AgentManager using directories from the provided config:
-   - Stage 1: Initial implementation
-   - Stage 2: Baseline tuning
-   - Stage 3: Creative research (plotting)
-   - Stage 4: Ablation studies
-3. **Aggregates plots** across runs using the specified model
-4. **Generates paper writeup** (normal or ICBINB format) using the specified model
-5. **Gathers citations** using the specified citation model
-6. **Performs paper review** (text and images/captions/references) using the model defined in the config's `review` section (when present)
+### Code Style
 
-**Output:**
-- Experiment logs: under the `log_dir` specified in your config (e.g., `workspaces/logs/<run_id>/`)
-- Figures: under the parent directory of `log_dir` (e.g., `workspaces/figures/`)
-- Paper PDF (if writeup enabled): under the parent directory of `log_dir` (e.g., `workspaces/`)
-- Review results (if writeup and review enabled): `review_text.txt` and `review_img_cap_ref.json` 
-- Token usage: `token_tracker.json` in the reports base directory
+- Use named arguments in Python functions
+- Avoid optional arguments with defaults unless explicitly needed
+- Use `pathlib.Path` instead of `os.path`
+- Check f-strings actually have variables being replaced
+- Keep functions small and focused
+- Refactor instead of duplicating code
 
-### Notes
-- The idea file (`desc_file`) and all directories are taken from your YAML config; do not pass idea flags to the launcher.
-- Logging level is controlled via `log_level` in the YAML config (e.g., `DEBUG`, `INFO`).
+## Authentication
 
+The application uses Google OAuth 2.0 for authentication:
+
+1. Users sign in with Google account
+2. Server validates OAuth token
+3. Session cookie stores authentication state
+4. All API routes (except auth endpoints) are protected
+
+See [Server Documentation](./server/README.md) for OAuth setup instructions.
+
+## Deployment
+
+### Server (Railway)
+
+The server is configured for Railway deployment:
+- `server/railway.toml` defines build configuration
+- Environment variables set in Railway dashboard
+- Automatic migrations on deployment
+
+### Frontend (Railway/Vercel)
+
+The frontend can be deployed to Railway or Vercel:
+- `frontend/railway.toml` for Railway
+- Automatic Next.js detection on Vercel
+- Configure `NEXT_PUBLIC_API_BASE_URL` to point to production server
+
+### Research Pipeline (RunPod)
+
+For GPU-accelerated experiments:
+- Use provided RunPod scripts to create containers
+- Configure environment variables in container
+- Run experiments via SSH or Jupyter
+
+See [Research Pipeline Documentation](./research_pipeline/README.md) for RunPod setup.
+
+## Contributing
+
+1. Follow the code style guidelines above
+2. Run linting before committing: `make lint`
+3. Update documentation when adding features
+4. Test authentication flows and protected routes
+5. Keep dependencies up to date
+
+## License
+
+See [LICENSE](./LICENSE) file for details.
+
+## Support
+
+For detailed documentation on each component:
+- **Frontend**: [frontend/README.md](./frontend/README.md)
+- **Server**: [server/README.md](./server/README.md)
+- **Research Pipeline**: [research_pipeline/README.md](./research_pipeline/README.md)

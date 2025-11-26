@@ -207,3 +207,4 @@ workspaces/
 research_topic_example.json
 
 configure_pod.sh
+/.docker/
