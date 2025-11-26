@@ -310,26 +310,6 @@ export interface paths {
         patch: operations["update_conversation_summary_api_conversations__conversation_id__summary_patch"];
         trace?: never;
     };
-    "/api/conversations/import-slack": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import From Slack
-         * @description Webhook endpoint for importing conversations from Slack.
-         */
-        post: operations["import_from_slack_api_conversations_import_slack_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/conversations/{conversation_id}/files": {
         parameters: {
             query?: never;
@@ -988,22 +968,6 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
-         * IdMessageResponse
-         * @description Response with ID and message.
-         */
-        IdMessageResponse: {
-            /**
-             * Id
-             * @description Resource ID
-             */
-            id: number;
-            /**
-             * Message
-             * @description Response message
-             */
-            message: string;
-        };
-        /**
          * Idea
          * @description Represents a research idea with its active version.
          */
@@ -1431,22 +1395,6 @@ export interface components {
              * @description Response message
              */
             message: string;
-        };
-        /**
-         * SlackImportRequest
-         * @description Data sent from Slack for conversation import.
-         */
-        SlackImportRequest: {
-            /**
-             * Url
-             * @description Share URL to import (ChatGPT or BranchPrompt)
-             */
-            url: string;
-            /**
-             * User Id
-             * @description ID of user who posted the URL in Slack
-             */
-            user_id: number;
         };
         /**
          * SummaryResponse
@@ -1920,39 +1868,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SummaryResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    import_from_slack_api_conversations_import_slack_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SlackImportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IdMessageResponse"] | components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
