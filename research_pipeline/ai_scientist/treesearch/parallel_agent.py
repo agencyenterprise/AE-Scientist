@@ -17,10 +17,11 @@ import traceback
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
 from types import TracebackType
-from typing import List, Optional, cast
+from typing import List, Optional
 
-from ai_scientist.llm import query
+from ai_scientist.llm import query, structured_query_with_schema
 
+from .codegen_agent import PlanAndCodeSchema
 from .events import BaseEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
@@ -29,7 +30,6 @@ from .stages.stage4_ablation import Stage4Ablation
 from .types import ExecCallbackType, PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .utils.response import extract_code, extract_text_up_to_code
 from .worker_process import process_node
 
 logger = logging.getLogger("ai-scientist")
@@ -136,31 +136,37 @@ class ParallelAgent:
 
     def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
-        # Retry a few times to obtain a clean plan and code block
-        completion_text = None
+        last_completion: str = ""
         for _ in range(retries):
-            completion_text = cast(
-                str,
-                query(
+            logger.debug("ParallelAgent: calling structured plan_and_code_query")
+            try:
+                response = structured_query_with_schema(
                     system_message=prompt,
-                    user_message=None,
                     model=self.cfg.agent.code.model,
                     temperature=self.cfg.agent.code.temp,
-                ),
-            )
+                    schema_class=PlanAndCodeSchema,
+                )
+            except Exception as exc:
+                logger.warning("ParallelAgent: structured plan + code query failed, retrying...")
+                logger.warning("ParallelAgent: failure details: %s", exc)
+                continue
 
-            code = extract_code(completion_text)
-            nl_text = extract_text_up_to_code(completion_text)
+            nl_text = response.plan.strip()
+            code = response.code.strip()
+            last_completion = f"{nl_text}\n\n{code}"
 
-            if code and nl_text:
-                # merge all code blocks into a single string
+            if nl_text and code:
                 return nl_text, code
-            logger.warning("Plan + code extraction failed, retrying...")
+
+            logger.warning(
+                "ParallelAgent: structured plan + code missing 'plan' or 'code', retrying...",
+            )
             prompt["Parsing Feedback"] = (
-                "The code extraction failed. Make sure to use the format ```python ... ``` for the code blocks."
+                "The structured response was missing either 'plan' or 'code'. "
+                "Ensure both fields are present and non-empty."
             )
         logger.error("Final plan + code extraction attempt failed, giving up...")
-        return "", cast(str, completion_text)
+        return "", last_completion
 
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
         """Run multiple seeds of the same node to get statistical metrics.

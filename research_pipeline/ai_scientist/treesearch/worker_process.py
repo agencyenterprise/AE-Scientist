@@ -4,7 +4,7 @@ import os
 import pickle
 import traceback
 from pathlib import Path
-from typing import Callable, Optional, cast
+from typing import Callable, Optional
 
 from ai_scientist.llm import query
 
@@ -215,7 +215,6 @@ def _improve_existing_implementation(
     }
 
     improve_instructions: dict[str, str | list[str]] = {}
-    improve_instructions |= worker_agent._prompt_resp_fmt
     improve_instructions |= worker_agent._prompt_impl_guideline
     prompt["Instructions"] = improve_instructions
 
@@ -609,9 +608,6 @@ def parse_and_assign_metrics(
                         "experiment_data = np.load(os.path.join(os.getcwd(), 'working', 'experiment_data.npy'), allow_pickle=True).item()\n"
                     )
                 ],
-                "Response format": cast(
-                    dict[str, str | list[str]], worker_agent._prompt_metricparse_resp_fmt()
-                ),
             }
             logger.debug(
                 "Generating metric parsing code to extract metrics from experiment results"

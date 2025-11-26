@@ -5,10 +5,11 @@ import logging
 import os
 from typing import List, Protocol, Tuple
 
-from ai_scientist.llm import query
+from pydantic import BaseModel, Field
+
+from ai_scientist.llm import query, structured_query_with_schema
 
 from .journal import Node
-from .response_parsing import parse_keyword_prefix_response
 from .types import PromptType
 from .utils.config import Config as AppConfig
 from .vlm_function_specs import plot_selection_spec, vlm_feedback_spec
@@ -21,10 +22,6 @@ class SupportsPlottingAgent(Protocol):
     cfg: AppConfig
 
     def plan_and_code_query(self, *, prompt: PromptType, retries: int) -> Tuple[str, str]:
-        pass
-
-    @property
-    def _prompt_resp_fmt(self) -> dict[str, str]:
         pass
 
 
@@ -92,7 +89,6 @@ def generate_plotting_code(
         "Instructions": {},
     }
     plotting_instructions: dict[str, str | list[str]] = {}
-    plotting_instructions |= agent._prompt_resp_fmt
     plotting_instructions |= {
         "Plotting code guideline": prompt_guideline,
     }
@@ -142,6 +138,21 @@ def _infer_image_mime_type(image_path: str) -> str:
     return "image/png"
 
 
+class DatasetsSuccessfullyTestedResult(BaseModel):
+    reasoning: str = Field(
+        description=(
+            "A brief explanation of which datasets are considered successfully tested and why, "
+            "based on the plot analyses and VLM feedback."
+        ),
+    )
+    datasets_successfully_tested: List[str] = Field(
+        description=(
+            "List of dataset names that are successfully tested. "
+            "Return an empty list if no datasets are successfully tested."
+        ),
+    )
+
+
 def determine_datasets_successfully_tested(
     *, agent: SupportsPlottingAgent, node: Node
 ) -> List[str]:
@@ -151,36 +162,37 @@ def determine_datasets_successfully_tested(
         plot_analyses += f"plot {i + 1}: {plot_analysis['analysis']}\n"
 
     determine_prompt: dict[str, object] = {
-        "Introduction": "You are an AI researcher analyzing experiment results. Based on the plot analyses and feedback, determine which datasets are successfully tested. Return reasoning and the dataset names that are successfully executed, or an empty string if no datasets are successfully executed.",
+        "Introduction": (
+            "You are an AI researcher analyzing experiment results. "
+            "Based on the plot analyses and feedback, determine which datasets are successfully tested. "
+            "Provide your reasoning and list the dataset names that are successfully executed, "
+            "or indicate that none are successfully executed."
+        ),
         "Plot analyses": plot_analyses,
         "VLM feedback summary": node.vlm_feedback_summary,
         "Original plotting code": node.plot_code or "",
-        "Response format": (
-            "Your response should start with 'REASONING: <reasoning>' to think about the plot analysis and feedback in the first line."
-            "In the second line, you should have a list of dataset names that are successfully executed, starting with 'SUCCESSFULLY_TESTED_DATASETS: <list_datasets_successfully_tested>', "
-        ),
     }
 
     retry_count = 0
     retry_limit = 5
     while retry_count < retry_limit:
-        response = query(
-            system_message=determine_prompt,
-            user_message=None,
-            model=agent.cfg.agent.feedback.model,
-            temperature=agent.cfg.agent.feedback.temp,
-        )
-        response_text = str(response)
-        reasoning, datasets_successfully_tested_str = parse_keyword_prefix_response(
-            response_text, "REASONING:", "SUCCESSFULLY_TESTED_DATASETS:"
-        )
-        if reasoning is not None and datasets_successfully_tested_str is not None:
-            if datasets_successfully_tested_str == "":
-                return [""]
-            datasets = [ds.strip() for ds in datasets_successfully_tested_str.split(",")]
-            datasets = [ds for ds in datasets if isinstance(ds, str) and ds]
+        try:
+            result = structured_query_with_schema(
+                system_message=determine_prompt,
+                model=agent.cfg.agent.feedback.model,
+                temperature=agent.cfg.agent.feedback.temp,
+                schema_class=DatasetsSuccessfullyTestedResult,
+            )
+        except Exception:
+            retry_count += 1
+            continue
+
+        datasets_raw = result.datasets_successfully_tested
+        datasets = [ds.strip() for ds in datasets_raw if isinstance(ds, str) and ds.strip()]
+        if datasets:
             return datasets
         retry_count += 1
+
     return [""]
 
 

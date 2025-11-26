@@ -1,10 +1,11 @@
 import logging
 from typing import List, Protocol, Tuple
 
-from ai_scientist.llm import FunctionSpec, query
+from pydantic import BaseModel, Field
+
+from ai_scientist.llm import FunctionSpec, query, structured_query_with_schema
 
 from ..journal import Journal, Node
-from ..response_parsing import parse_keyword_prefix_response
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
@@ -13,18 +14,23 @@ from .base import Stage
 logger = logging.getLogger(__name__)
 
 
-class AblationIdea:
-    def __init__(self, name: str, description: str):
-        self.name = name
-        self.description = description
+class AblationIdea(BaseModel):
+    name: str = Field(
+        description=(
+            "A short, descriptive name for the proposed ablation study. "
+            "It should clearly identify which component/feature is being ablated."
+        ),
+    )
+    description: str = Field(
+        description=(
+            "A brief description (3-5 sentences) of what component/feature is being ablated and why. "
+            "Explain the motivation and what the ablation is expected to reveal about the model."
+        ),
+    )
 
 
 class SupportsStage4Agent(Protocol):
     def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]:
-        pass
-
-    @property
-    def _prompt_ablation_resp_fmt(self) -> dict[str, str]:
         pass
 
 
@@ -76,7 +82,6 @@ class Stage4Ablation(Stage):
                 "Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
             ]
         }
-        abl_instructions |= agent._prompt_ablation_resp_fmt
         prompt["Instructions"] = abl_instructions
         plan, code = agent.plan_and_code_query(prompt=prompt)
         logger.debug("----- LLM code start (stage4 ablation) -----")
@@ -105,32 +110,33 @@ class Stage4Ablation(Stage):
             },
             "Instructions": {
                 "Requirements": [
-                    "1. Identify ONE specific component/feature to ablate",
-                    "2. Ensure the ablation is different from previous completed or running attempts",
-                    "3. The ablation should be a new idea, not a variation of previous ideas",
-                    "4. If you have only used a single synthetic dataset throughout the experiment, one of your ablations should be to use multiple synthetic datasets (at least 3 different datasets)",
+                    "1. Identify ONE specific component/feature to ablate.",
+                    "2. Ensure the ablation is different from previous completed or running attempts.",
+                    "3. The ablation should be a new idea, not a variation of previous ideas.",
+                    "4. If you have only used a single synthetic dataset throughout the experiment, one of your ablations should be to use multiple synthetic datasets (at least 3 different datasets).",
                 ]
             },
-            "Response format": (
-                "Your response should start with 'ABLATION NAME: <ablation name>' on the first line to represent the name of the ablation."
-                "The second line should start with 'ABLATION DESCRIPTION: <description>', a brief description of what component is being ablated and why (3-5 sentences), "
-            ),
         }
 
         retry_count = 0
         retry_limit = 5
         while retry_count < retry_limit:
-            response = query(
-                system_message=ablation_prompt,
-                user_message=None,
-                model=model,
-                temperature=temperature,
-            )
-            ablation_name, ablation_description = parse_keyword_prefix_response(
-                str(response), "ABLATION NAME:", "ABLATION DESCRIPTION:"
-            )
-            if ablation_name and ablation_description:
-                return AblationIdea(name=ablation_name, description=ablation_description)
+            try:
+                result = structured_query_with_schema(
+                    system_message=ablation_prompt,
+                    model=model,
+                    temperature=temperature,
+                    schema_class=AblationIdea,
+                )
+            except Exception:
+                retry_count += 1
+                continue
+
+            name = result.name.strip()
+            description = result.description.strip()
+            if name and description:
+                return AblationIdea(name=name, description=description)
+
             retry_count += 1
         return AblationIdea(name="add one more layer", description="add one more layer")
 

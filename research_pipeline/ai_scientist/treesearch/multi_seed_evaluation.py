@@ -71,14 +71,6 @@ def aggregate_seed_eval_results(*, agent: SupportsSeedAgent, seed_nodes: List[No
         "Instructions": {},
     }
     plotting_instructions: dict[str, str | list[str]] = {}
-    # Enforce response format and plug in reference plotting snippets from seed nodes
-    plotting_instructions |= {
-        "Response format": (
-            "Your response should be a brief outline/sketch of your proposed solution in natural language (7-10 sentences), "
-            "followed by a single markdown code block (wrapped in ```) which implements this solution and prints out the evaluation metric(s) if applicable. "
-            "There should be no additional headings or text in your response. Just natural language text followed by a newline and then the markdown code block. "
-        )
-    }
     plotting_instructions |= {
         "Plotting code guideline": prompt_guideline,
     }

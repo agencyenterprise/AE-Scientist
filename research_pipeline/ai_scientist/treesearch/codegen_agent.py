@@ -17,18 +17,36 @@ import re
 from typing import cast
 
 import humanize
+from pydantic import BaseModel, Field
 
-from ai_scientist.llm import query
+from ai_scientist.llm import query, structured_query_with_schema
 
 from .gpu_manager import GPUSpec
 from .interpreter import ExecutionResult
 from .journal import Node
 from .types import PromptType
 from .utils.config import Config
-from .utils.response import extract_code, extract_text_up_to_code, wrap_code
+from .utils.response import wrap_code
 from .vlm_function_specs import review_func_spec, summary_func_spec
 
 logger = logging.getLogger("ai-scientist")
+
+
+class PlanAndCodeSchema(BaseModel):
+    plan: str = Field(
+        description=(
+            "A brief outline or sketch of the proposed solution in natural language. "
+            "Use a small number of clear sentences (typically between 3 and 10) to describe the high-level approach "
+            "for the current task (e.g., baseline implementation, metric parsing, debugging, or hyperparameter tuning)."
+        ),
+    )
+    code: str = Field(
+        description=(
+            "The full Python implementation of the solution for the current task as plain executable code. "
+            "Do not include markdown code fences or extra commentary; provide only code that can be run directly "
+            "in the described environment (e.g., it should compute metrics, parse metrics, or implement the bugfix/tuning as required)."
+        ),
+    )
 
 
 class MinimalAgent:
@@ -89,7 +107,11 @@ class MinimalAgent:
             "Installed Packages": f"Your solution can use any relevant machine learning packages such as: {pkg_str}. Feel free to use any other packages too (all packages are already installed!). For neural networks we suggest using PyTorch rather than TensorFlow.{gpu_info}"
         }
         # Debug: show GPU context fed to the LLM
-        logger.debug(f"LLM environment GPU context: gpu_id={self.gpu_id}, gpu_spec={self.gpu_spec}")
+        logger.debug(
+            "LLM environment GPU context: gpu_id=%s, gpu_spec=%s",
+            self.gpu_id,
+            self.gpu_spec,
+        )
         return env_prompt
 
     @property
@@ -213,67 +235,8 @@ class MinimalAgent:
 
         return {"Implementation guideline": impl_guideline}
 
-    @property
-    def _prompt_resp_fmt(self) -> dict[str, str]:
-        # Response structure: short plan followed by a single python code block
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (7-10 sentences), "
-                "followed by a single markdown code block (using the format ```python ... ```) which implements this solution and prints out the evaluation metric(s) if applicable. "
-                "There should be no additional headings or text in your response. Just natural language text followed by a newline and then the markdown code block. "
-                "Make sure to write concise code."
-            )
-        }
-
-    def _prompt_metricparse_resp_fmt(self) -> dict[str, str]:
-        # Response structure tailored for metric-parsing code generation
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "followed by a single markdown code block (using the format ```python ... ```) which implements the full code for the metric parsing. "
-                "There should be no additional headings or text in your response. Just natural language text followed by a newline and then the markdown code block. "
-                "Your generated code should be complete and executable. "
-            )
-        }
-
-    @property
-    def _prompt_debug_resp_fmt(self) -> dict[str, str]:
-        # Response structure tailored for debugging/fix iterations
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "followed by a single markdown code block (using the format ```python ... ```) which implements the full code including the bugfix/solution. "
-                "There should be no additional headings or text in your response. Just natural language text followed by a newline and then the markdown code block. "
-                "Your generated code should be complete and executable. Do not omit any part of the code, even if it was part of a previous implementation."
-                "Make sure to write concise code."
-            )
-        }
-
-    @property
-    def _prompt_hyperparam_tuning_resp_fmt(self) -> dict[str, str]:
-        # Response structure tailored for hyperparameter tuning code
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "followed by a single markdown code block (using the format ```python ... ```) which implements the full code including hyperparameter tuning. "
-                "There should be no additional headings or text in your response. Do not omit any part of the code, "
-                "Your generated code should be complete and executable."
-                "Make sure to write concise code."
-            )
-        }
-
-    @property
-    def _prompt_ablation_resp_fmt(self) -> dict[str, str]:
-        # Response structure tailored for ablation study code
-        return {
-            "Response format": (
-                "Your response should be a brief outline/sketch of your proposed solution in natural language (3-5 sentences), "
-                "followed by a single markdown code block (using the format ```python ... ```) which implements the full code including the ablation study. "
-                "There should be no additional headings or text in your response. Do not omit any part of the code, "
-                "Your generated code should be complete and executable."
-                "Make sure to write concise code."
-            )
-        }
+    # Response format is fully specified by PlanAndCodeSchema and the FunctionSpec
+    # schemas used elsewhere; no additional response-format helpers are needed here.
 
     def _debug(self, parent_node: Node) -> Node:
         # Build a debugging prompt combining previous code, outputs, and feedback
@@ -291,7 +254,6 @@ class MinimalAgent:
             "Instructions": {},
         }
         debug_instructions: dict[str, str | list[str]] = {}
-        debug_instructions |= self._prompt_debug_resp_fmt
         debug_instructions |= {
             "Bugfix improvement sketch guideline": [
                 "You should write a brief natural language description (3-5 sentences) of how the issue in the previous implementation can be fixed.",
@@ -311,48 +273,45 @@ class MinimalAgent:
             is_seed_node=True,
         )
 
-    # Wrapper removed: callers should use Stage2Tuning.build_hyperparam_tuning_node directly
-
-    # Wrapper removed: callers should use Stage4Ablation.build_ablation_node directly
-
     def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
         for _ in range(retries):
-            # 1) Call LLM once to get combined plan + code
             logger.debug(
-                f"Calling code-generation LLM with gpu_id={self.gpu_id}, gpu_spec={self.gpu_spec}"
+                "Calling code-generation LLM with gpu_id=%s, gpu_spec=%s",
+                self.gpu_id,
+                self.gpu_spec,
             )
-            completion_any = query(
-                system_message=prompt,
-                user_message=None,
-                model=self.cfg.agent.code.model,
-                temperature=self.cfg.agent.code.temp,
-            )
+            try:
+                response = structured_query_with_schema(
+                    system_message=prompt,
+                    model=self.cfg.agent.code.model,
+                    temperature=self.cfg.agent.code.temp,
+                    schema_class=PlanAndCodeSchema,
+                )
+            except Exception as exc:
+                logger.warning("Structured plan + code query failed, retrying...")
+                logger.warning("Details: %s", exc)
+                continue
 
-            completion_text = cast(str, completion_any)
-            last_completion = completion_text
-
-            # 2) Try to extract python code block and the leading natural language plan
-            code = extract_code(completion_text)
-            nl_text = extract_text_up_to_code(completion_text)
+            nl_text = response.plan.strip()
+            code = response.code.strip()
+            last_completion = f"{nl_text}\n\n{code}"
 
             if code and nl_text:
-                # 2.1) Validate GPU id usage when required
                 if self.gpu_id is not None:
                     is_valid, validation_msg = self._validate_code_uses_gpu_id(code)
                     if not is_valid:
                         logger.warning("GPU id enforcement validation failed")
-                        logger.warning(f"GPU validation details: {validation_msg}")
+                        logger.warning("GPU validation details: %s", validation_msg)
                         prompt["Validation Feedback"] = validation_msg
                         continue
-                # merge all code blocks into a single string
                 return nl_text, code
 
-            logger.warning("Plan + code extraction failed, retrying...")
-            # 3) Provide parsing feedback for the next attempt
+            logger.warning("Structured plan + code extraction failed, retrying...")
             prompt["Parsing Feedback"] = (
-                "The code extraction failed. Make sure to use the format ```python ... ``` for the code blocks."
+                "The structured response was missing either 'plan' or 'code'. "
+                "Ensure both fields are present and non-empty."
             )
         logger.error("Final plan + code extraction attempt failed, giving up...")
         return "", last_completion
@@ -393,7 +352,7 @@ class MinimalAgent:
         return False, feedback
 
     def parse_exec_result(self, node: Node, exec_result: ExecutionResult) -> None:
-        logger.info(f"Agent is parsing execution results for node {node.id}")
+        logger.info("Agent is parsing execution results for node %s", node.id)
         # Store raw execution output into the node first
         node.absorb_exec_result(exec_result)
         # Build a structured review prompt for a function-call style response
@@ -422,7 +381,7 @@ class MinimalAgent:
         node.analysis = response["summary"]
         node.is_buggy = response["is_bug"] or node.exc_type is not None
         logger.debug("Checking if response contains metric name and description")
-        logger.debug(f"Bug check response: {response}")
+        logger.debug("Bug check response: %s", response)
 
     # Wrapper removed: callers should use Stage3Plotting.generate_plotting_code directly
 

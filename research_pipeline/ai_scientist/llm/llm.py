@@ -2,14 +2,15 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any, Tuple, TypeVar, cast
 
 import jsonschema
 from dataclasses_json import DataClassJsonMixin
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
+from pydantic import BaseModel
 
-from .providers import create_chat_model
 from .token_tracker import track_token_usage
 
 logger = logging.getLogger("ai-scientist")
@@ -18,6 +19,7 @@ logger = logging.getLogger("ai-scientist")
 PromptType = str | dict[str, Any] | list[Any]
 FunctionCallType = dict[str, Any]
 OutputType = str | FunctionCallType
+TStructured = TypeVar("TStructured", bound=BaseModel)
 
 
 def get_batch_responses_from_llm(
@@ -69,7 +71,10 @@ def make_llm_call(
             getattr(message, "type", type(message).__name__),
             getattr(message, "content", ""),
         )
-    chat = create_chat_model(model=model, temperature=temperature)
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -106,13 +111,13 @@ def get_response_from_llm(
     full_history = new_msg_history + [ai_message]
 
     if print_debug:
-        logger.debug("")
-        logger.debug("*" * 20 + " LLM START " + "*" * 20)
+        logger.debug("%s", "")
+        logger.debug("%s", "*" * 20 + " LLM START " + "*" * 20)
         for idx, message in enumerate(full_history):
             logger.debug("%s, %s: %s", idx, message.type, getattr(message, "content", ""))
-        logger.debug(content)
-        logger.debug("*" * 21 + " LLM END " + "*" * 21)
-        logger.debug("")
+        logger.debug("%s", content)
+        logger.debug("%s", "*" * 21 + " LLM END " + "*" * 21)
+        logger.debug("%s", "")
 
     return content, full_history
 
@@ -259,7 +264,10 @@ def _invoke_langchain_query(
             getattr(message, "type", type(message).__name__),
             getattr(message, "content", ""),
         )
-    chat = create_chat_model(model=model, temperature=temperature)
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
     ai_message = chat.invoke(messages)
     logger.debug(
         "LLM _invoke_langchain_query - response: %s - %s",
@@ -293,7 +301,10 @@ def _invoke_structured_langchain_query(
             getattr(message, "type", type(message).__name__),
             getattr(message, "content", ""),
         )
-    chat = create_chat_model(model=model, temperature=temperature)
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -303,6 +314,33 @@ def _invoke_structured_langchain_query(
     parsed: dict[str, Any] = structured_chain.invoke(messages)
     logger.debug("LLM _invoke_structured_langchain_query - parsed JSON: %s", parsed)
     return parsed
+
+
+def structured_query_with_schema(
+    *,
+    system_message: PromptType,
+    model: str,
+    temperature: float,
+    schema_class: type[TStructured],
+) -> TStructured:
+    """
+    Very thin helper around init_chat_model for structured outputs using a schema class.
+    """
+    messages = _build_messages_for_query(
+        system_message=system_message,
+        user_message=None,
+    )
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
+    structured_chat = chat.with_structured_output(
+        schema=schema_class,
+    )
+    result = structured_chat.invoke(
+        input=messages,
+    )
+    return cast(TStructured, result)
 
 
 def query(

@@ -1,10 +1,11 @@
 import logging
 from typing import List, Protocol, Tuple
 
-from ai_scientist.llm import FunctionSpec, query
+from pydantic import BaseModel, Field
+
+from ai_scientist.llm import FunctionSpec, query, structured_query_with_schema
 
 from ..journal import Journal, Node
-from ..response_parsing import parse_keyword_prefix_response
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
@@ -13,18 +14,23 @@ from .base import Stage
 logger = logging.getLogger(__name__)
 
 
-class HyperparamTuningIdea:
-    def __init__(self, name: str, description: str):
-        self.name = name
-        self.description = description
+class HyperparamTuningIdea(BaseModel):
+    name: str = Field(
+        description=(
+            "A short, descriptive name for the proposed hyperparameter tuning idea. "
+            "It should clearly identify which hyperparameter is being tuned."
+        ),
+    )
+    description: str = Field(
+        description=(
+            "A brief description (3-5 sentences) of which hyperparameter is being tuned, how it will be changed, "
+            "and why this change is expected to improve performance."
+        ),
+    )
 
 
 class SupportsStage2Agent(Protocol):
     def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]:
-        pass
-
-    @property
-    def _prompt_hyperparam_tuning_resp_fmt(self) -> dict[str, str]:
         pass
 
 
@@ -78,7 +84,6 @@ class Stage2Tuning(Stage):
                 "Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
             ]
         }
-        hp_instructions |= agent._prompt_hyperparam_tuning_resp_fmt
         prompt["Instructions"] = hp_instructions
         plan, code = agent.plan_and_code_query(prompt=prompt)
         logger.debug("----- LLM code start (stage2 tuning) -----")
@@ -110,32 +115,31 @@ class Stage2Tuning(Stage):
             },
             "Instructions": {
                 "Requirements": [
-                    "1. Identify ONE specific hyperparameter to tune",
-                    "2. Ensure the hyperparameter is different from previous attempts",
+                    "1. Identify ONE specific hyperparameter to tune.",
+                    "2. Ensure the hyperparameter is different from previous attempts.",
                 ]
             },
-            "Response format": (
-                "Your response should start with 'HYPERPARAM NAME: <hyperparam name>' on the first line to represent the name of the hyperparameter."
-                "The second line should start with 'DESCRIPTION: <description>', a brief description of what hyperparameter is being tuned and why (3-5 sentences). "
-            ),
         }
 
         retry_count = 0
         retry_limit = 5
         while retry_count < retry_limit:
-            response = query(
-                system_message=hyperparam_tuning_prompt,
-                user_message=None,
-                model=model,
-                temperature=temperature,
-            )
-            hyperparam_name, hyperparam_description = parse_keyword_prefix_response(
-                str(response), "HYPERPARAM NAME:", "DESCRIPTION:"
-            )
-            if hyperparam_name and hyperparam_description:
-                return HyperparamTuningIdea(
-                    name=hyperparam_name, description=hyperparam_description
+            try:
+                result = structured_query_with_schema(
+                    system_message=hyperparam_tuning_prompt,
+                    model=model,
+                    temperature=temperature,
+                    schema_class=HyperparamTuningIdea,
                 )
+            except Exception:
+                retry_count += 1
+                continue
+
+            name = result.name.strip()
+            description = result.description.strip()
+            if name and description:
+                return HyperparamTuningIdea(name=name, description=description)
+
             retry_count += 1
 
         return HyperparamTuningIdea(

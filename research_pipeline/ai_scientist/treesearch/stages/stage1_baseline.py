@@ -40,7 +40,6 @@ class Stage1Baseline(Stage):
         }
 
         instructions: dict[str, str | list[str]] = {}
-        instructions |= agent._prompt_resp_fmt
         instructions |= {
             "Experiment design sketch guideline": [
                 "This first experiment design should be relatively simple, without extensive hyper-parameter optimization.",
