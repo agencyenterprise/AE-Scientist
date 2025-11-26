@@ -38,7 +38,7 @@ export function ProjectDraftHeader({
   return (
     <div className="flex-shrink-0 py-4">
       <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-gray-700">Title</label>
+        <label className="text-sm font-medium text-muted-foreground">Title</label>
         <div className="flex items-center space-x-2">
           {/* Show diffs toggle (hidden when no comparison available) */}
           {!isEditing && !isGenerating && comparisonVersion && nextVersion && (
@@ -47,8 +47,8 @@ export function ProjectDraftHeader({
               disabled={!comparisonVersion || !nextVersion}
               className={`relative flex items-center justify-center px-2 py-1 text-xs font-medium rounded border transition-colors w-32 ${
                 !comparisonVersion || !nextVersion
-                  ? "text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed"
-                  : "text-gray-600 bg-gray-50 border-gray-200 hover:text-gray-800 hover:bg-gray-100"
+                  ? "text-muted-foreground bg-muted border-border cursor-not-allowed"
+                  : "text-muted-foreground bg-muted border-border hover:text-foreground hover:bg-muted/80"
               }`}
               title={
                 !comparisonVersion || !nextVersion
@@ -80,8 +80,8 @@ export function ProjectDraftHeader({
                 nextVersion &&
                 projectDraft?.active_version &&
                 nextVersion.version_number !== projectDraft.active_version.version_number
-                  ? "text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed"
-                  : "text-[var(--primary-700)] hover:bg-[var(--muted)] border-[var(--border)]"
+                  ? "text-muted-foreground bg-muted border-border cursor-not-allowed"
+                  : "text-primary hover:bg-muted border-border"
               }`}
               title={
                 showDiffs &&
@@ -106,20 +106,20 @@ export function ProjectDraftHeader({
             value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
             onKeyDown={e => onKeyDown(e, onSave)}
-            className="w-full px-3 py-2 text-base font-semibold border border-[var(--border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent bg-[var(--surface)] text-[var(--foreground)]"
+            className="input-field text-base font-semibold"
             placeholder="Enter idea title..."
             autoFocus
           />
           <div className="flex justify-end space-x-2 mt-2">
             <button
               onClick={onCancelEdit}
-              className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded border border-gray-200 transition-colors"
+              className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded border border-border transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={onSave}
-              className="px-3 py-1 text-xs text-[var(--primary-foreground)] bg-[var(--primary)] hover:bg-[var(--primary-hover)] rounded transition-colors"
+              className="btn-primary-gradient text-xs py-1 px-3"
             >
               Save
             </button>
@@ -130,7 +130,7 @@ export function ProjectDraftHeader({
           <div className="flex-1">
             <h3
               className={`text-base font-semibold ${
-                isGenerating ? "text-blue-900" : "text-gray-900"
+                isGenerating ? "text-primary" : "text-foreground"
               }`}
             >
               {showDiffs && comparisonVersion && nextVersion && titleDiffContent

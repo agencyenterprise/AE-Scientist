@@ -38,12 +38,12 @@ export function ConversationsGrid({ conversations, onSelect }: ConversationsGrid
       {/* Toolbar removed: list view only */}
 
       {/* Grid */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6 bg-gray-50">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 bg-muted">
         {filtered.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center max-w-md">
-              <h2 className="text-lg font-medium text-gray-900 mb-2">No conversations found</h2>
-              <p className="text-gray-600 text-sm">Try changing filters or search terms.</p>
+              <h2 className="text-lg font-medium text-foreground mb-2">No conversations found</h2>
+              <p className="text-muted-foreground text-sm">Try changing filters or search terms.</p>
             </div>
           </div>
         ) : (

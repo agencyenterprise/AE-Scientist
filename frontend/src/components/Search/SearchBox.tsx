@@ -66,7 +66,7 @@ export function SearchBox({
           <div className="absolute left-3 flex items-center pointer-events-none">
             <svg
               className={`h-5 w-5 ${
-                disabled ? "text-gray-300" : "text-gray-400"
+                disabled ? "text-muted-foreground/50" : "text-muted-foreground"
               } ${isLoading ? "animate-pulse" : ""}`}
               fill="none"
               stroke="currentColor"
@@ -92,14 +92,14 @@ export function SearchBox({
             disabled={disabled}
             className={`
               w-full pl-10 pr-10 py-2 text-sm border rounded-lg
-              focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+              focus:ring-2 focus:ring-primary focus:border-primary
               transition-colors duration-200
               ${
                 disabled
-                  ? "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                  : "bg-white border-gray-300 text-gray-900 hover:border-gray-400"
+                  ? "bg-muted border-border text-muted-foreground cursor-not-allowed"
+                  : "bg-card border-border text-foreground hover:border-primary/50"
               }
-              ${isLoading ? "bg-blue-50" : ""}
+              ${isLoading ? "bg-primary/10" : ""}
             `}
           />
 
@@ -108,7 +108,7 @@ export function SearchBox({
             <button
               type="button"
               onClick={handleClear}
-              className="absolute right-3 p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              className="absolute right-3 p-1 text-muted-foreground hover:text-foreground transition-colors duration-200"
               title="Clear search"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,7 +125,7 @@ export function SearchBox({
           {/* Loading Indicator */}
           {isLoading && (
             <div className="absolute right-3 flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
             </div>
           )}
         </div>

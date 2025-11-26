@@ -73,7 +73,7 @@ function ChatMarkdown({
           code: ({ children }) => (
             <code
               className={`px-1 py-0.5 rounded text-xs font-mono ${
-                isUser ? "bg-blue-500 bg-opacity-30" : "bg-gray-200"
+                isUser ? "bg-primary/30" : "bg-muted"
               }`}
             >
               {children}
@@ -82,7 +82,7 @@ function ChatMarkdown({
           pre: ({ children }) => (
             <pre
               className={`p-2 rounded text-xs font-mono mb-1 whitespace-pre-wrap break-all max-w-full ${
-                isUser ? "bg-blue-500 bg-opacity-30" : "bg-gray-200"
+                isUser ? "bg-primary/30" : "bg-muted"
               }`}
               style={{ width: "100%", maxWidth: "100%", overflowWrap: "anywhere" }}
             >
@@ -94,7 +94,7 @@ function ChatMarkdown({
           a: ({ href, children }) => (
             <a
               href={href}
-              className={`hover:underline ${isUser ? "text-blue-200" : "text-blue-600"}`}
+              className={`hover:underline ${isUser ? "text-primary/80" : "text-primary"}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -103,7 +103,7 @@ function ChatMarkdown({
           ),
           blockquote: ({ children }) => (
             <blockquote
-              className={`border-l-2 pl-2 my-1 ${isUser ? "border-blue-300" : "border-gray-300"}`}
+              className={`border-l-2 pl-2 my-1 ${isUser ? "border-primary/50" : "border-border"}`}
             >
               {children}
             </blockquote>
@@ -542,15 +542,15 @@ export function ProjectDraftConversation({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white max-w-full overflow-x-hidden">
+    <div className="flex flex-col h-full bg-card max-w-full overflow-x-hidden">
       {/* Chat Header with Configure AI */}
-      <div className="flex-shrink-0 px-4 pt-2 pb-1 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
+      <div className="flex-shrink-0 px-4 pt-2 pb-1 border-b border-border bg-gradient-to-r from-muted to-muted/80">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <div className="flex flex-row md:flex-col items-baseline gap-1">
-              <h3 className="text-sm font-medium text-gray-900">Project Chat</h3>
-              <span className="text-xs text-gray-600">Discuss and refine with AI</span>
+              <h3 className="text-sm font-medium text-foreground">Project Chat</h3>
+              <span className="text-xs text-muted-foreground">Discuss and refine with AI</span>
             </div>
           </div>
           <div className="flex items-center space-x-2 md:mt-0 mt-1">
@@ -584,14 +584,14 @@ export function ProjectDraftConversation({
         className={`flex-1 overflow-y-auto px-4 py-4 ${messages.length > 0 || isStreaming ? "space-y-4" : ""} min-h-0 max-w-full overflow-x-hidden`}
       >
         {isLoadingHistory ? (
-          <div className="text-center text-gray-500 mt-8">
+          <div className="text-center text-muted-foreground mt-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)] mx-auto mb-2"></div>
             <p className="text-sm">Loading chat history...</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-gray-500">
+          <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400 mb-4"
+              className="mx-auto h-12 w-12 text-muted-foreground/60 mb-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -615,8 +615,8 @@ export function ProjectDraftConversation({
               <div
                 className={`max-w-[80%] min-w-0 rounded-lg px-4 py-2 break-words overflow-hidden ${
                   message.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-900 border border-gray-200"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground border border-border"
                 }`}
               >
                 <ChatMarkdown
@@ -626,7 +626,7 @@ export function ProjectDraftConversation({
                 />
                 <div
                   className={`text-xs mt-1 flex items-center space-x-2 ${
-                    message.role === "user" ? "text-blue-200" : "text-gray-500"
+                    message.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
                   }`}
                 >
                   <span>{message.role === "user" ? message.sent_by_user_name : "Assistant"}</span>
@@ -641,14 +641,14 @@ export function ProjectDraftConversation({
         {/* Streaming content */}
         {isStreaming && (
           <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+            <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
               AI
             </div>
-            <div className="flex-1 bg-gray-100 rounded-lg px-4 py-2 max-w-3xl min-w-0 break-words overflow-hidden">
+            <div className="flex-1 bg-muted rounded-lg px-4 py-2 max-w-3xl min-w-0 break-words overflow-hidden">
               {statusMessage && (
-                <div className="text-sm text-gray-600 mb-2 font-medium flex items-center space-x-2">
+                <div className="text-sm text-muted-foreground mb-2 font-medium flex items-center space-x-2">
                   {statusMessage.includes("🔧") && (
-                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                   )}
                   <span>{statusMessage}</span>
                 </div>
@@ -660,8 +660,8 @@ export function ProjectDraftConversation({
                 </div>
               )}
               {!streamingContent && !statusMessage && (
-                <div className="flex items-center space-x-2 text-gray-500">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <div className="flex items-center space-x-2 text-muted-foreground">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                   <span className="text-sm">Thinking...</span>
                 </div>
               )}
@@ -675,12 +675,12 @@ export function ProjectDraftConversation({
       {/* Input Area or Generating Message (lock banner is rendered by parent tab) */}
       {isReadOnly ? (
         isLocked ? null : (
-          <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50">
+          <div className="flex-shrink-0 border-t border-border bg-muted">
             <div className="px-4 py-2">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className="text-sm font-medium text-gray-700">Project Draft Generating</p>
-                <p className="text-xs text-gray-500 mt-1">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                <p className="text-sm font-medium text-foreground">Project Draft Generating</p>
+                <p className="text-xs text-muted-foreground mt-1">
                   Please wait while the project draft is being generated. Chat will be available
                   once complete.
                 </p>
@@ -689,16 +689,16 @@ export function ProjectDraftConversation({
           </div>
         )
       ) : (
-        <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+        <div className="flex-shrink-0 border-t border-border bg-card">
           {error && (
-            <div className="px-4 py-2 bg-red-50 border-b border-red-200">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/30">
+              <p className="text-sm text-destructive">{error}</p>
             </div>
           )}
 
           {/* File Upload Area */}
           {showFileUpload && (
-            <div className="px-4 py-4 bg-gray-50 border-b border-gray-200">
+            <div className="px-4 py-4 bg-muted border-b border-border">
               <FileUpload
                 conversationId={conversationId}
                 onFilesUploaded={handleFilesUploaded}
@@ -713,14 +713,14 @@ export function ProjectDraftConversation({
 
           {/* Pending Files Display */}
           {pendingFiles.length > 0 && (
-            <div className="px-4 py-2 bg-blue-50 border-b border-blue-200">
+            <div className="px-4 py-2 bg-primary/10 border-b border-primary/30">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-blue-900">
+                <span className="text-sm font-medium text-primary">
                   {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} ready to send
                 </span>
                 <button
                   onClick={() => setPendingFiles([])}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+                  className="text-xs text-primary hover:text-primary/80"
                 >
                   Clear all
                 </button>
@@ -729,12 +729,12 @@ export function ProjectDraftConversation({
                 {pendingFiles.map(file => (
                   <div
                     key={file.s3_key}
-                    className="flex items-center space-x-2 bg-white px-2 py-1 rounded border"
+                    className="flex items-center space-x-2 bg-card px-2 py-1 rounded border border-border"
                   >
-                    <span className="text-sm text-gray-700">{file.filename}</span>
+                    <span className="text-sm text-foreground">{file.filename}</span>
                     <button
                       onClick={() => removePendingFile(file.s3_key)}
-                      className="text-gray-400 hover:text-gray-600"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       ✕
                     </button>
@@ -753,7 +753,7 @@ export function ProjectDraftConversation({
                 onKeyDown={handleKeyDown}
                 disabled={isLoadingHistory || isStreaming || !currentModel}
                 rows={1}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-hidden"
+                className="flex-1 px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-hidden bg-card text-foreground"
                 style={{
                   minHeight: "40px",
                   maxHeight: "120px",
@@ -779,13 +779,13 @@ export function ProjectDraftConversation({
               <button
                 onClick={() => setShowFileUpload(!showFileUpload)}
                 disabled={isLoadingHistory || isStreaming || !currentModel}
-                className={`px-3 py-2 h-10 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors ${
-                  showFileUpload ? "bg-blue-50 border-blue-300" : "bg-white"
+                className={`px-3 py-2 h-10 rounded-lg border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors ${
+                  showFileUpload ? "bg-primary/10 border-primary/30" : "bg-card"
                 }`}
                 title="Attach files"
               >
                 <svg
-                  className="w-4 h-4 text-gray-600"
+                  className="w-4 h-4 text-muted-foreground"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -807,7 +807,7 @@ export function ProjectDraftConversation({
                   !currentModel ||
                   (!inputMessage.trim() && pendingFiles.length === 0)
                 }
-                className="px-4 py-2 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                className="px-4 py-2 h-10 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {isStreaming ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -824,7 +824,7 @@ export function ProjectDraftConversation({
               </button>
             </div>
             {(isLoadingHistory || !currentModel) && (
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 {isLoadingHistory ? "Loading chat history..." : "Loading model settings..."}
               </p>
             )}

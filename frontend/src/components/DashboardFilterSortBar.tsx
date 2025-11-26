@@ -14,18 +14,14 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
   }, [hasQuery, sortKey, setSortKey]);
 
   return (
-    <div className="px-4 sm:px-6 py-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface),transparent_25%)] backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface),transparent_35%)] sticky top-[56px] md:top-[56px] z-10">
+    <div className="toolbar-glass px-4 sm:px-6 py-2 sticky top-14 z-10">
       <div className="flex items-center justify-between gap-2">
         {/* Filters */}
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setLinearFilter("all")}
-            className={`px-2 py-1 text-[11px] rounded border ${
-              linearFilter === "all"
-                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
-                : "bg-[var(--surface)] text-[var(--foreground)]/80 border-[var(--border)] hover:bg-[var(--muted)]"
-            }`}
+            className={`btn-filter ${linearFilter === "all" ? "btn-filter-active" : "btn-filter-inactive"}`}
             title="Show all"
           >
             All
@@ -33,11 +29,7 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
           <button
             type="button"
             onClick={() => setLinearFilter("in_progress")}
-            className={`px-2 py-1 text-[11px] rounded border ${
-              linearFilter === "in_progress"
-                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
-                : "bg-[var(--surface)] text-[var(--foreground)]/80 border-[var(--border)] hover:bg-[var(--muted)]"
-            }`}
+            className={`btn-filter ${linearFilter === "in_progress" ? "btn-filter-active" : "btn-filter-inactive"}`}
             title="Show in-progress"
           >
             In Progress
@@ -45,11 +37,7 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
           <button
             type="button"
             onClick={() => setLinearFilter("completed")}
-            className={`px-2 py-1 text-[11px] rounded border ${
-              linearFilter === "completed"
-                ? "bg-[var(--foreground)] text-[var(--background)] border-[var(--foreground)]"
-                : "bg-[var(--surface)] text-[var(--foreground)]/80 border-[var(--border)] hover:bg-[var(--muted)]"
-            }`}
+            className={`btn-filter ${linearFilter === "completed" ? "btn-filter-active" : "btn-filter-inactive"}`}
             title="Show completed"
           >
             Completed
@@ -65,7 +53,7 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
               setSortKey(val);
               if (val === "score") setSortDir("desc");
             }}
-            className="text-xs border border-gray-300 rounded-md py-1 px-2 bg-white shadow-sm"
+            className="btn-secondary text-xs py-1 px-2"
           >
             {hasQuery && <option value="score">Score</option>}
             <option value="updated">Updated</option>
@@ -74,7 +62,7 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
           </select>
           <button
             onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
-            className="text-xs border border-gray-300 rounded-md py-1 px-2 bg-white shadow-sm"
+            className="btn-secondary text-xs py-1 px-2"
             title="Toggle sort direction"
           >
             {sortDir === "desc" ? (

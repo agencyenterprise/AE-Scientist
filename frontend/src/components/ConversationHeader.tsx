@@ -132,7 +132,7 @@ export function ConversationHeader({
   return (
     <>
       {/* Header */}
-      <div className="border-b border-[var(--border)] bg-[var(--surface)]/80">
+      <div className="toolbar-glass">
         <div className="px-6 py-2">
           <div className="flex items-center justify-between">
             {/* Title Section - Left Side */}
@@ -145,18 +145,18 @@ export function ConversationHeader({
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      className="text-xl font-bold text-gray-900 bg-white border border-gray-300 rounded px-2 py-1 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[var(--ring)] shadow-sm"
+                      className="text-xl font-bold text-foreground bg-card border border-border rounded px-2 py-1 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
                       disabled={isUpdatingTitle}
                       autoFocus
                     />
                     <button
                       onClick={handleSaveTitle}
                       disabled={isUpdatingTitle || !editTitle.trim()}
-                      className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50 flex-shrink-0"
+                      className="p-1 text-green-500 hover:opacity-80 disabled:opacity-50 flex-shrink-0"
                       title="Save title"
                     >
                       {isUpdatingTitle ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>
                       ) : (
                         <svg
                           className="w-4 h-4"
@@ -176,7 +176,7 @@ export function ConversationHeader({
                     <button
                       onClick={handleCancelEdit}
                       disabled={isUpdatingTitle}
-                      className="p-1 text-gray-600 hover:text-gray-700 disabled:opacity-50 flex-shrink-0"
+                      className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-50 flex-shrink-0"
                       title="Cancel editing"
                     >
                       <svg
@@ -216,12 +216,12 @@ export function ConversationHeader({
                   </>
                 ) : (
                   <>
-                    <h1 className="text-xl font-bold text-gray-900 truncate">
+                    <h1 className="text-xl font-bold text-foreground truncate">
                       {conversation.title}
                     </h1>
                     <button
                       onClick={handleEditTitle}
-                      className="p-1 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                      className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
                       title="Edit title"
                     >
                       <svg
@@ -266,22 +266,18 @@ export function ConversationHeader({
             {/* Actions + View Tabs - Right Side */}
             <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
               {/* Segmented view tabs (compact, match header button style) */}
-              <div className="hidden sm:inline-flex items-center gap-0.5 rounded-md bg-[var(--surface)] p-0.5 border border-[var(--border)] shadow-sm mr-2">
+              <div className="hidden sm:flex view-tabs mr-2">
                 <button
                   type="button"
                   onClick={() => handleViewChange("chat")}
                   disabled={pendingView !== null && viewMode !== pendingView}
                   aria-busy={pendingView === "chat" && viewMode !== "chat"}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors disabled:opacity-50 ${
-                    viewMode === "chat"
-                      ? "bg-[var(--primary-50)] text-[var(--primary-700)] border border-[var(--primary-300)]"
-                      : "text-[var(--foreground)]/80 hover:bg-[var(--muted)]"
-                  }`}
+                  className={`view-tab ${viewMode === "chat" ? "view-tab-active" : "view-tab-inactive"}`}
                   title="Show Imported Chat"
                 >
                   {pendingView === "chat" && viewMode !== "chat" ? (
                     <div className="flex items-center gap-1">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--primary-600)]"></div>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                       <span>Loading</span>
                     </div>
                   ) : (
@@ -293,16 +289,12 @@ export function ConversationHeader({
                   onClick={() => handleViewChange("split")}
                   disabled={pendingView !== null && viewMode !== pendingView}
                   aria-busy={pendingView === "split" && viewMode !== "split"}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors disabled:opacity-50 ${
-                    viewMode === "split"
-                      ? "bg-[var(--primary-50)] text-[var(--primary-700)] border border-[var(--primary-300)]"
-                      : "text-[var(--foreground)]/80 hover:bg-[var(--muted)]"
-                  }`}
+                  className={`view-tab ${viewMode === "split" ? "view-tab-active" : "view-tab-inactive"}`}
                   title="Split View"
                 >
                   {pendingView === "split" && viewMode !== "split" ? (
                     <div className="flex items-center gap-1">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--primary-600)]"></div>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                       <span>Loading</span>
                     </div>
                   ) : (
@@ -314,16 +306,12 @@ export function ConversationHeader({
                   onClick={() => handleViewChange("project")}
                   disabled={pendingView !== null && viewMode !== pendingView}
                   aria-busy={pendingView === "project" && viewMode !== "project"}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-colors disabled:opacity-50 ${
-                    viewMode === "project"
-                      ? "bg-[var(--primary-50)] text-[var(--primary-700)] border border-[var(--primary-300)]"
-                      : "text-[var(--foreground)]/80 hover:bg-[var(--muted)]"
-                  }`}
+                  className={`view-tab ${viewMode === "project" ? "view-tab-active" : "view-tab-inactive"}`}
                   title="Show Project Draft"
                 >
                   {pendingView === "project" && viewMode !== "project" ? (
                     <div className="flex items-center gap-1">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--primary-600)]"></div>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                       <span>Loading</span>
                     </div>
                   ) : (
@@ -341,11 +329,11 @@ export function ConversationHeader({
         isClient &&
         createPortal(
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/50">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-card rounded-lg shadow-xl max-w-md w-full">
               <div className="p-6">
                 <div className="flex items-center mb-4">
                   <svg
-                    className="w-6 h-6 text-red-600 mr-3"
+                    className="w-6 h-6 text-destructive mr-3"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -357,9 +345,9 @@ export function ConversationHeader({
                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z"
                     />
                   </svg>
-                  <h3 className="text-lg font-medium text-gray-900">Delete Conversation</h3>
+                  <h3 className="text-lg font-medium text-foreground">Delete Conversation</h3>
                 </div>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-sm text-muted-foreground mb-6">
                   Are you sure you want to delete &quot;{conversation.title}&quot;? This action
                   cannot be undone.
                 </p>
@@ -367,14 +355,14 @@ export function ConversationHeader({
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
                     disabled={isDeleting}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-md hover:bg-muted disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleDeleteConversation}
                     disabled={isDeleting}
-                    className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 disabled:opacity-50"
+                    className="btn-danger"
                   >
                     {isDeleting ? (
                       <>

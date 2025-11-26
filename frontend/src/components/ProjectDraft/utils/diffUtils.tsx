@@ -26,21 +26,21 @@ export function generateTitleDiff(
     if (operation === 0) {
       // No change
       return (
-        <span key={index} className="text-gray-900">
+        <span key={index} className="text-foreground">
           {text}
         </span>
       );
     } else if (operation === -1) {
       // Deletion
       return (
-        <span key={index} className="bg-red-100 text-red-800 px-1 rounded">
+        <span key={index} className="bg-red-500/20 text-red-400 px-1 rounded">
           <span className="line-through">{text}</span>
         </span>
       );
     } else {
       // Addition
       return (
-        <span key={index} className="bg-green-100 text-green-800 px-1 rounded">
+        <span key={index} className="bg-green-500/20 text-green-400 px-1 rounded">
           <span className="font-medium">{text}</span>
         </span>
       );

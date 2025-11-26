@@ -83,7 +83,7 @@ export function FileAttachment({
 
   return (
     <div
-      className={`inline-block max-w-xs bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm ${className}`}
+      className={`inline-block max-w-xs bg-card border border-border rounded-lg overflow-hidden shadow-sm ${className}`}
     >
       {/* Image Preview */}
       {isImage && showPreview && !imageError && (
@@ -93,7 +93,7 @@ export function FileAttachment({
             alt={attachment.filename}
             width={320}
             height={128}
-            className="w-full h-32 object-contain bg-gray-50 cursor-pointer hover:opacity-90 transition-opacity"
+            className="w-full h-32 object-contain bg-muted cursor-pointer hover:opacity-90 transition-opacity"
             onError={() => setImageError(true)}
             onClick={() => setShowImageModal(true)}
             loading="lazy"
@@ -126,7 +126,7 @@ export function FileAttachment({
         {/* File Icon for non-images */}
         {(!isImage || !showPreview || imageError) && (
           <div className="flex justify-center mb-2">
-            <div className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded text-lg">
+            <div className="w-8 h-8 flex items-center justify-center bg-muted rounded text-lg">
               {fileIcon}
             </div>
           </div>
@@ -136,8 +136,8 @@ export function FileAttachment({
         <div className="flex items-center justify-between">
           {/* Left side: File size and type */}
           <div className="flex items-center space-x-2">
-            <span className="text-xs text-gray-500">{formattedSize}</span>
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+            <span className="text-xs text-muted-foreground">{formattedSize}</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-foreground">
               {attachment.file_type.split("/")[1]?.toUpperCase() || "FILE"}
             </span>
           </div>
@@ -150,14 +150,14 @@ export function FileAttachment({
                 flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded transition-colors
                 ${
                   isDownloading
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
                 }
               `}
           >
             {isDownloading ? (
               <>
-                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-muted-foreground"></div>
                 <span>...</span>
               </>
             ) : (
@@ -177,7 +177,7 @@ export function FileAttachment({
         </div>
 
         {/* Download Error */}
-        {downloadError && <p className="mt-1 text-xs text-red-600">{downloadError}</p>}
+        {downloadError && <p className="mt-1 text-xs text-destructive">{downloadError}</p>}
       </div>
 
       {/* Image Modal */}
@@ -276,8 +276,8 @@ export function FileAttachmentCompact({
       onClick={handleDownload}
       disabled={isDownloading}
       className={`
-        inline-flex items-center space-x-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 
-        border border-gray-200 rounded-lg text-sm transition-colors
+        inline-flex items-center space-x-2 px-3 py-2 bg-muted hover:bg-muted/80
+        border border-border rounded-lg text-sm transition-colors
         ${isDownloading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
         ${className}
       `}
@@ -285,14 +285,14 @@ export function FileAttachmentCompact({
     >
       <span className="text-base">{fileIcon}</span>
       <div className="flex flex-col items-start min-w-0">
-        <span className="font-medium text-gray-900 truncate">{displayName}</span>
-        <span className="text-xs text-gray-500">{formattedSize}</span>
+        <span className="font-medium text-foreground truncate">{displayName}</span>
+        <span className="text-xs text-muted-foreground">{formattedSize}</span>
       </div>
       {isDownloading ? (
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground"></div>
       ) : (
         <svg
-          className="w-4 h-4 text-gray-400"
+          className="w-4 h-4 text-muted-foreground"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -344,7 +344,7 @@ export function FileAttachmentList({
       {!showAll && remainingCount > 0 && (
         <button
           onClick={() => setShowAll(true)}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          className="text-sm text-primary hover:text-primary/80 font-medium"
         >
           + {remainingCount} more file{remainingCount !== 1 ? "s" : ""}
         </button>
@@ -354,7 +354,7 @@ export function FileAttachmentList({
       {showAll && attachments.length > maxItems && (
         <button
           onClick={() => setShowAll(false)}
-          className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+          className="text-sm text-muted-foreground hover:text-foreground font-medium"
         >
           Show less
         </button>

@@ -120,7 +120,7 @@ export function ProjectDraftTab({
         </div>
       </div>
 
-      {/* Prompt Edit Modal */}
+      {/* TODO Prompt Edit Modal, is used for?*/}
       <PromptEditModal
         isOpen={isPromptModalOpen}
         onClose={handleClosePromptModal}

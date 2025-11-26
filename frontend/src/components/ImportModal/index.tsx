@@ -384,7 +384,7 @@ export function ImportModal({
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
         <div
-          className={`relative bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-auto ${
+          className={`relative bg-card rounded-lg shadow-xl w-full max-h-[90vh] overflow-auto ${
             isStreaming ? "max-w-3xl" : "max-w-2xl"
           }`}
         >
@@ -418,11 +418,11 @@ export function ImportModal({
           ) : hasModelLimitConflict ? (
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Conversation Too Large</h3>
+                <h3 className="text-lg font-medium text-foreground">Conversation Too Large</h3>
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded"
+                  className="text-muted-foreground hover:text-foreground p-1 rounded"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -436,9 +436,9 @@ export function ImportModal({
               </div>
 
               <div className="mb-6 space-y-3">
-                <p className="text-gray-700">{modelLimitMessage}</p>
-                <p className="text-gray-600">{modelLimitSuggestion}</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-foreground">{modelLimitMessage}</p>
+                <p className="text-muted-foreground">{modelLimitSuggestion}</p>
+                <p className="text-sm text-muted-foreground">
                   Note: Summarization can take several minutes.
                 </p>
               </div>
@@ -446,20 +446,20 @@ export function ImportModal({
               <div className="space-y-3 mb-6">
                 <button
                   onClick={handleModelLimitProceed}
-                  className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full p-4 text-left border border-border rounded-lg hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <div className="font-medium text-gray-900">Proceed with summarization</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="font-medium text-foreground">Proceed with summarization</div>
+                  <div className="text-sm text-muted-foreground">
                     We&apos;ll create a placeholder and update it when ready
                   </div>
                 </button>
 
                 <button
                   onClick={handleModelLimitCancel}
-                  className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  className="w-full p-4 text-left border border-border rounded-lg hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <div className="font-medium text-gray-900">Choose another model</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="font-medium text-foreground">Choose another model</div>
+                  <div className="text-sm text-muted-foreground">
                     Select a model with a larger context window
                   </div>
                 </button>
@@ -479,7 +479,7 @@ export function ImportModal({
             <form onSubmit={handleSubmit}>
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Import Conversation</h3>
+                  <h3 className="text-lg font-medium text-foreground">Import Conversation</h3>
                   <div className="flex items-center space-x-2">
                     <ModelSelector
                       promptType={PromptTypes.IDEA_GENERATION}
@@ -495,17 +495,17 @@ export function ImportModal({
                       type="button"
                       onClick={handleShowPromptModal}
                       disabled={isLoading || isStreaming}
-                      className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors disabled:opacity-50"
+                      className="btn-secondary text-xs py-1 px-2 disabled:opacity-50"
                       title="Configure project generation prompt"
                     >
                       <span>⚙️</span>
-                      <span>LLM Prompt</span>
+                      <span className="ml-1">LLM Prompt</span>
                     </button>
                     <button
                       type="button"
                       onClick={handleClose}
                       disabled={isLoading || isStreaming}
-                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50 p-1 rounded"
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-50 p-1 rounded"
                     >
                       <svg
                         className="w-6 h-6"
@@ -525,7 +525,7 @@ export function ImportModal({
                 </div>
 
                 <div className="mb-4">
-                  <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="url" className="block text-sm font-medium text-muted-foreground mb-2">
                     Share URL
                   </label>
                   <input
@@ -535,24 +535,24 @@ export function ImportModal({
                     onChange={e => setUrl(e.target.value)}
                     disabled={isLoading || isStreaming || !currentModel}
                     placeholder={"Paste a share URL from ChatGPT, BranchPrompt, Claude, or Grok"}
-                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent disabled:bg-gray-100 bg-[var(--surface)] text-[var(--foreground)]/90"
+                    className="input-field"
                   />
-                  <p className="mt-2 text-sm text-gray-500">
+                  <p className="mt-2 text-sm text-muted-foreground">
                     Paste a ChatGPT, BranchPrompt, Claude, or Grok conversation share URL.
                   </p>
                 </div>
 
                 {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-600">{error}</p>
+                  <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
+                    <p className="text-sm text-destructive">{error}</p>
                   </div>
                 )}
 
-                <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                  <p className="text-sm text-gray-600">
+                <div className="mb-4 p-3 bg-muted rounded-md">
+                  <p className="text-sm text-muted-foreground">
                     <strong>Example:</strong>
                   </p>
-                  <div className="text-xs text-gray-500 font-mono mt-1 break-all space-y-1">
+                  <div className="text-xs text-muted-foreground font-mono mt-1 break-all space-y-1">
                     <p>https://chatgpt.com/share/12345678-1234-1234-1234-123456789abc</p>
                     <p>https://v2.branchprompt.com/conversation/67fe0326915f8dd81a3b1f74</p>
                     <p>https://claude.ai/share/12a33e29-2225-4d45-bae1-416a8647794d</p>
@@ -561,11 +561,11 @@ export function ImportModal({
                 </div>
               </div>
 
-              <div className="bg-gray-50 px-6 py-3 flex flex-row-reverse gap-3">
+              <div className="bg-muted px-6 py-3 flex flex-row-reverse gap-3">
                 <button
                   type="submit"
                   disabled={isLoading || isStreaming || !url.trim() || !currentModel}
-                  className="inline-flex items-center justify-center px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium rounded-md hover:bg-[var(--primary-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--ring)] disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="btn-primary-gradient px-4 py-2 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   {isLoading || isStreaming ? (
                     <>
@@ -580,7 +580,7 @@ export function ImportModal({
                   type="button"
                   onClick={handleClose}
                   disabled={isLoading || isStreaming}
-                  className="inline-flex items-center justify-center px-4 py-2 bg-[var(--surface)] text-[var(--foreground)]/80 text-sm font-medium border border-[var(--border)] rounded-md hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--ring)] disabled:opacity-50"
+                  className="btn-secondary disabled:opacity-50"
                 >
                   Cancel
                 </button>

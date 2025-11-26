@@ -17,9 +17,7 @@ export function DashboardHeader({ searchBoxProps }: { searchBoxProps?: Dashboard
   const { isSidebarCollapsed } = useDashboard();
 
   return (
-    <div
-      className={`px-6 py-3 bg-[color-mix(in_srgb,var(--surface),transparent_20%)] backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface),transparent_30%)] border-b border-[var(--border)] sticky top-0 z-10`}
-    >
+    <div className="toolbar-glass px-6 py-3 sticky top-0 z-10">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div
           className={`flex items-center gap-3 self-end md:self-auto w-full md:w-auto pl-12 sm:pl-0 ${isSidebarCollapsed ? "md:pl-10" : ""}`}

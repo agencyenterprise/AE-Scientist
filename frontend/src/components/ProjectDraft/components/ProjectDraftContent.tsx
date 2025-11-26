@@ -41,10 +41,10 @@ export function ProjectDraftContent({
     ol: (props: any) => <ol className="list-decimal ml-4 mb-1 space-y-0.5">{props.children}</ol>,
     li: (props: any) => <li>{props.children}</li>,
     code: (props: any) => (
-      <code className="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">{props.children}</code>
+      <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono">{props.children}</code>
     ),
     pre: (props: any) => (
-      <pre className="bg-gray-200 p-2 rounded text-xs font-mono overflow-x-auto mb-1">
+      <pre className="bg-muted p-2 rounded text-xs font-mono overflow-x-auto mb-1">
         {props.children}
       </pre>
     ),
@@ -53,7 +53,7 @@ export function ProjectDraftContent({
     a: (props: any) => (
       <a
         href={props.href}
-        className="text-[var(--primary)] hover:underline"
+        className="text-primary hover:underline"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -67,7 +67,7 @@ export function ProjectDraftContent({
     return (
       <div className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-gray-700">
+          <label className="text-sm font-medium text-muted-foreground">
             Edit Idea (JSON format required)
           </label>
         </div>
@@ -76,20 +76,14 @@ export function ProjectDraftContent({
             value={editDescription}
             onChange={e => setEditDescription(e.target.value)}
             onKeyDown={e => onKeyDown(e, onSave)}
-            className="flex-1 min-h-[45vh] sm:min-h-[20rem] px-3 py-2 text-sm border border-[var(--border)] rounded-md resize-none overflow-auto focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent bg-[var(--surface)] text-[var(--foreground)] font-mono"
+            className="input-field flex-1 min-h-[45vh] sm:min-h-[20rem] resize-none overflow-auto font-mono"
             placeholder="Enter idea data as JSON..."
           />
           <div className="flex justify-end space-x-2 mt-2">
-            <button
-              onClick={onCancelEdit}
-              className="px-3 py-1 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded border border-gray-200 transition-colors"
-            >
+            <button onClick={onCancelEdit} className="btn-secondary text-xs py-1">
               Cancel
             </button>
-            <button
-              onClick={onSave}
-              className="px-3 py-1 text-xs text-[var(--primary-foreground)] bg-[var(--primary)] hover:bg-[var(--primary-hover)] rounded transition-colors"
-            >
+            <button onClick={onSave} className="btn-primary-gradient text-xs py-1 px-3">
               Save
             </button>
           </div>
@@ -104,21 +98,21 @@ export function ProjectDraftContent({
         {isGenerating ? (
           <div className="space-y-4">
             <div className="animate-pulse space-y-2">
-              <div className="h-3 bg-[var(--primary-300)] rounded w-full"></div>
-              <div className="h-3 bg-[var(--primary-300)] rounded w-5/6"></div>
-              <div className="h-3 bg-[var(--primary-300)] rounded w-4/5"></div>
-              <div className="h-3 bg-[var(--primary-300)] rounded w-3/4"></div>
+              <div className="h-3 bg-primary/30 rounded w-full"></div>
+              <div className="h-3 bg-primary/30 rounded w-5/6"></div>
+              <div className="h-3 bg-primary/30 rounded w-4/5"></div>
+              <div className="h-3 bg-primary/30 rounded w-3/4"></div>
             </div>
           </div>
         ) : (
           <>
             {/* Short Hypothesis */}
             {activeVersion?.short_hypothesis && (
-              <div className="border-l-4 border-[var(--primary)] pl-4">
-                <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              <div className="border-l-4 border-primary pl-4">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                   Hypothesis
                 </h3>
-                <div className="text-sm text-gray-900">
+                <div className="text-sm text-foreground leading-relaxed">
                   <ReactMarkdown components={markdownComponents}>
                     {activeVersion.short_hypothesis}
                   </ReactMarkdown>
@@ -129,10 +123,10 @@ export function ProjectDraftContent({
             {/* Related Work */}
             {activeVersion?.related_work && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Related Work
                 </h3>
-                <div className="text-sm text-gray-900">
+                <div className="text-sm text-foreground/90 leading-relaxed">
                   <ReactMarkdown components={markdownComponents}>
                     {activeVersion.related_work}
                   </ReactMarkdown>
@@ -143,10 +137,10 @@ export function ProjectDraftContent({
             {/* Abstract */}
             {activeVersion?.abstract && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Abstract
                 </h3>
-                <div className="text-sm text-gray-900">
+                <div className="text-sm text-foreground/90 leading-relaxed">
                   <ReactMarkdown components={markdownComponents}>
                     {activeVersion.abstract}
                   </ReactMarkdown>
@@ -154,26 +148,29 @@ export function ProjectDraftContent({
               </div>
             )}
 
-            {/* Experiments */}
+            {/* Experiments - styled like orchestrator's Hypothesis History */}
             {activeVersion?.experiments && activeVersion.experiments.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                <h3 className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">
                   Experiments
                 </h3>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {activeVersion.experiments.map((experiment, idx) => (
-                    <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-start gap-2">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[var(--primary)] text-white text-xs font-semibold flex-shrink-0">
+                    <article
+                      key={idx}
+                      className="group overflow-hidden rounded-xl border border-border bg-muted/50 p-4 transition hover:border-primary/40"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold flex-shrink-0 shadow-sm">
                           {idx + 1}
                         </span>
-                        <div className="flex-1 text-sm text-gray-900">
+                        <div className="flex-1 text-sm text-foreground leading-relaxed">
                           <ReactMarkdown components={markdownComponents}>
                             {experiment}
                           </ReactMarkdown>
                         </div>
                       </div>
-                    </div>
+                    </article>
                   ))}
                 </div>
               </div>
@@ -182,10 +179,10 @@ export function ProjectDraftContent({
             {/* Expected Outcome */}
             {activeVersion?.expected_outcome && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Expected Outcome
                 </h3>
-                <div className="text-sm text-gray-900 bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="text-sm text-foreground bg-green-500/10 border border-green-500/30 rounded-xl p-4 leading-relaxed">
                   <ReactMarkdown components={markdownComponents}>
                     {activeVersion.expected_outcome}
                   </ReactMarkdown>
@@ -197,15 +194,18 @@ export function ProjectDraftContent({
             {activeVersion?.risk_factors_and_limitations &&
               activeVersion.risk_factors_and_limitations.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                     Risk Factors & Limitations
                   </h3>
                   <div className="space-y-2">
                     {activeVersion.risk_factors_and_limitations.map((risk, idx) => (
-                      <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                        <div className="flex items-start gap-2">
+                      <div
+                        key={idx}
+                        className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4"
+                      >
+                        <div className="flex items-start gap-3">
                           <svg
-                            className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"
+                            className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -217,7 +217,7 @@ export function ProjectDraftContent({
                               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                             />
                           </svg>
-                          <div className="flex-1 text-sm text-gray-900">
+                          <div className="flex-1 text-sm text-foreground leading-relaxed">
                             <ReactMarkdown components={markdownComponents}>{risk}</ReactMarkdown>
                           </div>
                         </div>

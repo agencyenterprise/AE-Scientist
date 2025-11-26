@@ -121,7 +121,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             type="button"
             aria-label={isSidebarCollapsed ? "Open menu" : "Close menu"}
             onClick={toggleSidebar}
-            className="fixed left-3 top-2 z-50 bg-white border border-gray-300 rounded-full shadow px-3 py-3 md:px-2 md:py-2 text-gray-700 hover:bg-gray-100 active:bg-gray-200"
+            className="fixed left-3 top-2 z-50 bg-card border border-border rounded-full shadow px-3 py-3 md:px-2 md:py-2 text-foreground hover:bg-muted active:bg-muted/80"
             title={isSidebarCollapsed ? "Open menu" : "Close menu"}
           >
             <svg

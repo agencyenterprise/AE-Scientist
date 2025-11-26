@@ -30,21 +30,21 @@ const MessageRow = memo(function MessageRow({ message }: MessageRowProps) {
       <div
         className={`max-w-5xl rounded-lg px-3 py-2 break-words overflow-hidden ${
           message.role === "user"
-            ? "bg-white border-2 border-[var(--primary)] text-gray-900"
-            : "bg-white border-2 border-gray-300 text-gray-900"
+            ? "bg-card border-2 border-[var(--primary)] text-foreground"
+            : "bg-card border-2 border-border text-foreground"
         }`}
       >
         <div className="flex items-center mb-1">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium mr-2 ${
               message.role === "user"
-                ? "bg-[var(--primary)] text-white"
-                : "bg-gray-200 text-gray-700"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+                : "bg-muted text-muted-foreground"
             }`}
           >
             {message.role === "user" ? "U" : "A"}
           </div>
-          <span className="text-sm font-medium text-gray-600">
+          <span className="text-sm font-medium text-muted-foreground">
             {message.role === "user" ? "User" : "Assistant"}
           </span>
         </div>
@@ -224,11 +224,11 @@ export function ImportedChatTab({
     <div className="bg-[var(--muted)] flex flex-col h-full">
       {/* Chat Header - Tab Style - Always visible */}
       <div className="px-4 py-1 border-b border-[var(--border)] flex items-center justify-between bg-[color-mix(in_srgb,var(--surface),transparent_20%)] backdrop-blur supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface),transparent_30%)] sticky top-0 z-10">
-        <h2 className="text-sm font-semibold text-gray-900">Imported Chat</h2>
+        <h2 className="text-sm font-semibold text-foreground">Imported Chat</h2>
         <div className="flex items-center space-x-1">
           <button
             onClick={onMaximizeConversation}
-            className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title={isMaximized ? "Restore to 50/50" : "Maximize Imported Chat"}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -260,7 +260,7 @@ export function ImportedChatTab({
           {/* Conversation Footer - Stays at bottom */}
           <div className="border-t border-[var(--border)] pt-2 mt-4 flex-shrink-0">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between w-full gap-2">
-              <div className="flex items-center space-x-2 text-xs text-gray-500 flex-1">
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground flex-1">
                 <span>By {conversation.user_name}</span>
                 <span>•</span>
                 <span>Imported {new Date(conversation.created_at).toLocaleDateString()}</span>
@@ -338,7 +338,7 @@ export function ImportedChatTab({
                   href={conversation.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  className="inline-flex items-center px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground bg-card hover:bg-muted transition-colors"
                 >
                   <svg
                     className="w-3 h-3 mr-1.5"
@@ -361,12 +361,12 @@ export function ImportedChatTab({
             {/* Summary Modal */}
             {showSummaryModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-                <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
-                  <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900">Imported chat summary</h3>
+                <div className="bg-card rounded-lg shadow-xl max-w-2xl w-full">
+                  <div className="p-4 border-b border-border flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">Imported chat summary</h3>
                     <button
                       onClick={handleCloseSummaryModal}
-                      className="p-1 text-gray-600 hover:text-gray-800"
+                      className="p-1 text-muted-foreground hover:text-foreground"
                       title="Close"
                     >
                       <svg
@@ -421,7 +421,7 @@ export function ImportedChatTab({
                       </div>
                     )}
                   </div>
-                  <div className="p-4 border-t border-gray-200 flex items-center justify-end space-x-2">
+                  <div className="p-4 border-t border-border flex items-center justify-end space-x-2">
                     {summary && !isEditingSummary && (
                       <button
                         onClick={handleEditSummary}
@@ -449,11 +449,11 @@ export function ImportedChatTab({
                         <button
                           onClick={handleSaveSummary}
                           disabled={isUpdatingSummary || !editSummary.trim()}
-                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 border border-green-300 rounded hover:bg-green-200 disabled:opacity-50"
+                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-[var(--success-foreground)] bg-[var(--success)] border border-[var(--success)] rounded hover:opacity-90 disabled:opacity-50"
                         >
                           {isUpdatingSummary ? (
                             <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-700 mr-1"></div>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--success-foreground)] mr-1"></div>
                               Saving...
                             </>
                           ) : (
@@ -478,7 +478,7 @@ export function ImportedChatTab({
                         <button
                           onClick={handleCloseSummaryModal}
                           disabled={isUpdatingSummary}
-                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 disabled:opacity-50"
+                          className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-foreground bg-muted border border-border rounded hover:bg-muted/80 disabled:opacity-50"
                         >
                           <svg
                             className="w-3 h-3 mr-1"
@@ -500,7 +500,7 @@ export function ImportedChatTab({
                     {!isEditingSummary && !isWritingSummary && (
                       <button
                         onClick={handleCloseSummaryModal}
-                        className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+                        className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-foreground bg-card border border-border rounded hover:bg-muted"
                       >
                         Close
                       </button>

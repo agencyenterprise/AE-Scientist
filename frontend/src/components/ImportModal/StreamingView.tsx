@@ -25,13 +25,13 @@ export function StreamingView({
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium text-gray-900">
+        <h3 className="text-lg font-medium text-foreground">
           {isUpdateMode ? "Updating Conversation" : "Importing Conversation"}
         </h3>
         <button
           type="button"
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 disabled:opacity-50 p-1 rounded"
+          className="text-muted-foreground hover:text-foreground disabled:opacity-50 p-1 rounded"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -46,12 +46,12 @@ export function StreamingView({
 
       <div className="mb-4">
         {isUpdateMode ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-md p-8 text-center">
+          <div className="bg-muted border border-border rounded-md p-8 text-center">
             <div className="space-y-4">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-muted-foreground">
                 Updating conversation with latest content…
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted-foreground">
                 Your existing project draft will be preserved.
               </div>
             </div>
@@ -61,7 +61,7 @@ export function StreamingView({
             ref={textareaRef}
             value={streamingContent}
             readOnly
-            className="w-full h-64 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm font-mono resize-none"
+            className="w-full h-64 p-3 bg-muted border border-border rounded-md text-sm font-mono resize-none text-foreground"
             placeholder="Analyzing conversation and generating project draft..."
           />
         )}
@@ -69,18 +69,18 @@ export function StreamingView({
 
       <div className="flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)]"></div>
-        <span className="ml-3 text-gray-600">{getStateMessage(currentState)}</span>
+        <span className="ml-3 text-muted-foreground">{getStateMessage(currentState)}</span>
       </div>
 
       {currentState === "summarizing" && summaryProgress !== null && (
         <div className="mt-4">
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-muted rounded-full h-2">
             <div
               className="bg-[var(--primary)] h-2 rounded-full transition-all"
               style={{ width: `${summaryProgress}%` }}
             ></div>
           </div>
-          <div className="mt-1 text-xs text-gray-500 text-center">{summaryProgress}%</div>
+          <div className="mt-1 text-xs text-muted-foreground text-center">{summaryProgress}%</div>
         </div>
       )}
     </div>

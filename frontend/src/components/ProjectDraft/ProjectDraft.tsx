@@ -137,10 +137,10 @@ export function ProjectDraft({
 
   if (projectState.isLoading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="h-full flex items-center justify-center bg-muted">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)] mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600">Loading idea...</p>
+          <p className="text-sm text-muted-foreground">Loading idea...</p>
         </div>
       </div>
     );
@@ -148,9 +148,9 @@ export function ProjectDraft({
 
   if (!projectState.projectDraft) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50">
+      <div className="h-full flex items-center justify-center bg-muted">
         <div className="text-center">
-          <p className="text-sm text-gray-600">No idea available</p>
+          <p className="text-sm text-muted-foreground">No idea available</p>
         </div>
       </div>
     );
@@ -165,7 +165,7 @@ export function ProjectDraft({
             animations.updateAnimation
               ? "ring-2 ring-[var(--primary-300)] bg-[color-mix(in_srgb,var(--primary),transparent_92%)]"
               : ""
-          } ${animations.newVersionAnimation ? "ring-4 ring-green-400 bg-green-50 shadow-lg" : ""}`}
+          } ${animations.newVersionAnimation ? "ring-4 ring-[var(--success)] bg-[color-mix(in_srgb,var(--success),transparent_90%)] shadow-lg" : ""}`}
         >
           <div className="flex-1 flex flex-col min-h-0 px-4 sm:px-6">
             {/* Header Section */}

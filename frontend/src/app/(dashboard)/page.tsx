@@ -196,7 +196,7 @@ export default function Home() {
       <DashboardFilterSortBar hasQuery={Boolean(searchState.query)} />
       <div className="flex-1 min-h-0 overflow-y-auto">
         {shouldShowSearch ? (
-          <div className="p-4 sm:p-6 bg-gray-50">
+          <div className="p-4 sm:p-6 bg-muted">
             <SearchResults {...searchResultsProps} />
           </div>
         ) : (

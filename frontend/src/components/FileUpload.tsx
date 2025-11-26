@@ -338,7 +338,7 @@ export function FileUpload({
       <div
         className={`
           border-2 border-dashed rounded-lg p-6 text-center transition-colors
-          ${isDragOver ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-gray-400"}
+          ${isDragOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}
           ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
         `}
         onDragOver={handleDragOver}
@@ -353,10 +353,10 @@ export function FileUpload({
         <div className="flex flex-col items-center space-y-2">
           <div className="text-4xl">📁</div>
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-foreground">
               {isDragOver ? "Drop files here" : "Click to upload or drag and drop"}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {(() => {
                 const supportedTypes = [];
                 if (modelCapabilities.supportsImages) {
@@ -376,7 +376,7 @@ export function FileUpload({
                 {getUnsupportedFileTypes().join(" or ")}
               </p>
             )}
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-muted-foreground/60 mt-1">
               Maximum {maxFiles} files • {completedFiles.length} uploaded
             </p>
           </div>
@@ -397,14 +397,14 @@ export function FileUpload({
       {uploads.length > 0 && (
         <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium text-gray-900">Files ({uploads.length})</h4>
-            <button onClick={clearAllUploads} className="text-xs text-gray-500 hover:text-gray-700">
+            <h4 className="text-sm font-medium text-foreground">Files ({uploads.length})</h4>
+            <button onClick={clearAllUploads} className="text-xs text-muted-foreground hover:text-foreground">
               Clear all
             </button>
           </div>
 
           {uploads.map(upload => (
-            <div key={upload.uploadId} className="border border-gray-200 rounded-lg p-3 bg-white">
+            <div key={upload.uploadId} className="border border-border rounded-lg p-3 bg-card">
               <div className="flex items-start space-x-3">
                 {/* File Icon/Preview */}
                 <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
@@ -425,34 +425,34 @@ export function FileUpload({
                 {/* File Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {getDisplayFileName(upload.file.name)}
                     </p>
                     <button
                       onClick={() => removeUpload(upload.uploadId)}
-                      className="text-gray-400 hover:text-gray-600 ml-2"
+                      className="text-muted-foreground hover:text-foreground ml-2"
                       title="Remove file"
                     >
                       ✕
                     </button>
                   </div>
 
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     {formatFileSize(upload.file.size)} • {upload.file.type}
                   </p>
 
                   {/* Status */}
                   <div className="mt-2">
                     {upload.status === "pending" && (
-                      <div className="text-xs text-gray-500">Waiting...</div>
+                      <div className="text-xs text-muted-foreground">Waiting...</div>
                     )}
 
                     {upload.status === "uploading" && (
                       <div className="space-y-1">
-                        <div className="text-xs text-blue-600">Uploading...</div>
-                        <div className="w-full bg-gray-200 rounded-full h-1">
+                        <div className="text-xs text-primary">Uploading...</div>
+                        <div className="w-full bg-muted rounded-full h-1">
                           <div
-                            className="bg-blue-600 h-1 rounded-full transition-all"
+                            className="bg-primary h-1 rounded-full transition-all"
                             style={{ width: `${upload.progress}%` }}
                           />
                         </div>
@@ -460,14 +460,14 @@ export function FileUpload({
                     )}
 
                     {upload.status === "completed" && (
-                      <div className="text-xs text-green-600 flex items-center">
+                      <div className="text-xs text-green-400 flex items-center">
                         <span className="mr-1">✓</span>
                         Uploaded successfully
                       </div>
                     )}
 
                     {upload.status === "error" && (
-                      <div className="text-xs text-red-600">⚠️ {upload.error}</div>
+                      <div className="text-xs text-destructive">⚠️ {upload.error}</div>
                     )}
                   </div>
                 </div>

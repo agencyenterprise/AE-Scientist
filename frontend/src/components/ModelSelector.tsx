@@ -367,8 +367,8 @@ export function ModelSelector({
 
   if (isLoading) {
     return (
-      <div className="flex items-center space-x-2 text-xs text-gray-500">
-        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
+      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-muted-foreground"></div>
         <span>Loading...</span>
       </div>
     );
@@ -389,12 +389,11 @@ export function ModelSelector({
         ref={buttonRef}
         onClick={handleToggleOpen}
         disabled={disabled}
-        className="flex items-center space-x-1 px-2 py-1 text-xs font-medium border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{
-          backgroundColor: isUsingCustomSelection ? "#dbeafe" : "white",
-          borderColor: isUsingCustomSelection ? "#3b82f6" : "#d1d5db",
-          color: isUsingCustomSelection ? "#1d4ed8" : "#374151",
-        }}
+        className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          isUsingCustomSelection
+            ? "bg-primary/10 border-primary text-primary"
+            : "bg-card border-border text-foreground"
+        }`}
         title={`Current model: ${currentModelLabel} (${currentModel}) - ${currentProvider}${isUsingCustomSelection ? " - Custom selection" : " - Default"}`}
       >
         <span>Model:</span>
@@ -423,7 +422,7 @@ export function ModelSelector({
 
           {/* Dropdown */}
           <div
-            className="fixed w-64 bg-white border border-gray-200 rounded-md shadow-lg z-[60]"
+            className="fixed w-64 bg-card border border-border rounded-md shadow-lg z-[60]"
             style={{
               top: dropdownCoords?.top || 0,
               left: dropdownPosition === "left" ? dropdownCoords?.left || 0 : "auto",
@@ -431,8 +430,8 @@ export function ModelSelector({
             }}
           >
             {/* Header with close button */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
-              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Select Model
               </span>
               <button
@@ -442,7 +441,7 @@ export function ModelSelector({
                   setDropdownCoords(null);
                   setFilterText("");
                 }}
-                className="text-gray-400 hover:text-gray-600 p-0.5 rounded transition-colors"
+                className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
                 title="Close"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -457,14 +456,14 @@ export function ModelSelector({
             </div>
 
             {/* Search Input */}
-            <div className="p-2 border-b border-gray-100">
+            <div className="p-2 border-b border-border">
               <input
                 ref={searchInputRef}
                 type="text"
                 placeholder="Search models..."
                 value={filterText}
                 onChange={e => setFilterText(e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-2 py-1 text-xs border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary bg-card text-foreground"
                 onClick={e => e.stopPropagation()}
                 onKeyDown={e => {
                   // Prevent dropdown from closing on Enter
@@ -477,14 +476,14 @@ export function ModelSelector({
 
             <div className="max-h-64 overflow-y-auto">
               {Object.keys(filteredProviders).length === 0 && filterText.trim() ? (
-                <div className="p-4 text-center text-xs text-gray-500">
+                <div className="p-4 text-center text-xs text-muted-foreground">
                   <div className="mb-1">No models found</div>
                   <div>Try adjusting your search</div>
                 </div>
               ) : (
                 Object.entries(filteredProviders).map(([provider, models]) => (
-                  <div key={provider} className="border-b border-gray-100 last:border-b-0">
-                    <div className="px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  <div key={provider} className="border-b border-border last:border-b-0">
+                    <div className="px-3 py-2 bg-muted text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                       {provider}
                     </div>
                     {models.map(model => {
@@ -502,12 +501,12 @@ export function ModelSelector({
                           disabled={!isCompatible}
                           className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                             !isCompatible
-                              ? "text-gray-400 cursor-not-allowed opacity-75"
+                              ? "text-muted-foreground/50 cursor-not-allowed opacity-75"
                               : isSelected
-                                ? "bg-blue-50 text-blue-700 font-medium hover:bg-blue-100"
+                                ? "bg-primary/10 text-primary font-medium hover:bg-primary/20"
                                 : isDefault
-                                  ? "bg-green-50 hover:bg-green-100 border-l-2 border-green-300"
-                                  : "text-gray-700 hover:bg-gray-50"
+                                  ? "bg-green-500/10 hover:bg-green-500/20 border-l-2 border-green-500/50"
+                                  : "text-foreground hover:bg-muted"
                           }`}
                           title={incompatibilityReason || undefined}
                         >
@@ -519,7 +518,7 @@ export function ModelSelector({
                                 <div className="text-xs text-green-600 font-medium">default</div>
                               )}
                               {incompatibilityReason && (
-                                <div className="text-xs text-gray-400 italic truncate">
+                                <div className="text-xs text-muted-foreground/50 italic truncate">
                                   {incompatibilityReason}
                                 </div>
                               )}
@@ -540,7 +539,7 @@ export function ModelSelector({
                             {/* Selection checkmark - small fixed width on right */}
                             <div className="flex items-center justify-center w-8">
                               {isSelected && (
-                                <span className={isCompatible ? "text-blue-500" : "text-gray-400"}>
+                                <span className={isCompatible ? "text-primary" : "text-muted-foreground/50"}>
                                   ✓
                                 </span>
                               )}
@@ -556,9 +555,9 @@ export function ModelSelector({
 
             {/* Make Default / Already Default section */}
             {showMakeDefault && (
-              <div className="border-t border-gray-200 p-2">
+              <div className="border-t border-border p-2">
                 {isCurrentSelectionDefault ? (
-                  <div className="flex items-center justify-center space-x-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded">
+                  <div className="flex items-center justify-center space-x-1 px-2 py-1.5 text-xs font-medium text-green-400 bg-green-500/10 rounded">
                     <span>✓</span>
                     <span>Already Default</span>
                   </div>
@@ -567,11 +566,11 @@ export function ModelSelector({
                     type="button"
                     onClick={handleMakeDefault}
                     disabled={isUpdatingDefault}
-                    className="w-full flex items-center justify-center space-x-1 px-2 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                    className="w-full flex items-center justify-center space-x-1 px-2 py-1.5 text-xs font-medium text-primary hover:text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
                   >
                     {isUpdatingDefault ? (
                       <>
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
                         <span>Updating...</span>
                       </>
                     ) : (

@@ -94,8 +94,8 @@ export function ConversationCard({
       );
 
     return {
-      p: ({ children }) => <p className="text-sm text-gray-900">{withHighlight(children)}</p>,
-      li: ({ children }) => <li className="text-sm text-gray-900">{withHighlight(children)}</li>,
+      p: ({ children }) => <p className="text-sm text-foreground">{withHighlight(children)}</p>,
+      li: ({ children }) => <li className="text-sm text-foreground">{withHighlight(children)}</li>,
     } as Components;
   }
 
@@ -125,18 +125,18 @@ export function ConversationCard({
     maxScore !== null && effectiveImportedScore !== null && effectiveImportedScore === maxScore;
 
   const badgeClass = (isMax: boolean) =>
-    `inline-flex items-center px-1.5 py-0.5 rounded ${isMax ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-700"}`;
+    `inline-flex items-center px-1.5 py-0.5 rounded ${isMax ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`;
 
   return (
     <div
-      className="group relative border rounded-lg p-4 cursor-pointer transition-all shadow-sm hover:shadow-md border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--muted)]"
+      className="group relative border border-border rounded-lg p-4 cursor-pointer transition-all shadow-sm hover:shadow-md bg-card hover:bg-muted"
       onClick={() => onSelect(conversation)}
     >
       <div className={"flex flex-col md:flex-row md:items-start md:gap-6"}>
         {/* Left: Title and meta */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="text-base font-semibold text-gray-900 truncate">
+            <h3 className="text-base font-semibold text-foreground truncate">
               {searchMatch?.contentType === "conversation"
                 ? highlightInline(conversation.title, searchMatch.query)
                 : conversation.title}
@@ -150,9 +150,9 @@ export function ConversationCard({
             conversation.ideaAbstract ||
             projectDraftMatch ||
             (searchMatch && searchMatch.contentType === "project_draft")) && (
-            <div className="mt-3 bg-gray-50/60 border border-gray-200 rounded p-3">
+            <div className="mt-3 bg-muted/60 border border-border rounded p-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Idea
                 </h4>
                 {(searchMatch?.contentType === "project_draft" || projectDraftMatch) && (
@@ -167,12 +167,12 @@ export function ConversationCard({
                 )}
               </div>
               {conversation.ideaTitle && (
-                <p className="text-sm font-medium text-gray-900 mt-1 line-clamp-1">
+                <p className="text-sm font-medium text-foreground mt-1 line-clamp-1">
                   {conversation.ideaTitle}
                 </p>
               )}
               {(searchMatch && searchMatch.contentType === "project_draft") || projectDraftMatch ? (
-                <div className="text-xs text-gray-700 mt-1 line-clamp-4 prose prose-sm max-w-none">
+                <div className="text-xs text-muted-foreground mt-1 line-clamp-4 prose prose-sm max-w-none">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={mdComponents(
@@ -188,7 +188,7 @@ export function ConversationCard({
                 </div>
               ) : (
                 conversation.ideaAbstract && (
-                  <p className="text-xs text-gray-700 mt-1 line-clamp-4">
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-4">
                     {abstractPreview}
                     {conversation.ideaAbstract.length > 500 ? "…" : ""}
                   </p>
@@ -204,13 +204,13 @@ export function ConversationCard({
           (searchMatch && searchMatch.contentType === "draft_chat") ||
           draftChatMatch) && (
           <div className="mt-3 md:mt-0 md:w-1/2">
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs shadow-sm">
+            <div className="rounded-lg border border-border bg-muted p-2 text-xs shadow-sm">
               <div className="flex items-center justify-between px-1 mb-1">
-                <div className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Chat
                 </div>
                 {(searchMatch && searchMatch.contentType === "draft_chat") || draftChatMatch ? (
-                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>
                       {new Date(
                         (searchMatch && searchMatch.contentType === "draft_chat"
@@ -232,8 +232,8 @@ export function ConversationCard({
               <div className="space-y-2 px-1">
                 {(searchMatch && searchMatch.contentType === "draft_chat") || draftChatMatch ? (
                   <div>
-                    <div className="text-[11px] text-gray-500 mb-0.5">Matched message</div>
-                    <div className="inline-block rounded-2xl bg-gray-100 text-gray-900 px-3 py-1.5 leading-relaxed prose prose-sm max-w-none">
+                    <div className="text-[11px] text-muted-foreground mb-0.5">Matched message</div>
+                    <div className="inline-block rounded-2xl bg-card text-foreground px-3 py-1.5 leading-relaxed prose prose-sm max-w-none">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={mdComponents(
@@ -252,10 +252,10 @@ export function ConversationCard({
                   <>
                     {lastUser && (
                       <div>
-                        <div className="text-[11px] text-gray-500 mb-0.5">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">
                           {conversation.userName}
                         </div>
-                        <div className="inline-block max-w-full rounded-2xl bg-blue-50 text-blue-900 px-3 py-1.5 leading-relaxed line-clamp-2">
+                        <div className="inline-block max-w-full rounded-2xl bg-primary/10 text-primary px-3 py-1.5 leading-relaxed line-clamp-2">
                           {lastUser}
                           {(conversation.lastUserMessageContent?.length ?? 0) > 120 ? "…" : ""}
                         </div>
@@ -263,8 +263,8 @@ export function ConversationCard({
                     )}
                     {lastAssistant && (
                       <div>
-                        <div className="text-[11px] text-gray-500 mb-0.5">Assistant</div>
-                        <div className="inline-block max-w-full rounded-2xl bg-gray-100 text-gray-900 px-3 py-1.5 leading-relaxed line-clamp-2">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Assistant</div>
+                        <div className="inline-block max-w-full rounded-2xl bg-card text-foreground px-3 py-1.5 leading-relaxed line-clamp-2">
                           {lastAssistant}
                           {(conversation.lastAssistantMessageContent?.length ?? 0) > 120 ? "…" : ""}
                         </div>
@@ -280,12 +280,12 @@ export function ConversationCard({
 
       {/* Bottom full-width: Imported Chat panel */}
       {(searchMatch?.contentType === "imported_chat" || importedChatMatch) && (
-        <div className="mt-4 bg-gray-50/60 border border-gray-200 rounded p-3">
+        <div className="mt-4 bg-muted/60 border border-border rounded p-3">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Imported Chat
             </span>
-            <div className="flex items-center gap-2 text-xs text-gray-600">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className={badgeClass(isImportedMax)}>
                 Score{" "}
                 {(
@@ -298,7 +298,7 @@ export function ConversationCard({
           </div>
           {searchMatch?.contentType === "imported_chat" && (
             <>
-              <div className="text-sm text-gray-900 prose prose-sm max-w-none">
+              <div className="text-sm text-foreground prose prose-sm max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={mdComponents(searchMatch.query)}
@@ -306,12 +306,12 @@ export function ConversationCard({
                   {searchMatch.snippetMarkdown}
                 </ReactMarkdown>
               </div>
-              <div className="mt-1 text-xs text-gray-600">{searchMatch.createdByUserName}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{searchMatch.createdByUserName}</div>
             </>
           )}
           {searchMatch?.contentType !== "imported_chat" && importedChatMatch && (
             <>
-              <div className="text-sm text-gray-900 prose prose-sm max-w-none">
+              <div className="text-sm text-foreground prose prose-sm max-w-none">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={mdComponents(importedChatMatch.query)}
@@ -319,7 +319,7 @@ export function ConversationCard({
                   {importedChatMatch.snippetMarkdown}
                 </ReactMarkdown>
               </div>
-              <div className="mt-1 text-xs text-gray-600">
+              <div className="mt-1 text-xs text-muted-foreground">
                 {importedChatMatch.createdByUserName}
               </div>
             </>
@@ -328,14 +328,14 @@ export function ConversationCard({
       )}
 
       {/* Footer meta */}
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500 gap-2">
+      <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground gap-2">
         <div className="flex items-center gap-2 flex-nowrap">
           <a
             href={conversation.url}
             target="_blank"
             rel="noreferrer"
             onClick={e => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900"
+            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
             title="Open imported chat"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -351,7 +351,7 @@ export function ConversationCard({
         </div>
         <div className="flex items-center gap-3 whitespace-nowrap">
           <span title={new Date(conversation.updatedAt).toISOString()}>Updated {updatedRel}</span>
-          <span className="text-gray-400" title={new Date(conversation.importDate).toISOString()}>
+          <span className="text-muted-foreground/60" title={new Date(conversation.importDate).toISOString()}>
             Imported {importedRel}
           </span>
         </div>

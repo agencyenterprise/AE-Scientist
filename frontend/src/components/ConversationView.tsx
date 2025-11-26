@@ -77,7 +77,7 @@ export function ConversationView({
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--primary)] mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading conversation...</p>
+          <p className="text-muted-foreground">Loading conversation...</p>
         </div>
       </div>
     );
@@ -88,7 +88,7 @@ export function ConversationView({
       <div className="h-full flex items-center justify-center">
         <div className="text-center max-w-md">
           <svg
-            className="mx-auto h-24 w-24 text-gray-400 mb-4"
+            className="mx-auto h-24 w-24 text-muted-foreground mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -100,13 +100,13 @@ export function ConversationView({
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.011-.235l-3.678 1.47a1 1 0 01-1.31-1.31l1.47-3.678A8.955 8.955 0 013 12a8 8 0 018-8c4.418 0 8 3.582 8 8z"
             />
           </svg>
-          <h2 className="text-xl font-medium text-gray-900 mb-2">
+          <h2 className="text-xl font-medium text-foreground mb-2">
             Welcome to AGI Judd&apos;s Idea Catalog
           </h2>
-          <p className="text-gray-600 mb-4">
+          <p className="text-muted-foreground mb-4">
             Transform imported conversations into Data Science experiments
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Select a conversation from the sidebar or import a new one to get started.
           </p>
         </div>
@@ -117,7 +117,7 @@ export function ConversationView({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Conversation Header - Always at top */}
-      <div className="flex-shrink-0 sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
+      <div className="flex-shrink-0 sticky top-0 z-10 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <ConversationHeader
           conversation={conversation}
           onConversationDeleted={onConversationDeleted}
@@ -142,14 +142,14 @@ export function ConversationView({
 
         {/* Project Draft Section - Always show tab header, dynamic content space */}
         <div
-          className={`bg-gray-50 flex flex-col overflow-hidden ${showProjectDraft ? "flex-1" : "flex-none"}`}
+          className={`bg-muted flex flex-col overflow-hidden ${showProjectDraft ? "flex-1" : "flex-none"}`}
         >
-          <div className="px-4 py-1 border-b border-gray-200 flex items-center justify-between bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/50 sticky top-0 z-10">
-            <h2 className="text-sm font-semibold text-gray-900">Project</h2>
+          <div className="px-4 py-1 border-b border-border flex items-center justify-between bg-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/50 sticky top-0 z-10">
+            <h2 className="text-sm font-semibold text-foreground">Project</h2>
             <div className="flex items-center space-x-1">
               <button
                 onClick={handleMaximizeProjectDraft}
-                className="p-1 text-gray-600 hover:text-gray-800 transition-colors"
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                 title={
                   showProjectDraft && !showConversation
                     ? "Restore to 50/50"
@@ -176,7 +176,7 @@ export function ConversationView({
               className={`flex-1 min-h-0 ${showConversation ? "overflow-y-auto" : "overflow-hidden"}`}
             >
               <div
-                className={`bg-white rounded-lg border border-gray-200 h-full flex flex-col min-h-0 m-2 overflow-hidden shadow-sm`}
+                className={`bg-card rounded-lg border border-border h-full flex flex-col min-h-0 m-2 overflow-hidden shadow-sm`}
               >
                 <ProjectDraftTab
                   conversation={conversation}

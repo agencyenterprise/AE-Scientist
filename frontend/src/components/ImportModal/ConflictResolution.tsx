@@ -28,11 +28,11 @@ export function ConflictResolution({
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium text-gray-900">URL Already Imported</h3>
+        <h3 className="text-lg font-medium text-foreground">URL Already Imported</h3>
         <button
           type="button"
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 p-1 rounded"
+          className="text-muted-foreground hover:text-foreground p-1 rounded"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -46,14 +46,14 @@ export function ConflictResolution({
       </div>
 
       <div className="mb-4">
-        <p className="text-gray-600">
+        <p className="text-muted-foreground">
           This URL was already imported. Choose one or create a new chat.
         </p>
       </div>
 
-      <div className="mb-4 border border-gray-200 rounded">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
+      <div className="mb-4 border border-border rounded">
+        <table className="w-full text-sm text-foreground">
+          <thead className="bg-muted">
             <tr>
               <th className="text-left px-3 py-2">Select</th>
               <th className="text-left px-3 py-2">Title</th>
@@ -63,7 +63,7 @@ export function ConflictResolution({
           </thead>
           <tbody>
             {conflicts.map(item => (
-              <tr key={item.id} className="border-t">
+              <tr key={item.id} className="border-t border-border">
                 <td className="px-3 py-2">
                   <input
                     type="radio"
@@ -103,8 +103,8 @@ export function ConflictResolution({
           disabled={!selectedConflictId}
           className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50"
         >
-          <div className="font-medium text-gray-900">Go to selected conversation</div>
-          <div className="text-sm text-gray-500">Open the conversation page in a new tab</div>
+          <div className="font-medium text-foreground">Go to selected conversation</div>
+          <div className="text-sm text-muted-foreground">Open the conversation page in a new tab</div>
         </button>
 
         <button
@@ -112,24 +112,24 @@ export function ConflictResolution({
           disabled={!selectedConflictId}
           className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:opacity-50"
         >
-          <div className="font-medium text-gray-900">Update selected conversation content</div>
-          <div className="text-sm text-gray-500">Re-import to add any new messages</div>
+          <div className="font-medium text-foreground">Update selected conversation content</div>
+          <div className="text-sm text-muted-foreground">Re-import to add any new messages</div>
         </button>
 
         <button
           onClick={onCreateNew}
           className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         >
-          <div className="font-medium text-gray-900">Create a new conversation for this URL</div>
-          <div className="text-sm text-gray-500">Start fresh without changing existing ones</div>
+          <div className="font-medium text-foreground">Create a new conversation for this URL</div>
+          <div className="text-sm text-muted-foreground">Start fresh without changing existing ones</div>
         </button>
 
         <button
           onClick={onCancel}
           className="w-full p-4 text-left border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         >
-          <div className="font-medium text-gray-900">Cancel</div>
-          <div className="text-sm text-gray-500">Go back and try a different URL</div>
+          <div className="font-medium text-foreground">Cancel</div>
+          <div className="text-sm text-muted-foreground">Go back and try a different URL</div>
         </button>
       </div>
     </div>

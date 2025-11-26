@@ -39,7 +39,7 @@ export function ProjectDraftFooter({
   return (
     <>
       {/* Version Info and Diff Legend */}
-      <div className="flex-shrink-0 py-2 text-xs text-gray-500 flex items-center justify-between">
+      <div className="flex-shrink-0 py-2 text-xs text-muted-foreground flex items-center justify-between">
         <div>
           {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating
             ? `Changes from version ${comparisonVersion.version_number} to ${nextVersion.version_number}`
@@ -52,11 +52,11 @@ export function ProjectDraftFooter({
         {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating && (
           <div>
             <span className="inline-flex items-center">
-              <span className="w-3 h-3 bg-red-100 border border-red-200 rounded mr-2"></span>
+              <span className="w-3 h-3 bg-red-500/20 border border-red-500/30 rounded mr-2"></span>
               Removed
             </span>
             <span className="inline-flex items-center ml-4">
-              <span className="w-3 h-3 bg-green-100 border border-green-200 rounded mr-2"></span>
+              <span className="w-3 h-3 bg-green-500/20 border border-green-500/30 rounded mr-2"></span>
               Added
             </span>
           </div>
@@ -64,7 +64,7 @@ export function ProjectDraftFooter({
       </div>
 
       {/* Footer with Navigation, Revert Button and Create Project Button */}
-      <div className="flex-shrink-0 py-3 border-gray-200 flex items-center justify-between">
+      <div className="flex-shrink-0 py-3 border-border flex items-center justify-between">
         {/* Version navigation and revert controls */}
         {showDiffs && comparisonVersion && nextVersion && !isEditing && !isGenerating && (
           <div className="flex items-center space-x-2">
@@ -83,7 +83,7 @@ export function ProjectDraftFooter({
             {/* Revert changes button */}
             <button
               onClick={onRevertChanges}
-              className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-800 hover:bg-red-50 rounded border border-red-200 transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded border border-red-500/30 transition-colors"
             >
               <span>↶</span>
               <span>Revert changes</span>
@@ -95,10 +95,8 @@ export function ProjectDraftFooter({
         <button
           onClick={onCreateProject}
           disabled={isGenerating}
-          className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded transition-colors ${
-            isGenerating
-              ? "bg-gray-400 text-gray-600 cursor-not-allowed"
-              : "bg-green-600 text-white hover:bg-green-700"
+          className={`btn-primary-gradient text-xs py-1 px-2 ${
+            isGenerating ? "opacity-50 cursor-not-allowed" : ""
           } ${
             !showDiffs || !comparisonVersion || !nextVersion || isEditing || isGenerating
               ? "ml-auto"

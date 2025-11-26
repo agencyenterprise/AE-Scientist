@@ -245,17 +245,17 @@ export function PromptEditModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-      <div className="relative bg-white rounded-lg p-4 sm:p-6 w-full sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-card rounded-lg p-4 sm:p-6 w-full sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold text-foreground">
             {showDiffView
               ? "Compare custom and default prompts"
               : getTitleForPromptType(promptType)}
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl"
+            className="text-muted-foreground hover:text-foreground text-2xl"
             disabled={isSaving || isDeleting}
           >
             ×
@@ -277,7 +277,7 @@ export function PromptEditModal({
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 text-destructive rounded">
             {error}
           </div>
         )}
@@ -285,7 +285,7 @@ export function PromptEditModal({
         {/* Success message */}
         {successMessage && (
           <div
-            className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded"
+            className="mb-4 p-3 bg-green-500/10 border border-green-500/30 text-green-400 rounded"
             role="status"
             aria-live="polite"
           >
@@ -298,14 +298,14 @@ export function PromptEditModal({
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)]"></div>
-              <span className="ml-2 text-gray-600">Loading prompt...</span>
+              <span className="ml-2 text-muted-foreground">Loading prompt...</span>
             </div>
           ) : showDiffView ? (
             <div className="h-full overflow-y-auto">
               {isLoadingDefault ? (
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)]"></div>
-                  <span className="ml-2 text-gray-600">Loading default prompt...</span>
+                  <span className="ml-2 text-muted-foreground">Loading default prompt...</span>
                 </div>
               ) : (
                 <DiffViewer
@@ -321,7 +321,7 @@ export function PromptEditModal({
               <div>
                 <label
                   htmlFor="system-prompt-editor"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+                  className="block text-sm font-medium text-muted-foreground mb-2"
                 >
                   System Prompt
                 </label>
@@ -334,7 +334,7 @@ export function PromptEditModal({
                   placeholder="Enter the system prompt that defines the AI's role and behavior for this task..."
                   disabled={isSaving || isDeleting}
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   This sets the AI&apos;s role and overall behavior for this specific task.
                 </p>
               </div>
@@ -343,7 +343,7 @@ export function PromptEditModal({
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-gray-200">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-6 pt-4 border-t border-border">
           {showDiffView ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center space-x-3">
@@ -373,7 +373,7 @@ export function PromptEditModal({
                     <button
                       onClick={handleRevertToDefault}
                       disabled={isDeleting || isSaving || isLoading}
-                      className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 text-sm font-medium text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isDeleting ? "Reverting..." : "Revert to default"}
                     </button>
@@ -391,7 +391,7 @@ export function PromptEditModal({
                 <button
                   onClick={handleClose}
                   disabled={isSaving || isDeleting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {showBackButton ? "Back" : "Cancel"}
                 </button>
@@ -413,11 +413,11 @@ export function PromptEditModal({
         <>
           <div className="absolute inset-0 z-10 bg-black bg-opacity-20"></div>
           <div className="absolute inset-0 z-20 flex items-center justify-center">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-2xl">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-card rounded-lg p-6 w-full max-w-md shadow-2xl">
+              <h3 className="text-lg font-semibold text-foreground mb-4">
                 Revert to Default Prompts
               </h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-muted-foreground mb-6">
                 Are you sure you want to revert to the default prompts? This will deactivate your
                 custom prompts and you&apos;ll need to recreate them if you want to use them again.
               </p>
@@ -425,14 +425,14 @@ export function PromptEditModal({
                 <button
                   onClick={handleCancelRevert}
                   disabled={isDeleting}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-foreground bg-muted hover:bg-muted/80 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmRevert}
                   disabled={isDeleting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-destructive hover:bg-destructive/90 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isDeleting ? "Reverting..." : "Revert to Default"}
                 </button>

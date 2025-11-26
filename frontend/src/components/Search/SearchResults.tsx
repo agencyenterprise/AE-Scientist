@@ -129,13 +129,13 @@ function ConversationGroup({ group, query }: ConversationGroupProps): React.JSX.
   if (!conversation || !topHit) {
     // Fallback to previous minimal block if conversation metadata not loaded yet
     return (
-      <div className="border border-gray-200 rounded-lg bg-white shadow-sm p-3">
+      <div className="border border-border rounded-lg bg-card shadow-sm p-3">
         <div
-          className="font-semibold text-gray-900 text-sm mb-2"
+          className="font-semibold text-foreground text-sm mb-2"
           dangerouslySetInnerHTML={{ __html: getConversationTitle() }}
         />
         <p
-          className="text-sm text-gray-700"
+          className="text-sm text-muted-foreground"
           dangerouslySetInnerHTML={{
             __html: highlightQuery(group.results[0]?.content_snippet || "", query),
           }}
@@ -210,8 +210,8 @@ export function SearchResults({
   if (error) {
     return (
       <div className="text-center py-8">
-        <div className="text-red-600 mb-2">Search Error</div>
-        <p className="text-gray-600 text-sm">{error}</p>
+        <div className="text-destructive mb-2">Search Error</div>
+        <p className="text-muted-foreground text-sm">{error}</p>
       </div>
     );
   }
@@ -221,9 +221,9 @@ export function SearchResults({
     return (
       <div className="flex flex-col items-center justify-center text-center h-full min-h-96">
         {/* Search Icon */}
-        <div className="bg-blue-100 p-4 rounded-full mb-6">
+        <div className="bg-primary/20 p-4 rounded-full mb-6">
           <svg
-            className="h-12 w-12 text-blue-600"
+            className="h-12 w-12 text-primary"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -238,8 +238,8 @@ export function SearchResults({
         </div>
 
         {/* Welcome Message */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Search Your Knowledge Base</h2>
-        <p className="text-gray-600 text-lg max-w-xl">
+        <h2 className="text-2xl font-bold text-foreground mb-4">Search Your Knowledge Base</h2>
+        <p className="text-muted-foreground text-lg max-w-xl">
           Find information across all your conversations, imported chats, and project drafts
         </p>
       </div>
@@ -251,7 +251,7 @@ export function SearchResults({
     return (
       <div className="text-center py-8">
         <svg
-          className="h-12 w-12 text-gray-300 mx-auto mb-4"
+          className="h-12 w-12 text-muted-foreground mx-auto mb-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -263,8 +263,8 @@ export function SearchResults({
             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
           />
         </svg>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No results found</h3>
-        <p className="text-gray-600 text-sm">
+        <h3 className="text-lg font-medium text-foreground mb-2">No results found</h3>
+        <p className="text-muted-foreground text-sm">
           Try adjusting your search query or check your spelling.
         </p>
       </div>
@@ -283,8 +283,8 @@ export function SearchResults({
       {/* Loading State */}
       {isLoading && (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-sm">Searching...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground text-sm">Searching...</p>
         </div>
       )}
 
@@ -293,7 +293,7 @@ export function SearchResults({
         <div className="text-center py-4">
           <button
             onClick={handleLoadMore}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary"
           >
             Load More Results
           </button>
@@ -302,7 +302,7 @@ export function SearchResults({
 
       {/* End of Results with Stats */}
       {!hasMore && results.length > 0 && !isLoading && stats && (
-        <div className="text-center py-4 text-gray-500 text-sm">
+        <div className="text-center py-4 text-muted-foreground text-sm">
           {sortedGroups.length} conversation
           {sortedGroups.length !== 1 ? "s" : ""} • {stats.execution_time_ms.toFixed(0)}ms
         </div>
