@@ -7,7 +7,6 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
-from uuid import uuid4
 
 from langchain.tools import tool
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -495,45 +494,8 @@ class LangChainChatWithIdeaStream:
         try:
             yield StreamStatusEvent("status", ChatStatus.ANALYZING_REQUEST.value)
             while True:
-                collected_content = ""
-                tool_calls: List[Dict[str, Any]] = []
-                tool_call_states: Dict[int, Dict[str, Any]] = {}
-                async for chunk in model.astream(input=messages):
-                    delta = self.service._extract_text_from_chunk(chunk=chunk)
-                    if delta:
-                        collected_content = f"{collected_content}{delta}"
-                        assistant_response = f"{assistant_response}{delta}"
-                        yield StreamContentEvent("content", delta)
-                    raw_calls = getattr(chunk, "additional_kwargs", {}).get("tool_calls")
-                    if raw_calls:
-                        for raw_call in raw_calls:
-                            call_index = int(raw_call.get("index", 0))
-                            state = tool_call_states.setdefault(
-                                call_index,
-                                {
-                                    "index": call_index,
-                                    "id": None,
-                                    "type": raw_call.get("type") or "function",
-                                    "function": {"name": None, "arguments": ""},
-                                },
-                            )
-                            raw_id = raw_call.get("id")
-                            if raw_id:
-                                state["id"] = str(raw_id)[:40]
-                            function_payload = raw_call.get("function") or {}
-                            function_name = function_payload.get("name")
-                            if function_name:
-                                state["function"]["name"] = function_name
-                            arguments_delta = function_payload.get("arguments")
-                            if arguments_delta:
-                                state["function"][
-                                    "arguments"
-                                ] = f'{state["function"]["arguments"]}{arguments_delta}'
-                            call_type = raw_call.get("type")
-                            if call_type:
-                                state["type"] = call_type
-                        tool_calls = self._finalize_tool_call_states(states=tool_call_states)
-
+                response = await model.ainvoke(input=messages)
+                tool_calls = getattr(response, "additional_kwargs", {}).get("tool_calls") or []
                 if tool_calls:
                     tool_messages: List[ToolMessage] = []
                     async for event in self._process_tool_calls(
@@ -548,7 +510,7 @@ class LangChainChatWithIdeaStream:
                             yield event
                     messages.append(
                         AIMessage(
-                            content=collected_content,
+                            content=response.content,
                             additional_kwargs={"tool_calls": tool_calls},
                         )
                     )
@@ -556,8 +518,13 @@ class LangChainChatWithIdeaStream:
                         messages.append(tool_message)
                     continue
 
-                if collected_content:
-                    messages.append(AIMessage(content=collected_content))
+                final_message = cast(AIMessage, response)
+                final_text = self.service._message_to_text(message=final_message)
+                if final_text:
+                    assistant_response = final_text
+                    yield StreamStatusEvent("status", ChatStatus.GENERATING_RESPONSE.value)
+                    yield StreamContentEvent("content", final_text)
+                messages.append(final_message)
                 break
 
             yield StreamStatusEvent("status", ChatStatus.DONE.value)
@@ -704,30 +671,3 @@ class LangChainChatWithIdeaStream:
 
         yield StreamStatusEvent("status", ChatStatus.GENERATING_RESPONSE.value)
         yield ToolCallResult(idea_updated=idea_updated, tool_results=tool_messages)
-
-    def _finalize_tool_call_states(
-        self, *, states: Dict[int, Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        finalized_calls: List[Dict[str, Any]] = []
-        for call_index in sorted(states.keys()):
-            state = states[call_index]
-            function_payload = state.get("function", {})
-            arguments = function_payload.get("arguments", "")
-            if not arguments:
-                continue
-            try:
-                json.loads(arguments)
-            except json.JSONDecodeError:
-                continue
-            finalized_calls.append(
-                {
-                    "index": call_index,
-                    "id": (state.get("id") or uuid4().hex)[:40],
-                    "type": state.get("type") or "function",
-                    "function": {
-                        "name": function_payload.get("name") or "update_idea",
-                        "arguments": arguments,
-                    },
-                }
-            )
-        return finalized_calls
