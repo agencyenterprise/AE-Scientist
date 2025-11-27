@@ -10,18 +10,10 @@ from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
 
 from langchain.tools import tool
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import (
-    AIMessage,
-    AIMessageChunk,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
-from langchain_core.outputs import ChatGenerationChunk
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
@@ -47,6 +39,7 @@ from app.services.prompts import (
     format_pdf_content_for_context,
     get_chat_system_prompt,
     get_idea_generation_prompt,
+    get_manual_seed_prompt,
 )
 from app.services.s3_service import S3Service, get_s3_service
 
@@ -132,42 +125,15 @@ class LangChainLLMService(BaseLLMService, ABC):
         content: Any = message.content
         if isinstance(content, str):
             return content.strip()
-        elif isinstance(content, list):
+        if isinstance(content, list):
             parts: List[str] = []
             for item in content:
                 if isinstance(item, dict) and item.get("type") == "text":
                     text_value = item.get("text", "")
                     if isinstance(text_value, str):
                         parts.append(text_value)
-        return "".join(parts).strip()
-
-    def _extract_text_from_chunk(
-        self,
-        *,
-        chunk: Union[ChatGenerationChunk, AIMessage, AIMessageChunk, BaseMessage],
-    ) -> str:
-        if isinstance(chunk, ChatGenerationChunk):
-            message = chunk.message
-            message_content: Any = getattr(message, "content", "")
-        else:
-            message_content = getattr(chunk, "content", "")
-        if isinstance(message_content, str):
-            return message_content
-        elif isinstance(message_content, list):
-            deltas: List[str] = []
-            for item in message_content:
-                if isinstance(item, dict):
-                    item_type = item.get("type")
-                    if item_type == "text":
-                        text_value = item.get("text", "")
-                        if isinstance(text_value, str):
-                            deltas.append(text_value)
-                    elif item_type == "reasoning":
-                        reasoning_text = item.get("text", "")
-                        if isinstance(reasoning_text, str):
-                            deltas.append(reasoning_text)
-            return "".join(deltas)
-        return str(message_content)
+            return "".join(parts).strip()
+        return str(content)
 
     def _format_text_attachments(self, *, text_files: List[LLMFileAttachmentData]) -> str:
         if not text_files:
@@ -241,7 +207,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             )
             user_text = f"{user_text}\n\n{placeholders}"
 
-        return HumanMessage(content=self._text_content_block(user_text))
+        return HumanMessage(content=self._text_content_block(text=user_text))
 
     async def generate_text_single_call(
         self,
@@ -263,22 +229,6 @@ class LangChainLLMService(BaseLLMService, ABC):
             return ""
         return self._message_to_text(message=response)
 
-    async def _stream_text(
-        self,
-        *,
-        llm_model: str,
-        messages: List[BaseMessage],
-        max_completion_tokens: int,
-    ) -> AsyncGenerator[str, None]:
-        model = self._model_with_token_limit(
-            llm_model=llm_model,
-            max_output_tokens=max_completion_tokens,
-        )
-        async for chunk in model.astream(input=messages):
-            delta = self._extract_text_from_chunk(chunk=cast(ChatGenerationChunk, chunk))
-            if delta:
-                yield delta
-
     async def generate_idea(
         self,
         llm_model: str,
@@ -298,18 +248,55 @@ class LangChainLLMService(BaseLLMService, ABC):
                 continue
         system_prompt = get_idea_generation_prompt(db=db, context="\n".join(memories))
         user_prompt = (
-            "Analyze this conversation and generate a research idea:\n\n" f"{conversation_text}"
+            "Analyze this conversation and generate a research idea based on the discussion below.\n\n"
+            f"{conversation_text}"
         )
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt),
+            SystemMessage(content=self._text_content_block(text=system_prompt)),
+            HumanMessage(content=self._text_content_block(text=user_prompt)),
         ]
-        async for chunk in self._stream_text(
-            llm_model=llm_model,
-            messages=messages,
-            max_completion_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
-        ):
-            yield chunk
+        base_model = self.get_or_create_model(llm_model=llm_model)
+        structured_model = base_model.with_structured_output(LLMIdeaGeneration)
+        idea = cast(
+            LLMIdeaGeneration,
+            await structured_model.ainvoke(
+                input=messages,
+                max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
+            ),
+        )
+        yield json.dumps(idea.model_dump())
+
+    async def generate_manual_seed_idea(
+        self,
+        *,
+        llm_model: str,
+        idea_title: str,
+        idea_hypothesis: str,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Generate an idea from a manual title and hypothesis seed.
+        """
+        db = get_database()
+        system_prompt = get_manual_seed_prompt(db=db)
+        user_prompt = (
+            "Create a structured research idea draft using the provided manual seed.\n\n"
+            f"Title: {idea_title}\n"
+            f"Hypothesis: {idea_hypothesis}"
+        )
+        messages = [
+            SystemMessage(content=self._text_content_block(text=system_prompt)),
+            HumanMessage(content=self._text_content_block(text=user_prompt)),
+        ]
+        base_model = self.get_or_create_model(llm_model=llm_model)
+        structured_model = base_model.with_structured_output(LLMIdeaGeneration)
+        idea = cast(
+            LLMIdeaGeneration,
+            await structured_model.ainvoke(
+                input=messages,
+                max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
+            ),
+        )
+        yield json.dumps(idea.model_dump())
 
     async def summarize_document(self, llm_model: LLMModel, content: str) -> str:
         return await self._summarize_document(llm_model=llm_model, content=content)
@@ -377,69 +364,17 @@ class LangChainLLMService(BaseLLMService, ABC):
             yield event
 
     def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
-        title_match = re.search(r"<title>(.*?)</title>", content, re.DOTALL)
-        title = title_match.group(1).strip() if title_match else ""
-
-        short_hypothesis_match = re.search(
-            r"<short_hypothesis>(.*?)</short_hypothesis>",
-            content,
-            re.DOTALL,
-        )
-        short_hypothesis = short_hypothesis_match.group(1).strip() if short_hypothesis_match else ""
-
-        related_work_match = re.search(r"<related_work>(.*?)</related_work>", content, re.DOTALL)
-        related_work = related_work_match.group(1).strip() if related_work_match else ""
-
-        abstract_match = re.search(r"<abstract>(.*?)</abstract>", content, re.DOTALL)
-        abstract = abstract_match.group(1).strip() if abstract_match else ""
-
-        experiments_match = re.search(r"<experiments>(.*?)</experiments>", content, re.DOTALL)
-        experiments_raw = experiments_match.group(1).strip() if experiments_match else "[]"
-        experiments: List[str]
+        cleaned_content = self.strip_reasoning_tags(text=content)
         try:
-            parsed_experiments = json.loads(experiments_raw)
-            if isinstance(parsed_experiments, list):
-                experiments = [str(item) for item in parsed_experiments]
-            else:
-                experiments = [str(parsed_experiments)]
-        except json.JSONDecodeError:
-            experiments = [experiments_raw]
-
-        expected_outcome_match = re.search(
-            r"<expected_outcome>(.*?)</expected_outcome>",
-            content,
-            re.DOTALL,
-        )
-        expected_outcome = expected_outcome_match.group(1).strip() if expected_outcome_match else ""
-
-        risk_match = re.search(
-            r"<risk_factors_and_limitations>(.*?)</risk_factors_and_limitations>",
-            content,
-            re.DOTALL,
-        )
-        risk_raw = risk_match.group(1).strip() if risk_match else "[]"
-        risk_factors_and_limitations: List[str]
-        try:
-            parsed_risk = json.loads(risk_raw)
-            if isinstance(parsed_risk, list):
-                risk_factors_and_limitations = [str(item) for item in parsed_risk]
-            else:
-                risk_factors_and_limitations = [str(parsed_risk)]
-        except json.JSONDecodeError:
-            risk_factors_and_limitations = [risk_raw]
-
-        if not title or not short_hypothesis or not abstract:
-            raise ValueError("Failed to parse required fields from response.")
-
-        return LLMIdeaGeneration(
-            title=title,
-            short_hypothesis=short_hypothesis,
-            related_work=related_work,
-            abstract=abstract,
-            experiments=experiments,
-            expected_outcome=expected_outcome,
-            risk_factors_and_limitations=risk_factors_and_limitations,
-        )
+            return LLMIdeaGeneration.model_validate_json(cleaned_content)
+        except (ValidationError, ValueError) as exc:
+            preview = cleaned_content.replace("\n", " ")
+            logger.debug(
+                "Failed to parse structured idea response for provider %s. Preview: %s",
+                self.provider_name,
+                preview,
+            )
+            raise ValueError("Failed to parse structured idea response.") from exc
 
 
 class UpdateIdeaInput(BaseModel):
@@ -600,7 +535,7 @@ class LangChainChatWithIdeaStream:
     ) -> List[BaseMessage]:
         system_prompt = get_chat_system_prompt(db, conversation_id=conversation_id)
         messages: List[BaseMessage] = [
-            SystemMessage(content=self.service._text_content_block(system_prompt))
+            SystemMessage(content=self.service._text_content_block(text=system_prompt))
         ]
         summary, recent_chat_messages = await self.summarizer_service.get_chat_summary(
             conversation_id=conversation_id,
@@ -609,7 +544,7 @@ class LangChainChatWithIdeaStream:
         if summary:
             messages.append(
                 HumanMessage(
-                    content=self.service._text_content_block(f"Conversation so far: {summary}")
+                    content=self.service._text_content_block(text=f"Conversation so far: {summary}")
                 )
             )
 
@@ -629,7 +564,9 @@ class LangChainChatWithIdeaStream:
                     attachment_summary = attachment.summary_text or attachment.extracted_text or ""
                     if attachment_summary:
                         content = f"{content}\n\n[Attachment: {attachment.filename}, {attachment_summary}]"
-                messages.append(HumanMessage(content=self.service._text_content_block(content)))
+                messages.append(
+                    HumanMessage(content=self.service._text_content_block(text=content))
+                )
             elif chat_msg.role == "assistant":
                 messages.append(AIMessage(content=chat_msg.content))
             elif chat_msg.role == "tool":

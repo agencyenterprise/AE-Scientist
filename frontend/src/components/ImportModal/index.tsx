@@ -43,6 +43,8 @@ export function ImportModal({
   const [selectedProvider, setSelectedProvider] = useState<string>("");
   const [currentModel, setCurrentModel] = useState<string>("");
   const [currentProvider, setCurrentProvider] = useState<string>("");
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualHypothesis, setManualHypothesis] = useState("");
   const [hasConflict, setHasConflict] = useState(false);
   const [conflicts, setConflicts] = useState<
     Array<{ id: number; title: string; updated_at: string; url: string }>
@@ -62,6 +64,8 @@ export function ImportModal({
       setCurrentState("");
       setSelectedModel("");
       setSelectedProvider("");
+      setManualTitle("");
+      setManualHypothesis("");
       setHasConflict(false);
       setConflicts([]);
       setSelectedConflictId(null);
@@ -238,36 +242,33 @@ export function ImportModal({
     }
   };
 
-  const handleStreamingImport = async (
-    trimmedUrl: string,
-    duplicateResolution: "prompt" | "update_existing" | "create_new",
-    targetConversationId?: number,
-    acceptSummarization: boolean = false
-  ): Promise<void> => {
-    const body =
-      targetConversationId !== undefined
-        ? {
-            url: trimmedUrl,
-            llm_model: currentModel,
-            llm_provider: currentProvider,
-            accept_summarization: acceptSummarization,
-            duplicate_resolution: duplicateResolution,
-            target_conversation_id: targetConversationId,
-          }
-        : {
-            url: trimmedUrl,
-            llm_model: currentModel,
-            llm_provider: currentProvider,
-            accept_summarization: acceptSummarization,
-            duplicate_resolution: duplicateResolution,
-          };
+  const handleManualSeedSubmit = async () => {
+    const title = manualTitle.trim();
+    const hypothesis = manualHypothesis.trim();
+    if (!title || !hypothesis) {
+      setError("Manual title and hypothesis are required.");
+      return;
+    }
+    if (!currentModel || !currentProvider) {
+      setError("LLM model and provider are required. Please wait for model to load.");
+      return;
+    }
+    setError("");
+    setIsStreaming(true);
+    setIsUpdateMode(false);
+    setStreamingContent("");
+    setCurrentState("");
+    onImportStart?.();
+    try {
+      await handleStreamingManualSeed(title, hypothesis);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create idea from manual seed");
+      setIsStreaming(false);
+      onImportEnd?.();
+    }
+  };
 
-    const response = await fetch(`${config.apiUrl}/conversations/import`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify(body),
-    });
+  const consumeStreamingResponse = async (response: Response): Promise<void> => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     if (!response.body) throw new Error("No response body");
 
@@ -342,7 +343,6 @@ export function ImportModal({
           }
           case "error": {
             const err = eventData as { type: "error"; data: string; code?: string };
-            // End streaming state and notify parent before throwing
             setIsStreaming(false);
             onImportEnd?.();
             if (err.code === "CHAT_NOT_FOUND") {
@@ -360,6 +360,8 @@ export function ImportModal({
             const conv = done.data.conversation;
             if (conv && typeof conv.id === "number") {
               setUrl("");
+              setManualTitle("");
+              setManualHypothesis("");
               setIsStreaming(false);
               setIsUpdateMode(false);
               setCurrentState("");
@@ -376,6 +378,58 @@ export function ImportModal({
         }
       }
     }
+  };
+
+  const handleStreamingImport = async (
+    trimmedUrl: string,
+    duplicateResolution: "prompt" | "update_existing" | "create_new",
+    targetConversationId?: number,
+    acceptSummarization: boolean = false
+  ): Promise<void> => {
+    const body =
+      targetConversationId !== undefined
+        ? {
+            url: trimmedUrl,
+            llm_model: currentModel,
+            llm_provider: currentProvider,
+            accept_summarization: acceptSummarization,
+            duplicate_resolution: duplicateResolution,
+            target_conversation_id: targetConversationId,
+          }
+        : {
+            url: trimmedUrl,
+            llm_model: currentModel,
+            llm_provider: currentProvider,
+            accept_summarization: acceptSummarization,
+            duplicate_resolution: duplicateResolution,
+          };
+
+    const response = await fetch(`${config.apiUrl}/conversations/import`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+    });
+    await consumeStreamingResponse(response);
+  };
+
+  const handleStreamingManualSeed = async (
+    title: string,
+    hypothesis: string
+  ): Promise<void> => {
+    const body = {
+      idea_title: title,
+      idea_hypothesis: hypothesis,
+      llm_model: currentModel,
+      llm_provider: currentProvider,
+    };
+    const response = await fetch(`${config.apiUrl}/conversations/import/manual`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+    });
+    await consumeStreamingResponse(response);
   };
 
   if (!isOpen) return null;
@@ -558,6 +612,42 @@ export function ImportModal({
                     <p>https://claude.ai/share/12a33e29-2225-4d45-bae1-416a8647794d</p>
                     <p>https://grok.com/share/abc_1234-5678-90ab-cdef-1234567890ab</p>
                   </div>
+                </div>
+
+                <div className="mt-6 border-t border-dashed border-[var(--border)] pt-4 space-y-3">
+                  <p className="text-sm font-semibold text-gray-700">
+                    Quick manual idea seed (dev helper, sorry it&apos;s ugly)
+                  </p>
+                  <input
+                    type="text"
+                    value={manualTitle}
+                    onChange={e => setManualTitle(e.target.value)}
+                    placeholder="Manual idea title"
+                    disabled={isLoading || isStreaming || !currentModel}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent disabled:bg-gray-100"
+                  />
+                  <textarea
+                    value={manualHypothesis}
+                    onChange={e => setManualHypothesis(e.target.value)}
+                    placeholder="Manual idea hypothesis"
+                    rows={3}
+                    disabled={isLoading || isStreaming || !currentModel}
+                    className="w-full px-3 py-2 border border-[var(--border)] rounded-md focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent disabled:bg-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualSeedSubmit}
+                    disabled={
+                      isLoading ||
+                      isStreaming ||
+                      !manualTitle.trim() ||
+                      !manualHypothesis.trim() ||
+                      !currentModel
+                    }
+                    className="w-full px-4 py-2 text-sm font-semibold text-white bg-black rounded-md disabled:bg-gray-300"
+                  >
+                    Stream manual idea
+                  </button>
                 </div>
               </div>
 

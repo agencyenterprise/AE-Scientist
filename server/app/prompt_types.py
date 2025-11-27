@@ -12,3 +12,4 @@ class PromptTypes(str, Enum):
 
     IDEA_CHAT = "idea_chat"
     IDEA_GENERATION = "idea_generation"
+    MANUAL_IDEA_GENERATION = "manual_idea_generation"

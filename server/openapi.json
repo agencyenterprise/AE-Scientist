@@ -381,6 +381,43 @@
         }
       }
     },
+    "/api/conversations/import/manual": {
+      "post": {
+        "summary": "Import Manual Seed",
+        "description": "Generate an idea directly from a manually provided title and hypothesis.",
+        "operationId": "import_manual_seed_api_conversations_import_manual_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualIdeaSeedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations": {
       "get": {
         "summary": "List Conversations",
@@ -1698,6 +1735,28 @@
               }
             ],
             "title": "Last Assistant Message Content"
+          },
+          "manual_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Title"
+          },
+          "manual_hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Hypothesis"
           }
         },
         "type": "object",
@@ -1818,6 +1877,30 @@
             ],
             "title": "Imported Chat",
             "description": "Conversation messages (optional)"
+          },
+          "manual_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Title",
+            "description": "Manual title provided when the conversation originates from a manual seed"
+          },
+          "manual_hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Hypothesis",
+            "description": "Manual hypothesis provided when the conversation originates from a manual seed"
           }
         },
         "type": "object",
@@ -2634,6 +2717,43 @@
         ],
         "title": "LLMProvidersResponse",
         "description": "Response model for getting available LLM providers."
+      },
+      "ManualIdeaSeedRequest": {
+        "properties": {
+          "idea_title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idea Title",
+            "description": "Idea title to seed generation"
+          },
+          "idea_hypothesis": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Idea Hypothesis",
+            "description": "Idea hypothesis to seed generation"
+          },
+          "llm_provider": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Provider",
+            "description": "LLM provider identifier"
+          },
+          "llm_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Llm Model",
+            "description": "LLM model identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea_title",
+          "idea_hypothesis",
+          "llm_provider",
+          "llm_model"
+        ],
+        "title": "ManualIdeaSeedRequest",
+        "description": "Request payload for manual idea generation."
       },
       "MessageResponse": {
         "properties": {

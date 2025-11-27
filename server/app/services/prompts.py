@@ -32,22 +32,9 @@ def get_default_idea_generation_prompt() -> str:
         "Focus on novel hypotheses, experimental designs, theoretical frameworks, or innovative approaches discussed. "
         "\n\nAdditional context from prior conversations (memories):\n"
         "{{context}}\n"
-        "\nIMPORTANT: You must respond in this exact format:\n"
-        "<title>Research Idea Title</title>\n"
-        "<short_hypothesis>Brief 1-2 sentence hypothesis statement</short_hypothesis>\n"
-        "<related_work>Discussion of related work, background, and how this builds on existing research</related_work>\n"
-        "<abstract>Detailed abstract explaining the research idea, its motivation, and potential impact</abstract>\n"
-        "<experiments>[\n"
-        '  "Experiment 1: Description of first experiment",\n'
-        '  "Experiment 2: Description of second experiment",\n'
-        '  "Experiment 3: Description of third experiment"\n'
-        "]</experiments>\n"
-        "<expected_outcome>Expected outcome of the research and what it would demonstrate</expected_outcome>\n"
-        "<risk_factors_and_limitations>[\n"
-        '  "Risk/Limitation 1: Description",\n'
-        '  "Risk/Limitation 2: Description"\n'
-        "]</risk_factors_and_limitations>\n\n"
-        "Use proper JSON array format for experiments and risk_factors_and_limitations fields (include quotes and commas)."
+        "\nAlways return a single JSON object that captures the complete research idea. "
+        "Do not include XML tags, Markdown, or commentary outside the JSON object. "
+        "Every string must use double quotes and arrays must be valid JSON arrays."
     )
 
 
@@ -75,6 +62,44 @@ def get_idea_generation_prompt(db: DatabaseManager, context: str) -> str:
         base_prompt = get_default_idea_generation_prompt()
 
     return base_prompt.replace("{{context}}", context or "")
+
+
+def get_default_manual_seed_prompt() -> str:
+    """
+    Default system prompt for manual idea seeds.
+
+    Returns:
+        str: The default system prompt for manual idea creation.
+    """
+    return (
+        "You are the AE Scientist assistant. Given a user-provided idea title and hypothesis, "
+        "craft a detailed draft idea ready for evaluation. Maintain a professional but concise tone.\n\n"
+        "Follow these steps:\n"
+        "1. Restate the title in a compelling single sentence.\n"
+        "2. Expand the hypothesis into 2-3 short paragraphs that describe the opportunity, target users, and expected impact.\n"
+        "3. List exactly three concrete next steps to validate or advance the idea.\n"
+        "4. Highlight any key assumptions or risks as bullet points.\n\n"
+        "Always return a single JSON object that fits the LLMIdeaGeneration schema."
+    )
+
+
+def get_manual_seed_prompt(db: DatabaseManager) -> str:
+    """
+    Retrieve the system prompt for manual idea seed generation, falling back to defaults.
+
+    Args:
+        db: Database manager instance
+
+    Returns:
+        str: The system prompt to use for manual seed idea generation.
+    """
+    try:
+        prompt_data = db.get_active_prompt(PromptTypes.MANUAL_IDEA_GENERATION.value)
+        if prompt_data and prompt_data.system_prompt:
+            return prompt_data.system_prompt
+    except Exception as exc:
+        logger.warning("Failed to get manual seed prompt: %s", exc)
+    return get_default_manual_seed_prompt()
 
 
 def get_default_chat_system_prompt() -> str:
