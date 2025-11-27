@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -589,7 +590,8 @@ class LangChainChatWithIdeaStream:
         user_id: int,
     ) -> BaseTool:
         @tool("update_idea", args_schema=UpdateIdeaInput)
-        def update_idea_tool(
+        async def update_idea_tool(
+            *,
             title: str,
             short_hypothesis: str,
             related_work: str,
@@ -603,18 +605,22 @@ class LangChainChatWithIdeaStream:
                 raise ValueError(
                     "update_idea requires non-empty title, short_hypothesis, and abstract"
                 )
-            db.create_idea_version(
-                idea_id=idea_id,
-                title=title,
-                short_hypothesis=short_hypothesis,
-                related_work=related_work,
-                abstract=abstract,
-                experiments=experiments,
-                expected_outcome=expected_outcome,
-                risk_factors_and_limitations=risk_factors_and_limitations,
-                is_manual_edit=False,
-                created_by_user_id=user_id,
-            )
+
+            def _persist_update() -> None:
+                db.create_idea_version(
+                    idea_id=idea_id,
+                    title=title,
+                    short_hypothesis=short_hypothesis,
+                    related_work=related_work,
+                    abstract=abstract,
+                    experiments=experiments,
+                    expected_outcome=expected_outcome,
+                    risk_factors_and_limitations=risk_factors_and_limitations,
+                    is_manual_edit=False,
+                    created_by_user_id=user_id,
+                )
+
+            await asyncio.to_thread(_persist_update)
             return {
                 "status": "success",
                 "message": f"✅ Idea updated successfully: {title}",
@@ -637,15 +643,19 @@ class LangChainChatWithIdeaStream:
             function_info = call.get("function") or {}
             name = function_info.get("name") or call.get("name", "")
             arguments_payload: Any = function_info.get("arguments")
+            if arguments_payload is None:
+                arguments_payload = call.get("arguments")
             if arguments_payload is None and "args" in call:
                 arguments_payload = call.get("args")
+            if arguments_payload is None and "input" in call:
+                arguments_payload = call.get("input")
             call_id = call.get("id", "")
             if name != "update_idea":
                 continue
 
             if isinstance(arguments_payload, str):
                 try:
-                    arguments = json.loads(arguments_payload)
+                    arguments = json.loads(s=arguments_payload)
                 except json.JSONDecodeError as exc:
                     error = f"❌ Tool validation failed: invalid JSON ({exc})"
                     tool_messages.append(ToolMessage(content=error, tool_call_id=call_id))
@@ -659,7 +669,7 @@ class LangChainChatWithIdeaStream:
 
             yield StreamStatusEvent("status", ChatStatus.UPDATING_IDEA.value)
             try:
-                result = update_tool.invoke(arguments)
+                result = await update_tool.ainvoke(input=arguments)
                 message_text = result.get("message", "Idea updated.")
                 if result.get("idea_updated") == "true":
                     idea_updated = True
