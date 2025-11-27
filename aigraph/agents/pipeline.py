@@ -117,9 +117,10 @@ async def node_experiment(
     file = state.cwd / "state.json"
     file.write_text(result.model_dump_json(indent=2))
 
-    if result.state_research:
+    if result.state_research and result.state_research.research:
         file = state.cwd / "research.json"
-        file.write_text(json.dumps(result.state_research.research, indent=2))
+        report = result.state_research.research.get("final_report")
+        file.write_text(json.dumps(report, indent=2))
 
     logger.info("Finished node_experiment")
     return {"experiments": [result]}
