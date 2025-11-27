@@ -1,8 +1,11 @@
 "use client";
 
+import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
+import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationDetail } from "@/types";
 import React, { useEffect, useState } from "react";
 
+import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { TitleEditor } from "./TitleEditor";
@@ -28,6 +31,19 @@ export function ConversationHeader({
   const [pendingView, setPendingView] = useState<ViewMode | null>(null);
 
   const { isDeleting, isUpdatingTitle, deleteConversation, updateTitle } = useConversationActions();
+
+  // Get model selection state from context
+  const {
+    selectedModel,
+    selectedProvider,
+    effectiveCapabilities,
+    isReadOnly,
+    isStreaming,
+    handleModelChange,
+    handleModelDefaults,
+    handleModelCapabilities,
+    onOpenPromptModal,
+  } = useConversationContext();
 
   useEffect(() => {
     if (pendingView && viewMode === pendingView) {
@@ -84,6 +100,31 @@ export function ConversationHeader({
         onCancel={handleCancelEdit}
         onDelete={() => setShowDeleteConfirm(true)}
       />
+
+      {/* Model Selector and AI Config */}
+      <div className="flex items-center gap-2">
+        {onOpenPromptModal && !isReadOnly && (
+          <button
+            onClick={onOpenPromptModal}
+            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
+            title="Configure AI prompts"
+          >
+            <span>⚙️</span>
+            <span>AI Config</span>
+          </button>
+        )}
+        <ModelSelector
+          promptType={PromptTypes.IDEA_CHAT}
+          onModelChange={handleModelChange}
+          onDefaultsChange={handleModelDefaults}
+          onCapabilitiesChange={handleModelCapabilities}
+          selectedModel={selectedModel}
+          selectedProvider={selectedProvider}
+          disabled={isReadOnly || isStreaming}
+          showMakeDefault={true}
+          conversationCapabilities={effectiveCapabilities}
+        />
+      </div>
 
       <DeleteConfirmModal
         isOpen={showDeleteConfirm}

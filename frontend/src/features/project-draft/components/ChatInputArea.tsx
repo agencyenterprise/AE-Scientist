@@ -1,6 +1,4 @@
 import type { FileMetadata } from "@/types";
-import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
-import { PromptTypes } from "@/shared/lib/prompt-types";
 
 import { ChatErrorBanner } from "./ChatErrorBanner";
 import { ChatFileUploadSection } from "./ChatFileUploadSection";
@@ -28,18 +26,6 @@ interface ChatInputAreaProps {
   onSendMessage: () => void;
   onToggleFileUpload: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
-  // Model selector props
-  selectedModel: string;
-  selectedProvider: string;
-  isReadOnly: boolean;
-  onModelChange: (model: string, provider: string) => void;
-  onDefaultsChange: (model: string, provider: string) => void;
-  onCapabilitiesChange: (capabilities: { supportsImages: boolean; supportsPdfs: boolean }) => void;
-  onOpenPromptModal?: () => void;
-  effectiveCapabilities: {
-    hasImages?: boolean;
-    hasPdfs?: boolean;
-  };
 }
 
 export function ChatInputArea({
@@ -60,14 +46,6 @@ export function ChatInputArea({
   onSendMessage,
   onToggleFileUpload,
   inputRef,
-  selectedModel,
-  selectedProvider,
-  isReadOnly,
-  onModelChange,
-  onDefaultsChange,
-  onCapabilitiesChange,
-  onOpenPromptModal,
-  effectiveCapabilities,
 }: ChatInputAreaProps) {
   return (
     <div className="flex-shrink-0 rounded-2xl border border-slate-800">
@@ -102,31 +80,6 @@ export function ChatInputArea({
         pendingFilesCount={pendingFiles.length}
         inputRef={inputRef}
       />
-
-      {/* Settings row below input */}
-      <div className="flex items-center justify-between px-4 py-2 ">
-        {onOpenPromptModal && !isReadOnly && (
-          <button
-            onClick={onOpenPromptModal}
-            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
-            title="Configure AI prompts"
-          >
-            <span>⚙️</span>
-            <span>AI Config</span>
-          </button>
-        )}
-        <ModelSelector
-          promptType={PromptTypes.IDEA_CHAT}
-          onModelChange={onModelChange}
-          onDefaultsChange={onDefaultsChange}
-          onCapabilitiesChange={onCapabilitiesChange}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          disabled={isReadOnly || isStreaming}
-          showMakeDefault={true}
-          conversationCapabilities={effectiveCapabilities}
-        />
-      </div>
     </div>
   );
 }

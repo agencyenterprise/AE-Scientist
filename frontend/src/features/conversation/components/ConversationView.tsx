@@ -1,6 +1,7 @@
 "use client";
 
 import { ConversationHeader } from "@/features/conversation/components/ConversationHeader";
+import { ConversationProvider } from "@/features/conversation/context/ConversationContext";
 import { ProjectDraftTab } from "@/features/project-draft/components/ProjectDraftTab";
 import type { ConversationDetail } from "@/types";
 import React, { useState } from "react";
@@ -86,24 +87,26 @@ export function ConversationView({
   }
 
   return (
-    <div className="h-[calc(100vh-180px)] flex flex-col overflow-hidden">
-      <ConversationHeader
-        conversation={conversation}
-        onConversationDeleted={onConversationDeleted}
-        onTitleUpdated={onTitleUpdated}
-        viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
-      />
-
-      {/* Dynamic Content Area - Flexbox layout for smart space allocation */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ProjectDraftTab
+    <ConversationProvider>
+      <div className="h-[calc(100vh-180px)] flex flex-col overflow-hidden">
+        <ConversationHeader
           conversation={conversation}
-          mobileView={mobileProjectView}
-          onMobileViewChange={setMobileProjectView}
-          onConversationLocked={onConversationLocked}
+          onConversationDeleted={onConversationDeleted}
+          onTitleUpdated={onTitleUpdated}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
         />
+
+        {/* Dynamic Content Area - Flexbox layout for smart space allocation */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ProjectDraftTab
+            conversation={conversation}
+            mobileView={mobileProjectView}
+            onMobileViewChange={setMobileProjectView}
+            onConversationLocked={onConversationLocked}
+          />
+        </div>
       </div>
-    </div>
+    </ConversationProvider>
   );
 }

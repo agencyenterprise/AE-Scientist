@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
+import { useConversationContext } from "@/features/conversation/context/ConversationContext";
 import type { Idea, FileMetadata } from "@/types";
 import { useAuth } from "@/shared/hooks/useAuth";
 
 import { isIdeaGenerating } from "../utils/versionUtils";
 import { useChatMessages } from "../hooks/useChatMessages";
-import { useModelSelection } from "../hooks/useModelSelection";
 import { useChatFileUpload } from "../hooks/useChatFileUpload";
 import { useChatStreaming } from "../hooks/useChatStreaming";
 
@@ -53,19 +53,19 @@ export function ProjectDraftConversation({
   const isGenerating = isIdeaGenerating(currentProjectDraft || null);
   const isReadOnly = isLocked || isGenerating;
 
-  // Custom hooks for state management
-  const { messages, setMessages, isLoadingHistory } = useChatMessages({ conversationId });
-
+  // Get model selection from context (lifted to ConversationView level)
   const {
-    selectedModel,
-    selectedProvider,
     currentModel,
     currentProvider,
     modelCapabilities,
-    handleModelChange,
-    handleModelDefaults,
-    handleModelCapabilities,
-  } = useModelSelection();
+    setEffectiveCapabilities,
+    setIsStreaming,
+    setIsReadOnly,
+    setOnOpenPromptModal,
+  } = useConversationContext();
+
+  // Custom hooks for state management
+  const { messages, setMessages, isLoadingHistory } = useChatMessages({ conversationId });
 
   const {
     pendingFiles,
@@ -77,6 +77,19 @@ export function ProjectDraftConversation({
     toggleFileUpload,
     consumePendingFiles,
   } = useChatFileUpload({ conversationCapabilities, messages });
+
+  // Sync dynamic state to context so header can read it
+  useEffect(() => {
+    setEffectiveCapabilities(effectiveCapabilities);
+  }, [effectiveCapabilities, setEffectiveCapabilities]);
+
+  useEffect(() => {
+    setIsReadOnly(isReadOnly);
+  }, [isReadOnly, setIsReadOnly]);
+
+  useEffect(() => {
+    setOnOpenPromptModal(onOpenPromptModal);
+  }, [onOpenPromptModal, setOnOpenPromptModal]);
 
   // Restore pending files callback for error recovery
   const restorePendingFiles = useCallback(
@@ -100,6 +113,11 @@ export function ProjectDraftConversation({
     restorePendingFiles,
     inputRef,
   });
+
+  // Sync isStreaming to context
+  useEffect(() => {
+    setIsStreaming(isStreaming);
+  }, [isStreaming, setIsStreaming]);
 
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && pendingFiles.length === 0) return;
@@ -151,14 +169,6 @@ export function ProjectDraftConversation({
           onSendMessage={handleSendMessage}
           onToggleFileUpload={toggleFileUpload}
           inputRef={inputRef}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          isReadOnly={isReadOnly}
-          onModelChange={handleModelChange}
-          onDefaultsChange={handleModelDefaults}
-          onCapabilitiesChange={handleModelCapabilities}
-          onOpenPromptModal={onOpenPromptModal}
-          effectiveCapabilities={effectiveCapabilities}
         />
       )}
     </div>
