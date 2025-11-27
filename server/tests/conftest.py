@@ -28,7 +28,7 @@ os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
 os.environ.setdefault("AWS_REGION", "test")
 os.environ.setdefault("AWS_S3_BUCKET_NAME", "test")
-os.environ.setdefault("LINEAR_ACCESS_KEY", "test")
+
 
 from app.main import app  # noqa: E402
 from app.services.database.users import UserData  # noqa: E402

@@ -14,6 +14,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models import ImportedChat, ImportedChatMessage, ParseSuccessResult
 from app.services.chat_models import StreamContentEvent, StreamDoneData, StreamDoneEvent
 
 
@@ -36,17 +37,17 @@ def patch_chat_stream_common(mock_user_data: object) -> Iterator[MagicMock]:
             "app.api.chat_stream.summarizer_service.add_messages_to_chat_summary",
             new=AsyncMock(return_value=None),
         ),
-        patch("app.api.chat_stream.search_indexer.index_chat_message") as mock_index_chat_msg,
     ):
         db = MagicMock()
         db.get_conversation_by_id.return_value = MagicMock()
-        db.get_project_draft_by_conversation_id.return_value = MagicMock(project_draft_id=1)
+        db.get_idea_by_conversation_id.return_value = MagicMock(idea_id=1)
+        db.create_idea.return_value = 1
         db.get_chat_messages.return_value = []
         db.create_chat_message.return_value = 101
+        db.get_file_attachments_by_ids.return_value = []
         mock_get_db.return_value = db
         mock_get_user.return_value = mock_user_data
         mock_get_by_session.return_value = mock_user_data
-        mock_index_chat_msg.return_value = None
         yield db
 
 
@@ -63,14 +64,16 @@ async def test_stream_midstream_error_emits_single_error_line_openai(
     - Endpoint should emit an in-stream error and stop
     """
 
+    del mock_user_data, patch_chat_stream_common
     client = authed_client
 
     async def failing_generator(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
+        del args, kwargs
         yield StreamContentEvent("content", "Hello")
         raise RuntimeError("network fail")
 
     with patch(
-        "app.api.chat_stream.openai_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.openai_service.chat_with_idea_stream",
         side_effect=failing_generator,
     ):
 
@@ -80,9 +83,7 @@ async def test_stream_midstream_error_emits_single_error_line_openai(
             "llm_provider": "openai",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -98,6 +99,7 @@ async def test_stream_immediate_exception_emits_error_openai(
     patch_chat_stream_common: MagicMock,
     parse_sse_lines: Callable[[httpx.Response], list[dict]],
 ) -> None:
+    del patch_chat_stream_common
     client = authed_client
 
     class _FailingAsyncIter:
@@ -107,9 +109,12 @@ async def test_stream_immediate_exception_emits_error_openai(
         async def __anext__(self) -> object:
             raise RuntimeError("immediate fail")
 
+    def _iterator_factory(*_args: object, **_kwargs: object) -> _FailingAsyncIter:
+        return _FailingAsyncIter()
+
     with patch(
-        "app.api.chat_stream.openai_service.chat_with_project_draft_stream",
-        side_effect=lambda *args, **kwargs: _FailingAsyncIter(),
+        "app.api.chat_stream.openai_service.chat_with_idea_stream",
+        side_effect=_iterator_factory,
     ):
         payload = {
             "message": "hi",
@@ -117,9 +122,7 @@ async def test_stream_immediate_exception_emits_error_openai(
             "llm_provider": "openai",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -136,14 +139,16 @@ async def test_stream_midstream_error_emits_single_error_line_anthropic(
 ) -> None:
     """Chat stream: Anthropic mid-stream exception -> one error line, 200 OK."""
 
+    del mock_user_data, patch_chat_stream_common
     client = authed_client
 
     async def failing_generator(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
+        del args, kwargs
         yield StreamContentEvent("content", "Hello")
         raise RuntimeError("network fail")
 
     with patch(
-        "app.api.chat_stream.anthropic_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.anthropic_service.chat_with_idea_stream",
         side_effect=failing_generator,
     ):
 
@@ -153,9 +158,7 @@ async def test_stream_midstream_error_emits_single_error_line_anthropic(
             "llm_provider": "anthropic",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -172,16 +175,16 @@ async def test_stream_midstream_error_emits_single_error_line_grok(
 ) -> None:
     """Chat stream: Grok mid-stream exception -> one error line, 200 OK."""
 
+    del mock_user_data, patch_chat_stream_common
     client = authed_client
 
-    from app.services.chat_models import StreamContentEvent
-
     async def failing_generator(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
+        del args, kwargs
         yield StreamContentEvent("content", "Hello")
         raise RuntimeError("network fail")
 
     with patch(
-        "app.api.chat_stream.grok_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.grok_service.chat_with_idea_stream",
         side_effect=failing_generator,
     ):
 
@@ -191,9 +194,7 @@ async def test_stream_midstream_error_emits_single_error_line_grok(
             "llm_provider": "grok",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -214,13 +215,18 @@ async def test_stream_empty_output_is_error_and_not_persisted(
     - Endpoint emits an error line and returns without persisting
     """
 
+    del mock_user_data
     client = authed_client
 
     async def done_empty(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
-        yield StreamDoneEvent("done", StreamDoneData(project_updated=False, assistant_response=""))
+        del args, kwargs
+        yield StreamDoneEvent(
+            "done",
+            StreamDoneData(idea_updated=False, assistant_response=""),
+        )
 
     with patch(
-        "app.api.chat_stream.openai_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.openai_service.chat_with_idea_stream",
         side_effect=done_empty,
     ):
 
@@ -230,9 +236,7 @@ async def test_stream_empty_output_is_error_and_not_persisted(
             "llm_provider": "openai",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -258,12 +262,14 @@ async def test_stream_whitespace_output_is_error_and_not_persisted(
     client = authed_client
 
     async def done_space(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
+        del args, kwargs
         yield StreamDoneEvent(
-            "done", StreamDoneData(project_updated=False, assistant_response="   \n")
+            "done",
+            StreamDoneData(idea_updated=False, assistant_response="   \n"),
         )
 
     with patch(
-        "app.api.chat_stream.openai_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.openai_service.chat_with_idea_stream",
         side_effect=done_space,
     ):
         payload = {
@@ -272,9 +278,7 @@ async def test_stream_whitespace_output_is_error_and_not_persisted(
             "llm_provider": "openai",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 
@@ -314,8 +318,6 @@ async def test_import_summarization_required_placeholder(
             return_value=([], ""),
         ),
     ):
-        from app.models import ImportedChat, ImportedChatMessage, ParseSuccessResult
-
         db = MagicMock()
         db.get_conversation_id_by_url.return_value = 0
         mock_get_db.return_value = db
@@ -369,14 +371,15 @@ async def test_stream_done_then_exception_persists_assistant_and_emits_error(
     client = authed_client
 
     async def gen_done_then_fail(*args: object, **kwargs: object) -> AsyncGenerator[object, None]:
+        del args, kwargs
         yield StreamDoneEvent(
             "done",
-            StreamDoneData(project_updated=False, assistant_response="Answer A"),
+            StreamDoneData(idea_updated=False, assistant_response="Answer A"),
         )
         raise RuntimeError("later failure")
 
     with patch(
-        "app.api.chat_stream.openai_service.chat_with_project_draft_stream",
+        "app.api.chat_stream.openai_service.chat_with_idea_stream",
         side_effect=gen_done_then_fail,
     ):
         payload = {
@@ -385,9 +388,7 @@ async def test_stream_done_then_exception_persists_assistant_and_emits_error(
             "llm_provider": "openai",
             "attachment_ids": [],
         }
-        with client.stream(
-            "POST", "/api/conversations/1/project-draft/chat/stream", json=payload
-        ) as resp:
+        with client.stream("POST", "/api/conversations/1/idea/chat/stream", json=payload) as resp:
             assert resp.status_code == 200
             lines = parse_sse_lines(resp)
 

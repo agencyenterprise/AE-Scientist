@@ -124,6 +124,10 @@ class LangChainLLMService(BaseLLMService, ABC):
     def render_image_url(self, *, image_url: str) -> List[Dict[str, Any]]:
         """Provider-specific image payload for summarize_image."""
 
+    @staticmethod
+    def _text_content_block(text: str) -> List[Union[str, Dict[str, Any]]]:
+        return [{"type": "text", "text": str(text)}]
+
     def _message_to_text(self, *, message: AIMessage) -> str:
         content: Any = message.content
         if isinstance(content, str):
@@ -135,8 +139,7 @@ class LangChainLLMService(BaseLLMService, ABC):
                     text_value = item.get("text", "")
                     if isinstance(text_value, str):
                         parts.append(text_value)
-            return "".join(parts).strip()
-        return str(content)
+        return "".join(parts).strip()
 
     def _extract_text_from_chunk(
         self,
@@ -238,7 +241,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             )
             user_text = f"{user_text}\n\n{placeholders}"
 
-        return HumanMessage(content=user_text)
+        return HumanMessage(content=self._text_content_block(user_text))
 
     async def generate_text_single_call(
         self,
@@ -503,7 +506,11 @@ class LangChainChatWithIdeaStream:
             yield StreamStatusEvent("status", ChatStatus.ANALYZING_REQUEST.value)
             while True:
                 response = await model.ainvoke(input=messages)
-                tool_calls = getattr(response, "additional_kwargs", {}).get("tool_calls") or []
+                if not isinstance(response, AIMessage):
+                    raise TypeError(
+                        f"chat model returned unsupported message type: {type(response).__name__}"
+                    )
+                tool_calls: List[Dict[str, Any]] = self._normalize_tool_calls(response=response)
                 if tool_calls:
                     tool_messages: List[ToolMessage] = []
                     async for event in self._process_tool_calls(
@@ -516,17 +523,12 @@ class LangChainChatWithIdeaStream:
                             tool_messages = event.tool_results
                         else:
                             yield event
-                    messages.append(
-                        AIMessage(
-                            content=response.content,
-                            additional_kwargs={"tool_calls": tool_calls},
-                        )
-                    )
+                    messages.append(response)
                     for tool_message in tool_messages:
                         messages.append(tool_message)
                     continue
 
-                final_message = cast(AIMessage, response)
+                final_message = response
                 final_text = self.service._message_to_text(message=final_message)
                 final_text = self.service.strip_reasoning_tags(text=final_text)
                 if final_text:
@@ -548,6 +550,44 @@ class LangChainChatWithIdeaStream:
             logger.exception("Error in chat_with_idea_stream: %s", exc)
             yield StreamErrorEvent("error", f"An error occurred: {exc}")
 
+    def _normalize_tool_calls(self, response: BaseMessage) -> List[Dict[str, Any]]:
+        if not isinstance(response, AIMessage):
+            return []
+
+        normalized: List[Dict[str, Any]] = []
+
+        tool_calls_attr = getattr(response, "tool_calls", None) or []
+        for call in tool_calls_attr:
+            if isinstance(call, dict):
+                normalized.append(call)
+                continue
+
+            name = getattr(call, "name", None)
+            args = getattr(call, "args", None)
+            if not name:
+                continue
+
+            if isinstance(args, str):
+                serialized_args = args
+            else:
+                try:
+                    serialized_args = json.dumps(args or {})
+                except TypeError:
+                    serialized_args = json.dumps({})
+
+            normalized.append(
+                {
+                    "id": getattr(call, "id", "") or "",
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": serialized_args,
+                    },
+                }
+            )
+
+        return normalized
+
     async def _build_messages(
         self,
         *,
@@ -559,13 +599,19 @@ class LangChainChatWithIdeaStream:
         llm_model: LLMModel,
     ) -> List[BaseMessage]:
         system_prompt = get_chat_system_prompt(db, conversation_id=conversation_id)
-        messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
+        messages: List[BaseMessage] = [
+            SystemMessage(content=self.service._text_content_block(system_prompt))
+        ]
         summary, recent_chat_messages = await self.summarizer_service.get_chat_summary(
             conversation_id=conversation_id,
             chat_history=chat_history,
         )
         if summary:
-            messages.append(HumanMessage(content=f"Conversation so far: {summary}"))
+            messages.append(
+                HumanMessage(
+                    content=self.service._text_content_block(f"Conversation so far: {summary}")
+                )
+            )
 
         all_file_attachments: List[DBFileAttachmentData] = db.get_file_attachments_by_message_ids(
             [msg.id for msg in recent_chat_messages]
@@ -583,7 +629,7 @@ class LangChainChatWithIdeaStream:
                     attachment_summary = attachment.summary_text or attachment.extracted_text or ""
                     if attachment_summary:
                         content = f"{content}\n\n[Attachment: {attachment.filename}, {attachment_summary}]"
-                messages.append(HumanMessage(content=content))
+                messages.append(HumanMessage(content=self.service._text_content_block(content)))
             elif chat_msg.role == "assistant":
                 messages.append(AIMessage(content=chat_msg.content))
             elif chat_msg.role == "tool":
@@ -652,16 +698,25 @@ class LangChainChatWithIdeaStream:
 
         for call in tool_calls:
             function_info = call.get("function") or {}
-            name = function_info.get("name", "")
-            arguments_str = function_info.get("arguments", "")
+            name = function_info.get("name") or call.get("name", "")
+            arguments_payload: Any = function_info.get("arguments")
+            if arguments_payload is None and "args" in call:
+                arguments_payload = call.get("args")
             call_id = call.get("id", "")
             if name != "update_idea":
                 continue
 
-            try:
-                arguments = json.loads(arguments_str)
-            except json.JSONDecodeError as exc:
-                error = f"❌ Tool validation failed: invalid JSON ({exc})"
+            if isinstance(arguments_payload, str):
+                try:
+                    arguments = json.loads(arguments_payload)
+                except json.JSONDecodeError as exc:
+                    error = f"❌ Tool validation failed: invalid JSON ({exc})"
+                    tool_messages.append(ToolMessage(content=error, tool_call_id=call_id))
+                    continue
+            elif isinstance(arguments_payload, dict):
+                arguments = arguments_payload
+            else:
+                error = "❌ Tool validation failed: missing arguments payload"
                 tool_messages.append(ToolMessage(content=error, tool_call_id=call_id))
                 continue
 
