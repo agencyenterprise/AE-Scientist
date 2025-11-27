@@ -86,7 +86,7 @@ export function ConversationView({
   }
 
   return (
-    <div>
+    <div className="h-[calc(100vh-180px)] flex flex-col overflow-hidden">
       <ConversationHeader
         conversation={conversation}
         onConversationDeleted={onConversationDeleted}
@@ -96,12 +96,14 @@ export function ConversationView({
       />
 
       {/* Dynamic Content Area - Flexbox layout for smart space allocation */}
-      <ProjectDraftTab
-        conversation={conversation}
-        mobileView={mobileProjectView}
-        onMobileViewChange={setMobileProjectView}
-        onConversationLocked={onConversationLocked}
-      />
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <ProjectDraftTab
+          conversation={conversation}
+          mobileView={mobileProjectView}
+          onMobileViewChange={setMobileProjectView}
+          onConversationLocked={onConversationLocked}
+        />
+      </div>
     </div>
   );
 }

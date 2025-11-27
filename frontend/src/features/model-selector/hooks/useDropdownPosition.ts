@@ -4,8 +4,10 @@ import { RefObject, useCallback, useEffect, useRef, useState } from "react";
  * Coordinates for positioning the dropdown relative to the viewport.
  */
 export interface DropdownCoords {
-  /** Distance from the top of the viewport */
+  /** Distance from the top of the viewport (used when verticalPosition is "below") */
   top: number;
+  /** Distance from the bottom of the viewport (used when verticalPosition is "above") */
+  bottom: number;
   /** Distance from the left of the viewport (used when position is "left") */
   left: number;
   /** Distance from the right of the viewport (used when position is "right") */
@@ -28,6 +30,8 @@ interface UseDropdownPositionReturn {
   isOpen: boolean;
   /** Which side the dropdown should align to ("left" or "right") */
   position: "left" | "right";
+  /** Whether dropdown opens above or below the button */
+  verticalPosition: "above" | "below";
   /** The calculated coordinates for positioning, or null when closed */
   coords: DropdownCoords | null;
   /** Toggles the dropdown open/closed */
@@ -42,6 +46,10 @@ const DROPDOWN_WIDTH = 256;
 const DROPDOWN_MARGIN = 4;
 /** Minimum margin from viewport edge */
 const VIEWPORT_MARGIN = 16;
+/** Minimum height needed for dropdown to be usable */
+const MIN_DROPDOWN_HEIGHT = 200;
+/** Maximum height for dropdown */
+const MAX_DROPDOWN_HEIGHT = 400;
 
 /**
  * Hook for managing dropdown positioning with viewport-aware placement.
@@ -77,6 +85,7 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
 
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<"left" | "right">("left");
+  const [verticalPosition, setVerticalPosition] = useState<"above" | "below">("below");
   const [coords, setCoords] = useState<DropdownCoords | null>(null);
 
   const calculatePosition = useCallback((): void => {
@@ -87,13 +96,25 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
     const viewportHeight = window.innerHeight;
     const spaceOnRight = viewportWidth - buttonRect.right;
 
-    const top = buttonRect.bottom + DROPDOWN_MARGIN;
-    const maxHeight = viewportHeight - top - VIEWPORT_MARGIN;
+    // Calculate space above and below
+    const spaceBelow = viewportHeight - buttonRect.bottom - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
+    const spaceAbove = buttonRect.top - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
+
+    // Prefer opening above if there's enough space (better UX for bottom-positioned buttons)
+    const openAbove = spaceAbove >= MIN_DROPDOWN_HEIGHT;
+
+    const availableHeight = openAbove ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(availableHeight, MAX_DROPDOWN_HEIGHT);
+    const top = openAbove ? 0 : buttonRect.bottom + DROPDOWN_MARGIN;
+    const bottom = openAbove ? viewportHeight - buttonRect.top + DROPDOWN_MARGIN : 0;
+
+    setVerticalPosition(openAbove ? "above" : "below");
 
     if (spaceOnRight < DROPDOWN_WIDTH) {
       setPosition("right");
       setCoords({
         top,
+        bottom,
         left: 0,
         right: viewportWidth - buttonRect.right,
         maxHeight,
@@ -102,6 +123,7 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
       setPosition("left");
       setCoords({
         top,
+        bottom,
         left: buttonRect.left,
         right: 0,
         maxHeight,
@@ -148,6 +170,7 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
     selectedModelRef,
     isOpen,
     position,
+    verticalPosition,
     coords,
     toggle,
     close,

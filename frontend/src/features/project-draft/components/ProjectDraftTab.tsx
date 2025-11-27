@@ -43,11 +43,11 @@ export function ProjectDraftTab({
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
       {/* Columns container */}
-      <div className="flex-1 min-h-0 overflow-auto flex flex-col md:flex-row">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
         {/* Left Panel - Chat */}
-        <div className={`w-full md:w-1/2`}>
+        <div className="w-full md:w-1/2 h-full overflow-y-auto md:border-r md:border-slate-800 md:pr-4">
           <ProjectDraftConversation
             conversationId={conversation.id}
             isLocked={false}
@@ -64,7 +64,7 @@ export function ProjectDraftTab({
         </div>
 
         {/* Right Panel - Project */}
-        <div className={`w-full md:w-1/2`}>
+        <div className={`w-full md:w-1/2 h-full overflow-y-auto`}>
           <ProjectDraft
             conversation={conversation}
             externalUpdate={updatedProjectDraft}

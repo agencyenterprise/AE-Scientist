@@ -25,6 +25,7 @@ interface ModelDropdownProps {
   isUsingCustomSelection: boolean;
   coords: DropdownCoords;
   position: "left" | "right";
+  verticalPosition: "above" | "below";
   searchInputRef: RefObject<HTMLInputElement | null>;
   selectedModelRef: RefObject<HTMLButtonElement | null>;
   onSelect: (provider: string, model: string) => void;
@@ -45,6 +46,7 @@ export function ModelDropdown({
   isUsingCustomSelection,
   coords,
   position,
+  verticalPosition,
   searchInputRef,
   selectedModelRef,
   onSelect,
@@ -88,7 +90,8 @@ export function ModelDropdown({
       <div
         className="fixed w-64 bg-card border border-border rounded-md shadow-lg z-[60] flex flex-col"
         style={{
-          top: coords.top,
+          top: verticalPosition === "below" ? coords.top : "auto",
+          bottom: verticalPosition === "above" ? coords.bottom : "auto",
           left: position === "left" ? coords.left : "auto",
           right: position === "right" ? coords.right : "auto",
           maxHeight: coords.maxHeight,

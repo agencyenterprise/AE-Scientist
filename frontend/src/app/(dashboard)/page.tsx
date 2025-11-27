@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   return (
-    <div className="relative mx-auto flex max-w-3xl flex-col gap-10 text-center">
+    <div className="relative mx-auto flex max-w-3xl flex-col gap-10 text-center px-6 py-12">
       <div className="flex flex-col items-center gap-4">
         <span className="inline-flex items-center gap-2 rounded-full border border-sky-500/40 bg-sky-500/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200">
           <Rocket className="h-3.5 w-3.5" />

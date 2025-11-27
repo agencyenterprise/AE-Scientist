@@ -11,7 +11,6 @@ import { useModelSelection } from "../hooks/useModelSelection";
 import { useChatFileUpload } from "../hooks/useChatFileUpload";
 import { useChatStreaming } from "../hooks/useChatStreaming";
 
-import { ChatHeader } from "./ChatHeader";
 import { ChatMessageList } from "./ChatMessageList";
 import { ChatInputArea } from "./ChatInputArea";
 import { ChatGeneratingState } from "./ChatGeneratingState";
@@ -117,20 +116,7 @@ export function ProjectDraftConversation({
   }, [inputMessage, pendingFiles.length, sendMessage]);
 
   return (
-    <div className="flex flex-col h-full bg-card max-w-full overflow-x-hidden">
-      {/* Chat Header with Configure AI */}
-      <ChatHeader
-        selectedModel={selectedModel}
-        selectedProvider={selectedProvider}
-        isReadOnly={isReadOnly}
-        isStreaming={isStreaming}
-        effectiveCapabilities={effectiveCapabilities}
-        onModelChange={handleModelChange}
-        onDefaultsChange={handleModelDefaults}
-        onCapabilitiesChange={handleModelCapabilities}
-        onOpenPromptModal={onOpenPromptModal}
-      />
-
+    <div className="flex flex-col h-full max-w-full overflow-x-hidden">
       {/* Messages Area */}
       <ChatMessageList
         messages={messages}
@@ -165,6 +151,14 @@ export function ProjectDraftConversation({
           onSendMessage={handleSendMessage}
           onToggleFileUpload={toggleFileUpload}
           inputRef={inputRef}
+          selectedModel={selectedModel}
+          selectedProvider={selectedProvider}
+          isReadOnly={isReadOnly}
+          onModelChange={handleModelChange}
+          onDefaultsChange={handleModelDefaults}
+          onCapabilitiesChange={handleModelCapabilities}
+          onOpenPromptModal={onOpenPromptModal}
+          effectiveCapabilities={effectiveCapabilities}
         />
       )}
     </div>

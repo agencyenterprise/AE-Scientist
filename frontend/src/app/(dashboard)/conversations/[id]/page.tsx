@@ -101,14 +101,16 @@ export default function ConversationPage({ params }: ConversationPageProps) {
   };
 
   return (
-    <ConversationView
-      conversation={selectedConversation}
-      isLoading={isLoading && !selectedConversation}
-      onConversationDeleted={handleConversationDeleted}
-      onTitleUpdated={handleTitleUpdated}
-      onSummaryGenerated={handleSummaryGenerated}
-      onConversationLocked={handleConversationLocked}
-      expandImportedChat={expandImportedChat}
-    />
+    <div className="p-6">
+      <ConversationView
+        conversation={selectedConversation}
+        isLoading={isLoading && !selectedConversation}
+        onConversationDeleted={handleConversationDeleted}
+        onTitleUpdated={handleTitleUpdated}
+        onSummaryGenerated={handleSummaryGenerated}
+        onConversationLocked={handleConversationLocked}
+        expandImportedChat={expandImportedChat}
+      />
+    </div>
   );
 }

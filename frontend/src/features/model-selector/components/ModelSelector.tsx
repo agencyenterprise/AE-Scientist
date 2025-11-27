@@ -41,8 +41,17 @@ export function ModelSelector({
   const { defaultModel, providers, isLoading, updateDefault, isUpdatingDefault } =
     useModelSelectorData({ promptType });
 
-  const { buttonRef, searchInputRef, selectedModelRef, isOpen, position, coords, toggle, close } =
-    useDropdownPosition();
+  const {
+    buttonRef,
+    searchInputRef,
+    selectedModelRef,
+    isOpen,
+    position,
+    verticalPosition,
+    coords,
+    toggle,
+    close,
+  } = useDropdownPosition();
 
   // Get current selection (from props or defaults)
   const currentProvider = selectedProvider || defaultModel?.llm_provider || "";
@@ -168,6 +177,7 @@ export function ModelSelector({
           isUsingCustomSelection={!!isUsingCustomSelection}
           coords={coords}
           position={position}
+          verticalPosition={verticalPosition}
           searchInputRef={searchInputRef}
           selectedModelRef={selectedModelRef}
           onSelect={handleModelSelect}

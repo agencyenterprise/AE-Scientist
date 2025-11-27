@@ -11,7 +11,7 @@ export default function ConversationsPage() {
     useConversationsFilter(conversations);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-6">
       <ConversationsBoardHeader
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
