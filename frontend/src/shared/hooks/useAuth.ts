@@ -4,7 +4,7 @@
  * Provides easy access to authentication state and functions.
  */
 
-import { useAuthContext } from "@/contexts/AuthContext";
+import { useAuthContext } from "@/shared/contexts/AuthContext";
 import type { AuthContextValue } from "@/types/auth";
 
 export function useAuth(): AuthContextValue {

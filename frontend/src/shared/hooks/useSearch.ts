@@ -7,7 +7,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { config } from "@/lib/config";
+import { config } from "@/shared/lib/config";
 import type {
   ErrorResponse,
   SearchContentType,
