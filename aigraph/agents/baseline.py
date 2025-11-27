@@ -266,7 +266,9 @@ async def node_baseline_parse_experiment_output(
 
 async def node_baseline_should_retry_code_from_output(
     state: State, runtime: Runtime[Context]
-) -> Literal["node_baseline_code_experiment", "node_baseline_code_metrics_parser", "__end__"]:
+) -> Literal[
+    "node_baseline_code_experiment", "node_baseline_code_metrics_parser", "__end__"
+]:
     logger.info("Starting node_baseline_should_retry_code_from_output")
 
     if state.experiment_retry_count > 5:
@@ -464,7 +466,11 @@ def build(
     builder.add_conditional_edges(
         "node_baseline_parse_experiment_output",
         node_baseline_should_retry_code_from_output,
-        ["node_baseline_code_experiment", "node_baseline_code_metrics_parser", "__end__"],
+        [
+            "node_baseline_code_experiment",
+            "node_baseline_code_metrics_parser",
+            "__end__",
+        ],
     )
     builder.add_edge(
         "node_baseline_code_metrics_parser",

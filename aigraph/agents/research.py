@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class State(BaseModel):
     """State for deep research using external API.
-    
+
     Attributes:
         cwd: Working directory (unused internally).
              Passed through but not referenced in node.
@@ -28,6 +28,7 @@ class State(BaseModel):
         research: Stores final_report from deep researcher.
                   Accessed via result["final_report"] and passed to baseline.
     """
+
     # inputs
     cwd: Path
     task: utils.Task
@@ -38,6 +39,7 @@ class State(BaseModel):
 
 class Context(BaseModel):
     """Context for research stage (placeholder for consistency)."""
+
     pass
 
 
