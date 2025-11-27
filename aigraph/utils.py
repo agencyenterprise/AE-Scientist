@@ -103,6 +103,13 @@ class Plot(BaseModel):
     analysis: str
 
 
+class Review(BaseModel):
+    model_config = ConfigDict(frozen=True)  # so it becomes hashable
+
+    passed: bool
+    reasoning: str
+
+
 @dataclass
 class RunCodeResult:
     stdout: str

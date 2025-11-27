@@ -77,10 +77,9 @@ async def node_experiment(
     state: experiment.State,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
+    """Runs experiment graph."""
     logger.info("Starting node_experiment")
 
-    # Build experiment graph with checkpointer=True (creates new checkpointer)
-    # Note: For shared state, would need to pass checkpointer through context
     graph = experiment.build(checkpointer=True)
     experiment_context = experiment.Context(
         model=runtime.context.model,
@@ -90,7 +89,7 @@ async def node_experiment(
     result = experiment.State.model_validate(result)
 
     logger.info("Finished node_experiment")
-    return {"experiment": result}
+    return {"experiments": [result]}
 
 
 def build(
