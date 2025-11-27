@@ -101,6 +101,7 @@ async def node_experiment(
 ) -> dict[str, Any]:
     """Runs experiment graph."""
     logger.info("Starting node_experiment")
+    state.cwd.mkdir(parents=True, exist_ok=True)
 
     file = state.cwd / "idea.json"
     file.write_text(state.idea.model_dump_json(indent=2))
