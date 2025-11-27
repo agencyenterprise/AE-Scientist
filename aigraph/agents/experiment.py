@@ -1,7 +1,7 @@
 import logging
 import operator
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langgraph.graph import END, START, StateGraph
@@ -19,6 +19,7 @@ from aigraph.agents import (
     tuning,
     writeup,
 )
+from aigraph.agents import experiment_prompts as prompts
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class State(BaseModel):
     state_writeup: writeup.State | None = None
 
     notes: Annotated[list[str], operator.add] = []
+
+    # Judge review
+    review: utils.Review | None = None
 
 
 class Context(BaseModel):
@@ -210,6 +214,35 @@ async def node_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any
     return {"state_writeup": result}
 
 
+async def node_judge(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    logger.info("Starting node_judge")
+
+    ablation = state.state_ablation
+    code = ablation.ablation_code if ablation else ""
+    code_stdout = ablation.parser_stdout if ablation else ""
+    parser_stdout = ablation.parser_stdout if ablation else ""
+    latex = state.state_writeup.latex_content if state.state_writeup else ""
+
+    prompt = prompts.build_prompt_evaluate(
+        idea=state.idea,
+        code=code or "",
+        code_stdout=code_stdout or "",
+        parser_stdout=parser_stdout or "",
+        latex=latex or "",
+        notes=state.notes,
+    )
+
+    llm = runtime.context.llm.with_structured_output(utils.Review)
+    result = await llm.ainvoke(prompt)
+    result = cast(utils.Review, result)
+
+    logger.debug(f"Review: passed={result.passed}")
+    logger.debug(f"Review: reasoning={result.reasoning[:32]!r}")
+
+    logger.info("Finished node_judge")
+    return {"review": result}
+
+
 def build(
     checkpointer: Checkpointer | None = None,
 ) -> CompiledStateGraph[State, Context, State, State]:
@@ -223,6 +256,7 @@ def build(
     builder.add_node("node_ablation", node_ablation)
     builder.add_node("node_plotting", node_plotting)
     builder.add_node("node_writeup", node_writeup)
+    builder.add_node("node_judge", node_judge)
 
     # Add edges
     builder.add_edge(START, "node_setup")
@@ -232,6 +266,7 @@ def build(
     builder.add_edge("node_tuning", "node_ablation")
     builder.add_edge("node_ablation", "node_plotting")
     builder.add_edge("node_plotting", "node_writeup")
-    builder.add_edge("node_writeup", END)
+    builder.add_edge("node_writeup", "node_judge")
+    builder.add_edge("node_judge", END)
 
     return builder.compile(name="graph_experiment", checkpointer=checkpointer)  # type: ignore
