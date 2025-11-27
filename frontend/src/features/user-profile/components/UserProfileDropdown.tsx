@@ -7,7 +7,7 @@ import { useAuth } from "@/shared/hooks/useAuth";
 function getInitials(name: string): string {
   return name
     .split(" ")
-    .map((n) => n[0])
+    .map(n => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
@@ -46,10 +46,7 @@ export function UserProfileDropdown() {
       {isOpen &&
         createPortal(
           <>
-            <div
-              className="fixed inset-0 z-[55]"
-              onClick={() => setIsOpen(false)}
-            />
+            <div className="fixed inset-0 z-[55]" onClick={() => setIsOpen(false)} />
             <div
               className="fixed z-[60] w-64 rounded-md border border-slate-700 bg-slate-800 shadow-lg"
               style={{ top: coords.top, right: coords.right }}
