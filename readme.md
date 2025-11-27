@@ -11,6 +11,7 @@ Scientific research automation using LangGraph agents.
 ### Requirements
 
 - **pdflatex**: Required for LaTeX document compilation
+- **chktex**: Required for LaTeX document linting
 
 ```bash
 sudo apt-get install texlive
@@ -24,7 +25,24 @@ brew install --cask mactex
 uv sync
 ```
 
+## Config
 
+Check `.env.example` for the required environment variables.
+
+```bash
+# llm. you can use any LLM supported by Langchain
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+
+# Tavily (for research)
+TAVILY_API_KEY=...
+
+# Langfuse for tracing
+LANGFUSE_TRACING_ENVIRONMENT=...
+LANGFUSE_BASE_URL=...
+LANGFUSE_SECRET_KEY=...
+LANGFUSE_PUBLIC_KEY=...
+```
 
 ## Running Scripts
 
@@ -119,7 +137,8 @@ own `cwd` pointing to a unique subdirectory:
 
 - Format: `experiment_{iteration:03d}_{uuid}`
 - `iteration`: Retry count (000 = first attempt, 001 = first retry)
-- `uuid`: Stable identifier per experiment. it keeps the same UUID across retries.
+- `uuid`: Stable identifier per experiment. it keeps the same UUID across
+  retries.
 
 ## Agent Architectures
 
