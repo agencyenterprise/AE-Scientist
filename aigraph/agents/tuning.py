@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
-from langgraph.errors import GraphRecursionError
 from langgraph.graph import START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -181,9 +180,6 @@ async def node_tuning_code_tuning(
         plan: str
         dependencies: list[str]
 
-    if state.tuning_retry_count > 5:
-        raise GraphRecursionError("Max retry count reached")
-
     memory = ""
 
     if state.tuning_returncode is not None and state.tuning_returncode > 0:
@@ -292,11 +288,18 @@ async def node_tuning_parse_tuning_output(
 
 async def node_tuning_should_retry_code_from_tuning_output(
     state: State, runtime: Runtime[Context]
-) -> Literal["node_tuning_code_tuning", "node_tuning_code_metrics_parser"]:
+) -> Literal["node_tuning_code_tuning", "node_tuning_code_metrics_parser", "__end__"]:
     logger.info("Starting node_tuning_should_retry_code_from_tuning_output")
 
+    if state.tuning_retry_count > 5:
+        logger.info("Max retry count reached, going to `__end__`")
+        return "__end__"
+
     if state.tuning_is_bug:
+        logger.info("Going to `node_tuning_code_tuning`")
         return "node_tuning_code_tuning"
+
+    logger.info("Going to `node_tuning_code_metrics_parser`")
     return "node_tuning_code_metrics_parser"
 
 
@@ -310,9 +313,6 @@ async def node_tuning_code_metrics_parser(
         code: str
         plan: str
         dependencies: list[str]
-
-    if state.parser_retry_count > 5:
-        raise GraphRecursionError("Max retry count reached")
 
     memory = ""
     if state.parse_is_bug is True:
@@ -406,6 +406,10 @@ async def node_tuning_should_retry_parser_from_output(
 ) -> Literal["node_tuning_code_metrics_parser", "__end__"]:
     logger.info("Starting node_tuning_should_retry_parser_from_output")
 
+    if state.parser_retry_count > 5:
+        logger.info("Max retry count reached, going to `__end__`")
+        return "__end__"
+
     if state.parse_is_bug is True:
         logger.info("Going to `node_tuning_code_metrics_parser`")
         return "node_tuning_code_metrics_parser"
@@ -484,6 +488,7 @@ def build(
     builder.add_conditional_edges(
         "node_tuning_parse_tuning_output",
         node_tuning_should_retry_code_from_tuning_output,
+        ["node_tuning_code_tuning", "node_tuning_code_metrics_parser", "__end__"],
     )
     builder.add_edge(
         "node_tuning_code_metrics_parser",

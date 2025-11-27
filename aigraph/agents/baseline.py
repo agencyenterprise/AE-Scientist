@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from langchain.chat_models import BaseChatModel, init_chat_model
-from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
@@ -162,9 +161,6 @@ async def node_baseline_code_experiment(
         code: str
         dependencies: list[str]
 
-    if state.experiment_retry_count > 5:
-        raise GraphRecursionError("Max retry count reached")
-
     memory = ""
 
     if state.experiment_is_bug is True:
@@ -270,8 +266,12 @@ async def node_baseline_parse_experiment_output(
 
 async def node_baseline_should_retry_code_from_output(
     state: State, runtime: Runtime[Context]
-) -> Literal["node_baseline_code_experiment", "node_baseline_code_metrics_parser"]:
+) -> Literal["node_baseline_code_experiment", "node_baseline_code_metrics_parser", "__end__"]:
     logger.info("Starting node_baseline_should_retry_code_from_output")
+
+    if state.experiment_retry_count > 5:
+        logger.info("Max retry count reached, going to `__end__`")
+        return "__end__"
 
     if state.experiment_is_bug is True:
         logger.info("Going to `node_baseline_code_experiment`")
@@ -290,9 +290,6 @@ async def node_baseline_code_metrics_parser(
         code: str
         plan: str
         dependencies: list[str]
-
-    if state.parser_retry_count > 5:
-        raise GraphRecursionError("Max retry count reached")
 
     memory = ""
     if state.parse_is_bug is True:
@@ -388,6 +385,10 @@ async def node_baseline_should_retry_parser_from_output(
 ) -> Literal["node_baseline_code_metrics_parser", "__end__"]:
     logger.info("Starting node_baseline_should_retry_parser_from_output")
 
+    if state.parser_retry_count > 5:
+        logger.info("Max retry count reached, going to `__end__`")
+        return "__end__"
+
     if state.parse_is_bug is True:
         logger.info("Going to `node_baseline_code_metrics_parser`")
         return "node_baseline_code_metrics_parser"
@@ -463,7 +464,7 @@ def build(
     builder.add_conditional_edges(
         "node_baseline_parse_experiment_output",
         node_baseline_should_retry_code_from_output,
-        ["node_baseline_code_experiment", "node_baseline_code_metrics_parser"],
+        ["node_baseline_code_experiment", "node_baseline_code_metrics_parser", "__end__"],
     )
     builder.add_edge(
         "node_baseline_code_metrics_parser",
