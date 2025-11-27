@@ -106,9 +106,14 @@ async def node_research(state: Experiment, runtime: Runtime[Context]) -> dict[st
 async def node_baseline(state: Experiment, runtime: Runtime[Context]) -> dict[str, Any]:
     logger.info("Starting node_baseline")
 
+    assert state.state_research
+    assert state.state_research.research
+
     baseline_state = baseline.State(
         cwd=state.cwd,
         task=state.task,
+        idea=state.idea,
+        research=state.state_research.research["final_report"],
     )
 
     baseline_context = baseline.Context(
@@ -134,6 +139,8 @@ async def node_tuning(state: Experiment, runtime: Runtime[Context]) -> dict[str,
         cwd=state.cwd,
         task=state.task,
         code=state.state_baseline.experiment_code,
+        idea=state.idea,
+        research=state.state_baseline.research,
     )
 
     tuning_context = tuning.Context(
@@ -159,6 +166,8 @@ async def node_ablation(state: Experiment, runtime: Runtime[Context]) -> dict[st
         cwd=state.cwd,
         task=state.task,
         code=state.state_tuning.tuning_code,
+        idea=state.idea,
+        research=state.state_tuning.research,
     )
 
     ablation_context = ablation.Context(
@@ -184,6 +193,8 @@ async def node_plotting(state: Experiment, runtime: Runtime[Context]) -> dict[st
         cwd=state.cwd,
         task=state.task,
         code=state.state_ablation.ablation_code,
+        idea=state.idea,
+        research=state.state_ablation.research,
     )
 
     plotting_context = plotting.Context(
@@ -213,6 +224,7 @@ async def node_writeup(state: Experiment, runtime: Runtime[Context]) -> dict[str
     writeup_state = writeup.State(
         cwd=state.cwd,
         task=state.task,
+        idea=state.idea,
         experiment_code=state.state_ablation.ablation_code,
         parser_code=state.state_ablation.parser_code,
         parser_stdout=state.state_ablation.parser_stdout,

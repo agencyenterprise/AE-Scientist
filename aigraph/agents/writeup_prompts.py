@@ -1,6 +1,7 @@
 from typing import Iterable
 
 from aigraph import utils
+from aigraph.utils import Idea
 
 
 def _task_to_prompt(task: utils.Task) -> str:
@@ -39,8 +40,24 @@ def _task_to_prompt(task: utils.Task) -> str:
     """
 
 
-def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
+def build_writeup_system_message(
+    task: utils.Task, pages: int = 5, idea: Idea | None = None
+) -> str:
     template = utils.DATA_DIR / "template.tex"
+
+    idea_section = ""
+    if idea:
+        idea_section = f"""
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+"""
 
     return f"""
     You are an ambitious AI researcher who is looking to publish a paper that
@@ -143,7 +160,7 @@ def build_writeup_system_message(task: utils.Task, pages: int = 5) -> str:
 
     When returning final code, return ONLY the raw LaTeX code without fenced
     code blocks or triple backticks.
-
+{idea_section}
     ## Research idea
 
     <RESEARCH_IDEA>
@@ -167,14 +184,29 @@ def build_writeup_prompt(
     plots: Iterable[utils.Plot],
     research: str | None = None,
     memory: str = "",
+    idea: Idea | None = None,
 ) -> str:
+    idea_section = ""
+    if idea:
+        idea_section = f"""
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+"""
+
     return f"""
     ## Introduction
 
     You are an AI researcher writing a paper for a top-tier ML conference. Your
     task is to write a LaTeX document that summarizes the research you have
     conducted.
-
+{idea_section}
     ## Experiment code
 
     <EXPERIMENT_CODE>
@@ -213,7 +245,23 @@ def build_writeup_prompt(
     """
 
 
-def build_prompt_compile_output(latex: str, stdout: str, stderr: str) -> str:
+def build_prompt_compile_output(
+    latex: str, stdout: str, stderr: str, idea: Idea | None = None
+) -> str:
+    idea_section = ""
+    if idea:
+        idea_section = f"""
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+"""
+
     return f"""
     Review LaTeX compilation output and identify compilation bugs.
     
@@ -230,7 +278,7 @@ def build_prompt_compile_output(latex: str, stdout: str, stderr: str) -> str:
     
     Set is_bug=True if compilation failed.
     Provide concise summary of issue.
-
+{idea_section}
     ## LaTeX Code
 
     <LATEX>

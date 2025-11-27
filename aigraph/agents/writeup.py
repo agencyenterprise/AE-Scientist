@@ -21,6 +21,7 @@ class State(BaseModel):
     # inputs
     cwd: Path
     task: utils.Task
+    idea: utils.Idea
 
     parser_code: str
     parser_stdout: str | None = None
@@ -93,6 +94,7 @@ async def node_writeup_generate_writeup(
     system = prompts.build_writeup_system_message(
         task=state.task,
         pages=5,
+        idea=state.idea,
     )
 
     prompt = prompts.build_writeup_prompt(
@@ -102,6 +104,7 @@ async def node_writeup_generate_writeup(
         plots=state.plots,
         research=state.research,
         memory=memory,
+        idea=state.idea,
     )
 
     messages = [
@@ -158,6 +161,7 @@ async def node_parse_compile_output(
         state.latex_content or "",
         state.compile_stdout or "",
         state.compile_stderr or "",
+        state.idea,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)

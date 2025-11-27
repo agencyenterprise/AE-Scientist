@@ -1,4 +1,4 @@
-from aigraph.utils import DATA_DIR, Task
+from aigraph.utils import DATA_DIR, Idea, Task
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -50,13 +50,31 @@ def _task_to_prompt(task: Task) -> str:
     return prompt + f"Code To Use:\n{code}\n"
 
 
-def build_prompt_propose_ablation(code: str, ablations: list[str]) -> str:
+def build_prompt_propose_ablation(
+    code: str, ablations: list[str], idea: Idea, research: str
+) -> str:
     attempted = ablations or ["Nothing has been tried yet."]
 
     return f"""
     You are an AI researcher conducting ablation studies. Based on the current
     implementation and previous ablations (if any), propose ONE new ablation
     study that tests a different aspect of the model.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
 
     ## Base code you are working on
 
@@ -92,7 +110,7 @@ def build_prompt_propose_ablation(code: str, ablations: list[str]) -> str:
 
 
 def build_prompt_code_ablation(
-    name: str, description: str, code: str, memory: str
+    name: str, description: str, code: str, memory: str, idea: Idea, research: str
 ) -> str:
     return f"""
     You are an experienced AI researcher. You are provided with a previously
@@ -101,6 +119,22 @@ def build_prompt_code_ablation(
     
     Name: {name}
     Description: {description}
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
 
     ## Base code you are working on
     
@@ -172,7 +206,7 @@ def build_prompt_code_ablation(
 
 
 def build_prompt_ablation_output(
-    task: Task, code: str, stdout: str, stderr: str
+    task: Task, code: str, stdout: str, stderr: str, idea: Idea
 ) -> str:
     return f"""
     ## Introduction
@@ -181,6 +215,16 @@ def build_prompt_ablation_output(
     ablation experiment and now need to evaluate the output of the code
     execution. Analyze the execution output, determine if there were any bugs,
     and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Research idea
 
@@ -282,7 +326,9 @@ def build_prompt_ablation_parser_code(code: str, memory: str = "") -> str:
     """
 
 
-def build_prompt_ablation_parser_output(code: str, stdout: str, stderr: str) -> str:
+def build_prompt_ablation_parser_output(
+    code: str, stdout: str, stderr: str, idea: Idea
+) -> str:
     return f"""
     ## Introduction
 
@@ -290,6 +336,16 @@ def build_prompt_ablation_parser_output(code: str, stdout: str, stderr: str) -> 
     analyze the results of your ablation experiment. Now you need to evaluate
     the output of the parser execution. Analyze the execution output, determine
     if there were any bugs, and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Implementation
 

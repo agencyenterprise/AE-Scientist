@@ -1,17 +1,33 @@
 import json
 from typing import Iterable
 
-from aigraph.utils import Metric, Task
 from aigraph.agents.research_prompts import _task_to_prompt
+from aigraph.utils import Idea, Metric, Task
 
 
-def build_prompt_baseline_metrics(task: Task) -> str:
+def build_prompt_baseline_metrics(task: Task, idea: Idea, research: str) -> str:
     return f"""
     ## Introduction
 
     You are an AI researcher setting up experiments. Please propose meaningful
     evaluation metrics that will help analyze the performance and
     characteristics of solutions for this research task.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
 
     ## Research idea
 
@@ -43,7 +59,7 @@ def build_prompt_baseline_metrics(task: Task) -> str:
 
 
 def build_prompt_baseline_code(
-    task: Task, metrics: Iterable[Metric], memory: str
+    task: Task, metrics: Iterable[Metric], memory: str, idea: Idea, research: str
 ) -> str:
     prompt = f"""
     ## Introduction
@@ -210,6 +226,22 @@ def build_prompt_baseline_code(
 
     YOUR CODE MUST SAVE THE DATA IN THE `data_baseline.json` FILE.
 
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
+
     ## Research idea
 
     <RESEARCH IDEA>
@@ -234,7 +266,7 @@ def build_prompt_baseline_code(
 
 
 def build_prompt_baseline_code_output(
-    task: Task, code: str, stdout: str, stderr: str
+    task: Task, code: str, stdout: str, stderr: str, idea: Idea
 ) -> str:
     return f"""
     ## Introduction
@@ -243,6 +275,16 @@ def build_prompt_baseline_code_output(
     research experiment and now need to evaluate the output of the code
     execution. Analyze the execution output, determine if there were any bugs,
     and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Research idea
 
@@ -364,7 +406,9 @@ def build_prompt_baseline_parser_code(code: str, memory: str = "") -> str:
     """
 
 
-def build_prompt_baseline_parser_output(code: str, stdout: str, stderr: str) -> str:
+def build_prompt_baseline_parser_output(
+    code: str, stdout: str, stderr: str, idea: Idea
+) -> str:
     return f"""
     ## Introduction
 
@@ -372,6 +416,16 @@ def build_prompt_baseline_parser_output(code: str, stdout: str, stderr: str) -> 
     analyze the results of your research experiment. Now you need to evaluate
     the output of the parser execution. Analyze the execution output, determine
     if there were any bugs, and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Implementation
 

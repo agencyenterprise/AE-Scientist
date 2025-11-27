@@ -1,4 +1,4 @@
-from aigraph.utils import DATA_DIR, Task
+from aigraph.utils import DATA_DIR, Idea, Task
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -49,7 +49,9 @@ def _task_to_prompt(task: Task) -> str:
     return prompt + f"Code To Use:\n{code}\n"
 
 
-def build_prompt_tuning_propose(code: str, hyperparams: list[str]) -> str:
+def build_prompt_tuning_propose(
+    code: str, hyperparams: list[str], idea: Idea, research: str
+) -> str:
     attempted = hyperparams or ["Nothing has been tried yet."]
 
     return f"""
@@ -62,6 +64,22 @@ def build_prompt_tuning_propose(code: str, hyperparams: list[str]) -> str:
     performance. Then try tuning common hyperparameters such as learning rate,
     batch size, etc. Only propose algorithm-specific and/or model-specific
     hyperparameters after you have tried the above.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
     
     ## Code
     
@@ -92,7 +110,13 @@ def build_prompt_tuning_propose(code: str, hyperparams: list[str]) -> str:
 
 
 def build_prompt_tuning_code(
-    task: Task, name: str, description: str, code: str, memory: str
+    task: Task,
+    name: str,
+    description: str,
+    code: str,
+    memory: str,
+    idea: Idea,
+    research: str,
 ) -> str:
     return f"""
     ## Introduction
@@ -254,6 +278,22 @@ def build_prompt_tuning_code(
 
     YOUR CODE MUST SAVE THE DATA IN THE `data_tuning.json` FILE.
 
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
+
     ## Research idea
 
     <RESEARCH_IDEA>
@@ -275,7 +315,7 @@ def build_prompt_tuning_code(
 
 
 def build_prompt_tuning_code_output(
-    task: Task, code: str, stdout: str, stderr: str
+    task: Task, code: str, stdout: str, stderr: str, idea: Idea
 ) -> str:
     return f"""
     ## Introduction
@@ -284,6 +324,16 @@ def build_prompt_tuning_code_output(
     research experiment and now need to evaluate the output of the code
     execution. Analyze the execution output, determine if there were any bugs,
     and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Research idea
 
@@ -405,7 +455,9 @@ def build_prompt_tuning_parser_code(code: str, memory: str = "") -> str:
     """
 
 
-def build_prompt_tuning_parser_output(code: str, stdout: str, stderr: str) -> str:
+def build_prompt_tuning_parser_output(
+    code: str, stdout: str, stderr: str, idea: Idea
+) -> str:
     return f"""
     ## Introduction
 
@@ -413,6 +465,16 @@ def build_prompt_tuning_parser_output(code: str, stdout: str, stderr: str) -> st
     results of your research experiment. Now you need to evaluate the output of the
     parser execution. Analyze the execution output, determine if there were any bugs,
     and provide a summary of the findings.
+
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Implementation
 

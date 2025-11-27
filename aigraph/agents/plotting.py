@@ -23,6 +23,8 @@ class State(BaseModel):
     cwd: Path
     task: utils.Task
     code: str  # The experiment code that generated the data
+    idea: utils.Idea
+    research: str
 
     plots: Annotated[list[utils.Plot], operator.add] = []
 
@@ -85,6 +87,8 @@ async def node_plotting_code_plotting(
         state.task,
         state.code,
         memory,
+        state.idea,
+        state.research,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)
@@ -144,6 +148,7 @@ async def node_plotting_parse_plotting_output(
         state.plotting_code or "",
         state.plotting_stdout or "",
         state.plotting_stderr or "",
+        state.idea,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)

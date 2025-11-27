@@ -1,4 +1,4 @@
-from aigraph.utils import Task
+from aigraph.utils import Idea, Task
 
 
 def _task_to_prompt(task: Task) -> str:
@@ -37,14 +37,41 @@ def _task_to_prompt(task: Task) -> str:
     """
 
 
-def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
+def build_prompt_plotting_code(
+    task: Task, code: str, memory: str = "", idea: Idea | None = None, research: str | None = None
+) -> str:
+    idea_section = ""
+    research_section = ""
+    
+    if idea:
+        idea_section = f"""
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+"""
+    
+    if research:
+        research_section = f"""
+    ## Research Background
+
+    <RESEARCH>
+    {research}
+    </RESEARCH>
+"""
+    
     return f"""
     ## Introduction
 
     You are an AI researcher. You have run an experiment and generated results
     in `data_ablation.json`. Your task is to write a Python script to
     visualize these results using matplotlib or seaborn.
-
+{idea_section}{research_section}
     ## Instructions
 
     - Write a Python script to load `data_ablation.json` and generate plots.
@@ -122,8 +149,22 @@ def build_prompt_plotting_code(task: Task, code: str, memory: str = "") -> str:
 
 
 def build_prompt_plotting_output(
-    task: Task, code: str, stdout: str, stderr: str
+    task: Task, code: str, stdout: str, stderr: str, idea: Idea | None = None
 ) -> str:
+    idea_section = ""
+    if idea:
+        idea_section = f"""
+    ## Idea Context
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
+"""
+    
     return f"""
     ## Introduction
 
@@ -139,7 +180,7 @@ def build_prompt_plotting_output(
       logs if any).
     - If there are errors, summarize them.
     - If successful, confirm that plots were generated.
-
+{idea_section}
     ## Research idea
 
     <RESEARCH_IDEA>

@@ -21,6 +21,8 @@ class State(BaseModel):
     cwd: Path
     task: utils.Task
     code: str
+    idea: utils.Idea
+    research: str
 
     ablations: list[utils.Ablation] = []
     last_ablation: utils.Ablation | None = None
@@ -86,6 +88,8 @@ async def node_ablation_propose_ablation(
     prompt = prompts.build_prompt_propose_ablation(
         code=state.code,
         ablations=[i.name for i in state.ablations],
+        idea=state.idea,
+        research=state.research,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)
@@ -139,6 +143,8 @@ async def node_ablation_code_ablation(
         description=state.last_ablation.description,
         code=state.code,
         memory=memory,
+        idea=state.idea,
+        research=state.research,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)
@@ -197,6 +203,7 @@ async def node_ablation_parse_ablation_output(
         state.ablation_code,
         state.ablation_stdout or "",
         state.ablation_stderr or "",
+        state.idea,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)
@@ -315,6 +322,7 @@ async def node_ablation_parse_metrics_output(
         state.parser_code or "",
         state.parser_stdout or "",
         state.parser_stderr or "",
+        state.idea,
     )
 
     llms = runtime.context.llm.with_structured_output(Schema)
