@@ -79,26 +79,36 @@ Execute individual agents:
 - `uv run -m aigraph.scripts.run_ablation` - Ablation studies
 - `uv run -m aigraph.scripts.run_plotting` - Generate plots and analysis
 - `uv run -m aigraph.scripts.run_writeup` - Generate LaTeX document
-- `uv run -m aigraph.scripts.run_all` - Execute complete pipeline
+- `uv run -m aigraph.scripts.run_pipeline` - Execute complete pipeline
 
-## Complete Pipeline (run_all)
+## Complete Pipeline (run_pipeline)
 
-Sequential execution with data flow between graphs:
+Main orchestrator with parallel experiments and review loop:
 
 ```mermaid
 graph TD
-    START([START]) --> Baseline[Baseline Graph]
-    START --> |cwd, task| Baseline
-    Baseline --> |experiment_code| Tuning[Tuning Graph]
-    START --> |cwd, task| Tuning
-    Tuning --> |tuning_code| Ablation[Ablation Graph]
-    START --> |cwd, task| Ablation
-    Ablation --> |ablation_code| Plotting[Plotting Graph]
-    START --> |cwd, task| Plotting
-    Plotting --> |plots| Writeup[Writeup Graph]
-    Ablation --> |ablation_code, parser_code| Writeup
-    START --> |cwd, task| Writeup
-    Writeup --> END([END])
+    START([START]) --> node_ideas
+    node_ideas -->|Fan Out| node_experiment
+    node_experiment --> node_review
+    node_review -->|Retry| node_experiment
+    node_review -->|Done| END([END])
+```
+
+### Experiment Sub-Graph
+
+Sequential stages within each experiment:
+
+```mermaid
+graph TD
+    START([START]) --> node_setup
+    node_setup --> node_research
+    node_research --> node_baseline
+    node_baseline --> node_tuning
+    node_tuning --> node_ablation
+    node_ablation --> node_plotting
+    node_plotting --> node_writeup
+    node_writeup --> node_judge
+    node_judge --> END([END])
 ```
 
 ## Agent Architectures
@@ -167,8 +177,7 @@ graph TD
     node_plotting_code_plotting --> node_plotting_exec_plotting
     node_plotting_exec_plotting --> node_plotting_parse_plotting_output
     node_plotting_parse_plotting_output -->|Has Bug| node_plotting_code_plotting
-    node_plotting_parse_plotting_output -->|No Bug| node_plotting_prepare_analysis
-    node_plotting_prepare_analysis -->|Fan Out| node_plotting_analyze_single_plot
+    node_plotting_parse_plotting_output -->|No Bug, Fan Out| node_plotting_analyze_single_plot
     node_plotting_analyze_single_plot --> END([END])
 ```
 
