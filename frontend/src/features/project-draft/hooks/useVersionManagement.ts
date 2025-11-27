@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { Idea, IdeaVersion, IdeaVersionsResponse } from "@/types";
-import { config } from "@/lib/config";
+import { config } from "@/shared/lib/config";
 import {
   getComparisonVersion,
   getNextVersion,

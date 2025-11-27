@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
-import { config, constants } from "@/lib/config";
+import { config, constants } from "@/shared/lib/config";
 import { isIdeaGenerating } from "../utils/versionUtils";
 
 interface UseProjectDraftStateProps {

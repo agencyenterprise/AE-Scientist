@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-import { FileAttachmentList } from "@/components/FileAttachment";
-import { FileUpload } from "@/components/FileUpload";
-import { ModelSelector } from "@/components/ModelSelector";
-import { config } from "@/lib/config";
-import { PromptTypes } from "@/lib/prompt-types";
+import { FileAttachmentList } from "@/shared/components/FileAttachment";
+import { FileUpload } from "@/shared/components/FileUpload";
+import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
+import { config } from "@/shared/lib/config";
+import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ChatMessage, ChatRequest, FileAttachment, Idea, FileMetadata } from "@/types";
-import { isErrorResponse } from "@/lib/api-adapters";
+import { isErrorResponse } from "@/shared/lib/api-adapters";
 import { ChatStatus } from "@/types";
-import { isIdeaGenerating } from "./utils/versionUtils";
-import { useAuth } from "@/hooks/useAuth";
+import { isIdeaGenerating } from "../utils/versionUtils";
+import { useAuth } from "@/shared/hooks/useAuth";
 
 interface ProjectDraftConversationProps {
   conversationId: number;
@@ -268,7 +268,7 @@ export function ProjectDraftConversation({
 
   // Model capabilities are managed by ModelSelector via handleCapabilitiesChange callback
 
-  const handleModelChange = (model: string, provider: string): void => {
+  const handleModelChange = useCallback((model: string, provider: string): void => {
     // Update both selected (for custom selections) and current (for sending requests)
     if (model && provider) {
       // User made a custom selection
@@ -282,23 +282,26 @@ export function ProjectDraftConversation({
       setSelectedProvider("");
       // currentModel/currentProvider will be set by ModelSelector when defaults load
     }
-  };
+  }, []);
 
-  const handleModelDefaults = (model: string, provider: string): void => {
-    // Called by ModelSelector when defaults are loaded or when selection falls back to defaults
-    if (!selectedModel && !selectedProvider) {
-      // Only update current if no custom selection
-      setCurrentModel(model);
-      setCurrentProvider(provider);
-    }
-  };
+  const handleModelDefaults = useCallback(
+    (model: string, provider: string): void => {
+      // Called by ModelSelector when defaults are loaded or when selection falls back to defaults
+      if (!selectedModel && !selectedProvider) {
+        // Only update current if no custom selection
+        setCurrentModel(model);
+        setCurrentProvider(provider);
+      }
+    },
+    [selectedModel, selectedProvider]
+  );
 
-  const handleModelCapabilities = (capabilities: {
-    supportsImages: boolean;
-    supportsPdfs: boolean;
-  }): void => {
-    setModelCapabilities(capabilities);
-  };
+  const handleModelCapabilities = useCallback(
+    (capabilities: { supportsImages: boolean; supportsPdfs: boolean }): void => {
+      setModelCapabilities(capabilities);
+    },
+    []
+  );
 
   const sendMessage = async (): Promise<void> => {
     if (!inputMessage.trim() || isStreaming) return;

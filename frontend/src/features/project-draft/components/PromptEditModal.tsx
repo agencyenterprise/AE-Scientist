@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { LLMPromptCreateRequest, LLMPromptResponse } from "@/types";
-import { config } from "@/lib/config";
+import { config } from "@/shared/lib/config";
 import { DiffViewer } from "./DiffViewer";
-import { PromptTypes } from "@/lib/prompt-types";
+import { PromptTypes } from "@/shared/lib/prompt-types";
 
 interface PromptEditModalProps {
   isOpen: boolean;

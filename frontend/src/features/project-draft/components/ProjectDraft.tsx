@@ -2,20 +2,20 @@
 
 import { useEffect } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
-import { config } from "@/lib/config";
-import { isErrorResponse } from "@/lib/api-adapters";
+import { config } from "@/shared/lib/config";
+import { isErrorResponse } from "@/shared/lib/api-adapters";
 import { CreateProjectModal } from "./CreateProjectModal";
 
 // Hooks
-import { useProjectDraftState } from "./hooks/useProjectDraftState";
-import { useVersionManagement } from "./hooks/useVersionManagement";
-import { useDiffGeneration } from "./hooks/useDiffGeneration";
-import { useAnimations } from "./hooks/useAnimations";
+import { useProjectDraftState } from "../hooks/useProjectDraftState";
+import { useVersionManagement } from "../hooks/useVersionManagement";
+import { useDiffGeneration } from "../hooks/useDiffGeneration";
+import { useAnimations } from "../hooks/useAnimations";
 
 // Components
-import { ProjectDraftHeader } from "./components/ProjectDraftHeader";
-import { ProjectDraftContent } from "./components/ProjectDraftContent";
-import { ProjectDraftFooter } from "./components/ProjectDraftFooter";
+import { ProjectDraftHeader } from "./ProjectDraftHeader";
+import { ProjectDraftContent } from "./ProjectDraftContent";
+import { ProjectDraftFooter } from "./ProjectDraftFooter";
 
 interface ProjectDraftProps {
   conversation: ConversationDetail;

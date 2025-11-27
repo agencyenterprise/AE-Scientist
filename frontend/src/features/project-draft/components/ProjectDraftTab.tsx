@@ -5,8 +5,8 @@ import { useState } from "react";
 import { ProjectDraft } from "./ProjectDraft";
 import { ProjectDraftConversation } from "./ProjectDraftConversation";
 import { PromptEditModal } from "./PromptEditModal";
-import { useProjectDraftState } from "./hooks/useProjectDraftState";
-import { PromptTypes } from "@/lib/prompt-types";
+import { useProjectDraftState } from "../hooks/useProjectDraftState";
+import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
 
 interface ProjectDraftTabProps {

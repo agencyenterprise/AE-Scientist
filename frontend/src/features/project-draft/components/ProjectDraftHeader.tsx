@@ -117,10 +117,7 @@ export function ProjectDraftHeader({
             >
               Cancel
             </button>
-            <button
-              onClick={onSave}
-              className="btn-primary-gradient text-xs py-1 px-3"
-            >
+            <button onClick={onSave} className="btn-primary-gradient text-xs py-1 px-3">
               Save
             </button>
           </div>
