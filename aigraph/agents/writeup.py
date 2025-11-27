@@ -226,7 +226,7 @@ async def node_should_retry_compile(
 
 
 def build(
-    checkpointer: Checkpointer = None,
+    checkpointer: Checkpointer | None = None,
 ) -> CompiledStateGraph[State, Context, State, State]:
     builder = StateGraph(State, Context)
 

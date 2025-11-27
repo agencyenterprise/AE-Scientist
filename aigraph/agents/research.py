@@ -36,7 +36,12 @@ class State(BaseModel):
     research: AgentState | None = None
 
 
-async def node_research(state: State, runtime: Runtime) -> dict[str, Any]:
+class Context(BaseModel):
+    """Context for research stage (placeholder for consistency)."""
+    pass
+
+
+async def node_research(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     logger.info("Starting node_research")
 
     prompt = prompts._task_to_prompt(state.task)
@@ -54,9 +59,9 @@ async def node_research(state: State, runtime: Runtime) -> dict[str, Any]:
 
 
 def build(
-    checkpointer: Checkpointer = None,
-) -> CompiledStateGraph[State, None, State, State]:
-    builder = StateGraph(state_schema=State)
+    checkpointer: Checkpointer | None = None,
+) -> CompiledStateGraph[State, Context, State, State]:
+    builder = StateGraph(state_schema=State, context_schema=Context)
 
     builder.add_node("node_research", node_research)
 

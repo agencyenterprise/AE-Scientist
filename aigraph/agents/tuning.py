@@ -433,7 +433,7 @@ async def _create_notes(state: State, runtime: Runtime[Context]) -> str:
 
 
 def build(
-    checkpointer: Checkpointer = None,
+    checkpointer: Checkpointer | None = None,
 ) -> CompiledStateGraph[State, Context, State, State]:
     """Build the Stage 2 hyperparameter tuning graph."""
     builder = StateGraph(state_schema=State, context_schema=Context)
@@ -501,6 +501,7 @@ def build(
     builder.add_conditional_edges(
         "node_tuning_parse_metrics_output",
         node_tuning_should_retry_parser_from_output,
+        ["node_tuning_code_metrics_parser", "__end__"],
     )
 
     return builder.compile(name="graph_tuning", checkpointer=checkpointer)  # type: ignore

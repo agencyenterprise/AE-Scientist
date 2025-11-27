@@ -252,7 +252,7 @@ async def node_judge(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 
     ablation = state.state_ablation
     code = ablation.ablation_code if ablation else ""
-    code_stdout = ablation.parser_stdout if ablation else ""
+    code_stdout = ablation.ablation_stdout if ablation else ""
     parser_stdout = ablation.parser_stdout if ablation else ""
     latex = state.state_writeup.latex_content if state.state_writeup else ""
 

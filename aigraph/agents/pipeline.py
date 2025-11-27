@@ -143,11 +143,11 @@ async def node_review(state: State, runtime: Runtime[Context]) -> dict[str, Any]
     assert result.review is not None
 
     for e in result.review.done:
-        logger.info("Experiment %d is done", e.id)
+        logger.info("Experiment %s is done", e.id)
     for e in result.review.drop:
         logger.debug(f"Experiment {e.id} is dropped")
     for e in result.review.retry:
-        logger.info("Experiment %d is retry", e.id)
+        logger.info("Experiment %s is retry", e.id)
 
     return {"reviews": [result.review], "iteration": state.iteration + 1}
 

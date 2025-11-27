@@ -412,7 +412,7 @@ async def _create_notes(state: State, runtime: Runtime[Context]) -> str:
 
 
 def build(
-    checkpointer: Checkpointer = None,
+    checkpointer: Checkpointer | None = None,
 ) -> CompiledStateGraph[State, Context, State, State]:
     builder = StateGraph(state_schema=State, context_schema=Context)
 

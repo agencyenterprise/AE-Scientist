@@ -275,7 +275,7 @@ async def node_plotting_analyze_single_plot(
     return {"plots": [plot]}
 
 
-def build(checkpointer: Checkpointer = None) -> CompiledStateGraph[State, Context]:
+def build(checkpointer: Checkpointer | None = None) -> CompiledStateGraph[State, Context]:
     builder = StateGraph(State, Context)
 
     # Add nodes
