@@ -72,7 +72,7 @@ def build_prompt_propose_ablation(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research Background
@@ -113,6 +113,7 @@ def build_prompt_propose_ablation(
 
 
 def build_prompt_code_ablation(
+    task: Task,
     name: str,
     description: str,
     code: str,
@@ -136,8 +137,14 @@ def build_prompt_code_ablation(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
+
+    ## Research idea
+
+    <RESEARCH_IDEA>
+    {_task_to_prompt(task)}
+    </RESEARCH_IDEA>
 
     ## Research Background
 
@@ -241,7 +248,7 @@ def build_prompt_ablation_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research idea
@@ -296,7 +303,7 @@ def build_prompt_create_notes(state: "State") -> str:
     ## Ablations
 
     <ABLATIONS>
-    {chr(10).join(f"- {ab.name}: {ab.description}" for ab in state.ablations)}
+    {"\n".join(f"- {ab.name}: {ab.description}" for ab in state.ablations)}
     </ABLATIONS>
 
     ## Execution Output
@@ -405,7 +412,7 @@ def build_prompt_ablation_parser_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Implementation

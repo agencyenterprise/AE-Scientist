@@ -52,7 +52,7 @@ def build_prompt_evaluate(
     ## Accumulated Notes
 
     <NOTES>
-    {"\n".join(f"- {note}" for note in notes) or "No notes."}
+    {"\n".join(f"{i} - {note}" for i, note in enumerate(notes, 1)) or "No notes."}
     </NOTES>
 
     ## Evaluation Criteria

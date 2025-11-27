@@ -56,7 +56,7 @@ def build_prompt_plotting_code(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 """
 
@@ -163,7 +163,7 @@ def build_prompt_plotting_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 """
 
@@ -209,19 +209,26 @@ def build_prompt_plotting_output(
     """
 
 
-def build_prompt_analyze_plots(task: Task) -> str:
+def build_prompt_analyze_plots(task: Task, idea: Idea) -> str:
     return f"""
     ## Introduction
 
     You are an AI researcher. You have generated plots from your experiment
     results. Your task is to analyze these plots to interpret the scientific
     findings.
-
     ## Research idea
 
     <RESEARCH_IDEA>
     {_task_to_prompt(task)}
     </RESEARCH_IDEA>
+
+    <IDEA>
+    Name: {idea.name}
+    Description: {idea.description}
+    Plan: {idea.plan}
+    Goals:
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
+    </IDEA>
 
     ## Instructions
 

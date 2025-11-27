@@ -23,7 +23,7 @@ def build_prompt_baseline_metrics(task: Task, idea: Idea, research: str) -> str:
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research Background
@@ -241,7 +241,7 @@ def build_prompt_baseline_code(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research Background
@@ -297,7 +297,7 @@ def build_prompt_baseline_code_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research idea
@@ -354,7 +354,7 @@ def build_prompt_create_notes(state: "State") -> str:
     ## Metrics
 
     <METRICS>
-    {chr(10).join(f"- {m.name}: {m.description}" for m in state.metrics)}
+    {"\n".join(f"- {m.name}: {m.description}" for m in state.metrics)}
     </METRICS>
 
     ## Execution Output
@@ -482,7 +482,7 @@ def build_prompt_baseline_parser_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Implementation

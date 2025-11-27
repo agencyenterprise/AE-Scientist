@@ -77,7 +77,7 @@ def build_prompt_tuning_propose(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research Background
@@ -289,7 +289,7 @@ def build_prompt_tuning_code(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research Background
@@ -345,7 +345,7 @@ def build_prompt_tuning_code_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Research idea
@@ -481,7 +481,7 @@ def build_prompt_tuning_parser_output(
     Description: {idea.description}
     Plan: {idea.plan}
     Goals:
-    {chr(10).join(f"- {goal}" for goal in idea.goals)}
+    {"\n".join(f"- {goal}" for goal in idea.goals)}
     </IDEA>
 
     ## Implementation

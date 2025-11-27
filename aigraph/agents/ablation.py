@@ -197,6 +197,7 @@ async def node_ablation_code_ablation(
     assert state.last_ablation, "last_ablation is required"
 
     prompt = prompts.build_prompt_code_ablation(
+        task=state.task,
         name=state.last_ablation.name,
         description=state.last_ablation.description,
         code=state.code,

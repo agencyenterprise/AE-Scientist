@@ -203,6 +203,7 @@ async def node_plotting_parse_plotting_output(
 
 class StateSinglePlot(BaseModel):
     task: utils.Task
+    idea: utils.Idea
     image: Path
 
 
@@ -222,7 +223,7 @@ async def node_plotting_should_retry_from_output(
 
     sends: list[Send] = []
     for png in pngs:
-        st = StateSinglePlot(task=state.task, image=png)
+        st = StateSinglePlot(task=state.task, idea=state.idea, image=png)
         sends.append(Send("node_plotting_analyze_single_plot", st))
 
     return sends
@@ -236,7 +237,7 @@ async def node_plotting_analyze_single_plot(
     class Schema(BaseModel):
         analysis: str
 
-    prompt = prompts.build_prompt_analyze_plots(state.task)
+    prompt = prompts.build_prompt_analyze_plots(state.task, state.idea)
 
     with open(state.image, "rb") as f:
         data = f.read()
