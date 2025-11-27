@@ -3,8 +3,13 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-import { config } from "@/lib/config";
-import { formatFileSize, getDisplayFileName, getFileIcon, isImageFile } from "@/lib/fileUtils";
+import { config } from "@/shared/lib/config";
+import {
+  formatFileSize,
+  getDisplayFileName,
+  getFileIcon,
+  isImageFile,
+} from "@/shared/lib/fileUtils";
 import type { FileAttachment as FileAttachmentType } from "@/types";
 
 interface FileAttachmentProps {

@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Image from "next/image";
 
-import { config } from "@/lib/config";
+import { config } from "@/shared/lib/config";
 import {
   createImagePreview,
   formatFileSize,
@@ -14,9 +14,9 @@ import {
   hasFiles,
   isImageFile,
   validateFile,
-} from "@/lib/fileUtils";
+} from "@/shared/lib/fileUtils";
 import type { FileMetadata } from "@/types";
-import { isErrorResponse } from "@/lib/api-adapters";
+import { isErrorResponse } from "@/shared/lib/api-adapters";
 
 interface UploadProgress {
   uploadId: string;
@@ -398,7 +398,10 @@ export function FileUpload({
         <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium text-foreground">Files ({uploads.length})</h4>
-            <button onClick={clearAllUploads} className="text-xs text-muted-foreground hover:text-foreground">
+            <button
+              onClick={clearAllUploads}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
               Clear all
             </button>
           </div>
