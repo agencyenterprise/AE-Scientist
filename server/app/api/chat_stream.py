@@ -31,9 +31,9 @@ router = APIRouter(prefix="/conversations")
 
 # Initialize services
 summarizer_service = SummarizerService()
-openai_service = OpenAIService(summarizer_service)
-anthropic_service = AnthropicService(summarizer_service)
-grok_service = GrokService(summarizer_service)
+openai_service = OpenAIService(summarizer_service=summarizer_service)
+anthropic_service = AnthropicService(summarizer_service=summarizer_service)
+grok_service = GrokService(summarizer_service=summarizer_service)
 logger = logging.getLogger(__name__)
 
 

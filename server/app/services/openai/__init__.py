@@ -16,7 +16,6 @@ from app.services.chat_models import (
     StreamStatusEvent,
     ToolCallResult,
 )
-from app.services.openai.chat_with_idea import ChatWithIdeaStream
 
 __all__ = [
     "ChatStatus",
@@ -28,5 +27,4 @@ __all__ = [
     "StreamIdeaUpdateEvent",
     "StreamStatusEvent",
     "ToolCallResult",
-    "ChatWithIdeaStream",
 ]
