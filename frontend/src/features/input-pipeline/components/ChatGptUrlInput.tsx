@@ -1,7 +1,5 @@
 "use client";
 
-import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
-import { PromptTypes } from "@/shared/lib/prompt-types";
 import { Loader2 } from "lucide-react";
 
 interface ChatGptUrlInputProps {
@@ -10,11 +8,6 @@ interface ChatGptUrlInputProps {
   disabled?: boolean;
   error?: string | null;
   isExtracting?: boolean;
-  // Model selector props
-  onModelChange: (model: string, provider: string) => void;
-  onModelDefaults: (model: string, provider: string) => void;
-  selectedModel: string;
-  selectedProvider: string;
 }
 
 export function ChatGptUrlInput({
@@ -23,10 +16,6 @@ export function ChatGptUrlInput({
   disabled = false,
   error = null,
   isExtracting = false,
-  onModelChange,
-  onModelDefaults,
-  selectedModel,
-  selectedProvider,
 }: ChatGptUrlInputProps) {
   const isDisabled = disabled || isExtracting;
 
@@ -70,20 +59,6 @@ export function ChatGptUrlInput({
             ? error
             : "Paste a shared ChatGPT conversation URL to automatically extract and structure your hypothesis."}
       </p>
-
-      <div className="mt-3 flex items-center gap-2">
-        <span className="text-xs text-slate-400">Model:</span>
-        <ModelSelector
-          promptType={PromptTypes.IDEA_CHAT}
-          onModelChange={onModelChange}
-          onDefaultsChange={onModelDefaults}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          disabled={isDisabled}
-          showMakeDefault={true}
-          showCapabilities={false}
-        />
-      </div>
     </div>
   );
 }
