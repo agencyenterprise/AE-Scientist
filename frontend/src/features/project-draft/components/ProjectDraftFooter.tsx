@@ -1,8 +1,8 @@
-import React from "react";
 import type { Idea, IdeaVersion } from "@/types";
-import { VersionNavigationPanel } from "./VersionNavigationPanel";
+import { Undo2 } from "lucide-react";
+import React from "react";
 import { isIdeaGenerating } from "../utils/versionUtils";
-import { Undo2, Plus } from "lucide-react";
+import { VersionNavigationPanel } from "./VersionNavigationPanel";
 
 interface ProjectDraftFooterProps {
   projectDraft: Idea;
@@ -97,7 +97,7 @@ export function ProjectDraftFooter({
         <button
           onClick={onCreateProject}
           disabled={isGenerating}
-          className={`btn-primary-gradient text-xs py-1 px-2 ${
+          className={`btn-primary-gradient w-full text-xs py-3 px-2 ${
             isGenerating ? "opacity-50 cursor-not-allowed" : ""
           } ${
             !showDiffs || !comparisonVersion || !nextVersion || isEditing || isGenerating
@@ -105,8 +105,7 @@ export function ProjectDraftFooter({
               : ""
           }`}
         >
-          <Plus className="w-3 h-3" />
-          <span>Create Project</span>
+          <span>Launch Project</span>
         </button>
       </div>
     </>

@@ -259,7 +259,7 @@ export function CreateHypothesisForm() {
           >
             {importState.status.isImporting || manualImportState.status.isImporting
               ? "Generating..."
-              : "Launch hypothesis"}
+              : "Create hypothesis"}
           </button>
           <ModelSelector
             promptType={PromptTypes.IDEA_GENERATION}
