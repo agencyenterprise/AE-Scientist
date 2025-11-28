@@ -79,6 +79,31 @@ class Context(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
 
+    # Stage: baseline
+    stage_baseline_model: str | None = None
+    stage_baseline_temperature: float = 0.0
+    stage_baseline_max_retries: int = 5
+
+    # Stage: tuning
+    stage_tuning_model: str | None = None
+    stage_tuning_temperature: float = 0.0
+    stage_tuning_max_retries: int = 5
+
+    # Stage: ablation
+    stage_ablation_model: str | None = None
+    stage_ablation_temperature: float = 0.0
+    stage_ablation_max_retries: int = 5
+
+    # Stage: plotting
+    stage_plotting_model: str | None = None
+    stage_plotting_temperature: float = 0.0
+    stage_plotting_max_retries: int = 5
+
+    # Stage: writeup
+    stage_writeup_model: str | None = None
+    stage_writeup_temperature: float = 0.0
+    stage_writeup_max_retries: int = 5
+
     @property
     def llm(self) -> BaseChatModel:
         return init_chat_model(model=self.model, temperature=self.temperature)
@@ -117,8 +142,9 @@ async def node_baseline(state: State, runtime: Runtime[Context]) -> dict[str, An
     )
 
     baseline_context = baseline.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_baseline_model or runtime.context.model,
+        temperature=runtime.context.stage_baseline_temperature,
+        max_retries=runtime.context.stage_baseline_max_retries,
     )
 
     graph = baseline.build(checkpointer=True)
@@ -145,8 +171,9 @@ async def node_tuning(state: State, runtime: Runtime[Context]) -> dict[str, Any]
     )
 
     tuning_context = tuning.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_tuning_model or runtime.context.model,
+        temperature=runtime.context.stage_tuning_temperature,
+        max_retries=runtime.context.stage_tuning_max_retries,
     )
 
     graph = tuning.build(checkpointer=True)
@@ -173,8 +200,9 @@ async def node_ablation(state: State, runtime: Runtime[Context]) -> dict[str, An
     )
 
     ablation_context = ablation.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_ablation_model or runtime.context.model,
+        temperature=runtime.context.stage_ablation_temperature,
+        max_retries=runtime.context.stage_ablation_max_retries,
     )
 
     graph = ablation.build(checkpointer=True)
@@ -200,8 +228,9 @@ async def node_plotting(state: State, runtime: Runtime[Context]) -> dict[str, An
     )
 
     plotting_context = plotting.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_plotting_model or runtime.context.model,
+        temperature=runtime.context.stage_plotting_temperature,
+        max_retries=runtime.context.stage_plotting_max_retries,
     )
 
     graph = plotting.build(checkpointer=True)
@@ -235,8 +264,9 @@ async def node_writeup(state: State, runtime: Runtime[Context]) -> dict[str, Any
     )
 
     writeup_context = writeup.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_writeup_model or runtime.context.model,
+        temperature=runtime.context.stage_writeup_temperature,
+        max_retries=runtime.context.stage_writeup_max_retries,
     )
 
     graph = writeup.build(checkpointer=True)

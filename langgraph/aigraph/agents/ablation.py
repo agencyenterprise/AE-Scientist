@@ -131,6 +131,7 @@ class State(BaseModel):
 class Context(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
+    max_retries: int = 5
 
     @property
     def llm(self) -> BaseChatModel:
@@ -293,7 +294,7 @@ async def node_ablation_should_retry_code_from_ablation_output(
 ]:
     logger.info("Starting node_ablation_should_retry_code_from_ablation_output")
 
-    if state.ablation_retry_count > 5:
+    if state.ablation_retry_count > runtime.context.max_retries:
         logger.info("Max retry count reached, going to `__end__`")
         return "__end__"
 
@@ -411,7 +412,7 @@ async def node_ablation_should_retry_parser_from_output(
 ) -> Literal["node_ablation_code_metrics_parser", "__end__"]:
     logger.info("Starting node_ablation_should_retry_parser_from_output")
 
-    if state.parser_retry_count > 5:
+    if state.parser_retry_count > runtime.context.max_retries:
         logger.info("Max retry count reached, going to `__end__`")
         return "__end__"
 

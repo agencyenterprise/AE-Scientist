@@ -23,6 +23,40 @@ class Context(BaseModel):
     temperature: float = 0.0
     max_iterations: int = 3
 
+    # Stage: ideas
+    stage_ideas_model: str | None = None
+    stage_ideas_temperature: float = 0.7
+    stage_ideas_num_ideas: int = 5
+
+    # Stage: baseline
+    stage_baseline_model: str | None = None
+    stage_baseline_temperature: float = 0.0
+    stage_baseline_max_retries: int = 5
+
+    # Stage: tuning
+    stage_tuning_model: str | None = None
+    stage_tuning_temperature: float = 0.0
+    stage_tuning_max_retries: int = 5
+
+    # Stage: ablation
+    stage_ablation_model: str | None = None
+    stage_ablation_temperature: float = 0.0
+    stage_ablation_max_retries: int = 5
+
+    # Stage: plotting
+    stage_plotting_model: str | None = None
+    stage_plotting_temperature: float = 0.0
+    stage_plotting_max_retries: int = 5
+
+    # Stage: writeup
+    stage_writeup_model: str | None = None
+    stage_writeup_temperature: float = 0.0
+    stage_writeup_max_retries: int = 5
+
+    # Stage: reviewer
+    stage_reviewer_model: str | None = None
+    stage_reviewer_temperature: float = 0.0
+
     @property
     def llm(self) -> BaseChatModel:
         return init_chat_model(model=self.model, temperature=self.temperature)
@@ -63,9 +97,9 @@ async def node_ideas(state: State, runtime: Runtime[Context]) -> list[Send]:
     )
 
     ideas_context = ideas.Context(
-        num_ideas=3,
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        num_ideas=runtime.context.stage_ideas_num_ideas,
+        model=runtime.context.stage_ideas_model or runtime.context.model,
+        temperature=runtime.context.stage_ideas_temperature,
     )
 
     graph = ideas.build(checkpointer=True)
@@ -110,6 +144,26 @@ async def node_experiment(
     experiment_context = experiment.Context(
         model=runtime.context.model,
         temperature=runtime.context.temperature,
+        # baseline
+        stage_baseline_model=runtime.context.stage_baseline_model,
+        stage_baseline_temperature=runtime.context.stage_baseline_temperature,
+        stage_baseline_max_retries=runtime.context.stage_baseline_max_retries,
+        # tuning
+        stage_tuning_model=runtime.context.stage_tuning_model,
+        stage_tuning_temperature=runtime.context.stage_tuning_temperature,
+        stage_tuning_max_retries=runtime.context.stage_tuning_max_retries,
+        # ablation
+        stage_ablation_model=runtime.context.stage_ablation_model,
+        stage_ablation_temperature=runtime.context.stage_ablation_temperature,
+        stage_ablation_max_retries=runtime.context.stage_ablation_max_retries,
+        # plotting
+        stage_plotting_model=runtime.context.stage_plotting_model,
+        stage_plotting_temperature=runtime.context.stage_plotting_temperature,
+        stage_plotting_max_retries=runtime.context.stage_plotting_max_retries,
+        # writeup
+        stage_writeup_model=runtime.context.stage_writeup_model,
+        stage_writeup_temperature=runtime.context.stage_writeup_temperature,
+        stage_writeup_max_retries=runtime.context.stage_writeup_max_retries,
     )
     result = await graph.ainvoke(input=state, context=experiment_context)
     result = experiment.State.model_validate(result)
@@ -134,8 +188,8 @@ async def node_review(state: State, runtime: Runtime[Context]) -> dict[str, Any]
         experiments=state.experiments,
     )
     review_context = reviewer.Context(
-        model=runtime.context.model,
-        temperature=runtime.context.temperature,
+        model=runtime.context.stage_reviewer_model or runtime.context.model,
+        temperature=runtime.context.stage_reviewer_temperature,
     )
 
     graph = reviewer.build(checkpointer=True)

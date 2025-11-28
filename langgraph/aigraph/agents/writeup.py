@@ -83,6 +83,7 @@ class State(BaseModel):
 class Context(BaseModel):
     model: str = "gpt-4o-mini"
     temperature: float = 0.0
+    max_retries: int = 5
 
     @property
     def llm(self) -> BaseChatModel:
@@ -112,7 +113,7 @@ async def node_writeup_generate_writeup(
     class Schema(BaseModel):
         content: str
 
-    if state.writeup_retry_count > 5:
+    if state.writeup_retry_count > runtime.context.max_retries:
         raise GraphRecursionError("Max retry count reached")
 
     memory = ""
