@@ -51,7 +51,13 @@ app = FastAPI(
     description="Transform LLM conversations into actionable AE ideas",
 )
 
-# Set up CORS
+# Add authentication middleware FIRST (will be inner)
+# This order matters: middleware added later runs first (LIFO)
+# By adding auth first and CORS second, CORS wraps auth and processes all responses
+app.add_middleware(AuthenticationMiddleware)
+
+# Set up CORS SECOND (will be outer, wraps auth)
+# This ensures 401 responses from auth middleware get CORS headers
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -59,9 +65,6 @@ app.add_middleware(
     allow_methods=settings.CORS_METHODS,
     allow_headers=settings.CORS_HEADERS,
 )
-
-# Add authentication middleware
-app.add_middleware(AuthenticationMiddleware)
 
 # Include API routes
 app.include_router(api_router)
