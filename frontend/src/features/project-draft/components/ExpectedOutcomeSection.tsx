@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
 import { Pencil } from "lucide-react";
 
@@ -5,10 +6,15 @@ import { markdownComponents } from "../utils/markdownComponents";
 
 interface ExpectedOutcomeSectionProps {
   content: string;
+  diffContent?: ReactElement[] | null;
   onEdit?: () => void;
 }
 
-export function ExpectedOutcomeSection({ content, onEdit }: ExpectedOutcomeSectionProps) {
+export function ExpectedOutcomeSection({
+  content,
+  diffContent,
+  onEdit,
+}: ExpectedOutcomeSectionProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -26,7 +32,11 @@ export function ExpectedOutcomeSection({ content, onEdit }: ExpectedOutcomeSecti
         )}
       </div>
       <div className="text-sm text-foreground bg-green-500/10 border border-green-500/30 rounded-xl p-4 leading-relaxed">
-        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        {diffContent ? (
+          <div className="whitespace-pre-wrap">{diffContent}</div>
+        ) : (
+          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        )}
       </div>
     </div>
   );

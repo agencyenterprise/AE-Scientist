@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
 import { Pencil } from "lucide-react";
 
@@ -5,10 +6,11 @@ import { markdownComponents } from "../utils/markdownComponents";
 
 interface RelatedWorkSectionProps {
   content: string;
+  diffContent?: ReactElement[] | null;
   onEdit?: () => void;
 }
 
-export function RelatedWorkSection({ content, onEdit }: RelatedWorkSectionProps) {
+export function RelatedWorkSection({ content, diffContent, onEdit }: RelatedWorkSectionProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -26,7 +28,11 @@ export function RelatedWorkSection({ content, onEdit }: RelatedWorkSectionProps)
         )}
       </div>
       <div className="text-sm text-foreground/90 leading-relaxed">
-        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        {diffContent ? (
+          <div className="whitespace-pre-wrap">{diffContent}</div>
+        ) : (
+          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        )}
       </div>
     </div>
   );

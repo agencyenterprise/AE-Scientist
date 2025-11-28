@@ -1,7 +1,7 @@
 import React, { ReactElement } from "react";
 import type { Idea, IdeaVersion } from "@/types";
 import { isIdeaGenerating } from "../utils/versionUtils";
-import { FileText, Pencil, Undo2 } from "lucide-react";
+import { GitCompare, Pencil, Undo2 } from "lucide-react";
 import { VersionNavigationPanel } from "./VersionNavigationPanel";
 
 interface ProjectDraftHeaderProps {
@@ -47,8 +47,25 @@ export function ProjectDraftHeader({
       <div className="flex items-center justify-between mb-2">
         <label className="text-sm font-medium text-muted-foreground">Title</label>
         <div className="flex items-center gap-2">
-          {/* Version navigation (always visible when multiple versions exist) */}
-          {!isGenerating && hasMultipleVersions && comparisonVersion && (
+          {/* Show diffs toggle */}
+          {!isGenerating && comparisonVersion && nextVersion && (
+            <button
+              onClick={() => setShowDiffs(!showDiffs)}
+              className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded transition-colors ${
+                showDiffs
+                  ? "text-primary bg-primary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              title={showDiffs ? "Hide changes" : "Show changes"}
+              aria-label={showDiffs ? "Hide changes" : "Show changes"}
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              <span>{showDiffs ? "Hide changes" : "Show changes"}</span>
+            </button>
+          )}
+
+          {/* Version navigation (only when diffs enabled) */}
+          {showDiffs && !isGenerating && hasMultipleVersions && comparisonVersion && (
             <VersionNavigationPanel
               comparisonVersion={comparisonVersion}
               totalVersions={allVersions.length}
@@ -60,8 +77,8 @@ export function ProjectDraftHeader({
             />
           )}
 
-          {/* Revert button (visible when can compare versions) */}
-          {canRevert && (
+          {/* Revert button (only when diffs enabled) */}
+          {showDiffs && canRevert && (
             <button
               onClick={onRevertChanges}
               className="p-1.5 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
@@ -69,22 +86,6 @@ export function ProjectDraftHeader({
               aria-label="Revert changes"
             >
               <Undo2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {/* Show diffs toggle (icon-only) */}
-          {!isGenerating && comparisonVersion && nextVersion && (
-            <button
-              onClick={() => setShowDiffs(!showDiffs)}
-              className={`p-1.5 rounded transition-colors ${
-                showDiffs
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              title={showDiffs ? "Hide changes" : "Show changes"}
-              aria-label={showDiffs ? "Hide changes" : "Show changes"}
-            >
-              <FileText className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

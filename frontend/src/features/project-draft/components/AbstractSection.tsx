@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
 import { Pencil } from "lucide-react";
 
@@ -5,10 +6,11 @@ import { markdownComponents } from "../utils/markdownComponents";
 
 interface AbstractSectionProps {
   content: string;
+  diffContent?: ReactElement[] | null;
   onEdit?: () => void;
 }
 
-export function AbstractSection({ content, onEdit }: AbstractSectionProps) {
+export function AbstractSection({ content, diffContent, onEdit }: AbstractSectionProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -26,7 +28,11 @@ export function AbstractSection({ content, onEdit }: AbstractSectionProps) {
         )}
       </div>
       <div className="text-sm text-foreground/90 leading-relaxed">
-        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        {diffContent ? (
+          <div className="whitespace-pre-wrap">{diffContent}</div>
+        ) : (
+          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        )}
       </div>
     </div>
   );

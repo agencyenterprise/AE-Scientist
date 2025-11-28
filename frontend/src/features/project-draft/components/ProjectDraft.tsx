@@ -227,6 +227,7 @@ export function ProjectDraft({
               projectDraft={projectState.projectDraft}
               conversationId={conversation.id.toString()}
               onUpdate={handleSectionUpdate}
+              sectionDiffs={diffState.sectionDiffs}
             />
 
             {/* Footer Section */}

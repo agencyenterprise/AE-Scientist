@@ -1,6 +1,7 @@
 import React from "react";
 
 import type { Idea } from "@/types";
+import type { SectionDiffs } from "../utils/diffUtils";
 
 import { isIdeaGenerating } from "../utils/versionUtils";
 import {
@@ -24,12 +25,14 @@ interface ProjectDraftContentProps {
   projectDraft: Idea;
   conversationId: string;
   onUpdate: (updatedIdea: Idea) => void;
+  sectionDiffs?: SectionDiffs | null;
 }
 
 export function ProjectDraftContent({
   projectDraft,
   conversationId,
   onUpdate,
+  sectionDiffs,
 }: ProjectDraftContentProps): React.JSX.Element {
   const isGenerating = isIdeaGenerating(projectDraft);
   const activeVersion = projectDraft.active_version;
@@ -99,6 +102,7 @@ export function ProjectDraftContent({
               {activeVersion?.short_hypothesis && (
                 <HypothesisSection
                   content={activeVersion.short_hypothesis}
+                  diffContent={sectionDiffs?.hypothesis}
                   onEdit={() => sectionEdit.openSection("hypothesis")}
                 />
               )}
@@ -106,6 +110,7 @@ export function ProjectDraftContent({
               {activeVersion?.related_work && (
                 <RelatedWorkSection
                   content={activeVersion.related_work}
+                  diffContent={sectionDiffs?.relatedWork}
                   onEdit={() => sectionEdit.openSection("related_work")}
                 />
               )}
@@ -113,6 +118,7 @@ export function ProjectDraftContent({
               {activeVersion?.abstract && (
                 <AbstractSection
                   content={activeVersion.abstract}
+                  diffContent={sectionDiffs?.abstract}
                   onEdit={() => sectionEdit.openSection("abstract")}
                 />
               )}
@@ -120,6 +126,8 @@ export function ProjectDraftContent({
               {activeVersion?.experiments && activeVersion.experiments.length > 0 && (
                 <ExperimentsSection
                   experiments={activeVersion.experiments}
+                  diffContent={sectionDiffs?.experiments}
+                  deletedItems={sectionDiffs?.deletedExperiments}
                   onEditAll={() => sectionEdit.openArrayAll("experiments")}
                   onEditItem={index => sectionEdit.openArrayItem("experiments", index)}
                   onAddItem={() => sectionEdit.openAddNewItem("experiments")}
@@ -131,6 +139,7 @@ export function ProjectDraftContent({
               {activeVersion?.expected_outcome && (
                 <ExpectedOutcomeSection
                   content={activeVersion.expected_outcome}
+                  diffContent={sectionDiffs?.expectedOutcome}
                   onEdit={() => sectionEdit.openSection("expected_outcome")}
                 />
               )}
@@ -139,6 +148,8 @@ export function ProjectDraftContent({
                 activeVersion.risk_factors_and_limitations.length > 0 && (
                   <RiskFactorsSection
                     risks={activeVersion.risk_factors_and_limitations}
+                    diffContent={sectionDiffs?.riskFactors}
+                    deletedItems={sectionDiffs?.deletedRiskFactors}
                     onEditAll={() => sectionEdit.openArrayAll("risk_factors")}
                     onEditItem={index => sectionEdit.openArrayItem("risk_factors", index)}
                     onAddItem={() => sectionEdit.openAddNewItem("risk_factors")}

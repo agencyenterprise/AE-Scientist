@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import ReactMarkdown from "react-markdown";
 import { Pencil } from "lucide-react";
 
@@ -5,10 +6,11 @@ import { markdownComponents } from "../utils/markdownComponents";
 
 interface HypothesisSectionProps {
   content: string;
+  diffContent?: ReactElement[] | null;
   onEdit?: () => void;
 }
 
-export function HypothesisSection({ content, onEdit }: HypothesisSectionProps) {
+export function HypothesisSection({ content, diffContent, onEdit }: HypothesisSectionProps) {
   return (
     <div className="border-l-4 border-primary pl-4">
       <div className="flex items-center justify-between mb-1">
@@ -26,7 +28,11 @@ export function HypothesisSection({ content, onEdit }: HypothesisSectionProps) {
         )}
       </div>
       <div className="text-sm text-foreground leading-relaxed">
-        <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        {diffContent ? (
+          <div className="whitespace-pre-wrap">{diffContent}</div>
+        ) : (
+          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
+        )}
       </div>
     </div>
   );

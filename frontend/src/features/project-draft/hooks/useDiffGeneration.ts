@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ReactElement } from "react";
 import type { IdeaVersion } from "@/types";
-import { generateTitleDiff, generateDescriptionDiff, canCompareVersions } from "../utils/diffUtils";
+import { generateSectionDiffs, canCompareVersions, type SectionDiffs } from "../utils/diffUtils";
 
 interface UseDiffGenerationProps {
   showDiffs: boolean;
@@ -10,8 +10,11 @@ interface UseDiffGenerationProps {
 }
 
 interface UseDiffGenerationReturn {
+  // Title diff (for header)
   titleDiffContent: ReactElement[] | null;
-  descriptionDiffContent: ReactElement[] | null;
+  // All section diffs
+  sectionDiffs: SectionDiffs | null;
+  // Can show diffs flag
   canShowDiffs: boolean;
 }
 
@@ -25,27 +28,21 @@ export function useDiffGeneration({
     return showDiffs && canCompareVersions(comparisonVersion, nextVersion);
   }, [showDiffs, comparisonVersion, nextVersion]);
 
-  // Generate diff content for title
-  const titleDiffContent = useMemo((): ReactElement[] | null => {
+  // Generate all section diffs
+  const sectionDiffs = useMemo((): SectionDiffs | null => {
     if (!canShowDiffs || !comparisonVersion || !nextVersion) {
       return null;
     }
 
-    return generateTitleDiff(comparisonVersion, nextVersion);
+    return generateSectionDiffs(comparisonVersion, nextVersion);
   }, [canShowDiffs, comparisonVersion, nextVersion]);
 
-  // Generate diff content for description
-  const descriptionDiffContent = useMemo((): ReactElement[] | null => {
-    if (!canShowDiffs || !comparisonVersion || !nextVersion) {
-      return null;
-    }
-
-    return generateDescriptionDiff(comparisonVersion, nextVersion);
-  }, [canShowDiffs, comparisonVersion, nextVersion]);
+  // Extract title diff for backwards compatibility
+  const titleDiffContent = sectionDiffs?.title ?? null;
 
   return {
     titleDiffContent,
-    descriptionDiffContent,
+    sectionDiffs,
     canShowDiffs,
   };
 }
