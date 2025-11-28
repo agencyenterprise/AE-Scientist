@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { X } from "lucide-react";
 
 type ConflictItem = { id: number; title: string; updated_at: string; url: string };
 
@@ -34,14 +35,7 @@ export function ConflictResolution({
           onClick={onClose}
           className="text-muted-foreground hover:text-foreground p-1 rounded"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <X className="w-6 h-6" />
         </button>
       </div>
 

@@ -4,6 +4,7 @@ import { ModelSelector } from "@/features/model-selector/components/ModelSelecto
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationDetail } from "@/types";
 import React, { useEffect, useState } from "react";
+import { Settings } from "lucide-react";
 
 import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
@@ -109,7 +110,7 @@ export function ConversationHeader({
             className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
             title="Configure AI prompts"
           >
-            <span>⚙️</span>
+            <Settings className="w-4 h-4" />
             <span>AI Config</span>
           </button>
         )}

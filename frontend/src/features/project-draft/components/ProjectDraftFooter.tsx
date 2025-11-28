@@ -2,6 +2,7 @@ import React from "react";
 import type { Idea, IdeaVersion } from "@/types";
 import { VersionNavigationPanel } from "./VersionNavigationPanel";
 import { isIdeaGenerating } from "../utils/versionUtils";
+import { Undo2, Plus } from "lucide-react";
 
 interface ProjectDraftFooterProps {
   projectDraft: Idea;
@@ -86,7 +87,7 @@ export function ProjectDraftFooter({
               onClick={onRevertChanges}
               className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded border border-red-500/30 transition-colors"
             >
-              <span>↶</span>
+              <Undo2 className="w-3 h-3" />
               <span>Revert changes</span>
             </button>
           </div>
@@ -104,9 +105,7 @@ export function ProjectDraftFooter({
               : ""
           }`}
         >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+          <Plus className="w-3 h-3" />
           <span>Create Project</span>
         </button>
       </div>

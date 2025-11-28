@@ -2,6 +2,7 @@
 
 import type { LLMModel } from "@/types";
 import { RefObject } from "react";
+import { Image as ImageIcon, FileText, Check } from "lucide-react";
 
 interface ModelOptionProps {
   provider: string;
@@ -57,12 +58,12 @@ export function ModelOption({
 
         {/* Capabilities - fixed width for alignment */}
         {showCapabilities && (
-          <div className="flex items-center justify-center w-12 space-x-0.5">
-            <span title="Supports images" className="text-xs w-4 text-center">
-              {model.supports_images ? "🖼️" : ""}
+          <div className="flex items-center justify-center w-12 space-x-1">
+            <span title="Supports images" className="w-4 text-center">
+              {model.supports_images && <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />}
             </span>
-            <span title="Supports PDFs" className="text-xs w-4 text-center">
-              {model.supports_pdfs ? "📄" : ""}
+            <span title="Supports PDFs" className="w-4 text-center">
+              {model.supports_pdfs && <FileText className="w-3.5 h-3.5 text-muted-foreground" />}
             </span>
           </div>
         )}
@@ -70,7 +71,9 @@ export function ModelOption({
         {/* Selection checkmark - small fixed width on right */}
         <div className="flex items-center justify-center w-8">
           {isSelected && (
-            <span className={isCompatible ? "text-primary" : "text-muted-foreground/50"}>✓</span>
+            <Check
+              className={`w-4 h-4 ${isCompatible ? "text-primary" : "text-muted-foreground/50"}`}
+            />
           )}
         </div>
       </div>

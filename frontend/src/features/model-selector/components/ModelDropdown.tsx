@@ -11,6 +11,7 @@ import {
 import type { LLMDefault, LLMModel } from "@/types";
 import { RefObject, useState } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 interface ModelDropdownProps {
   providers: Record<string, LLMModel[]>;
@@ -108,14 +109,7 @@ export function ModelDropdown({
             className="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
             title="Close"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <X className="w-3 h-3" />
           </button>
         </div>
 

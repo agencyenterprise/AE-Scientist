@@ -12,6 +12,7 @@ import {
   isModelDefault,
 } from "@/features/model-selector/utils/modelUtils";
 import { useEffect } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface ModelSelectorProps {
   promptType: string;
@@ -153,14 +154,7 @@ export function ModelSelector({
       >
         <span>Model:</span>
         <span className="font-semibold">{currentModelLabel}</span>
-        <svg
-          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {isOpen && coords && (

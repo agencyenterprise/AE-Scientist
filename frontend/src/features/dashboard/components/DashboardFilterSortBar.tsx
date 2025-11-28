@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): React.JSX.Element {
   const { sortKey, setSortKey, sortDir, setSortDir } = useDashboard();
@@ -35,23 +36,9 @@ export function DashboardFilterSortBar({ hasQuery }: { hasQuery: boolean }): Rea
           title="Toggle sort direction"
         >
           {sortDir === "desc" ? (
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
+            <ChevronDown className="h-4 w-4" />
           ) : (
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 15l7-7 7 7"
-              />
-            </svg>
+            <ChevronUp className="h-4 w-4" />
           )}
         </button>
       </div>

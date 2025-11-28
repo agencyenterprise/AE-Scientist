@@ -2,6 +2,7 @@
 
 import React, { useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Home, Plus, MessageCircle, Loader2 } from "lucide-react";
 
 import type { Conversation } from "@/shared/lib/api-adapters";
 
@@ -72,14 +73,7 @@ export function Sidebar({
               className="btn-secondary w-full py-2"
               title="Go to dashboard"
             >
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"
-                />
-              </svg>
+              <Home className="h-4 w-4 mr-2" />
               Dashboard
             </button>
           )}
@@ -94,19 +88,12 @@ export function Sidebar({
           >
             {isLoading ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Importing...
               </>
             ) : (
               <>
-                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
+                <Plus className="h-4 w-4 mr-2" />
                 Import
               </>
             )}
@@ -120,19 +107,7 @@ export function Sidebar({
           <div className="p-4 text-center text-muted-foreground">
             {conversations.length === 0 ? (
               <>
-                <svg
-                  className="mx-auto h-12 w-12 text-muted-foreground mb-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.011-.235l-3.678 1.47a1 1 0 01-1.31-1.31l1.47-3.678A8.955 8.955 0 013 12a8 8 0 018-8c4.418 0 8 3.582 8 8z"
-                  />
-                </svg>
+                <MessageCircle className="mx-auto h-12 w-12 text-muted-foreground mb-2" />
                 <p className="text-sm">No conversations yet</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Click &quot;Import Chat&quot; to get started

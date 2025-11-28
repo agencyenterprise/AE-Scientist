@@ -1,6 +1,7 @@
 import React, { ReactElement } from "react";
 import type { Idea, IdeaVersion } from "@/types";
 import { isIdeaGenerating } from "../utils/versionUtils";
+import { FileText, Pencil } from "lucide-react";
 
 interface ProjectDraftHeaderProps {
   projectDraft: Idea;
@@ -58,7 +59,7 @@ export function ProjectDraftHeader({
                     : "Show diffs"
               }
             >
-              <span className="absolute left-2">📄</span>
+              <FileText className="absolute left-2 w-3.5 h-3.5" />
               <span className="pl-2">{showDiffs ? "Show current" : "Show diffs"}</span>
             </button>
           )}
@@ -92,7 +93,7 @@ export function ProjectDraftHeader({
                   : "Edit idea"
               }
             >
-              <span>✏️</span>
+              <Pencil className="w-3.5 h-3.5" />
               <span>Edit</span>
             </button>
           )}

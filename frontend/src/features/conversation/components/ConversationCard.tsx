@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { ExternalLink } from "lucide-react";
 
 import type { Conversation } from "@/shared/lib/api-adapters";
 import type { SearchResult as SearchHit } from "@/types";
@@ -340,14 +341,7 @@ export function ConversationCard({
             className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
             title="Open imported chat"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7h4m0 0v4m0-4L10 14m-1 5H6a2 2 0 01-2-2v-3"
-              />
-            </svg>
+            <ExternalLink className="w-3.5 h-3.5" />
             {!isGrid && <span>Imported Chat</span>}
           </a>
         </div>

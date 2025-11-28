@@ -8,6 +8,7 @@ import {
 } from "@/features/conversation/components/ConversationCard";
 import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
 import type { Conversation } from "@/shared/lib/api-adapters";
+import { Search } from "lucide-react";
 
 interface SearchResultsProps {
   results: SearchResult[];
@@ -225,19 +226,7 @@ export function SearchResults({
       <div className="flex flex-col items-center justify-center text-center h-full min-h-96">
         {/* Search Icon */}
         <div className="bg-primary/20 p-4 rounded-full mb-6">
-          <svg
-            className="h-12 w-12 text-primary"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
+          <Search className="h-12 w-12 text-primary" />
         </div>
 
         {/* Welcome Message */}
@@ -253,19 +242,7 @@ export function SearchResults({
   if (!isLoading && results.length === 0 && query) {
     return (
       <div className="text-center py-8">
-        <svg
-          className="h-12 w-12 text-muted-foreground mx-auto mb-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
+        <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h3 className="text-lg font-medium text-foreground mb-2">No results found</h3>
         <p className="text-muted-foreground text-sm">
           Try adjusting your search query or check your spelling.

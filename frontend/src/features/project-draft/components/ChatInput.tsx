@@ -1,4 +1,5 @@
 import { useRef, useCallback } from "react";
+import { Paperclip, Send, Loader2 } from "lucide-react";
 
 interface ChatInputProps {
   inputMessage: string;
@@ -92,37 +93,18 @@ export function ChatInput({
           }`}
           title="Attach files"
         >
-          <svg
-            className="w-4 h-4 text-muted-foreground"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-            />
-          </svg>
+          <Paperclip className="w-4 h-4 text-muted-foreground" />
         </button>
 
         <button
           onClick={onSendMessage}
           disabled={!canSend}
-          className="px-4 py-2 h-10 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          className="p-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
         >
           {isStreaming ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
+            <Send className="w-4 h-4" />
           )}
         </button>
       </div>

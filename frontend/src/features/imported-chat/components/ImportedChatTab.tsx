@@ -2,6 +2,17 @@
 
 import React, { memo, useEffect, useRef, useState } from "react";
 import { Markdown } from "@/shared/components/Markdown";
+import {
+  Maximize2,
+  Minimize2,
+  FileText,
+  PenSquare,
+  ExternalLink,
+  X,
+  Pencil,
+  Check,
+  Loader2,
+} from "lucide-react";
 
 import type { ConversationDetail } from "@/types";
 import type { ErrorResponse } from "@/types";
@@ -231,18 +242,7 @@ export function ImportedChatTab({
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title={isMaximized ? "Restore to 50/50" : "Maximize Imported Chat"}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d={
-                  isMaximized
-                    ? "M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3"
-                    : "M4 8V4m0 0h4m-4 0l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                }
-              />
-            </svg>
+            {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
@@ -275,19 +275,7 @@ export function ImportedChatTab({
                         : "border-[var(--border)] bg-[var(--surface)] text-[var(--primary-700)] hover:bg-[var(--muted)]"
                     }`}
                   >
-                    <svg
-                      className="w-3 h-3 mr-1.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2 2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                      />
-                    </svg>
+                    <FileText className="w-3 h-3 mr-1.5" />
                     Summary
                   </button>
                 ) : (
@@ -300,7 +288,7 @@ export function ImportedChatTab({
                     <div className="px-2 h-full min-w-[96px] flex items-center justify-center">
                       {isGenerating ? (
                         <div className="flex items-center text-[10px] font-medium text-[var(--primary)]">
-                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--primary)] mr-1"></div>
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           Generating...
                         </div>
                       ) : (
@@ -314,19 +302,7 @@ export function ImportedChatTab({
                               : "Write summary manually"
                           }
                         >
-                          <svg
-                            className="w-3 h-3 mr-1"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                            />
-                          </svg>
+                          <PenSquare className="w-3 h-3 mr-1" />
                           Write
                         </button>
                       )}
@@ -340,19 +316,7 @@ export function ImportedChatTab({
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-3 py-1.5 border border-border rounded-md text-xs font-medium text-foreground bg-card hover:bg-muted transition-colors"
                 >
-                  <svg
-                    className="w-3 h-3 mr-1.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                    />
-                  </svg>
+                  <ExternalLink className="w-3 h-3 mr-1.5" />
                   View Original
                 </a>
               </div>
@@ -369,19 +333,7 @@ export function ImportedChatTab({
                       className="p-1 text-muted-foreground hover:text-foreground"
                       title="Close"
                     >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="p-4">
@@ -428,19 +380,7 @@ export function ImportedChatTab({
                         className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-[var(--primary-700)] bg-[color-mix(in_srgb,var(--primary),transparent_90%)] border border-[var(--primary-300)] rounded hover:bg-[color-mix(in_srgb,var(--primary),transparent_80%)]"
                         title="Edit summary"
                       >
-                        <svg
-                          className="w-3 h-3 mr-1"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                          />
-                        </svg>
+                        <Pencil className="w-3 h-3 mr-1" />
                         Edit
                       </button>
                     )}
@@ -453,24 +393,12 @@ export function ImportedChatTab({
                         >
                           {isUpdatingSummary ? (
                             <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[var(--success-foreground)] mr-1"></div>
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                               Saving...
                             </>
                           ) : (
                             <>
-                              <svg
-                                className="w-3 h-3 mr-1"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
+                              <Check className="w-3 h-3 mr-1" />
                               Save
                             </>
                           )}
@@ -480,19 +408,7 @@ export function ImportedChatTab({
                           disabled={isUpdatingSummary}
                           className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-foreground bg-muted border border-border rounded hover:bg-muted/80 disabled:opacity-50"
                         >
-                          <svg
-                            className="w-3 h-3 mr-1"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
+                          <X className="w-3 h-3 mr-1" />
                           Cancel
                         </button>
                       </>

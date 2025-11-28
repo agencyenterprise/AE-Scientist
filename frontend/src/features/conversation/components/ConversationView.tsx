@@ -5,6 +5,7 @@ import { ConversationProvider } from "@/features/conversation/context/Conversati
 import { ProjectDraftTab } from "@/features/project-draft/components/ProjectDraftTab";
 import type { ConversationDetail } from "@/types";
 import React, { useState } from "react";
+import { MessageCircle } from "lucide-react";
 
 interface ConversationViewProps {
   conversation?: ConversationDetail;
@@ -59,19 +60,7 @@ export function ConversationView({
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center max-w-md">
-          <svg
-            className="mx-auto h-24 w-24 text-muted-foreground mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.955 8.955 0 01-2.011-.235l-3.678 1.47a1 1 0 01-1.31-1.31l1.47-3.678A8.955 8.955 0 013 12a8 8 0 018-8c4.418 0 8 3.582 8 8z"
-            />
-          </svg>
+          <MessageCircle className="mx-auto h-24 w-24 text-muted-foreground mb-4" strokeWidth={1} />
           <h2 className="text-xl font-medium text-foreground mb-2">
             Welcome to AGI Judd&apos;s Idea Catalog
           </h2>

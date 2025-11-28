@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Settings, X, Loader2 } from "lucide-react";
 
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
@@ -77,7 +78,7 @@ export function ImportForm({
                 className="btn-secondary text-xs py-1 px-2 disabled:opacity-50"
                 title="Configure project generation prompt"
               >
-                <span>⚙️</span>
+                <Settings className="w-4 h-4" />
                 <span className="ml-1">LLM Prompt</span>
               </button>
             )}
@@ -88,14 +89,7 @@ export function ImportForm({
                 disabled={isDisabled || isSubmitting}
                 className="text-muted-foreground hover:text-foreground disabled:opacity-50 p-1 rounded"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-6 h-6" />
               </button>
             )}
           </div>
@@ -146,7 +140,7 @@ export function ImportForm({
         >
           {isSubmitting ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Importing...
             </>
           ) : (

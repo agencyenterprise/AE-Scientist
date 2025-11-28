@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { X, AlertTriangle, Loader2, Plus } from "lucide-react";
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -48,14 +49,7 @@ export function CreateProjectModal({
               disabled={isLoading}
               className="text-muted-foreground hover:text-foreground disabled:opacity-50 p-1 rounded"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="w-6 h-6" />
             </button>
           </div>
 
@@ -69,19 +63,7 @@ export function CreateProjectModal({
             <div className="bg-[color-mix(in_srgb,var(--warning),transparent_90%)] border border-[var(--warning)] rounded-lg p-4">
               <div className="flex">
                 <div className="flex-shrink-0">
-                  <svg
-                    className="w-5 h-5 text-[var(--warning)]"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"
-                    />
-                  </svg>
+                  <AlertTriangle className="w-5 h-5 text-[var(--warning)]" />
                 </div>
                 <div className="ml-3">
                   <h3 className="text-sm font-medium text-foreground">Important</h3>
@@ -114,19 +96,12 @@ export function CreateProjectModal({
           >
             {isLoading ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[var(--success-foreground)] mr-2"></div>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Creating Project...
               </>
             ) : (
               <>
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
+                <Plus className="w-4 h-4 mr-2" />
                 Create Project
               </>
             )}
