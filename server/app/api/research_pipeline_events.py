@@ -144,6 +144,13 @@ def ingest_run_finished(
 
     if run.pod_id:
         try:
+            logger.info(
+                "Run %s finished (success=%s, message=%s); terminating pod %s.",
+                payload.run_id,
+                payload.success,
+                payload.message,
+                run.pod_id,
+            )
             terminate_pod(pod_id=run.pod_id)
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:

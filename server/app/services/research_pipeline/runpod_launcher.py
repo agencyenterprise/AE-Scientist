@@ -363,8 +363,7 @@ def launch_research_pipeline_run(
         "GIT_SSH_KEY_B64": github_key_b64,
         "REPO_NAME": "AE-Scientist",
         "REPO_ORG": "agencyenterprise",
-        # "REPO_BRANCH": "main",
-        "REPO_BRANCH": "feature/aut-220-ae-scientist-api-research-pipeline",
+        "REPO_BRANCH": "main",
         "OPENAI_API_KEY": env.openai_api_key,
         "HF_TOKEN": env.hf_token,
     }

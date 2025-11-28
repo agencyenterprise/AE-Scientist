@@ -140,8 +140,10 @@ class EventPersistenceManager:
         self._run_id = run_id
         self._webhook_client = webhook_client
         ctx = multiprocessing.get_context("spawn")
-        self._queue: multiprocessing.queues.Queue[PersistableEvent | None] = ctx.Queue(
-            maxsize=queue_maxsize
+        self._manager = ctx.Manager()
+        self._queue = cast(
+            multiprocessing.queues.Queue[PersistableEvent | None],
+            self._manager.Queue(maxsize=queue_maxsize),
         )
         self._stop_sentinel: Optional[PersistableEvent] = None
         self._thread = threading.Thread(
@@ -173,6 +175,8 @@ class EventPersistenceManager:
             self._queue.close()
         except OSError:
             pass
+        if self._manager is not None:
+            self._manager.shutdown()
 
     def _drain_queue(self) -> None:
         conn: Optional[psycopg2.extensions.connection] = None

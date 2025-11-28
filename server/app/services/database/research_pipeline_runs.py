@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import NamedTuple, Optional
 
@@ -8,6 +9,20 @@ import psycopg2.extras
 logger = logging.getLogger(__name__)
 
 PIPELINE_RUN_STATUSES = ("pending", "running", "failed", "completed")
+
+
+def _startup_grace_seconds() -> int:
+    value = os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
+    if not value:
+        raise RuntimeError(
+            "PIPELINE_MONITOR_STARTUP_GRACE_SECONDS is required to create pipeline runs."
+        )
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise RuntimeError(
+            "PIPELINE_MONITOR_STARTUP_GRACE_SECONDS must be an integer number of seconds."
+        ) from exc
 
 
 class ResearchPipelineRun(NamedTuple):
@@ -43,7 +58,7 @@ class ResearchPipelineRunsMixin:
         if status not in PIPELINE_RUN_STATUSES:
             raise ValueError(f"Invalid status '{status}'")
         now = datetime.now()
-        deadline = start_deadline_at or (now + timedelta(minutes=5))
+        deadline = start_deadline_at or (now + timedelta(seconds=_startup_grace_seconds()))
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
             with conn.cursor() as cursor:
                 cursor.execute(

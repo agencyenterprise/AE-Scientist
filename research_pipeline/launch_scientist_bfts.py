@@ -771,6 +771,13 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = parse_arguments()
+    cfg_path = Path(args.config_file)
+    try:
+        config_text = cfg_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        logger.error("Failed to read config file %s: %s", cfg_path, exc)
+        raise
+    logger.info("Launching AE Scientist with config file %s\n%s", cfg_path, config_text)
     execute_launcher(args)
 
 

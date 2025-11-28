@@ -140,6 +140,12 @@ class ResearchPipelineMonitor:
                         run.pod_id,
                     )
                 elif status not in ("RUNNING", "PENDING"):
+                    logger.warning(
+                        "Run %s pod %s returned unexpected status '%s'; failing run.",
+                        run.run_id,
+                        run.pod_id,
+                        status,
+                    )
                     self._fail_run(db, run, f"Pod status is {status}; terminating run.")
             except RunPodError as exc:
                 logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
