@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class Args(BaseSettings):
     cwd: CliPositionalArg[Path]
     task: CliPositionalArg[Path]
+
     thread_id: Annotated[
         str,
         Field(default_factory=lambda: str(uuid.uuid4())),
@@ -34,7 +35,7 @@ class Args(BaseSettings):
     ]
     model: Annotated[
         str,
-        Field(default="gpt-4o-mini"),
+        Field(default="gpt-5"),
     ]
     temperature: Annotated[
         float,
@@ -50,37 +51,37 @@ class Args(BaseSettings):
     ]
 
     # Stage: ideas
-    stage_ideas_model: Annotated[str | None, Field(default=None)]
+    stage_ideas_model: Annotated[str, Field(default='gpt-5')]
     stage_ideas_temperature: Annotated[float, Field(default=0.7)]
     stage_ideas_num_ideas: Annotated[int, Field(default=5)]
 
     # Stage: baseline
-    stage_baseline_model: Annotated[str | None, Field(default=None)]
+    stage_baseline_model: Annotated[str, Field(default='gpt-5')]
     stage_baseline_temperature: Annotated[float, Field(default=0.0)]
     stage_baseline_max_retries: Annotated[int, Field(default=5)]
 
     # Stage: tuning
-    stage_tuning_model: Annotated[str | None, Field(default=None)]
+    stage_tuning_model: Annotated[str, Field(default='gpt-5')]
     stage_tuning_temperature: Annotated[float, Field(default=0.0)]
     stage_tuning_max_retries: Annotated[int, Field(default=5)]
 
     # Stage: ablation
-    stage_ablation_model: Annotated[str | None, Field(default=None)]
+    stage_ablation_model: Annotated[str, Field(default='gpt-5')]
     stage_ablation_temperature: Annotated[float, Field(default=0.0)]
     stage_ablation_max_retries: Annotated[int, Field(default=5)]
 
     # Stage: plotting
-    stage_plotting_model: Annotated[str | None, Field(default=None)]
+    stage_plotting_model: Annotated[str, Field(default='gpt-5')]
     stage_plotting_temperature: Annotated[float, Field(default=0.0)]
     stage_plotting_max_retries: Annotated[int, Field(default=5)]
 
     # Stage: writeup
-    stage_writeup_model: Annotated[str | None, Field(default=None)]
+    stage_writeup_model: Annotated[str, Field(default='gpt-5')]
     stage_writeup_temperature: Annotated[float, Field(default=0.0)]
     stage_writeup_max_retries: Annotated[int, Field(default=5)]
 
     # Stage: reviewer
-    stage_reviewer_model: Annotated[str | None, Field(default=None)]
+    stage_reviewer_model: Annotated[str, Field(default='gpt-5')]
     stage_reviewer_temperature: Annotated[float, Field(default=0.0)]
 
     async def cli_cmd(self) -> None:
