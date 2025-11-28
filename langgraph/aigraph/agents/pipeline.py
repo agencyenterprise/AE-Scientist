@@ -259,8 +259,7 @@ def build(
 
     # Add edges
     builder.add_conditional_edges(START, node_ideas, ["node_experiment"])
-    builder.add_edge("node_experiment", "node_summarize")
-    builder.add_edge("node_summarize", "node_review")
+    builder.add_edge("node_experiment", "node_review")
     builder.add_conditional_edges("node_review", node_retry, ["node_experiment", END])
 
     return builder.compile(name="graph_all", checkpointer=checkpointer)  # type: ignore
