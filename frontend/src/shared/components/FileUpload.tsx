@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Image from "next/image";
 
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import {
   createImagePreview,
   formatFileSize,
@@ -119,19 +119,12 @@ export function FileUpload({
         formData.append("llm_model", currentModel);
         formData.append("llm_provider", currentProvider);
 
-        const response = await fetch(`${config.apiUrl}/conversations/${conversationId}/files`, {
+        const result = await apiFetch<
+          import("@/types").ApiComponents["schemas"]["FileUploadResponse"]
+        >(`/conversations/${conversationId}/files`, {
           method: "POST",
-          credentials: "include", // Include authentication cookies
           body: formData,
         });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: "Upload failed" }));
-          throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-
-        const result: import("@/types").ApiComponents["schemas"]["FileUploadResponse"] =
-          await response.json();
 
         if (isErrorResponse(result)) {
           throw new Error(result.error || "Upload failed");

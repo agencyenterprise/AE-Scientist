@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import type { Idea } from "@/types";
-import { config } from "@/shared/lib/config";
+import type { Idea, IdeaGetResponse } from "@/types";
+import { apiFetch } from "@/shared/lib/api-client";
 
 // Section types
 export type StringSection =
@@ -116,21 +116,10 @@ export function useSectionEdit({
   // API call to update the idea
   const updateIdea = useCallback(
     async (payload: ReturnType<typeof buildPayload>): Promise<void> => {
-      const response = await fetch(`${config.apiUrl}/conversations/${conversationId}/idea`, {
+      const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversationId}/idea`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(payload),
+        body: payload,
       });
-
-      if (!response.ok) {
-        const errorResult = await response.json();
-        throw new Error(errorResult.error || "Failed to update idea");
-      }
-
-      const result = await response.json();
       onUpdate(result.idea);
     },
     [conversationId, onUpdate]

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { LLMPromptCreateRequest, LLMPromptResponse } from "@/types";
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import { DiffViewer } from "./DiffViewer";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 
@@ -43,17 +43,8 @@ export function PromptEditModal({
 
   const fetchCurrentPrompt = useCallback(async (): Promise<LLMPromptResponse | null> => {
     try {
-      const response = await fetch(`${config.apiUrl}/llm-prompts/${promptType}`, {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const result: LLMPromptResponse = await response.json();
-        return result;
-      }
-
-      setError("Failed to load prompt");
-      return null;
+      const result = await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}`);
+      return result;
     } catch (err) {
       setError("Failed to load prompt");
       // eslint-disable-next-line no-console
@@ -81,16 +72,8 @@ export function PromptEditModal({
     setError("");
 
     try {
-      const response = await fetch(`${config.apiUrl}/llm-prompts/${promptType}/default`, {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const result: LLMPromptResponse = await response.json();
-        setDefaultPrompt(result.system_prompt);
-      } else {
-        setError("Failed to load default prompt");
-      }
+      const result = await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}/default`);
+      setDefaultPrompt(result.system_prompt);
     } catch (err) {
       setError("Failed to load default prompt");
       // eslint-disable-next-line no-console
@@ -127,26 +110,18 @@ export function PromptEditModal({
         system_prompt: systemPrompt.trim(),
       };
 
-      const response = await fetch(`${config.apiUrl}/llm-prompts/${promptType}`, {
+      await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(requestData),
+        body: requestData,
       });
 
-      if (response.ok) {
-        // Background refresh without spinner to avoid flicker
-        const result = await fetchCurrentPrompt();
-        if (result) {
-          applyPromptStateFromResponse(result);
-        }
-        setSuccessMessage("Saved");
-        setShowBackButton(true);
-      } else {
-        setError("Failed to save prompt");
+      // Background refresh without spinner to avoid flicker
+      const result = await fetchCurrentPrompt();
+      if (result) {
+        applyPromptStateFromResponse(result);
       }
+      setSuccessMessage("Saved");
+      setShowBackButton(true);
     } catch (err) {
       setError("Failed to save prompt");
       // eslint-disable-next-line no-console
@@ -166,23 +141,19 @@ export function PromptEditModal({
     setError("");
 
     try {
-      const response = await fetch(`${config.apiUrl}/llm-prompts/${promptType}`, {
+      await apiFetch<void>(`/llm-prompts/${promptType}`, {
         method: "DELETE",
-        credentials: "include",
+        skipJson: true,
       });
 
-      if (response.ok) {
-        // Background refresh without spinner to avoid flicker
-        const result = await fetchCurrentPrompt();
-        if (result) {
-          applyPromptStateFromResponse(result);
-        }
-        // Show success without closing to avoid flicker
-        setSuccessMessage("Reverted to default");
-        setShowBackButton(true);
-      } else {
-        setError("Failed to revert to default");
+      // Background refresh without spinner to avoid flicker
+      const result = await fetchCurrentPrompt();
+      if (result) {
+        applyPromptStateFromResponse(result);
       }
+      // Show success without closing to avoid flicker
+      setSuccessMessage("Reverted to default");
+      setShowBackButton(true);
     } catch (err) {
       const errorMessage = `Failed to revert to default: ${err instanceof Error ? err.message : String(err)}`;
       setError(errorMessage);

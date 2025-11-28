@@ -5,9 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 import { ProtectedRoute } from "@/shared/components/ProtectedRoute";
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import type { Conversation } from "@/shared/lib/api-adapters";
 import { convertApiConversationList } from "@/shared/lib/api-adapters";
+import type { ConversationListResponse } from "@/types";
 
 interface ConversationsLayoutProps {
   children: React.ReactNode;
@@ -30,14 +31,11 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
 
   const loadConversations = useCallback(async (): Promise<void> => {
     try {
-      const response = await fetch(`${config.apiUrl}/conversations?limit=500&offset=0`, {
-        credentials: "include",
-      });
-      if (response.ok) {
-        const apiResponse = await response.json();
-        const data = convertApiConversationList(apiResponse);
-        setConversations(data);
-      }
+      const apiResponse = await apiFetch<ConversationListResponse>(
+        "/conversations?limit=500&offset=0"
+      );
+      const data = convertApiConversationList(apiResponse);
+      setConversations(data);
     } catch {
       // silence error in prod/CI
     }

@@ -16,7 +16,7 @@ import {
 
 import type { ConversationDetail } from "@/types";
 import type { ErrorResponse } from "@/types";
-import { config } from "@/shared/lib/config";
+import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { extractSummary } from "@/shared/lib/api-adapters";
 import type { UpdateSummaryRequest } from "@/shared/lib/api-adapters";
 
@@ -99,25 +99,24 @@ export function ImportedChatTab({
 
     const fetchSummary = async (): Promise<void> => {
       try {
-        const resp = await fetch(
-          `${config.apiUrl}/conversations/${conversation.id}/imported_chat_summary`,
-          { credentials: "include" }
+        const data = await apiFetch<{ summary?: string } | ErrorResponse>(
+          `/conversations/${conversation.id}/imported_chat_summary`
         );
-        if (resp.ok) {
-          const data: { summary?: string } | ErrorResponse = await resp.json();
-          if (!("error" in data)) {
-            const s = extractSummary(data);
-            setSummary(s ?? "");
-            setIsGenerating(false);
-            if (pollInterval) {
-              clearInterval(pollInterval);
-              pollInterval = null;
-            }
-          } else if (!isCancelled) {
-            setSummary("");
-            setIsGenerating(false);
+        if (!("error" in data)) {
+          const s = extractSummary(data);
+          setSummary(s ?? "");
+          setIsGenerating(false);
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
           }
-        } else if (resp.status === 404 && !isCancelled) {
+        } else if (!isCancelled) {
+          setSummary("");
+          setIsGenerating(false);
+        }
+      } catch (err) {
+        // 404 means summary is still generating - start polling
+        if (err instanceof ApiError && err.status === 404 && !isCancelled) {
           setSummary("");
           setIsGenerating(true);
           if (!pollInterval) {
@@ -128,11 +127,6 @@ export function ImportedChatTab({
             }, 30000);
           }
         } else if (!isCancelled) {
-          setSummary("");
-          setIsGenerating(false);
-        }
-      } catch {
-        if (!isCancelled) {
           setSummary("");
           setIsGenerating(false);
         }
@@ -177,22 +171,21 @@ export function ImportedChatTab({
     }
     setIsUpdatingSummary(true);
     try {
-      const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/summary`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ summary: trimmed } as UpdateSummaryRequest),
-      });
-      const result: { summary: string } | ErrorResponse = await response.json();
-      if (response.ok && !("error" in result)) {
+      const result = await apiFetch<{ summary: string } | ErrorResponse>(
+        `/conversations/${conversation.id}/summary`,
+        {
+          method: "PATCH",
+          body: { summary: trimmed } as UpdateSummaryRequest,
+        }
+      );
+      if (!("error" in result)) {
         setIsEditingSummary(false);
         setIsWritingSummary(false);
         setEditSummary("");
         setSummary(result.summary);
         onSummaryGenerated?.(result.summary);
       } else {
-        const errorMsg = (result as ErrorResponse).error ?? "Summary update failed";
-        throw new Error(errorMsg);
+        throw new Error(result.error ?? "Summary update failed");
       }
     } catch (error) {
       // eslint-disable-next-line no-console
