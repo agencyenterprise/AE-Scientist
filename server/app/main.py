@@ -51,6 +51,9 @@ app = FastAPI(
     description="Transform LLM conversations into actionable AE ideas",
 )
 
+# Add authentication middleware
+app.add_middleware(AuthenticationMiddleware)
+
 # Set up CORS
 app.add_middleware(
     CORSMiddleware,
@@ -59,9 +62,6 @@ app.add_middleware(
     allow_methods=settings.CORS_METHODS,
     allow_headers=settings.CORS_HEADERS,
 )
-
-# Add authentication middleware
-app.add_middleware(AuthenticationMiddleware)
 
 # Include API routes
 app.include_router(api_router)
