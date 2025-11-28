@@ -176,7 +176,7 @@ class RunPodEnvironment:
     git_deploy_key: str
     openai_api_key: str
     hf_token: str
-    database_url: str
+    database_public_url: str
     telemetry_webhook_url: str
     telemetry_webhook_token: str
 
@@ -209,7 +209,7 @@ def _load_runpod_environment() -> RunPodEnvironment:
         git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
         hf_token=_require("HF_TOKEN"),
-        database_url=_require("DATABASE_URL"),
+        database_public_url=_require("DATABASE_PUBLIC_URL"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
         telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
     )
@@ -332,7 +332,7 @@ def launch_research_pipeline_run(
     idea_filename = f"{run_id}_idea.json"
     config_filename = config_name
     telemetry_block: dict[str, str] = {
-        "database_url": env.database_url,
+        "database_url": env.database_public_url,
         "run_id": run_id,
         "webhook_url": env.telemetry_webhook_url,
         "webhook_token": env.telemetry_webhook_token,

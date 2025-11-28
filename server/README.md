@@ -315,6 +315,7 @@ AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
 # Research pipeline telemetry (optional webhooks from the experiment runner)
 TELEMETRY_WEBHOOK_URL="https://your-backend-host/api/research-pipeline/events"
 TELEMETRY_WEBHOOK_TOKEN="your_shared_secret_token"
+HF_TOKEN="your_huggingface_token"
 
 # Research pipeline monitor settings (all required)
 PIPELINE_MONITOR_POLL_INTERVAL_SECONDS="60"

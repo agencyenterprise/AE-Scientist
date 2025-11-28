@@ -39,6 +39,7 @@ def _launch_research_pipeline_job(*, run_id: str, idea_payload: Dict[str, object
     db = get_database()
     config_name = f"{run_id}_config.yaml"
     try:
+        logger.info("Launching research pipeline job in background for run_id=%s", run_id)
         pod_info = launch_research_pipeline_run(
             idea=idea_payload,
             config_name=config_name,
@@ -48,6 +49,8 @@ def _launch_research_pipeline_job(*, run_id: str, idea_payload: Dict[str, object
     except (RunPodError, FileNotFoundError, ValueError, RuntimeError) as exc:
         logger.exception("Failed to launch research pipeline run.")
         db.update_research_pipeline_run(run_id=run_id, status="failed", error_message=str(exc))
+    else:
+        logger.info("Background launch complete for run_id=%s", run_id)
 
 
 @router.post(

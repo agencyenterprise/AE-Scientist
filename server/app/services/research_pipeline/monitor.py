@@ -1,6 +1,6 @@
-import asyncio
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -30,38 +30,35 @@ class ResearchPipelineMonitor:
         self._heartbeat_timeout = timedelta(seconds=heartbeat_timeout_seconds)
         self._max_missed_heartbeats = max_missed_heartbeats
         self._startup_grace = timedelta(seconds=startup_grace_seconds)
-        self._task: Optional[asyncio.Task[None]] = None
-        self._stop_event = asyncio.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
         api_key = os.environ.get("RUNPOD_API_KEY")
         self._runpod_creator: Optional[RunPodCreator] = (
             RunPodCreator(api_key=api_key) if api_key else None
         )
 
     async def start(self) -> None:
-        if self._task is not None:
+        if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._task = asyncio.create_task(self._run())
+        self._thread = threading.Thread(target=self._run, name="PipelineMonitor", daemon=True)
+        self._thread.start()
         logger.info("Research pipeline monitor started.")
 
     async def stop(self) -> None:
-        if self._task is None:
-            return
         self._stop_event.set()
-        await self._task
-        self._task = None
+        if self._thread is not None:
+            self._thread.join(timeout=self._poll_interval + 1)
+            self._thread = None
         logger.info("Research pipeline monitor stopped.")
 
-    async def _run(self) -> None:
+    def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
                 self._check_runs()
             except PipelineMonitorError:
                 logger.exception("Pipeline monitor encountered an error.")
-            try:
-                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval)
-            except asyncio.TimeoutError:
-                continue
+            self._stop_event.wait(timeout=self._poll_interval)
 
     def _check_runs(self) -> None:
         try:
@@ -70,7 +67,11 @@ class ResearchPipelineMonitor:
             if not runs:
                 logger.debug("Pipeline monitor heartbeat: no active runs.")
                 return
-            logger.info("Pipeline monitor inspecting %s active runs.", len(runs))
+            logger.info(
+                "Pipeline monitor inspecting %s active runs: %s",
+                len(runs),
+                [f"{run.run_id}:{run.status}" for run in runs],
+            )
             now = datetime.now(timezone.utc)
             for run in runs:
                 if run.status == "pending":

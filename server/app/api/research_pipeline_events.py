@@ -165,7 +165,11 @@ def ingest_heartbeat(
     db = get_database()
     run = db.get_research_pipeline_run(payload.run_id)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        logger.warning(
+            "Received heartbeat for unknown run_id=%s; ignoring but returning 204.",
+            payload.run_id,
+        )
+        return
     now = datetime.now(timezone.utc)
     db.update_research_pipeline_run(
         run_id=payload.run_id,
