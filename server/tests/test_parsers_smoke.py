@@ -7,8 +7,6 @@ Notes:
 - 404 should fail the test (bubbled as exceptions by parser services).
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os

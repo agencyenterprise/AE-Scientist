@@ -4,8 +4,6 @@ Utility: Dump parser outputs (counts and message chunks) for given share URLs.
 Emits JSON to stdout for embedding into smoke tests.
 """
 
-from __future__ import annotations
-
 import argparse
 import asyncio
 import json

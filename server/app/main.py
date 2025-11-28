@@ -1,5 +1,6 @@
 import logging
-from typing import Dict
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Dict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
+from app.services.research_pipeline.monitor import pipeline_monitor
 
 
 def configure_logging() -> None:
@@ -45,10 +47,21 @@ def configure_logging() -> None:
 # Configure logging before creating the app
 configure_logging()
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await pipeline_monitor.start()
+    try:
+        yield
+    finally:
+        await pipeline_monitor.stop()
+
+
 app = FastAPI(
     title="AE Scientist API",
     version=settings.VERSION,
     description="Transform LLM conversations into actionable AE ideas",
+    lifespan=lifespan,
 )
 
 # Set up CORS

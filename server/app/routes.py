@@ -15,6 +15,8 @@ from app.api.files import router as files_router
 from app.api.ideas import router as ideas_router
 from app.api.llm_defaults import router as llm_defaults_router
 from app.api.llm_prompts import router as llm_prompts_router
+from app.api.research_pipeline_events import router as rp_events_router
+from app.api.research_pipeline_runs import router as rp_runs_router
 
 # Load environment variables first
 load_dotenv()
@@ -30,3 +32,5 @@ router.include_router(files_router)
 router.include_router(ideas_router)
 router.include_router(llm_defaults_router)
 router.include_router(llm_prompts_router)
+router.include_router(rp_events_router)
+router.include_router(rp_runs_router)

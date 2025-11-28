@@ -103,7 +103,7 @@ class AgentManager:
         # Initialize the experiment with the first stage
         self._create_initial_stage()
 
-    def _get_max_iterations(self, stage_number: int) -> int:
+    def get_max_iterations(self, stage_number: int) -> int:
         """Get max iterations for a stage from config or default"""
         return self.cfg.agent.stages.get(f"stage{stage_number}_max_iters", self.cfg.agent.steps)
 
@@ -145,7 +145,7 @@ Your research idea:\n\n
             substage_number=1,
             substage_name="preliminary",
             goals=Stage1Baseline.DEFAULT_GOALS,
-            max_iterations=self._get_max_iterations(self.current_stage_number),
+            max_iterations=self.get_max_iterations(self.current_stage_number),
             num_drafts=self.cfg.agent.search.num_drafts,
         )
 
@@ -489,7 +489,7 @@ Your research idea:\n\n
             + main_stage_goal
             + "\n\nSub-stage goals:\n"
             + sub_stage_goal,
-            max_iterations=self._get_max_iterations(main_stage_num),
+            max_iterations=self.get_max_iterations(main_stage_num),
             num_drafts=0,
         )
 
@@ -521,7 +521,7 @@ Your research idea:\n\n
             substage_number=sub_stage_num,
             substage_name=sub_stage_name,
             goals=main_stage_goal,
-            max_iterations=self._get_max_iterations(main_stage_num + 1),
+            max_iterations=self.get_max_iterations(main_stage_num + 1),
             num_drafts=num_drafts,
         )
 

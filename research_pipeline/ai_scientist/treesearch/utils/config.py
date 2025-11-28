@@ -149,6 +149,14 @@ class ReviewConfig:
 
 
 @dataclass
+class TelemetryConfig:
+    database_url: str
+    run_id: str
+    webhook_url: Optional[str] = None
+    webhook_token: Optional[str] = None
+
+
+@dataclass
 class Config(Hashable):
     desc_file: Path
     log_dir: Path
@@ -164,6 +172,7 @@ class Config(Hashable):
     experiment: ExperimentConfig
     writeup: Optional[WriteupConfig] = None
     review: Optional[ReviewConfig] = None
+    telemetry: Optional[TelemetryConfig] = None
 
 
 def _get_next_logindex(dir: Path) -> int:

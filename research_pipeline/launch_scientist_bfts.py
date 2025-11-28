@@ -19,9 +19,10 @@ import os.path as osp
 import re
 import shutil
 import sys
+import threading
 import traceback
 from pathlib import Path
-from typing import cast
+from typing import Callable, NamedTuple, Optional, cast
 
 from omegaconf import OmegaConf
 
@@ -34,6 +35,7 @@ from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
+from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.events import BaseEvent
@@ -50,6 +52,7 @@ from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
 from ai_scientist.treesearch.utils.config import (
     Config,
     ReviewConfig,
+    TelemetryConfig,
     WriteupConfig,
     apply_log_level,
     load_task_desc,
@@ -59,6 +62,12 @@ from ai_scientist.treesearch.utils.config import (
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 
 logger = logging.getLogger(__name__)
+
+
+class TelemetryHooks(NamedTuple):
+    event_callback: Callable[[BaseEvent], None]
+    persistence: Optional[EventPersistenceManager]
+    webhook: Optional[WebhookClient]
 
 
 def save_token_tracker(idea_dir: str) -> None:
@@ -226,7 +235,72 @@ def all_summaries_exist(run_dir: Path) -> bool:
     return all(p.exists() for p in paths)
 
 
-def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
+def on_event(event: BaseEvent) -> None:
+    try:
+        logger.debug(event.to_dict())
+    except Exception:
+        traceback.print_exc()
+
+
+def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryHooks:
+    event_callback: Callable[[BaseEvent], None] = EventQueueEmitter(queue=None, fallback=on_event)
+    if telemetry_cfg is None:
+        return TelemetryHooks(event_callback=event_callback, persistence=None, webhook=None)
+
+    run_identifier = telemetry_cfg.run_id.strip()
+    if not run_identifier:
+        logger.debug("Telemetry config missing run_id; skipping external sinks.")
+        return TelemetryHooks(event_callback=event_callback, persistence=None, webhook=None)
+
+    db_url = telemetry_cfg.database_url.strip()
+    webhook_client: WebhookClient | None = None
+    webhook_url = (telemetry_cfg.webhook_url or "").strip()
+    webhook_token = (telemetry_cfg.webhook_token or "").strip()
+    if webhook_url and webhook_token:
+        webhook_client = WebhookClient(
+            base_url=webhook_url,
+            token=webhook_token,
+            run_id=run_identifier,
+        )
+    elif webhook_url or webhook_token:
+        logger.warning("Telemetry webhook config incomplete; skipping webhook publishing.")
+
+    if not db_url and webhook_client is None:
+        logger.debug("No telemetry sinks configured; using in-process logging only.")
+        return TelemetryHooks(
+            event_callback=event_callback,
+            persistence=None,
+            webhook=webhook_client,
+        )
+
+    try:
+        event_persistence = EventPersistenceManager(
+            database_url=db_url or None,
+            run_id=run_identifier,
+            webhook_client=webhook_client,
+        )
+        event_persistence.start()
+        logger.info("Telemetry sinks enabled for run_id=%s", run_identifier)
+        return TelemetryHooks(
+            event_callback=EventQueueEmitter(queue=event_persistence.queue, fallback=on_event),
+            persistence=event_persistence,
+            webhook=webhook_client,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to initialize telemetry sinks; continuing without external logging."
+        )
+        return TelemetryHooks(
+            event_callback=event_callback, persistence=None, webhook=webhook_client
+        )
+
+
+def resume_run(
+    base_cfg: Config,
+    idea_json_path: str,
+    resume_arg: str,
+    event_callback: Callable[[BaseEvent], None],
+) -> Path:
     try:
         logs_root = base_cfg.log_dir
         raw_exp_name = base_cfg.exp_name
@@ -264,17 +338,11 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
         fake_config.desc_file = Path(idea_json_path)
         task_desc = load_task_desc(cfg=fake_config)
 
-        def on_event(event: BaseEvent) -> None:
-            try:
-                logger.debug(event.to_dict())
-            except Exception:
-                traceback.print_exc()
-
         manager = AgentManager(
             task_desc=task_desc,
             cfg=cfg_obj,
             workspace_dir=Path(cfg_obj.workspace_dir),
-            event_callback=on_event,
+            event_callback=event_callback,
         )
 
         if s1:
@@ -287,7 +355,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                 substage_number=1,
                 substage_name="preliminary",
                 goals=Stage1Baseline.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(1),
+                max_iterations=manager.get_max_iterations(1),
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
@@ -304,7 +372,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                     substage_number=1,
                     substage_name="first_attempt",
                     goals=Stage2Tuning.DEFAULT_GOALS,
-                    max_iterations=manager._get_max_iterations(2),
+                    max_iterations=manager.get_max_iterations(2),
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
@@ -323,7 +391,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                     substage_number=1,
                     substage_name="first_attempt",
                     goals=Stage3Plotting.DEFAULT_GOALS,
-                    max_iterations=manager._get_max_iterations(3),
+                    max_iterations=manager.get_max_iterations(3),
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
@@ -339,7 +407,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                 substage_number=1,
                 substage_name="first_attempt",
                 goals=Stage2Tuning.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(2),
+                max_iterations=manager.get_max_iterations(2),
                 num_drafts=0,
             )
         elif next_stage == 3:
@@ -350,7 +418,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                 substage_number=1,
                 substage_name="first_attempt",
                 goals=Stage3Plotting.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(3),
+                max_iterations=manager.get_max_iterations(3),
                 num_drafts=0,
             )
         else:
@@ -361,7 +429,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
                 substage_number=1,
                 substage_name="first_attempt",
                 goals=Stage4Ablation.DEFAULT_GOALS,
-                max_iterations=manager._get_max_iterations(4),
+                max_iterations=manager.get_max_iterations(4),
                 num_drafts=0,
             )
 
@@ -372,7 +440,7 @@ def resume_run(base_cfg: Config, idea_json_path: str, resume_arg: str) -> Path:
             node_selection_model=cfg_obj.agent.feedback.model,
             summary_temperature=cfg_obj.report.temp,
             node_selection_temperature=cfg_obj.agent.feedback.temp,
-            event_callback=on_event,
+            event_callback=event_callback,
         )
 
         def step_callback(stage: StageMeta, journal: Journal) -> None:
@@ -602,58 +670,103 @@ def execute_launcher(args: argparse.Namespace) -> None:
     if review_cfg is not None and not writeup_enabled:
         logger.info("Review configuration provided but writeup is disabled; skipping review.")
 
-    idea_json_path = str(base_cfg.desc_file)
-    with open(idea_json_path, "r") as f:
-        idea = json.load(f)
-        logger.info(f"Loaded idea from {idea_json_path}")
+    telemetry_hooks = setup_event_pipeline(telemetry_cfg=base_cfg.telemetry)
+    event_callback = telemetry_hooks.event_callback
+    event_persistence = telemetry_hooks.persistence
+    webhook_client = telemetry_hooks.webhook
+    heartbeat_thread: threading.Thread | None = None
+    heartbeat_stop: threading.Event | None = None
+    if webhook_client is not None:
+        try:
+            webhook_client.publish_run_started()
+        except Exception:
+            logger.exception("Failed to notify run start.")
+        heartbeat_stop = threading.Event()
 
-    resume_run_dir: Path | None = None
-    if args.resume is not None:
-        resume_run_dir = resume_run(
-            base_cfg=base_cfg, idea_json_path=idea_json_path, resume_arg=args.resume
+        def heartbeat_loop() -> None:
+            while not heartbeat_stop.wait(60):
+                try:
+                    webhook_client.publish_heartbeat()
+                except Exception:
+                    logger.exception("Failed to publish telemetry heartbeat.")
+
+        heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+        heartbeat_thread.start()
+
+    run_success = False
+    failure_message: str | None = None
+    try:
+        idea_json_path = str(base_cfg.desc_file)
+        with open(idea_json_path, "r") as f:
+            idea = json.load(f)
+            logger.info(f"Loaded idea from {idea_json_path}")
+
+        resume_run_dir: Path | None = None
+        if args.resume is not None:
+            resume_run_dir = resume_run(
+                base_cfg=base_cfg,
+                idea_json_path=idea_json_path,
+                resume_arg=args.resume,
+                event_callback=event_callback,
+            )
+        else:
+            perform_experiments_bfts(base_config_path, event_callback)
+
+        run_dir_path = determine_run_directory(
+            top_log_dir=top_log_dir,
+            existing_runs_before=existing_runs_before,
+            resume_run_dir=resume_run_dir,
         )
-    else:
-        perform_experiments_bfts(base_config_path, lambda event: logger.debug(event.to_dict()))
+        write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
 
-    run_dir_path = determine_run_directory(
-        top_log_dir=top_log_dir,
-        existing_runs_before=existing_runs_before,
-        resume_run_dir=resume_run_dir,
-    )
-    write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
+        should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
+        agg_ok = run_plot_aggregation(
+            writeup_cfg=writeup_cfg,
+            reports_base=reports_base,
+            run_dir_path=run_dir_path,
+            should_run_reports=should_run_reports,
+        )
 
-    should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
-    agg_ok = run_plot_aggregation(
-        writeup_cfg=writeup_cfg,
-        reports_base=reports_base,
-        run_dir_path=run_dir_path,
-        should_run_reports=should_run_reports,
-    )
+        cleanup_aggregated_results(reports_base=reports_base)
 
-    cleanup_aggregated_results(reports_base=reports_base)
+        save_token_tracker(
+            idea_dir=run_dir_path.as_posix() if run_dir_path is not None else reports_base
+        )
 
-    save_token_tracker(
-        idea_dir=run_dir_path.as_posix() if run_dir_path is not None else reports_base
-    )
+        writeup_success = run_writeup_stage(
+            writeup_cfg=writeup_cfg,
+            reports_base=reports_base,
+            run_dir_path=run_dir_path,
+            should_run_reports=should_run_reports,
+            agg_ok=agg_ok,
+        )
 
-    writeup_success = run_writeup_stage(
-        writeup_cfg=writeup_cfg,
-        reports_base=reports_base,
-        run_dir_path=run_dir_path,
-        should_run_reports=should_run_reports,
-        agg_ok=agg_ok,
-    )
+        run_review_stage(
+            review_cfg=review_cfg if review_enabled else None,
+            reports_base=reports_base,
+            run_dir_path=run_dir_path,
+            writeup_success=writeup_success,
+            should_run_reports=should_run_reports,
+            agg_ok=agg_ok,
+        )
 
-    run_review_stage(
-        review_cfg=review_cfg if review_enabled else None,
-        reports_base=reports_base,
-        run_dir_path=run_dir_path,
-        writeup_success=writeup_success,
-        should_run_reports=should_run_reports,
-        agg_ok=agg_ok,
-    )
-
-    logger.info("Finished running the experiment.")
+        logger.info("Finished running the experiment.")
+        run_success = True
+    except Exception as exc:
+        failure_message = str(exc)
+        raise
+    finally:
+        if webhook_client is not None:
+            try:
+                webhook_client.publish_run_finished(success=run_success, message=failure_message)
+            except Exception:
+                logger.exception("Failed to notify run completion.")
+        if heartbeat_stop is not None:
+            heartbeat_stop.set()
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(timeout=5)
+        if event_persistence is not None:
+            event_persistence.stop()
 
 
 def main() -> None:

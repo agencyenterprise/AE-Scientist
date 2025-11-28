@@ -312,6 +312,10 @@ AWS_ACCESS_KEY_ID="your-aws-access-key"             # For file uploads
 AWS_SECRET_ACCESS_KEY="your-aws-secret"             # For file uploads
 AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
 
+# Research pipeline telemetry (optional webhooks from the experiment runner)
+TELEMETRY_WEBHOOK_URL="https://your-backend-host/api/research-pipeline/events"
+TELEMETRY_WEBHOOK_TOKEN="your_shared_secret_token"
+
 # Metacognition Service (for conversation summarization)
 METACOGNITION_API_URL="http://localhost:8888"      # External summarization service
 METACOGNITION_AUTH_TOKEN="your-auth-token-here"    # Auth token for summarization

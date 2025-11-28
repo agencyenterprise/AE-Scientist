@@ -73,6 +73,9 @@ class Settings:
     # Frontend URL for redirects
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+    # Research pipeline webhook authentication
+    TELEMETRY_WEBHOOK_TOKEN: str = os.getenv("TELEMETRY_WEBHOOK_TOKEN", "")
+
     @property
     def is_production(self) -> bool:
         return self.RAILWAY_ENVIRONMENT_NAME == "production"

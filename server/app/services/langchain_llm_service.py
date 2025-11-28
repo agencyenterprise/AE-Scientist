@@ -1,7 +1,5 @@
 """LangChain-powered base service that removes per-provider duplication."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

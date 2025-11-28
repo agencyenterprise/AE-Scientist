@@ -6,8 +6,6 @@ Includes:
 - Optional real smoke tests that hit provider APIs (skipped unless RUN_LLM_SMOKE=1).
 """
 
-from __future__ import annotations
-
 import json
 import os
 from dataclasses import dataclass

@@ -5,6 +5,8 @@ desc_file: idea_example.json
 workspace_dir: workspaces
 log_dir: "workspaces/logs"
 
+telemetry: null
+
 exp_name: run # a random experiment name will be generated if not provided
 
 # settings for code execution

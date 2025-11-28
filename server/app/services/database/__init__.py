@@ -15,6 +15,7 @@ from .imported_conversation_summaries import ImportedConversationSummariesMixin
 from .llm_defaults import LLMDefaultsMixin
 from .memories import ConversationMemoriesMixin
 from .prompts import PromptsMixin
+from .research_pipeline_runs import ResearchPipelineRunsMixin
 from .users import UsersDatabaseMixin
 
 
@@ -30,6 +31,7 @@ class DatabaseManager(
     ImportedConversationSummariesMixin,
     ChatSummariesMixin,
     ConversationMemoriesMixin,
+    ResearchPipelineRunsMixin,
 ):
     """
     Main database manager that combines all domain-specific functionality.

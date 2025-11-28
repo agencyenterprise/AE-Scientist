@@ -564,6 +564,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/stage-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Stage Progress */
+        post: operations["ingest_stage_progress_api_research_pipeline_events_stage_progress_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/experiment-node-completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Experiment Node Completed */
+        post: operations["ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/run-started": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Run Started */
+        post: operations["ingest_run_started_api_research_pipeline_events_run_started_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/run-finished": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Run Finished */
+        post: operations["ingest_run_finished_api_research_pipeline_events_run_finished_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Heartbeat */
+        post: operations["ingest_heartbeat_api_research_pipeline_events_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Idea For Research */
+        post: operations["submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -895,6 +997,23 @@ export interface components {
              */
             detail?: string | null;
         };
+        /** ExperimentNodeCompletedEvent */
+        ExperimentNodeCompletedEvent: {
+            /** Stage */
+            stage: string;
+            /** Node Id */
+            node_id?: string | null;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** ExperimentNodeCompletedPayload */
+        ExperimentNodeCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["ExperimentNodeCompletedEvent"];
+        };
         /**
          * FileAttachment
          * @description File attachment model for chat messages.
@@ -1000,6 +1119,11 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HeartbeatPayload */
+        HeartbeatPayload: {
+            /** Run Id */
+            run_id: string;
         };
         /**
          * Idea
@@ -1455,6 +1579,68 @@ export interface components {
              * @description Response message
              */
             message: string;
+        };
+        /** RunFinishedPayload */
+        RunFinishedPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Success */
+            success: boolean;
+            /** Message */
+            message?: string | null;
+        };
+        /** RunStartedPayload */
+        RunStartedPayload: {
+            /** Run Id */
+            run_id: string;
+        };
+        /** StageProgressEvent */
+        StageProgressEvent: {
+            /** Stage */
+            stage: string;
+            /** Iteration */
+            iteration: number;
+            /** Max Iterations */
+            max_iterations: number;
+            /** Progress */
+            progress: number;
+            /** Total Nodes */
+            total_nodes: number;
+            /** Buggy Nodes */
+            buggy_nodes: number;
+            /** Good Nodes */
+            good_nodes: number;
+            /** Best Metric */
+            best_metric?: string | null;
+            /** Eta S */
+            eta_s?: number | null;
+            /** Latest Iteration Time S */
+            latest_iteration_time_s?: number | null;
+        };
+        /** StageProgressPayload */
+        StageProgressPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["StageProgressEvent"];
+        };
+        /** SubmitIdeaResponse */
+        SubmitIdeaResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Pod Id */
+            pod_id: string | null;
+            /** Pod Name */
+            pod_name: string | null;
+            /** Gpu Type */
+            gpu_type: string | null;
+            /** Public Ip */
+            public_ip: string | null;
+            /** Ssh Port */
+            ssh_port: string | null;
+            /** Pod Host Id */
+            pod_host_id: string | null;
         };
         /**
          * SummaryResponse
@@ -2401,6 +2587,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LLMPromptResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_stage_progress_api_research_pipeline_events_stage_progress_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageProgressPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExperimentNodeCompletedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_run_started_api_research_pipeline_events_run_started_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunStartedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_run_finished_api_research_pipeline_events_run_finished_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunFinishedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_heartbeat_api_research_pipeline_events_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmitIdeaResponse"];
                 };
             };
             /** @description Validation Error */

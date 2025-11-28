@@ -1,0 +1,391 @@
+"""
+Launches the research pipeline on RunPod and injects refined ideas/configurations.
+"""
+
+import base64
+import json
+import os
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, cast
+
+import requests
+
+
+class RunPodError(Exception):
+    """RunPod API error"""
+
+    def __init__(self, message: str, status: int = 0):
+        super().__init__(message)
+        self.status = status
+
+
+class RunPodCreator:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://rest.runpod.io/v1"
+        self.graphql_url = "https://api.runpod.io/graphql"
+        self._session = requests.Session()
+
+    def _make_request(
+        self, endpoint: str, method: str = "GET", data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}{endpoint}"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.request(method=method, url=url, headers=headers, json=data, timeout=60)
+        if not response.ok:
+            raise RunPodError(
+                f"RunPod API error ({response.status_code}): {response.text}",
+                status=response.status_code,
+            )
+        result = cast(dict[str, Any], response.json())
+        return result
+
+    def _graphql_request(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(
+            self.graphql_url,
+            headers=headers,
+            json={"query": query, "variables": variables},
+            timeout=60,
+        )
+        if not response.ok:
+            raise RunPodError(
+                f"GraphQL error ({response.status_code}): {response.text}",
+                status=response.status_code,
+            )
+        return cast(dict[str, Any], response.json())
+
+    def get_pod_host_id(self, pod_id: str) -> str | None:
+        query = """
+            query pod($input: PodFilter!) {
+                pod(input: $input) {
+                    machine {
+                        podHostId
+                    }
+                }
+            }
+        """
+        variables = {"input": {"podId": pod_id}}
+        try:
+            result = self._graphql_request(query=query, variables=variables)
+            machine = cast(dict[str, Any], result.get("data", {}).get("pod", {}).get("machine", {}))
+            return machine.get("podHostId")
+        except (RunPodError, requests.RequestException, ValueError):
+            return None
+
+    def _attempt_create_pod(
+        self,
+        *,
+        name: str,
+        image: str,
+        gpu_type: str,
+        env: dict[str, str],
+        docker_cmd: str,
+    ) -> dict[str, Any]:
+        payload = {
+            "name": name,
+            "imageName": image,
+            "cloudType": "SECURE",
+            "gpuCount": 1,
+            "gpuTypeIds": [gpu_type],
+            "containerDiskInGb": 30,
+            "volumeInGb": 70,
+            "env": env,
+            "ports": ["22/tcp"],
+            "dockerStartCmd": ["bash", "-c", docker_cmd],
+        }
+        return self._make_request(endpoint="/pods", method="POST", data=payload)
+
+    def create_pod(
+        self,
+        *,
+        name: str,
+        image: str,
+        gpu_types: list[str],
+        env: dict[str, str],
+        docker_cmd: str,
+        max_retries: int = 3,
+    ) -> dict[str, Any]:
+        if not gpu_types:
+            raise ValueError("At least one GPU type must be specified")
+
+        last_error: Exception | None = None
+        max_attempts = max(max_retries, len(gpu_types))
+
+        for i in range(max_attempts):
+            gpu_type = gpu_types[i % len(gpu_types)]
+            try:
+                pod = self._attempt_create_pod(
+                    name=name,
+                    image=image,
+                    gpu_type=gpu_type,
+                    env=env,
+                    docker_cmd=docker_cmd,
+                )
+                pod["gpu_type_requested"] = gpu_type
+                return pod
+            except RunPodError as error:
+                last_error = error
+                unavailable = (
+                    "no instances currently available" in str(error).lower() or error.status == 500
+                )
+                if not unavailable or i == max_attempts - 1:
+                    raise
+                time.sleep(1)
+        raise RunPodError(
+            f"Failed to create pod after {max_attempts} attempts. "
+            f"Tried GPU types: {', '.join(gpu_types)}. "
+            f"Last error: {last_error}"
+        )
+
+    def get_pod(self, pod_id: str) -> dict[str, Any]:
+        return self._make_request(endpoint=f"/pods/{pod_id}")
+
+    def stop_pod(self, pod_id: str) -> None:
+        self._make_request(endpoint=f"/pods/{pod_id}", method="DELETE", data=None)
+
+    def wait_for_pod_ready(
+        self, *, pod_id: str, poll_interval: int = 5, max_attempts: int = 60
+    ) -> dict[str, Any]:
+        for _ in range(max_attempts):
+            time.sleep(poll_interval)
+            pod = self.get_pod(pod_id=pod_id)
+            is_running = pod.get("desiredStatus") == "RUNNING"
+            has_public_ip = pod.get("publicIp") is not None
+            has_port_mappings = bool(pod.get("portMappings", {}))
+            if is_running and has_public_ip and has_port_mappings:
+                return pod
+        raise RunPodError("Pod did not become ready in time")
+
+
+@dataclass
+class RunPodEnvironment:
+    git_deploy_key: str
+    openai_api_key: str
+    hf_token: str
+    database_url: str
+    telemetry_webhook_url: str
+    telemetry_webhook_token: str
+
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+PIPELINE_DIR = REPO_ROOT / "research_pipeline"
+RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
+
+
+def _load_repo_setup_script() -> str:
+    if not RUNPOD_SETUP_SCRIPT_PATH.exists():
+        raise RuntimeError(
+            f"RunPod setup script missing at {RUNPOD_SETUP_SCRIPT_PATH}. "
+            "Ensure server/app/services/research_pipeline/runpod_repo_setup.sh exists."
+        )
+    return RUNPOD_SETUP_SCRIPT_PATH.read_text(encoding="utf-8").strip()
+
+
+def _load_runpod_environment() -> RunPodEnvironment:
+    def _require(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise RuntimeError(f"Environment variable {name} is required to launch RunPod.")
+        return value
+
+    return RunPodEnvironment(
+        git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
+        openai_api_key=_require("OPENAI_API_KEY"),
+        hf_token=_require("HF_TOKEN"),
+        database_url=_require("DATABASE_URL"),
+        telemetry_webhook_url=os.environ.get("TELEMETRY_WEBHOOK_URL", ""),
+        telemetry_webhook_token=os.environ.get("TELEMETRY_WEBHOOK_TOKEN", ""),
+    )
+
+
+def _prepare_config_text(
+    *, template_path: Path, idea_filename: str, telemetry: dict[str, str]
+) -> str:
+    config_text = template_path.read_text(encoding="utf-8")
+    marker = "desc_file:"
+    lines = config_text.splitlines()
+    replaced = False
+    for idx, line in enumerate(lines):
+        if line.strip().startswith(marker):
+            lines[idx] = f"{marker} {idea_filename}"
+            replaced = True
+            break
+    if not replaced:
+        lines.append(f"{marker} {idea_filename}")
+    config_text = "\n".join(lines)
+    if telemetry:
+        config_text += "\ntelemetry:\n"
+        for key, value in telemetry.items():
+            config_text += f"  {key}: {json.dumps(value)}\n"
+    if not config_text.endswith("\n"):
+        config_text += "\n"
+    return config_text
+
+
+def _encode_multiline(value: str) -> str:
+    return base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+
+def _repository_setup_commands() -> list[str]:
+    script_text = _load_repo_setup_script()
+    return [
+        "# === Repository Setup ===",
+        "cat <<'RUNPOD_SETUP' | bash",
+        script_text,
+        "RUNPOD_SETUP",
+        "",
+    ]
+
+
+def _build_remote_script(
+    *,
+    env: RunPodEnvironment,
+    idea_filename: str,
+    idea_content_b64: str,
+    config_filename: str,
+    config_content_b64: str,
+) -> str:
+    script_parts: list[str] = ["set -euo pipefail", ""]
+    script_parts += [
+        "# === GPU Validation ===",
+        'echo "Validating GPU..."',
+        'nvidia-smi || { echo "❌ nvidia-smi failed"; exit 1; }',
+        'echo "✅ GPU validated"',
+        "",
+    ]
+    script_parts += _repository_setup_commands()
+    script_parts += [
+        "# === Environment Setup ===",
+        'echo "Creating .env file..."',
+        "cd /workspace/AE-Scientist/research_pipeline",
+        "cat > .env << 'EOF'",
+        f"OPENAI_API_KEY={env.openai_api_key}",
+        f"HF_TOKEN={env.hf_token}",
+        "EOF",
+        "",
+        "# === Installation ===",
+        'echo "Running installation script..."',
+        "cd /workspace/AE-Scientist",
+        "bash install_run_pod.sh",
+        "",
+        "# === Inject refined idea and config ===",
+        "cd /workspace/AE-Scientist/research_pipeline",
+        "python - <<'PY'",
+        "import base64, pathlib",
+        f"pathlib.Path('{idea_filename}').write_bytes(base64.b64decode('{idea_content_b64}'))",
+        f"pathlib.Path('{config_filename}').write_bytes(base64.b64decode('{config_content_b64}'))",
+        "PY",
+        "",
+        "# === Starting Research Pipeline ===",
+        'echo "Launching research pipeline..."',
+        "source .venv/bin/activate",
+        f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        'echo "Research pipeline completed. Check /workspace/research_pipeline.log for full output."',
+    ]
+    return "\n".join(script_parts).strip()
+
+
+def launch_research_pipeline_run(
+    *,
+    idea: Dict[str, Any],
+    config_name: str,
+    run_id: str,
+) -> Dict[str, Any]:
+    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
+    if not runpod_api_key:
+        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
+    env = _load_runpod_environment()
+    config_path = PIPELINE_DIR / config_name
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config template not found: {config_path}")
+
+    idea_filename = f"{run_id}_idea.json"
+    config_filename = f"{run_id}_config.yaml"
+    telemetry_block: dict[str, str] = {
+        "database_url": env.database_url,
+        "run_id": run_id,
+    }
+    has_webhook = bool(env.telemetry_webhook_url and env.telemetry_webhook_token)
+    if has_webhook:
+        telemetry_block["webhook_url"] = env.telemetry_webhook_url
+        telemetry_block["webhook_token"] = env.telemetry_webhook_token
+    elif env.telemetry_webhook_url or env.telemetry_webhook_token:
+        logger.warning(
+            "Telemetry webhook requires both TELEMETRY_WEBHOOK_URL and "
+            "TELEMETRY_WEBHOOK_TOKEN. Skipping webhook injection."
+        )
+
+    idea_text = json.dumps(idea, indent=2)
+    config_text = _prepare_config_text(
+        template_path=config_path,
+        idea_filename=idea_filename,
+        telemetry=telemetry_block,
+    )
+    idea_b64 = _encode_multiline(idea_text)
+    config_b64 = _encode_multiline(config_text)
+
+    docker_cmd = _build_remote_script(
+        env=env,
+        idea_filename=idea_filename,
+        idea_content_b64=idea_b64,
+        config_filename=config_filename,
+        config_content_b64=config_b64,
+    )
+
+    creator = RunPodCreator(api_key=runpod_api_key)
+    github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
+    metadata_env = {
+        "GIT_SSH_KEY_B64": github_key_b64,
+        "REPO_NAME": "AE-Scientist",
+        "REPO_ORG": "agencyenterprise",
+        "REPO_BRANCH": "main",
+        "OPENAI_API_KEY": env.openai_api_key,
+        "HF_TOKEN": env.hf_token,
+    }
+    gpu_types = [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA RTX A4000",
+        "NVIDIA RTX A4500",
+        "NVIDIA RTX A5000",
+    ]
+    pod_name = f"ae-scientist-{int(time.time())}"
+    pod = creator.create_pod(
+        name=pod_name,
+        image="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+        gpu_types=gpu_types,
+        env=metadata_env,
+        docker_cmd=docker_cmd,
+    )
+    pod_id = pod["id"]
+    ready_pod = creator.wait_for_pod_ready(pod_id=pod_id)
+    pod_host_id = creator.get_pod_host_id(pod_id=pod_id)
+    return {
+        "pod_id": pod_id,
+        "pod_name": pod.get("name"),
+        "gpu_type": pod.get("gpu_type_requested"),
+        "public_ip": ready_pod.get("publicIp"),
+        "ssh_port": ready_pod.get("portMappings", {}).get("22"),
+        "pod_host_id": pod_host_id,
+    }
+
+
+def terminate_pod(*, pod_id: str) -> None:
+    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
+    if not runpod_api_key:
+        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
+    creator = RunPodCreator(api_key=runpod_api_key)
+    try:
+        creator.stop_pod(pod_id=pod_id)
+    except RunPodError as exc:
+        raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc

@@ -1,7 +1,5 @@
 """Anthropic (Claude) service implemented on the LangChain base."""
 
-from __future__ import annotations
-
 import base64
 import logging
 from typing import Any, Dict, List, cast

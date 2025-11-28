@@ -162,6 +162,21 @@ python launch_scientist_bfts.py <config_file>
 - `num_cite_rounds`: Maximum number of citation gathering rounds.
 - Remove the `writeup` block entirely to skip writeup and review.
 
+### Telemetry Configuration (Optional)
+
+To mirror the server's event feed, provide a `telemetry` block in the YAML config:
+
+```
+telemetry:
+  database_url: ${env:DATABASE_URL,""}
+  run_id: ${env:RUN_ID,""}
+  webhook_url: ${env:TELEMETRY_WEBHOOK_URL,""}
+  webhook_token: ${env:TELEMETRY_WEBHOOK_TOKEN,""}
+```
+
+`database_url` + `run_id` enables Postgres persistence; `webhook_url` + `webhook_token` (plus the same `run_id`) enable live callbacks to the server. Leave any of them blank to disable that destination.
+Set `webhook_url` to the base endpoint (e.g., `https://your-server/api/research-pipeline/events`); the pipeline appends the specific event path automatically.
+
 **Optional Argument:**
 - `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); the launcher runs only the next missing stage for that run, or skips stages entirely if summaries exist, then performs aggregation/writeup per config.
 
