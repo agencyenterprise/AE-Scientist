@@ -45,6 +45,8 @@ class RunPodCreator:
                 f"RunPod API error ({response.status_code}): {response.text}",
                 status=response.status_code,
             )
+        if response.status_code == 204 or not response.content:
+            return {}
         result = cast(dict[str, Any], response.json())
         return result
 
@@ -184,6 +186,7 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
+RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 
 
 def _load_repo_setup_script() -> str:
@@ -250,6 +253,28 @@ def _repository_setup_commands() -> list[str]:
     ]
 
 
+def _load_install_script() -> str:
+    if not RUNPOD_INSTALL_SCRIPT_PATH.exists():
+        raise RuntimeError(
+            f"RunPod install script missing at {RUNPOD_INSTALL_SCRIPT_PATH}. "
+            "Ensure server/app/services/research_pipeline/install_run_pod.sh exists."
+        )
+    return RUNPOD_INSTALL_SCRIPT_PATH.read_text(encoding="utf-8").strip()
+
+
+def _installation_commands() -> list[str]:
+    script_text = _load_install_script()
+    return [
+        "# === Installation ===",
+        'echo "Running installation script..."',
+        "cd /workspace/AE-Scientist",
+        "cat <<'RUNPOD_INSTALL' | bash",
+        script_text,
+        "RUNPOD_INSTALL",
+        "",
+    ]
+
+
 def _build_remote_script(
     *,
     env: RunPodEnvironment,
@@ -267,6 +292,7 @@ def _build_remote_script(
         "",
     ]
     script_parts += _repository_setup_commands()
+    script_parts += _installation_commands()
     script_parts += [
         "# === Environment Setup ===",
         'echo "Creating .env file..."',
@@ -275,12 +301,6 @@ def _build_remote_script(
         f"OPENAI_API_KEY={env.openai_api_key}",
         f"HF_TOKEN={env.hf_token}",
         "EOF",
-        "",
-        "# === Installation ===",
-        'echo "Running installation script..."',
-        "cd /workspace/AE-Scientist",
-        "bash install_run_pod.sh",
-        "",
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
         "python - <<'PY'",

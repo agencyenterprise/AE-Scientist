@@ -43,6 +43,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/login",
             "/api/auth/callback",
             "/api/auth/status",
+            "/api/research-pipeline/events",
         ]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

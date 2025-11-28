@@ -61,7 +61,12 @@ class WebhookClient:
             response = requests.post(url, headers=headers, json=payload, timeout=5)
             response.raise_for_status()
         except requests.RequestException:
-            logger.exception("Failed to publish telemetry webhook to %s", path)
+            logger.exception(
+                "Failed to publish telemetry webhook: url=%s auth=%s payload=%s",
+                url,
+                headers.get("Authorization"),
+                payload,
+            )
 
     def publish(self, *, kind: EventKind, payload: dict[str, Any]) -> None:
         if kind == "run_log":
