@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-import { config } from "@/shared/lib/config";
+import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { isErrorResponse } from "@/shared/lib/api-adapters";
 import type { ChatMessage } from "@/types";
 
@@ -24,28 +24,25 @@ export function useChatMessages({ conversationId }: UseChatMessagesOptions): Use
       setIsLoadingHistory(true);
 
       try {
-        const response = await fetch(`${config.apiUrl}/conversations/${conversationId}/idea/chat`, {
-          method: "GET",
-          credentials: "include",
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          if (isErrorResponse(result)) {
-            // eslint-disable-next-line no-console
-            console.warn("Failed to load chat history:", result.error);
-            setMessages([]); // Start with empty if there's an issue
-          } else {
-            setMessages(result.chat_messages || []);
-          }
+        const result = await apiFetch<{ chat_messages?: ChatMessage[] }>(
+          `/conversations/${conversationId}/idea/chat`
+        );
+        if (isErrorResponse(result)) {
+          // eslint-disable-next-line no-console
+          console.warn("Failed to load chat history:", (result as { error: string }).error);
+          setMessages([]); // Start with empty if there's an issue
         } else {
-          // If conversation/project draft doesn't exist yet, start with empty chat
-          setMessages([]);
+          setMessages(result.chat_messages || []);
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("Failed to load chat history:", err);
-        setMessages([]); // Start with empty if there's an issue
+        // If conversation/project draft doesn't exist yet (404), start with empty chat
+        if (err instanceof ApiError && err.status === 404) {
+          setMessages([]);
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn("Failed to load chat history:", err);
+          setMessages([]); // Start with empty if there's an issue
+        }
       } finally {
         setIsLoadingHistory(false);
       }

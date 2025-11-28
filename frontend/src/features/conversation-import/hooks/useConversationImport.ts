@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { config } from "@/shared/lib/config";
+import { apiStream } from "@/shared/lib/api-client";
 import {
   ConflictItem,
   ImportState,
@@ -201,14 +201,12 @@ export function useConversationImport(
               duplicate_resolution: duplicateResolution,
             };
 
-      const response = await fetch(`${config.apiUrl}/conversations/import`, {
+      const response = await apiStream("/conversations/import", {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream" },
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (!response.body) throw new Error("No response body");
 
       const reader = response.body.getReader();

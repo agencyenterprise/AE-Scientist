@@ -8,7 +8,7 @@ import {
   SSEProgress,
   SSEState,
 } from "@/features/conversation-import/types/types";
-import { config } from "@/shared/lib/config";
+import { apiStream } from "@/shared/lib/api-client";
 
 export interface UseManualIdeaImportOptions {
   onImportStart?: () => void;
@@ -96,14 +96,12 @@ export function useManualIdeaImport(
           llm_provider: provider,
         };
 
-        const response = await fetch(`${config.apiUrl}/conversations/import/manual`, {
+        const response = await apiStream("/conversations/import/manual", {
           method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          headers: { Accept: "text/event-stream" },
           body: JSON.stringify(body),
         });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         if (!response.body) throw new Error("No response body");
 
         const reader = response.body.getReader();

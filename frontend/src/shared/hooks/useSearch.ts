@@ -7,7 +7,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import type {
   ErrorResponse,
   SearchContentType,
@@ -170,16 +170,10 @@ export function useSearch(): UseSearchReturn {
           sort_dir,
         });
 
-        const response = await fetch(`${config.apiUrl}/search?${searchParams}`, {
-          method: "GET",
-          credentials: "include",
-        });
+        const result = await apiFetch<SearchResponse>(`/search?${searchParams}`);
 
-        const result: SearchResponse | ErrorResponse = await response.json();
-
-        if (!response.ok || isErrorResponse(result)) {
-          const errorMessage = isErrorResponse(result) ? result.error : `HTTP ${response.status}`;
-          throw new Error(errorMessage);
+        if (isErrorResponse(result)) {
+          throw new Error(result.error);
         }
 
         // Cache the successful result

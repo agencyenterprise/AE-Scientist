@@ -2,7 +2,7 @@
 
 import { ConversationView } from "@/features/conversation/components/ConversationView";
 import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import type { ConversationDetail } from "@/types";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -30,14 +30,9 @@ export default function ConversationPage({ params }: ConversationPageProps) {
       setIsLoading(true);
 
       try {
-        const response = await fetch(`${config.apiUrl}/conversations/${id}`, {
-          credentials: "include", // Include authentication cookies
-        });
-        if (response.ok) {
-          const conversationDetail = await response.json();
-          setSelectedConversation(conversationDetail);
-          return conversationDetail;
-        }
+        const conversationDetail = await apiFetch<ConversationDetail>(`/conversations/${id}`);
+        setSelectedConversation(conversationDetail);
+        return conversationDetail;
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to load conversation detail:", error);

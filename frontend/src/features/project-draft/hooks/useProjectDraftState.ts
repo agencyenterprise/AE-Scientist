@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
-import { config, constants } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
+import { constants } from "@/shared/lib/config";
 import { isIdeaGenerating } from "../utils/versionUtils";
 
 interface UseProjectDraftStateProps {
@@ -66,22 +67,11 @@ export function useProjectDraftState({
     }): Promise<void> => {
       setIsUpdating(true);
       try {
-        const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/idea`, {
+        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`, {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify(ideaData),
+          body: ideaData,
         });
-
-        if (response.ok) {
-          const result: IdeaGetResponse = await response.json();
-          setProjectDraft(result.idea);
-          return;
-        }
-        const errorResult = await response.json();
-        throw new Error(errorResult.error || "Failed to update idea");
+        setProjectDraft(result.idea);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to update idea:", error);
@@ -162,26 +152,13 @@ export function useProjectDraftState({
   const handleConfirmCreateProject = async (): Promise<void> => {
     setIsCreatingProject(true);
     try {
-      const response = await fetch(
-        `${config.apiUrl}/conversations/${conversation.id}/idea/research-run`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
-
-      if (!response.ok) {
-        let errorMessage = "Failed to launch project";
-        try {
-          const errorResult = await response.json();
-          errorMessage = errorResult.detail || errorResult.error || errorMessage;
-        } catch {
-          // Ignore JSON parse errors and use default message
-        }
-        throw new Error(errorMessage);
-      }
-
+      await apiFetch(`/conversations/${conversation.id}/idea/research-run`, {
+        method: "POST",
+      });
       setIsCreateModalOpen(false);
+    } catch (error) {
+      // Re-throw to let the caller handle the error
+      throw error;
     } finally {
       setIsCreatingProject(false);
     }
@@ -191,17 +168,10 @@ export function useProjectDraftState({
   useEffect(() => {
     const loadData = async (): Promise<void> => {
       try {
-        // Load idea
-        const draftResponse = await fetch(
-          `${config.apiUrl}/conversations/${conversation.id}/idea`,
-          {
-            credentials: "include",
-          }
+        const draftResult = await apiFetch<IdeaGetResponse>(
+          `/conversations/${conversation.id}/idea`
         );
-        if (draftResponse.ok) {
-          const draftResult: IdeaGetResponse = await draftResponse.json();
-          setProjectDraft(draftResult.idea);
-        }
+        setProjectDraft(draftResult.idea);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to load data:", error);
@@ -217,18 +187,13 @@ export function useProjectDraftState({
   useEffect(() => {
     const checkAndPoll = async () => {
       try {
-        const response = await fetch(`${config.apiUrl}/conversations/${conversation.id}/idea`, {
-          credentials: "include",
-        });
-        if (response.ok) {
-          const result: IdeaGetResponse = await response.json();
-          const draft = result.idea;
-          setProjectDraft(draft);
+        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`);
+        const draft = result.idea;
+        setProjectDraft(draft);
 
-          // Only continue polling if idea is still being generated
-          if (isIdeaGenerating(draft)) {
-            return true; // Continue polling
-          }
+        // Only continue polling if idea is still being generated
+        if (isIdeaGenerating(draft)) {
+          return true; // Continue polling
         }
       } catch (error) {
         // eslint-disable-next-line no-console

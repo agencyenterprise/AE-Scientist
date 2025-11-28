@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
 import { config } from "@/shared/lib/config";
 import { isErrorResponse } from "@/shared/lib/api-adapters";
 import { CreateProjectModal } from "./CreateProjectModal";
+import { SectionEditModal } from "./SectionEditModal";
 
 // Hooks
 import { useProjectDraftState } from "../hooks/useProjectDraftState";
@@ -28,6 +29,10 @@ export function ProjectDraft({
   externalUpdate,
   onConversationLocked,
 }: ProjectDraftProps) {
+  // Title editing state
+  const [isTitleEditOpen, setIsTitleEditOpen] = useState(false);
+  const [isTitleSaving, setIsTitleSaving] = useState(false);
+
   // State management hooks
   const projectState = useProjectDraftState({ conversation });
   const versionState = useVersionManagement({
@@ -103,17 +108,48 @@ export function ProjectDraft({
     }
   };
 
-  // Ensure diffs reflect the latest manual save by reloading versions
-  // and selecting the previous version as the comparison base
-  const handleSaveAndRefreshDiffs = async (): Promise<void> => {
+  // Handle section edit updates
+  const handleSectionUpdate = async (updatedIdea: IdeaType): Promise<void> => {
     const previousActiveVersionNumber = projectState.projectDraft?.active_version?.version_number;
 
-    await projectState.handleSave();
+    projectState.setProjectDraft(updatedIdea);
+    animations.triggerUpdateAnimation();
 
+    // Reload versions and set up diff comparison
     if (previousActiveVersionNumber) {
       await versionState.loadVersions();
       versionState.setSelectedVersionForComparison(previousActiveVersionNumber);
       versionState.setShowDiffs(true);
+    }
+  };
+
+  // Handle title edit save
+  const handleTitleSave = async (newTitle: string): Promise<void> => {
+    if (!projectState.projectDraft?.active_version) return;
+
+    setIsTitleSaving(true);
+    try {
+      const activeVersion = projectState.projectDraft.active_version;
+      await projectState.updateProjectDraft({
+        title: newTitle,
+        short_hypothesis: activeVersion.short_hypothesis,
+        related_work: activeVersion.related_work,
+        abstract: activeVersion.abstract,
+        experiments: activeVersion.experiments,
+        expected_outcome: activeVersion.expected_outcome,
+        risk_factors_and_limitations: activeVersion.risk_factors_and_limitations,
+      });
+
+      // Trigger update animation and refresh diffs
+      animations.triggerUpdateAnimation();
+      const previousVersion = projectState.projectDraft.active_version.version_number;
+      await versionState.loadVersions();
+      versionState.setSelectedVersionForComparison(previousVersion);
+      versionState.setShowDiffs(true);
+
+      setIsTitleEditOpen(false);
+    } finally {
+      setIsTitleSaving(false);
     }
   };
 
@@ -171,38 +207,12 @@ export function ProjectDraft({
             {/* Header Section */}
             <ProjectDraftHeader
               projectDraft={projectState.projectDraft}
-              isEditing={projectState.isEditing}
-              editTitle={projectState.editTitle}
-              setEditTitle={projectState.setEditTitle}
               showDiffs={versionState.showDiffs}
               setShowDiffs={versionState.setShowDiffs}
               comparisonVersion={versionState.comparisonVersion}
               nextVersion={versionState.nextVersion}
               titleDiffContent={diffState.titleDiffContent}
-              onEdit={projectState.handleEdit}
-              onKeyDown={projectState.handleKeyDown}
-              onSave={handleSaveAndRefreshDiffs}
-              onCancelEdit={projectState.handleCancelEdit}
-            />
-
-            {/* Content Section */}
-            <ProjectDraftContent
-              projectDraft={projectState.projectDraft}
-              isEditing={projectState.isEditing}
-              editDescription={projectState.editDescription}
-              setEditDescription={projectState.setEditDescription}
-              onKeyDown={projectState.handleKeyDown}
-              onSave={handleSaveAndRefreshDiffs}
-              onCancelEdit={projectState.handleCancelEdit}
-            />
-
-            {/* Footer Section */}
-            <ProjectDraftFooter
-              projectDraft={projectState.projectDraft}
-              isEditing={projectState.isEditing}
-              showDiffs={versionState.showDiffs}
-              comparisonVersion={versionState.comparisonVersion}
-              nextVersion={versionState.nextVersion}
+              onEditTitle={() => setIsTitleEditOpen(true)}
               allVersions={versionState.allVersions}
               canNavigatePrevious={versionState.canNavigatePrevious}
               canNavigateNext={versionState.canNavigateNext}
@@ -210,6 +220,22 @@ export function ProjectDraft({
               onPreviousVersion={versionState.handlePreviousVersion}
               onNextVersion={versionState.handleNextVersion}
               onRevertChanges={handleRevertChanges}
+            />
+
+            {/* Content Section */}
+            <ProjectDraftContent
+              projectDraft={projectState.projectDraft}
+              conversationId={conversation.id.toString()}
+              onUpdate={handleSectionUpdate}
+              sectionDiffs={diffState.sectionDiffs}
+            />
+
+            {/* Footer Section */}
+            <ProjectDraftFooter
+              projectDraft={projectState.projectDraft}
+              showDiffs={versionState.showDiffs}
+              comparisonVersion={versionState.comparisonVersion}
+              nextVersion={versionState.nextVersion}
               onCreateProject={handleCreateProject}
             />
           </div>
@@ -222,6 +248,16 @@ export function ProjectDraft({
         isLoading={projectState.isCreatingProject}
         onClose={projectState.handleCloseCreateModal}
         onConfirm={handleConfirmCreateProject}
+      />
+
+      {/* Title Edit Modal */}
+      <SectionEditModal
+        isOpen={isTitleEditOpen}
+        onClose={() => setIsTitleEditOpen(false)}
+        title="Title"
+        content={projectState.projectDraft?.active_version?.title || ""}
+        onSave={handleTitleSave}
+        isSaving={isTitleSaving}
       />
     </>
   );

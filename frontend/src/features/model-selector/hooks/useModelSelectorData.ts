@@ -1,4 +1,4 @@
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import type { LLMDefault, LLMDefaultsResponse, LLMModel, LLMProvidersResponse } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -39,13 +39,7 @@ interface UseModelSelectorDataReturn {
  * @internal
  */
 async function fetchDefaults(promptType: string): Promise<LLMDefaultsResponse> {
-  const response = await fetch(`${config.apiUrl}/llm-defaults/${promptType}`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to fetch LLM defaults");
-  }
-  return response.json();
+  return apiFetch<LLMDefaultsResponse>(`/llm-defaults/${promptType}`);
 }
 
 /**
@@ -53,13 +47,7 @@ async function fetchDefaults(promptType: string): Promise<LLMDefaultsResponse> {
  * @internal
  */
 async function fetchProviders(): Promise<LLMProvidersResponse> {
-  const response = await fetch(`${config.apiUrl}/llm-defaults/providers`, {
-    credentials: "include",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to fetch LLM providers");
-  }
-  return response.json();
+  return apiFetch<LLMProvidersResponse>("/llm-defaults/providers");
 }
 
 /**
@@ -71,21 +59,13 @@ async function updateDefaultModel(
   provider: string,
   model: string
 ): Promise<UpdateDefaultResult> {
-  const response = await fetch(`${config.apiUrl}/llm-defaults/${promptType}`, {
+  return apiFetch<UpdateDefaultResult>(`/llm-defaults/${promptType}`, {
     method: "PUT",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify({
       llm_provider: provider,
       llm_model: model,
     }),
   });
-  if (!response.ok) {
-    throw new Error("Failed to update default model");
-  }
-  return response.json();
 }
 
 /**

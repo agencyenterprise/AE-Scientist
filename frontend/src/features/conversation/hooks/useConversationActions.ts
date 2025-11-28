@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import type { ConversationDetail, ConversationUpdateResponse, ErrorResponse } from "@/types";
 import { convertApiConversationDetail, isErrorResponse } from "@/shared/lib/api-adapters";
 
@@ -20,15 +20,11 @@ export function useConversationActions(): UseConversationActionsReturn {
   const deleteConversation = useCallback(async (id: number): Promise<boolean> => {
     setIsDeleting(true);
     try {
-      const response = await fetch(`${config.apiUrl}/conversations/${id}`, {
+      await apiFetch<void>(`/conversations/${id}`, {
         method: "DELETE",
-        credentials: "include",
+        skipJson: true,
       });
-
-      if (response.ok) {
-        return true;
-      }
-      throw new Error("Failed to delete conversation");
+      return true;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to delete conversation:", error);
@@ -45,22 +41,18 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       setIsUpdatingTitle(true);
       try {
-        const response = await fetch(`${config.apiUrl}/conversations/${id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({ title: trimmedTitle }),
-        });
+        const result = await apiFetch<ConversationUpdateResponse | ErrorResponse>(
+          `/conversations/${id}`,
+          {
+            method: "PATCH",
+            body: { title: trimmedTitle },
+          }
+        );
 
-        const result: ConversationUpdateResponse | ErrorResponse = await response.json();
-
-        if (response.ok && !isErrorResponse(result)) {
+        if (!isErrorResponse(result)) {
           return convertApiConversationDetail(result.conversation);
         }
-        const errorMsg = isErrorResponse(result) ? result.error : "Update failed";
-        throw new Error(errorMsg);
+        throw new Error(result.error ?? "Update failed");
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to update title:", error);
