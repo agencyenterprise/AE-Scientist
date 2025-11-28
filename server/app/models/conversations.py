@@ -8,7 +8,7 @@ parsing, importing, and summarization.
 from datetime import datetime
 from typing import Annotated, List, Literal, NamedTuple, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ImportedChatMessage(BaseModel):
@@ -85,6 +85,14 @@ class ConversationResponse(BaseModel):
     imported_chat: Optional[List[ImportedChatMessage]] = Field(
         None, description="Conversation messages (optional)"
     )
+    manual_title: Optional[str] = Field(
+        None,
+        description="Manual title provided when the conversation originates from a manual seed",
+    )
+    manual_hypothesis: Optional[str] = Field(
+        None,
+        description="Manual hypothesis provided when the conversation originates from a manual seed",
+    )
 
 
 class ParseSuccessResult(BaseModel):
@@ -102,6 +110,25 @@ class ParseErrorResult(BaseModel):
 
 
 ParseResult = Union[ParseSuccessResult, ParseErrorResult]
+
+
+class ManualIdeaSeedRequest(BaseModel):
+    """Request payload for manual idea generation."""
+
+    idea_title: str = Field(..., description="Idea title to seed generation", min_length=1)
+    idea_hypothesis: str = Field(
+        ..., description="Idea hypothesis to seed generation", min_length=1
+    )
+    llm_provider: str = Field(..., description="LLM provider identifier", min_length=1)
+    llm_model: str = Field(..., description="LLM model identifier", min_length=1)
+
+    @field_validator("idea_title", "idea_hypothesis")
+    @classmethod
+    def _ensure_non_empty(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("Value cannot be blank or whitespace-only.")
+        return trimmed
 
 
 class ChatMessageData(NamedTuple):

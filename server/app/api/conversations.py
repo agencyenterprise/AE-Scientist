@@ -8,7 +8,9 @@ import asyncio
 import json
 import logging
 import re
-from typing import AsyncGenerator, List, Optional, Union
+from dataclasses import dataclass
+from enum import Enum
+from typing import AsyncGenerator, Awaitable, Callable, List, Optional, Union
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
@@ -21,12 +23,12 @@ from app.models import (
     ConversationUpdate,
     Idea,
     IdeaVersion,
-    ImportChatCreateNew,
     ImportChatGPTConversation,
     ImportChatPrompt,
     ImportChatUpdateExisting,
     ImportedChatMessage,
     ImportedConversationSummaryUpdate,
+    ManualIdeaSeedRequest,
     ParseErrorResult,
     ParseSuccessResult,
 )
@@ -38,11 +40,15 @@ from app.services import (
     SummarizerService,
     get_database,
 )
+from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.database import DatabaseManager
 from app.services.database.conversations import Conversation as DBConversation
 from app.services.database.conversations import DashboardConversation as DBDashboardConversation
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
+from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
+from app.services.database.users import UserData
+from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
 from app.services.prompts import get_idea_generation_prompt
 from app.services.scraper.errors import ChatNotFound
@@ -52,12 +58,59 @@ router = APIRouter(prefix="/conversations")
 # Initialize services
 parser_service = ParserRouterService()
 summarizer_service = SummarizerService()
-openai_service = OpenAIService(summarizer_service)
-anthropic_service = AnthropicService(summarizer_service)
-grok_service = GrokService(summarizer_service)
+openai_service = OpenAIService(summarizer_service=summarizer_service)
+anthropic_service = AnthropicService(summarizer_service=summarizer_service)
+grok_service = GrokService(summarizer_service=summarizer_service)
 mem0_service = Mem0Service()
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_llm_service(llm_provider: str) -> LangChainLLMService:
+    """Return the configured LangChain service for the requested provider."""
+    if llm_provider == "openai":
+        return openai_service
+    if llm_provider == "grok":
+        return grok_service
+    if llm_provider == "anthropic":
+        return anthropic_service
+    raise ValueError(f"Unsupported LLM provider: {llm_provider}")
+
+
+class ImportConversationStreamError(Exception):
+    """Raised to signal streamed import errors that should be sent to the client."""
+
+    def __init__(self, payload: dict) -> None:
+        super().__init__("Import conversation streaming error")
+        self.payload = payload
+
+
+class ImportAction(Enum):
+    """Available import strategies after duplicate detection."""
+
+    CREATE_NEW = "create_new"
+    UPDATE_EXISTING = "update_existing"
+    CONFLICT = "conflict"
+    INVALID_TARGET = "invalid_target"
+
+
+@dataclass
+class ImportDecision:
+    """Result of import strategy detection."""
+
+    action: ImportAction
+    target_conversation_id: Optional[int]
+
+
+@dataclass
+class PreparedImportContext:
+    """Holds derived context used while creating a conversation."""
+
+    imported_conversation_text: str
+    raw_memory_results: List[dict]
+    formatted_memories_context: str
+    must_summarize: bool
+    memories_retrieved: bool
 
 
 # Import URL validation regexes
@@ -105,6 +158,8 @@ class ConversationListItem(BaseModel):
     idea_abstract: Optional[str] = None
     last_user_message_content: Optional[str] = None
     last_assistant_message_content: Optional[str] = None
+    manual_title: Optional[str] = None
+    manual_hypothesis: Optional[str] = None
 
 
 class ConversationListResponse(BaseModel):
@@ -163,6 +218,8 @@ def convert_db_to_api_response(db_conversation: DBFullConversation) -> Conversat
             if db_conversation.imported_chat
             else None
         ),
+        manual_title=db_conversation.manual_title,
+        manual_hypothesis=db_conversation.manual_hypothesis,
     )
 
 
@@ -183,6 +240,77 @@ def _imported_chat_messages_to_text(imported_chat_messages: List[ImportedChatMes
         formatted_messages.append(f"{role}: {message.content}")
 
     return "\n\n".join(formatted_messages)
+
+
+def _idea_sections_for_stream(idea: LLMIdeaGeneration) -> List[str]:
+    """Convert structured idea fields into readable streaming chunks."""
+
+    def _format_list(items: List[str]) -> str:
+        entries = [entry.strip() for entry in items if entry.strip()]
+        if not entries:
+            return "No entries provided."
+        return "\n".join(f"- {entry}" for entry in entries)
+
+    sections: List[tuple[str, str]] = [
+        ("Title", idea.title.strip()),
+        ("Short Hypothesis", idea.short_hypothesis.strip()),
+        ("Related Work", idea.related_work.strip()),
+        ("Abstract", idea.abstract.strip()),
+        ("Experiments", _format_list(items=idea.experiments)),
+        ("Expected Outcome", idea.expected_outcome.strip()),
+        ("Risk Factors and Limitations", _format_list(items=idea.risk_factors_and_limitations)),
+    ]
+
+    formatted_sections: List[str] = []
+    for label, body in sections:
+        section_body = body if body else "Not provided."
+        formatted_sections.append(f"{label}:\n{section_body}\n")
+    return formatted_sections
+
+
+async def _stream_structured_idea(
+    *,
+    db: DatabaseManager,
+    llm_service: LangChainLLMService,
+    idea_stream: AsyncGenerator[str, None],
+    conversation_id: int,
+    user_id: int,
+) -> AsyncGenerator[str, None]:
+    """Persist structured idea output and stream formatted sections."""
+    collected_content = ""
+    async for content_chunk in idea_stream:
+        collected_content += content_chunk
+
+    llm_idea = llm_service._parse_idea_response(content=collected_content)
+    existing_idea = db.get_idea_by_conversation_id(conversation_id)
+    if existing_idea is None:
+        db.create_idea(
+            conversation_id=conversation_id,
+            title=llm_idea.title,
+            short_hypothesis=llm_idea.short_hypothesis,
+            related_work=llm_idea.related_work,
+            abstract=llm_idea.abstract,
+            experiments=llm_idea.experiments,
+            expected_outcome=llm_idea.expected_outcome,
+            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
+            created_by_user_id=user_id,
+        )
+    else:
+        db.update_idea_version(
+            idea_id=existing_idea.idea_id,
+            version_id=existing_idea.version_id,
+            title=llm_idea.title,
+            short_hypothesis=llm_idea.short_hypothesis,
+            related_work=llm_idea.related_work,
+            abstract=llm_idea.abstract,
+            experiments=llm_idea.experiments,
+            expected_outcome=llm_idea.expected_outcome,
+            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
+            is_manual_edit=False,
+        )
+
+    for section_text in _idea_sections_for_stream(idea=llm_idea):
+        yield json.dumps({"type": "content", "data": section_text}) + "\n"
 
 
 async def _generate_imported_chat_keywords(
@@ -215,58 +343,48 @@ async def _generate_idea(
 ) -> AsyncGenerator[str, None]:
     """Generate idea, streaming the response."""
     yield json.dumps({"type": "state", "data": "generating"}) + "\n"
-    collected_content = ""
-    if llm_provider == "openai":
-        async for content_chunk in openai_service.generate_idea(
-            llm_model, imported_conversation, user_id, conversation_id
-        ):
-            collected_content += content_chunk
-            yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_idea = openai_service._parse_idea_response(collected_content)
-    elif llm_provider == "grok":
-        async for content_chunk in grok_service.generate_idea(
-            llm_model, imported_conversation, user_id, conversation_id
-        ):
-            collected_content += content_chunk
-            yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_idea = grok_service._parse_idea_response(collected_content)
-    elif llm_provider == "anthropic":
-        async for content_chunk in anthropic_service.generate_idea(
-            llm_model, imported_conversation, user_id, conversation_id
-        ):
-            collected_content += content_chunk
-            yield json.dumps({"type": "content", "data": content_chunk}) + "\n"
-        llm_idea = anthropic_service._parse_idea_response(collected_content)
-    else:
-        raise ValueError(f"Unsupported LLM provider: {llm_provider}")
+    service = _resolve_llm_service(llm_provider=llm_provider)
+    idea_stream = service.generate_idea(
+        llm_model=llm_model,
+        conversation_text=imported_conversation,
+        _user_id=user_id,
+        conversation_id=conversation_id,
+    )
+    async for chunk in _stream_structured_idea(
+        db=db,
+        llm_service=service,
+        idea_stream=idea_stream,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    ):
+        yield chunk
 
-    existing_idea = db.get_idea_by_conversation_id(conversation_id)
-    if existing_idea is None:
-        # Save idea to database
-        db.create_idea(
-            conversation_id=conversation_id,
-            title=llm_idea.title,
-            short_hypothesis=llm_idea.short_hypothesis,
-            related_work=llm_idea.related_work,
-            abstract=llm_idea.abstract,
-            experiments=llm_idea.experiments,
-            expected_outcome=llm_idea.expected_outcome,
-            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
-            created_by_user_id=user_id,
-        )
-    else:
-        db.update_idea_version(
-            idea_id=existing_idea.idea_id,
-            version_id=existing_idea.version_id,
-            title=llm_idea.title,
-            short_hypothesis=llm_idea.short_hypothesis,
-            related_work=llm_idea.related_work,
-            abstract=llm_idea.abstract,
-            experiments=llm_idea.experiments,
-            expected_outcome=llm_idea.expected_outcome,
-            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
-            is_manual_edit=False,
-        )
+
+async def _generate_manual_seed_idea(
+    db: DatabaseManager,
+    llm_provider: str,
+    llm_model: str,
+    conversation_id: int,
+    manual_title: str,
+    manual_hypothesis: str,
+    user_id: int,
+) -> AsyncGenerator[str, None]:
+    """Generate an idea from manual seed data."""
+    yield json.dumps({"type": "state", "data": "generating"}) + "\n"
+    service = _resolve_llm_service(llm_provider=llm_provider)
+    idea_stream = service.generate_manual_seed_idea(
+        llm_model=llm_model,
+        idea_title=manual_title,
+        idea_hypothesis=manual_hypothesis,
+    )
+    async for chunk in _stream_structured_idea(
+        db=db,
+        llm_service=service,
+        idea_stream=idea_stream,
+        conversation_id=conversation_id,
+        user_id=user_id,
+    ):
+        yield chunk
 
 
 async def _generate_idea_consuming_yields(
@@ -385,6 +503,506 @@ async def _handle_existing_conversation(
     )
 
 
+def _validate_import_url_or_raise(url: str) -> None:
+    """Ensure the provided URL matches an allowed pattern."""
+    if validate_import_chat_url(url=url):
+        return
+    raise ImportConversationStreamError(
+        payload={
+            "type": "error",
+            "data": "Invalid share URL format. Expected ChatGPT https://chatgpt.com/share/{uuid} or BranchPrompt https://v2.branchprompt.com/conversation/{24-hex} or Claude https://claude.ai/share/{uuid} or Grok https://grok.com/share/…",
+        }
+    )
+
+
+def _determine_import_decision(
+    import_data: ImportChatGPTConversation, matching: List[DBUrlConversationBrief]
+) -> ImportDecision:
+    """Select how to proceed depending on the request payload and duplicates."""
+    if isinstance(import_data, ImportChatPrompt):
+        if matching:
+            return ImportDecision(action=ImportAction.CONFLICT, target_conversation_id=None)
+        return ImportDecision(action=ImportAction.CREATE_NEW, target_conversation_id=None)
+    if isinstance(import_data, ImportChatUpdateExisting):
+        target_id = import_data.target_conversation_id
+        if any(m.id == target_id for m in matching):
+            return ImportDecision(
+                action=ImportAction.UPDATE_EXISTING, target_conversation_id=target_id
+            )
+        return ImportDecision(action=ImportAction.INVALID_TARGET, target_conversation_id=target_id)
+    return ImportDecision(action=ImportAction.CREATE_NEW, target_conversation_id=None)
+
+
+def _build_conflict_payload(matching: List[DBUrlConversationBrief]) -> dict:
+    """Serialize conflicts so the frontend can prompt the user."""
+    return {
+        "type": "conflict",
+        "data": {
+            "conversations": [
+                {
+                    "id": conversation.id,
+                    "title": conversation.title,
+                    "updated_at": conversation.updated_at.isoformat(),
+                    "url": conversation.url,
+                }
+                for conversation in matching
+            ]
+        },
+    }
+
+
+async def _parse_conversation_or_raise(url: str) -> ParseSuccessResult:
+    """Parse an external conversation and translate failures into streamed errors."""
+    try:
+        parse_result = await parser_service.parse_conversation(url)
+    except ChatNotFound:
+        raise ImportConversationStreamError(
+            payload={
+                "type": "error",
+                "code": "CHAT_NOT_FOUND",
+                "data": "This conversation no longer exists or has been deleted",
+            }
+        )
+
+    if not parse_result.success:
+        assert isinstance(parse_result, ParseErrorResult)
+        raise ImportConversationStreamError(payload={"type": "error", "data": parse_result.error})
+
+    assert isinstance(parse_result, ParseSuccessResult)
+    return parse_result
+
+
+async def _prepare_import_context(
+    db: DatabaseManager,
+    parse_result: ParseSuccessResult,
+    llm_provider: str,
+    llm_model: str,
+) -> PreparedImportContext:
+    """Prepare text and memory context for a newly imported conversation."""
+    imported_conversation_text = _imported_chat_messages_to_text(parse_result.data.content)
+    imported_chat_keywords = await _generate_imported_chat_keywords(
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        imported_conversation_text=imported_conversation_text,
+    )
+    memories_retrieved = False
+    if not imported_chat_keywords:
+        logger.warning("No imported chat keywords generated, skipping memories generation")
+        raw_memory_results: List[dict] = []
+        formatted_memories_context = ""
+    else:
+        raw_memory_results, formatted_memories_context = (
+            await mem0_service.generate_project_creation_memories(
+                imported_chat_keywords=imported_chat_keywords
+            )
+        )
+        memories_retrieved = True
+
+    must_summarize = _must_summarize(
+        db=db,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        messages=parse_result.data.content,
+        memories_block=formatted_memories_context,
+    )
+
+    return PreparedImportContext(
+        imported_conversation_text=imported_conversation_text,
+        raw_memory_results=raw_memory_results,
+        formatted_memories_context=formatted_memories_context,
+        must_summarize=must_summarize,
+        memories_retrieved=memories_retrieved,
+    )
+
+
+def _create_conversation_with_memories(
+    db: DatabaseManager,
+    parse_result: ParseSuccessResult,
+    user_id: int,
+    raw_memory_results: List[dict],
+) -> DBFullConversation:
+    """Persist the imported conversation and attach generated memories."""
+    conversation_id = db.create_conversation(
+        conversation=DBConversation(
+            url=parse_result.data.url,
+            title=parse_result.data.title,
+            import_date=parse_result.data.import_date,
+            imported_chat=[
+                DBImportedChatMessage(
+                    role=message.role,
+                    content=message.content,
+                )
+                for message in parse_result.data.content
+            ],
+        ),
+        imported_by_user_id=user_id,
+    )
+    conversation = db.get_conversation_by_id(conversation_id)
+    assert conversation is not None
+
+    db.store_memories_block(
+        conversation_id=conversation_id,
+        source="imported_chat",
+        memories_block=raw_memory_results,
+    )
+    return conversation
+
+
+async def _stream_existing_conversation_update(
+    db: DatabaseManager, target_id: int, messages: List[ImportedChatMessage]
+) -> AsyncGenerator[str, None]:
+    """Handle the update flow for an already imported conversation."""
+    await _handle_existing_conversation(
+        db=db,
+        existing_conversation_id=target_id,
+        messages=messages,
+    )
+    async for chunk in _generate_response_for_conversation(
+        db=db,
+        conversation_id=target_id,
+    ):
+        yield chunk
+
+
+def _create_placeholder_idea(db: DatabaseManager, conversation_id: int, user_id: int) -> None:
+    """Create a placeholder idea while summarization completes."""
+    db.create_idea(
+        conversation_id=conversation_id,
+        title="Generating...",
+        short_hypothesis="Generating idea...",
+        related_work="",
+        abstract="Generating idea...",
+        experiments=[],
+        expected_outcome="",
+        risk_factors_and_limitations=[],
+        created_by_user_id=user_id,
+    )
+
+
+def _build_summary_callback(
+    db: DatabaseManager,
+    llm_provider: str,
+    llm_model: str,
+    conversation_id: int,
+    user_id: int,
+) -> Callable[[str], Awaitable[None]]:
+    """Build the callback invoked after summarization finishes."""
+
+    async def callback_function(summary_text: str) -> None:
+        logger.info(
+            "Summarization callback function called for conversation %s",
+            conversation_id,
+        )
+        try:
+            await _generate_idea_consuming_yields(
+                db=db,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                conversation_id=conversation_id,
+                imported_conversation=summary_text,
+                user_id=user_id,
+            )
+        except Exception as exc:
+            logger.exception("Failed to generate idea: %s", exc)
+            _create_failure_idea(
+                db=db,
+                conversation_id=conversation_id,
+                user_id=user_id,
+                error_message=str(exc),
+            )
+
+    return callback_function
+
+
+async def _stream_summarization_flow(
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    messages: List[ImportedChatMessage],
+    llm_provider: str,
+    llm_model: str,
+    user_id: int,
+) -> AsyncGenerator[str, None]:
+    """Stream responses when summarization is required."""
+    yield json.dumps({"type": "state", "data": "summarizing"}) + "\n"
+    _create_placeholder_idea(
+        db=db,
+        conversation_id=conversation.id,
+        user_id=user_id,
+    )
+    callback_function = _build_summary_callback(
+        db=db,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        conversation_id=conversation.id,
+        user_id=user_id,
+    )
+    asyncio.create_task(
+        summarizer_service.create_imported_chat_summary(
+            conversation.id,
+            messages,
+            callback_function=callback_function,
+        )
+    )
+    async for chunk in _generate_response_for_conversation(
+        db=db,
+        conversation_id=conversation.id,
+    ):
+        yield chunk
+
+
+async def _stream_generation_flow(
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    llm_provider: str,
+    llm_model: str,
+    imported_conversation_text: str,
+    messages: List[ImportedChatMessage],
+    user_id: int,
+) -> AsyncGenerator[str, None]:
+    """Stream responses when the conversation fits in the model context."""
+    async for chunk in _generate_idea(
+        db=db,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        conversation_id=conversation.id,
+        imported_conversation=imported_conversation_text,
+        user_id=user_id,
+    ):
+        yield chunk
+    asyncio.create_task(
+        summarizer_service.create_imported_chat_summary(
+            conversation.id,
+            messages,
+            callback_function=None,
+        )
+    )
+    async for chunk in _generate_response_for_conversation(
+        db=db,
+        conversation_id=conversation.id,
+    ):
+        yield chunk
+
+
+async def _stream_manual_seed_flow(
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    llm_provider: str,
+    llm_model: str,
+    manual_title: str,
+    manual_hypothesis: str,
+    user_id: int,
+) -> AsyncGenerator[str, None]:
+    """Stream responses for manual idea seed flow."""
+    async for chunk in _generate_manual_seed_idea(
+        db=db,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        conversation_id=conversation.id,
+        manual_title=manual_title,
+        manual_hypothesis=manual_hypothesis,
+        user_id=user_id,
+    ):
+        yield chunk
+    async for chunk in _generate_response_for_conversation(
+        db=db,
+        conversation_id=conversation.id,
+    ):
+        yield chunk
+
+
+def _create_failure_idea(
+    db: DatabaseManager, conversation_id: int, user_id: int, error_message: str
+) -> None:
+    """Create a failure idea entry so the UI can show the error state."""
+    db.create_idea(
+        conversation_id=conversation_id,
+        title="Failed to Generate Idea",
+        short_hypothesis="Generation failed",
+        related_work="",
+        abstract=f"Idea generation failed: {error_message}\n\nPlease try regenerating the idea manually.",
+        experiments=[],
+        expected_outcome="",
+        risk_factors_and_limitations=[],
+        created_by_user_id=user_id,
+    )
+
+
+async def _stream_failure_response(
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    user_id: int,
+    error_message: str,
+) -> AsyncGenerator[str, None]:
+    """Stream the failure response after persisting the failure idea."""
+    _create_failure_idea(
+        db=db,
+        conversation_id=conversation.id,
+        user_id=user_id,
+        error_message=error_message,
+    )
+    async for chunk in _generate_response_for_conversation(
+        db=db,
+        conversation_id=conversation.id,
+    ):
+        yield chunk
+
+
+async def _stream_import_pipeline(
+    import_data: ImportChatGPTConversation,
+    user: UserData,
+    url: str,
+    llm_model: str,
+    llm_provider: str,
+    accept_summarization: bool,
+) -> AsyncGenerator[str, None]:
+    """Main workflow for importing conversations, factored for readability."""
+    db = get_database()
+    conversation: Optional[DBFullConversation] = None
+    try:
+        _validate_import_url_or_raise(url=url)
+        matching = db.list_conversations_by_url(url)
+        decision = _determine_import_decision(import_data=import_data, matching=matching)
+        if decision.action == ImportAction.CONFLICT:
+            raise ImportConversationStreamError(payload=_build_conflict_payload(matching=matching))
+        if decision.action == ImportAction.INVALID_TARGET:
+            raise ImportConversationStreamError(
+                payload={
+                    "type": "error",
+                    "data": "Target conversation does not match the provided URL",
+                }
+            )
+
+        yield json.dumps({"type": "state", "data": "importing"}) + "\n"
+        parse_result = await _parse_conversation_or_raise(url=url)
+
+        if decision.action == ImportAction.UPDATE_EXISTING:
+            assert decision.target_conversation_id is not None
+            async for chunk in _stream_existing_conversation_update(
+                db=db,
+                target_id=decision.target_conversation_id,
+                messages=parse_result.data.content,
+            ):
+                yield chunk
+            return
+
+        yield json.dumps({"type": "state", "data": "extracting_chat_keywords"}) + "\n"
+        prepared_context = await _prepare_import_context(
+            db=db,
+            parse_result=parse_result,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+        )
+        if prepared_context.memories_retrieved:
+            yield json.dumps({"type": "state", "data": "retrieving_memories"}) + "\n"
+        if prepared_context.must_summarize and not accept_summarization:
+            raise ImportConversationStreamError(
+                payload={
+                    "type": "model_limit_conflict",
+                    "data": {
+                        "message": "Imported chat is too long for the selected model context. Summarization is required and can take several minutes.",
+                        "suggestion": "Consider choosing a model with a larger context window, or proceed to summarize.",
+                    },
+                }
+            )
+
+        conversation = _create_conversation_with_memories(
+            db=db,
+            parse_result=parse_result,
+            user_id=user.id,
+            raw_memory_results=prepared_context.raw_memory_results,
+        )
+
+        if prepared_context.must_summarize:
+            async for chunk in _stream_summarization_flow(
+                db=db,
+                conversation=conversation,
+                messages=parse_result.data.content,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                user_id=user.id,
+            ):
+                yield chunk
+            return
+
+        async for chunk in _stream_generation_flow(
+            db=db,
+            conversation=conversation,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            imported_conversation_text=prepared_context.imported_conversation_text,
+            messages=parse_result.data.content,
+            user_id=user.id,
+        ):
+            yield chunk
+        return
+    except ImportConversationStreamError as stream_error:
+        yield json.dumps(stream_error.payload) + "\n"
+        return
+    except Exception as exc:
+        logger.exception("Failed to generate idea: %s", exc)
+        if conversation is None:
+            logger.error("Conversation not found after import: %s", exc)
+            return
+        async for chunk in _stream_failure_response(
+            db=db,
+            conversation=conversation,
+            user_id=user.id,
+            error_message=str(exc),
+        ):
+            yield chunk
+        return
+
+
+async def _stream_manual_seed_pipeline(
+    manual_data: ManualIdeaSeedRequest,
+    user: UserData,
+) -> AsyncGenerator[str, None]:
+    """Workflow for generating ideas directly from manual seed data."""
+    db = get_database()
+    conversation: Optional[DBFullConversation] = None
+    manual_title = manual_data.idea_title.strip()
+    manual_hypothesis = manual_data.idea_hypothesis.strip()
+    try:
+        yield json.dumps({"type": "state", "data": "creating_manual_seed"}) + "\n"
+        conversation_id = db.create_manual_conversation(
+            manual_title=manual_title,
+            manual_hypothesis=manual_hypothesis,
+            imported_by_user_id=user.id,
+        )
+        db.store_memories_block(
+            conversation_id=conversation_id,
+            source="imported_chat",
+            memories_block=[],
+        )
+        conversation = db.get_conversation_by_id(conversation_id)
+        assert conversation is not None
+
+        async for chunk in _stream_manual_seed_flow(
+            db=db,
+            conversation=conversation,
+            llm_provider=manual_data.llm_provider,
+            llm_model=manual_data.llm_model,
+            manual_title=manual_title,
+            manual_hypothesis=manual_hypothesis,
+            user_id=user.id,
+        ):
+            yield chunk
+        return
+    except Exception as exc:
+        logger.exception("Failed manual idea seed flow: %s", exc)
+        if conversation is None:
+            logger.error("Manual conversation not created: %s", exc)
+            return
+        async for chunk in _stream_failure_response(
+            db=db,
+            conversation=conversation,
+            user_id=user.id,
+            error_message=str(exc),
+        ):
+            yield chunk
+        return
+
+
 @router.post("/import")
 async def import_conversation(
     import_data: ImportChatGPTConversation, request: Request
@@ -397,259 +1015,47 @@ async def import_conversation(
     llm_provider = import_data.llm_provider
     accept_summarization = import_data.accept_summarization
 
-    # Get authenticated user BEFORE the generator starts
     user = get_current_user(request)
-    logger.debug(f"User authenticated for import: {user.email}")
+    logger.debug("User authenticated for import: %s", user.email)
 
-    # Create async streaming response
     async def generate_import_stream() -> AsyncGenerator[str, None]:
-        conversation = None
-        try:
-            # Validate URL format
-            if not validate_import_chat_url(url):
-                yield json.dumps(
-                    {
-                        "type": "error",
-                        "data": "Invalid share URL format. Expected ChatGPT https://chatgpt.com/share/{uuid} or BranchPrompt https://v2.branchprompt.com/conversation/{24-hex} or Claude https://claude.ai/share/{uuid} or Grok https://grok.com/share/…",
-                    }
-                ) + "\n"
-                return
-
-            # Check if conversation already exists
-            db = get_database()
-            matching = db.list_conversations_by_url(url)
-            # Handle duplicate resolution strategies
-            if isinstance(import_data, (ImportChatPrompt,)):
-                if matching:
-                    yield json.dumps(
-                        {
-                            "type": "conflict",
-                            "data": {
-                                "conversations": [
-                                    {
-                                        "id": m.id,
-                                        "title": m.title,
-                                        "updated_at": m.updated_at.isoformat(),
-                                        "url": m.url,
-                                    }
-                                    for m in matching
-                                ]
-                            },
-                        }
-                    ) + "\n"
-                    return
-                # No conflicts, proceed to create new
-            elif isinstance(import_data, (ImportChatUpdateExisting,)):
-                # Validate target id belongs to same url
-                target_id = import_data.target_conversation_id
-                if not any(m.id == target_id for m in matching):
-                    yield json.dumps(
-                        {
-                            "type": "error",
-                            "data": "Target conversation does not match the provided URL",
-                        }
-                    ) + "\n"
-                    return
-            elif isinstance(import_data, (ImportChatCreateNew,)):
-                # Always proceed to create new, regardless of conflicts
-                pass
-
-            # Parse the conversation
-            yield json.dumps({"type": "state", "data": "importing"}) + "\n"
-            try:
-                parse_result = await parser_service.parse_conversation(url)
-            except ChatNotFound:
-                # Handle 404 errors with specific error code
-                yield json.dumps(
-                    {
-                        "type": "error",
-                        "code": "CHAT_NOT_FOUND",
-                        "data": "This conversation no longer exists or has been deleted",
-                    }
-                ) + "\n"
-                return
-
-            if not parse_result.success:
-                # Type narrowing: if success is False, it's ParseErrorResult
-                assert isinstance(parse_result, ParseErrorResult)
-                yield json.dumps({"type": "error", "data": parse_result.error}) + "\n"
-                return
-
-            # Type narrowing: if success is True, it's ParseSuccessResult
-            assert isinstance(parse_result, ParseSuccessResult)
-
-            # Handle update_existing flow
-            if isinstance(import_data, (ImportChatUpdateExisting,)):
-                target_id = import_data.target_conversation_id
-                await _handle_existing_conversation(db, target_id, parse_result.data.content)
-                async for chunk in _generate_response_for_conversation(db, target_id):
-                    yield chunk
-                return
-
-            imported_conversation_text = _imported_chat_messages_to_text(parse_result.data.content)
-
-            yield json.dumps({"type": "state", "data": "extracting_chat_keywords"}) + "\n"
-            # Build context from Mem0 memories to include it in system prompt
-            imported_chat_keywords = await _generate_imported_chat_keywords(
-                llm_provider=llm_provider,
-                llm_model=llm_model,
-                imported_conversation_text=imported_conversation_text,
-            )
-            if not imported_chat_keywords:
-                logger.warning("No imported chat keywords generated, skipping memories generation")
-                raw_memory_results: list[dict] = []
-                formatted_memories_context: str = ""
-            else:
-                yield json.dumps({"type": "state", "data": "retrieving_memories"}) + "\n"
-                raw_memory_results, formatted_memories_context = (
-                    await mem0_service.generate_project_creation_memories(
-                        imported_chat_keywords=imported_chat_keywords
-                    )
-                )
-            must_summarize = _must_summarize(
-                db=db,
-                llm_provider=llm_provider,
-                llm_model=llm_model,
-                messages=parse_result.data.content,
-                memories_block=formatted_memories_context,
-            )
-            if must_summarize:
-                # The content is too long for the selected model context, so we need to summarize
-                if not accept_summarization:
-                    # Inform frontend to prompt user for acceptance to summarize
-                    yield json.dumps(
-                        {
-                            "type": "model_limit_conflict",
-                            "data": {
-                                "message": "Imported chat is too long for the selected model context. Summarization is required and can take several minutes.",
-                                "suggestion": "Consider choosing a model with a larger context window, or proceed to summarize.",
-                            },
-                        }
-                    ) + "\n"
-                    return
-
-            # Create new conversation in the database
-            conversation_id = db.create_conversation(
-                conversation=DBConversation(
-                    url=parse_result.data.url,
-                    title=parse_result.data.title,
-                    import_date=parse_result.data.import_date,
-                    imported_chat=[
-                        DBImportedChatMessage(
-                            role=msg.role,
-                            content=msg.content,
-                        )
-                        for msg in parse_result.data.content
-                    ],
-                ),
-                imported_by_user_id=user.id,
-            )
-            conversation = db.get_conversation_by_id(conversation_id)
-            assert conversation is not None
-
-            db.store_memories_block(
-                conversation_id=conversation_id,
-                source="imported_chat",
-                memories_block=raw_memory_results,
-            )
-
-            if must_summarize and accept_summarization:
-                # The frontend has accepted to summarize, so we can proceed
-                # Inform frontend and create placeholder idea, then background summarize+generate
-                yield json.dumps({"type": "state", "data": "summarizing"}) + "\n"
-
-                db.create_idea(
-                    conversation_id=conversation.id,
-                    title="Generating...",
-                    short_hypothesis="Generating idea...",
-                    related_work="",
-                    abstract="Generating idea...",
-                    experiments=[],
-                    expected_outcome="",
-                    risk_factors_and_limitations=[],
-                    created_by_user_id=user.id,
-                )
-
-                async def callback_function(summary_text: str) -> None:
-                    logger.info(
-                        f"Summarization callback function called for conversation {conversation.id}"
-                    )
-                    try:
-                        await _generate_idea_consuming_yields(
-                            db, llm_provider, llm_model, conversation.id, summary_text, user.id
-                        )
-                    except Exception as e:
-                        logger.exception(f"Failed to generate idea: {e}")
-                        db.create_idea(
-                            conversation_id=conversation.id,
-                            title="Failed to Generate Idea",
-                            short_hypothesis="Generation failed",
-                            related_work="",
-                            abstract=f"Idea generation failed: {str(e)}\n\nPlease try regenerating the idea manually.",
-                            experiments=[],
-                            expected_outcome="",
-                            risk_factors_and_limitations=[],
-                            created_by_user_id=user.id,
-                        )
-
-                asyncio.create_task(
-                    summarizer_service.create_imported_chat_summary(
-                        conversation.id,
-                        parse_result.data.content,
-                        callback_function=callback_function,
-                    )
-                )
-
-                # here we will return the placeholder idea
-                async for chunk in _generate_response_for_conversation(db, conversation.id):
-                    yield chunk
-                return
-
-            # Happy path, the conversation is not too long for the selected model context
-            # Generating an idea
-            async for chunk in _generate_idea(
-                db, llm_provider, llm_model, conversation.id, imported_conversation_text, user.id
-            ):
-                yield chunk
-            # Will generate a new summarization in the background
-            asyncio.create_task(
-                summarizer_service.create_imported_chat_summary(
-                    conversation.id,
-                    parse_result.data.content,
-                    callback_function=None,
-                )
-            )
-            # finished generating an idea
-
-            async for chunk in _generate_response_for_conversation(db, conversation.id):
-                yield chunk
-            return
-
-        except Exception as e:
-            logger.exception(f"Failed to generate idea: {e}")
-            # Create placeholder idea
-            if not conversation:
-                logger.error(f"Conversation not found after import: {e}")
-                return
-
-            db.create_idea(
-                conversation_id=conversation.id,
-                title="Failed to Generate Idea",
-                short_hypothesis="Generation failed",
-                related_work="",
-                abstract=f"Idea generation failed: {str(e)}\n\nPlease try regenerating the idea manually.",
-                experiments=[],
-                expected_outcome="",
-                risk_factors_and_limitations=[],
-                created_by_user_id=user.id,
-            )
-
-            async for chunk in _generate_response_for_conversation(db, conversation.id):
-                yield chunk
-            return
+        async for chunk in _stream_import_pipeline(
+            import_data=import_data,
+            user=user,
+            url=url,
+            llm_model=llm_model,
+            llm_provider=llm_provider,
+            accept_summarization=accept_summarization,
+        ):
+            yield chunk
 
     return StreamingResponse(
         generate_import_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+        },
+    )
+
+
+@router.post("/import/manual")
+async def import_manual_seed(
+    manual_data: ManualIdeaSeedRequest, request: Request
+) -> StreamingResponse:
+    """
+    Generate an idea directly from a manually provided title and hypothesis.
+    """
+    user = get_current_user(request)
+    logger.debug("User authenticated for manual import: %s", user.email)
+
+    async def generate_manual_stream() -> AsyncGenerator[str, None]:
+        async for chunk in _stream_manual_seed_pipeline(manual_data=manual_data, user=user):
+            yield chunk
+
+    return StreamingResponse(
+        generate_manual_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -692,6 +1098,8 @@ async def list_conversations(
                 idea_abstract=conv.idea_abstract,
                 last_user_message_content=conv.last_user_message_content,
                 last_assistant_message_content=conv.last_assistant_message_content,
+                manual_title=conv.manual_title,
+                manual_hypothesis=conv.manual_hypothesis,
             )
             for conv in conversations
         ]

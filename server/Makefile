@@ -7,12 +7,18 @@ install:
 lint:
 	@echo "🔍 Linting server..."
 	@echo "🎨 Auto-formatting server..."
-	VIRTUAL_ENV= uv run black . --exclude '\.venv|tests'
+	VIRTUAL_ENV= uv run black . --exclude '\.venv'
 	VIRTUAL_ENV= uv run isort . --skip-glob '.venv/*'
-	VIRTUAL_ENV= uv run ruff check . --exclude .venv,tests
-	VIRTUAL_ENV= uv run mypy . --exclude '^(\.venv|tests|playground)'
-	VIRTUAL_ENV= uv run python ../linter/check_inline_imports.py --target-dir . --exclude tests,playground
+	VIRTUAL_ENV= uv run ruff check . --exclude .venv
+	VIRTUAL_ENV= uv run mypy . --exclude '^(\.venv|playground)'
+	VIRTUAL_ENV= uv run python ../linter/check_inline_imports.py --target-dir . --exclude playground
 	@echo "✅ Linting complete"
+
+# Testing
+test:
+	@echo "🧪 Running server tests..."
+	VIRTUAL_ENV= uv run python -m pytest tests
+	@echo "✅ Tests complete"
 
 # Development server
 dev: migrate gen-api-types
@@ -34,5 +40,5 @@ migrate:
 	@echo "📊 Running database migrations..."
 	VIRTUAL_ENV= uv run migrate.py upgrade
 
-.PHONY: install lint dev export-openapi gen-api-types migrate
+.PHONY: install lint test dev export-openapi gen-api-types migrate
 

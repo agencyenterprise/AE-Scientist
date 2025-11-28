@@ -1,8 +1,9 @@
 FROM python:3.12-slim
 
-# Install system dependencies needed for Playwright
+# Install system dependencies needed for Playwright and uv
 RUN apt-get update && apt-get install -y \
     wget \
+    curl \
     ca-certificates \
     libnss3 \
     libnspr4 \
@@ -28,14 +29,19 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
 
-# Install Playwright browsers (skip deps since we installed them manually)
-RUN playwright install firefox chromium webkit
+# Install Python dependencies with uv (exclude dev dependencies)
+RUN uv sync --frozen --no-dev
+
+# Install Playwright browsers
+RUN uv run playwright install firefox chromium webkit
 
 # Copy application code
 COPY . .
@@ -44,4 +50,4 @@ COPY . .
 EXPOSE 8000
 
 # Start the application (run migrations first)
-CMD ["sh", "-c", "python migrate.py upgrade && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uv run migrate.py upgrade && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

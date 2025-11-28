@@ -219,6 +219,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/import/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Manual Seed
+         * @description Generate an idea directly from a manually provided title and hypothesis.
+         */
+        post: operations["import_manual_seed_api_conversations_import_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations": {
         parameters: {
             query?: never;
@@ -308,26 +328,6 @@ export interface paths {
          * @description Update a conversation's summary.
          */
         patch: operations["update_conversation_summary_api_conversations__conversation_id__summary_patch"];
-        trace?: never;
-    };
-    "/api/conversations/import-slack": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import From Slack
-         * @description Webhook endpoint for importing conversations from Slack.
-         */
-        post: operations["import_from_slack_api_conversations_import_slack_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/conversations/{conversation_id}/files": {
@@ -768,6 +768,10 @@ export interface components {
             last_user_message_content?: string | null;
             /** Last Assistant Message Content */
             last_assistant_message_content?: string | null;
+            /** Manual Title */
+            manual_title?: string | null;
+            /** Manual Hypothesis */
+            manual_hypothesis?: string | null;
         };
         /**
          * ConversationListResponse
@@ -845,6 +849,16 @@ export interface components {
              * @description Conversation messages (optional)
              */
             imported_chat?: components["schemas"]["ImportedChatMessage"][] | null;
+            /**
+             * Manual Title
+             * @description Manual title provided when the conversation originates from a manual seed
+             */
+            manual_title?: string | null;
+            /**
+             * Manual Hypothesis
+             * @description Manual hypothesis provided when the conversation originates from a manual seed
+             */
+            manual_hypothesis?: string | null;
         };
         /**
          * ConversationUpdate
@@ -986,22 +1000,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * IdMessageResponse
-         * @description Response with ID and message.
-         */
-        IdMessageResponse: {
-            /**
-             * Id
-             * @description Resource ID
-             */
-            id: number;
-            /**
-             * Message
-             * @description Response message
-             */
-            message: string;
         };
         /**
          * Idea
@@ -1422,6 +1420,32 @@ export interface components {
             };
         };
         /**
+         * ManualIdeaSeedRequest
+         * @description Request payload for manual idea generation.
+         */
+        ManualIdeaSeedRequest: {
+            /**
+             * Idea Title
+             * @description Idea title to seed generation
+             */
+            idea_title: string;
+            /**
+             * Idea Hypothesis
+             * @description Idea hypothesis to seed generation
+             */
+            idea_hypothesis: string;
+            /**
+             * Llm Provider
+             * @description LLM provider identifier
+             */
+            llm_provider: string;
+            /**
+             * Llm Model
+             * @description LLM model identifier
+             */
+            llm_model: string;
+        };
+        /**
          * MessageResponse
          * @description Simple message response.
          */
@@ -1431,22 +1455,6 @@ export interface components {
              * @description Response message
              */
             message: string;
-        };
-        /**
-         * SlackImportRequest
-         * @description Data sent from Slack for conversation import.
-         */
-        SlackImportRequest: {
-            /**
-             * Url
-             * @description Share URL to import (ChatGPT or BranchPrompt)
-             */
-            url: string;
-            /**
-             * User Id
-             * @description ID of user who posted the URL in Slack
-             */
-            user_id: number;
         };
         /**
          * SummaryResponse
@@ -1738,6 +1746,39 @@ export interface operations {
             };
         };
     };
+    import_manual_seed_api_conversations_import_manual_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualIdeaSeedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_conversations_api_conversations_get: {
         parameters: {
             query?: {
@@ -1920,39 +1961,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SummaryResponse"] | components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    import_from_slack_api_conversations_import_slack_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SlackImportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IdMessageResponse"] | components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */

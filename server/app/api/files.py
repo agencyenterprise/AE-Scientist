@@ -66,9 +66,9 @@ class FileListResponse(BaseModel):
 
 
 summarizer_service = SummarizerService()
-anthropic_service = AnthropicService(summarizer_service)
-grok_service = GrokService(summarizer_service)
-openai_service = OpenAIService(summarizer_service)
+anthropic_service = AnthropicService(summarizer_service=summarizer_service)
+grok_service = GrokService(summarizer_service=summarizer_service)
+openai_service = OpenAIService(summarizer_service=summarizer_service)
 pdf_service = PDFService()
 s3_service = S3Service()
 

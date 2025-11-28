@@ -6,6 +6,7 @@ Handles CRUD operations for conversations table.
 
 import json
 import logging
+import uuid
 from datetime import datetime
 from typing import List, NamedTuple, Optional
 
@@ -46,6 +47,8 @@ class FullConversation(NamedTuple):
     user_name: str
     user_email: str
     imported_chat: Optional[List[ImportedChatMessage]]
+    manual_title: Optional[str]
+    manual_hypothesis: Optional[str]
 
 
 class DashboardConversation(NamedTuple):
@@ -64,6 +67,8 @@ class DashboardConversation(NamedTuple):
     idea_abstract: Optional[str]
     last_user_message_content: Optional[str]
     last_assistant_message_content: Optional[str]
+    manual_title: Optional[str]
+    manual_hypothesis: Optional[str]
 
 
 class UrlConversationBrief(NamedTuple):
@@ -128,6 +133,7 @@ class ConversationsMixin:
                                WHERE fa.conversation_id = c.id
                                AND fa.file_type = 'application/pdf'
                            ) as has_pdfs
+                           , c.manual_title, c.manual_hypothesis
                     FROM conversations c
                     JOIN users u ON c.imported_by_user_id = u.id
                     WHERE c.id = %s
@@ -163,6 +169,8 @@ class ConversationsMixin:
             user_name=row["user_name"],
             user_email=row["user_email"],
             imported_chat=content,
+            manual_title=row.get("manual_title"),
+            manual_hypothesis=row.get("manual_hypothesis"),
         )
 
     def get_conversation_id_by_url(self, url: str) -> Optional[int]:
@@ -245,7 +253,8 @@ class ConversationsMixin:
                     SELECT id, url, title, import_date, created_at, updated_at,
                            user_id, user_name, user_email,
                            idea_title, idea_abstract,
-                           last_user_message_content, last_assistant_message_content
+                           last_user_message_content, last_assistant_message_content,
+                           manual_title, manual_hypothesis
                     FROM conversation_dashboard_view
                     ORDER BY updated_at DESC
                     LIMIT %s OFFSET %s
@@ -269,9 +278,50 @@ class ConversationsMixin:
                 idea_abstract=row.get("idea_abstract"),
                 last_user_message_content=row.get("last_user_message_content"),
                 last_assistant_message_content=row.get("last_assistant_message_content"),
+                manual_title=row.get("manual_title"),
+                manual_hypothesis=row.get("manual_hypothesis"),
             )
             for row in rows
         ]
+
+    def create_manual_conversation(
+        self,
+        *,
+        manual_title: str,
+        manual_hypothesis: str,
+        imported_by_user_id: int,
+    ) -> int:
+        """Create a conversation originating from manual seed data."""
+        now = datetime.now()
+        manual_url = f"manual://{uuid.uuid4()}"
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO conversations
+                        (url, title, import_date, imported_chat, created_at, updated_at,
+                         imported_by_user_id, manual_title, manual_hypothesis)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        manual_url,
+                        manual_title,
+                        now,
+                        json.dumps([]),
+                        now,
+                        now,
+                        imported_by_user_id,
+                        manual_title,
+                        manual_hypothesis,
+                    ),
+                )
+                result = cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to create manual conversation: no ID returned")
+                conversation_id = int(result["id"])
+                conn.commit()
+        return conversation_id
 
     def delete_conversation(self, conversation_id: int) -> bool:
         """Delete a conversation by its ID. Returns True if deleted, False if not found."""

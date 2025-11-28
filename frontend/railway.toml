@@ -8,4 +8,4 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
 [[services]]
-name = "agi-judds-frontend"
+name = "frontend"

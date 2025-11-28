@@ -3,13 +3,13 @@ from typing import AsyncGenerator, List, Tuple
 import pytest
 
 from app.models import ChatMessageData, LLMModel
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMProjectGeneration
+from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMIdeaGeneration
 from app.services.chat_models import (
     StreamContentEvent,
     StreamConversationLockedEvent,
     StreamDoneEvent,
     StreamErrorEvent,
-    StreamProjectUpdateEvent,
+    StreamIdeaUpdateEvent,
     StreamStatusEvent,
 )
 
@@ -21,19 +21,28 @@ class _StubService(BaseLLMService):
         self.map_counter = 0
 
     # Abstracts not used in these tests
-    def generate_project_draft(
+    def generate_idea(
         self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         raise NotImplementedError
 
-    def _parse_project_draft_response(self, content: str) -> LLMProjectGeneration:
-        return LLMProjectGeneration(title="t", description="d")
+    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
+        del content
+        return LLMIdeaGeneration(
+            title="t",
+            short_hypothesis="h",
+            related_work="rw",
+            abstract="a",
+            experiments=["e1"],
+            expected_outcome="o",
+            risk_factors_and_limitations=["r"],
+        )
 
-    def chat_with_project_draft_stream(
+    def chat_with_idea_stream(
         self,
         llm_model: LLMModel,
         conversation_id: int,
-        project_draft_id: int,
+        idea_id: int,
         user_message: str,
         chat_history: List[ChatMessageData],
         attached_files: List[FileAttachmentData],
@@ -41,7 +50,7 @@ class _StubService(BaseLLMService):
     ) -> AsyncGenerator[
         StreamContentEvent
         | StreamStatusEvent
-        | StreamProjectUpdateEvent
+        | StreamIdeaUpdateEvent
         | StreamConversationLockedEvent
         | StreamErrorEvent
         | StreamDoneEvent,
@@ -53,14 +62,17 @@ class _StubService(BaseLLMService):
         return await self._summarize_document(llm_model=llm_model, content=content)
 
     async def summarize_image(self, llm_model: LLMModel, image_url: str) -> str:
+        del llm_model, image_url
         return ""
 
     async def generate_imported_chat_keywords(
         self, llm_model: str, imported_conversation_text: str
     ) -> str:
+        del llm_model, imported_conversation_text
         return ""
 
     def get_context_window_tokens(self, llm_model: str) -> int:
+        del llm_model
         return self._tokens
 
     async def generate_text_single_call(
@@ -70,6 +82,7 @@ class _StubService(BaseLLMService):
         user_prompt: str,
         max_completion_tokens: int,
     ) -> str:
+        del llm_model, system_prompt, max_completion_tokens
         if "Combine these excerpt summaries" in user_prompt:
             self.calls.append(("reduce", user_prompt))
             return "FINAL"

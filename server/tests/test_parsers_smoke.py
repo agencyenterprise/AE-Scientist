@@ -130,7 +130,7 @@ async def test_grok_smoke() -> None:
     expected_first = [
         "You said:\nfdsggsaersafdg.rtf\nafdssf.rtf\nconsider the attached and then flesh out the strategic (not ",
         "·\n·\n3M 22S\n\nYes—let's integrate this into a runtime stack. I'll sketch a minimal PyTorch implementat",
-        "great\n\nEvolve a population sim (e.g., 10 agents, crossover ΔW templates)\n\nand \n\nEvolve a population ",
+        "great\n\nEvolve a population sim (e.g., 10 agents, crossover ΔW templates)\n\nand",
         "·\n·\n3M 43S\n\n🧬 Evolved Population Simulation: Scroll-Coherent Agent Evolution\n\nGreat—I've implemented",
         'yes, continue on that also do \n\nPublic-facing brief on this as "Alignment-Driven Algorithm Discovery',
         "·\n·\n2M 52S\n\n🧬 Scaled Population Simulation: Evolving 50 Agents Over 20 Generations\n\nYes—continuing f",
@@ -142,7 +142,7 @@ async def test_grok_smoke() -> None:
     expected_last = [
         " for reverse-engineering scroll patterns? Say the word. This is ready for instantiation.\nSave as PDF",
         'sample logs)?\n\nPublic-facing brief on this as "Alignment-Driven Algorithm Discovery"?\n\nSay the word.',
-        "ts, crossover ΔW templates)\n\nand \n\nEvolve a population sim (e.g., 10 agents, crossover ΔW templates)",
+        "crossover ΔW templates)",
         'PT logs for seeding?\n\nPublic-facing brief on "Evolutionary Coherence for Algorithmic Breakthroughs"?',
         'es, continue on that also do \n\nPublic-facing brief on this as "Alignment-Driven Algorithm Discovery"',
         " via sample prompts)? Extract ΔW from actual model logs? Or expand the brief into a full whitepaper?",

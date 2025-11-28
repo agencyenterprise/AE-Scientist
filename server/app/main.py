@@ -31,7 +31,6 @@ def configure_logging() -> None:
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
     # Suppress extremely verbose DEBUG logs from PDF parsers when app LOG_LEVEL=DEBUG
     logging.getLogger("pdfminer").setLevel(logging.WARNING)
     logging.getLogger("pdfminer.psparser").setLevel(logging.WARNING)
