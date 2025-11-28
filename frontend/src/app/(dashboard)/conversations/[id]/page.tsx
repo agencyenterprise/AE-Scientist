@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-
-import { ConversationView } from "@/components/ConversationView";
-import { config } from "@/lib/config";
+import { ConversationView } from "@/features/conversation/components/ConversationView";
+import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
+import { config } from "@/shared/lib/config";
 import type { ConversationDetail } from "@/types";
-import { useDashboard } from "../../DashboardContext";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 
 interface ConversationPageProps {
   params: Promise<{
@@ -102,14 +101,16 @@ export default function ConversationPage({ params }: ConversationPageProps) {
   };
 
   return (
-    <ConversationView
-      conversation={selectedConversation}
-      isLoading={isLoading && !selectedConversation}
-      onConversationDeleted={handleConversationDeleted}
-      onTitleUpdated={handleTitleUpdated}
-      onSummaryGenerated={handleSummaryGenerated}
-      onConversationLocked={handleConversationLocked}
-      expandImportedChat={expandImportedChat}
-    />
+    <div className="p-6">
+      <ConversationView
+        conversation={selectedConversation}
+        isLoading={isLoading && !selectedConversation}
+        onConversationDeleted={handleConversationDeleted}
+        onTitleUpdated={handleTitleUpdated}
+        onSummaryGenerated={handleSummaryGenerated}
+        onConversationLocked={handleConversationLocked}
+        expandImportedChat={expandImportedChat}
+      />
+    </div>
   );
 }

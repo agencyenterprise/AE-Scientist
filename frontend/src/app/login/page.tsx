@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/shared/hooks/useAuth";
 
 export default function LoginPage() {
   const { isAuthenticated, isLoading, error, login } = useAuth();
@@ -56,11 +56,11 @@ export default function LoginPage() {
         </div>
 
         <h2 className="mt-6 text-center text-3xl font-bold tracking-tight text-[var(--foreground)]">
-          Welcome to Judd&apos;s Idea Catalog
+          Welcome to AE Scientist
         </h2>
 
         <p className="mt-2 text-center text-sm text-[var(--muted-foreground)]">
-          Transform your conversations into actionable project ideas
+          Transform your conversations into Alignment Research
         </p>
       </div>
 

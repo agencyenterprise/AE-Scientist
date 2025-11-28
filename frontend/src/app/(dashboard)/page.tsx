@@ -1,208 +1,33 @@
-"use client";
+import { CreateHypothesisForm } from "@/features/input-pipeline/components/CreateHypothesisForm";
+import { Rocket } from "lucide-react";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+export const dynamic = "force-dynamic";
 
-import { ConversationsGrid } from "@/components/ConversationsGrid";
-import { DashboardHeader } from "@/components/DashboardHeader";
-import { SearchResults } from "@/components/Search";
-import { DashboardFilterSortBar } from "@/components/DashboardFilterSortBar";
-import { useSearch } from "@/hooks/useSearch";
-import { useDashboard } from "./DashboardContext";
-import type { SortDir, SortKey } from "./DashboardContext";
-import type { SearchSortBy } from "@/types";
-import { getSearchSortByFromSortKey } from "@/lib/searchUtils";
-
-export default function Home() {
-  const {
-    conversations,
-    selectConversation,
-    linearFilter,
-    sortKey,
-    sortDir,
-    setSortKey,
-    setSortDir,
-  } = useDashboard();
-  const searchParams = useSearchParams();
-  const {
-    searchState,
-    search,
-    executeSearch,
-    loadNextPage,
-    clearSearch,
-    setQuery,
-    setQueryWithDebounce,
-    isValidQuery,
-  } = useSearch();
-
-  // Initialize from URL (?q=)
-  const hasInitializedFromUrl = useRef(false);
-  const urlQuery = searchParams.get("q") || "";
-
-  useEffect(() => {
-    if (urlQuery && isValidQuery(urlQuery) && !hasInitializedFromUrl.current) {
-      hasInitializedFromUrl.current = true;
-      setQuery(urlQuery);
-      search(urlQuery);
-    }
-  }, [urlQuery, search, setQuery, isValidQuery]);
-
-  // Helpers to DRY sort mapping and first-search behavior
-  const getSortBy = useCallback((key: SortKey): SearchSortBy => {
-    return getSearchSortByFromSortKey(key);
-  }, []);
-
-  const computeSortParams = useCallback(
-    (query: string): { sort_by: SearchSortBy; sort_dir: SortDir } => {
-      const willStartSearch = !searchState.query && Boolean(query.trim());
-      const effectiveSortKey = willStartSearch ? "score" : sortKey;
-      if (willStartSearch && sortKey !== "score") {
-        setSortKey("score");
-        setSortDir("desc");
-      }
-      const sort_by = getSortBy(effectiveSortKey as SortKey);
-      const sort_dir: SortDir = sortDir;
-      return { sort_by, sort_dir };
-    },
-    [searchState.query, sortKey, sortDir, setSortKey, setSortDir, getSortBy]
-  );
-
-  // Handlers for SearchBox
-  const handleSearch = useCallback(
-    (query: string) => {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set("q", query);
-      window.history.pushState({}, "", newUrl.toString());
-
-      const status = linearFilter;
-      const { sort_by, sort_dir } = computeSortParams(query);
-      executeSearch({
-        query,
-        content_types: ["conversation", "chat_message", "project_draft"],
-        limit: 20,
-        offset: 0,
-        status,
-        sort_by,
-        sort_dir,
-      });
-    },
-    [executeSearch, linearFilter, computeSortParams]
-  );
-
-  const handleQueryChange = useCallback(
-    (query: string) => {
-      const status = linearFilter;
-      const { sort_by, sort_dir } = computeSortParams(query);
-      setQueryWithDebounce(query, status, sort_by, sort_dir);
-    },
-    [setQueryWithDebounce, linearFilter, computeSortParams]
-  );
-
-  const handleClear = useCallback(() => {
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.delete("q");
-    window.history.pushState({}, "", newUrl.toString());
-    clearSearch();
-  }, [clearSearch]);
-
-  // Re-apply filters/sorting to search when they change and a query is active
-  useEffect(() => {
-    if (!searchState.query || !isValidQuery(searchState.query)) return;
-    const status = linearFilter;
-    const sort_by = getSortBy(sortKey);
-    const sort_dir = sortDir;
-    executeSearch({
-      query: searchState.query,
-      content_types: searchState.selectedContentTypes,
-      limit: 20,
-      offset: 0,
-      status,
-      sort_by,
-      sort_dir,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linearFilter, sortKey, sortDir]);
-
-  // Responsive placeholder text
-  const [isSmallScreen, setIsSmallScreen] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(max-width: 640px)");
-    const update = (e?: MediaQueryListEvent) => setIsSmallScreen(e ? e.matches : mql.matches);
-    update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-
-  const placeholderText = useMemo(() => {
-    return isSmallScreen
-      ? "Search conversations & drafts"
-      : "Search across conversations, chats, and project drafts...";
-  }, [isSmallScreen]);
-
-  const searchBoxProps = useMemo(
-    () => ({
-      query: searchState.query,
-      isLoading: searchState.isLoading,
-      placeholder: placeholderText,
-      onQueryChange: handleQueryChange,
-      onSearch: handleSearch,
-      onClear: handleClear,
-      disabled: false,
-    }),
-    [
-      searchState.query,
-      searchState.isLoading,
-      handleQueryChange,
-      handleSearch,
-      handleClear,
-      placeholderText,
-    ]
-  );
-
-  const searchResultsProps = useMemo(
-    () => ({
-      results: searchState.results,
-      stats: searchState.stats,
-      isLoading: searchState.isLoading,
-      hasMore: searchState.hasMore,
-      onLoadMore: loadNextPage,
-      query: searchState.query,
-      error: searchState.error,
-    }),
-    [
-      searchState.results,
-      searchState.stats,
-      searchState.isLoading,
-      searchState.hasMore,
-      searchState.query,
-      searchState.error,
-      loadNextPage,
-    ]
-  );
-
-  const shouldShowSearch = useMemo(() => {
-    return Boolean(
-      searchState.query ||
-        searchState.isLoading ||
-        searchState.results.length > 0 ||
-        searchState.error
-    );
-  }, [searchState.query, searchState.isLoading, searchState.results.length, searchState.error]);
-
+export default async function HomePage() {
   return (
-    <div className="h-full flex flex-col">
-      <DashboardHeader searchBoxProps={searchBoxProps} />
-      <DashboardFilterSortBar hasQuery={Boolean(searchState.query)} />
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {shouldShowSearch ? (
-          <div className="p-4 sm:p-6 bg-gray-50">
-            <SearchResults {...searchResultsProps} />
-          </div>
-        ) : (
-          <ConversationsGrid conversations={conversations} onSelect={selectConversation} />
-        )}
+    <div className="relative mx-auto flex max-w-3xl flex-col gap-10 text-center px-6 py-12">
+      <div className="flex flex-col items-center gap-4">
+        <span className="inline-flex items-center gap-2 rounded-full border border-sky-500/40 bg-sky-500/15 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-sky-200">
+          <Rocket className="h-3.5 w-3.5" />
+          Submit a hypothesis
+        </span>
+        <h1 className="text-balance text-4xl font-semibold text-white sm:text-5xl">
+          What should the AI Scientist run next?
+        </h1>
+        <p className="max-w-2xl text-pretty text-base text-slate-300 sm:text-lg">
+          Promote a favorite ideation outcome or craft a brand new research direction. We’ll run the
+          experiments and keep you in the loop every step of the way.
+        </p>
       </div>
+
+      <div className="relative rounded-[28px] border border-slate-800/70 bg-slate-950/80 p-6 text-left shadow-[0_30px_80px_-50px_rgba(125,211,252,0.45)] backdrop-blur">
+        <CreateHypothesisForm />
+      </div>
+
+      <p className="text-xs text-slate-500">
+        Runs kick off the moment a hypothesis is ready, then experimentation with real-time updates
+        across the dashboard.
+      </p>
     </div>
   );
 }

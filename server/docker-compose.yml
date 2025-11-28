@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: ankane/pgvector
     container_name: ae_scientist_db
     environment:
       POSTGRES_USER: ae_scientist_user
