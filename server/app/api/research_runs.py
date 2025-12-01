@@ -4,7 +4,7 @@ API endpoints for listing all research pipeline runs.
 
 import logging
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.middleware.auth import get_current_user
 from app.models import ResearchRunListItem, ResearchRunListResponse
@@ -39,6 +39,9 @@ def list_research_runs(
     request: Request,
     limit: int = Query(50, ge=1, le=500, description="Maximum number of runs to return"),
     offset: int = Query(0, ge=0, description="Number of runs to skip"),
+    search: str = Query(None, description="Search term for run ID, title, hypothesis, or creator"),
+    status: str = Query(None, description="Filter by status (pending, running, completed, failed)"),
+    user_id: int = Query(None, description="Filter by creator user ID"),
 ) -> ResearchRunListResponse:
     """
     List all research pipeline runs with enriched data.
@@ -49,13 +52,45 @@ def list_research_runs(
     - Latest stage progress (stage, progress percentage, best metric)
     - Artifact count
     - Creator information
+
+    Supports filtering by search term, status, and creator user ID.
     """
     # Ensure user is authenticated
     get_current_user(request)
 
     db = get_database()
-    rows, total = db.list_all_research_pipeline_runs(limit=limit, offset=offset)
+    rows, total = db.list_all_research_pipeline_runs(
+        limit=limit,
+        offset=offset,
+        search=search,
+        status=status,
+        user_id=user_id,
+    )
 
     items = [_row_to_list_item(row) for row in rows]
 
     return ResearchRunListResponse(items=items, total=total)
+
+
+@router.get("/{run_id}/", response_model=ResearchRunListItem)
+def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
+    """
+    Get a single research pipeline run by run_id.
+
+    Returns the run with enriched data including:
+    - Run metadata (status, GPU, timestamps)
+    - Idea information (title, hypothesis)
+    - Latest stage progress (stage, progress percentage, best metric)
+    - Artifact count
+    - Creator information
+    - conversation_id for navigation
+    """
+    get_current_user(request)
+
+    db = get_database()
+    row = db.get_enriched_research_pipeline_run(run_id)
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    return _row_to_list_item(row)

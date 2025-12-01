@@ -7,7 +7,7 @@ Provides CRUD operations for users and user sessions.
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import NamedTuple, Optional
+from typing import List, NamedTuple, Optional
 
 import psycopg2.extras
 from psycopg2.extensions import connection
@@ -218,6 +218,29 @@ class UsersDatabaseMixin:
         except Exception as e:
             logger.exception(f"Error deleting expired sessions: {e}")
             return 0
+
+    def list_all_users(self) -> List[UserData]:
+        """
+        List all active users.
+
+        Returns:
+            List of all active users sorted by name
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    cursor.execute(
+                        """
+                        SELECT id, google_id, email, name, is_active, created_at, updated_at
+                        FROM users
+                        WHERE is_active = TRUE
+                        ORDER BY name ASC
+                        """
+                    )
+                    return [UserData(**row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.exception(f"Error listing users: {e}")
+            return []
 
     def _get_connection(self) -> connection:
         """Get database connection. Must be implemented by parent class."""

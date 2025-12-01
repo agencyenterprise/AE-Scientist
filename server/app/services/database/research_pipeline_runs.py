@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import NamedTuple, Optional
+from typing import List, NamedTuple, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -229,20 +229,12 @@ class ResearchPipelineRunsMixin:
             updated_at=row["updated_at"],
         )
 
-    def list_all_research_pipeline_runs(
-        self, *, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int]:
+    def get_enriched_research_pipeline_run(self, run_id: str) -> Optional[dict]:
         """
-        List all research pipeline runs with enriched data from related tables.
+        Get a single research pipeline run with enriched data from related tables.
 
-        Returns a tuple of (list of run dicts, total count).
-        Each dict contains:
-        - run_id, status, gpu_type, error_message, created_at, updated_at
-        - idea_title, idea_hypothesis from idea_versions
-        - created_by_name from users
-        - current_stage, progress, best_metric from latest rp_run_stage_progress_events
-        - artifacts_count from rp_artifacts
-        - conversation_id from ideas
+        Returns a dict with the same fields as list_all_research_pipeline_runs,
+        or None if not found.
         """
         query = """
             WITH latest_progress AS (
@@ -269,6 +261,7 @@ class ResearchPipelineRunsMixin:
                 iv.title AS idea_title,
                 iv.short_hypothesis AS idea_hypothesis,
                 u.name AS created_by_name,
+                u.id AS created_by_user_id,
                 lp.stage AS current_stage,
                 lp.progress,
                 lp.best_metric,
@@ -280,17 +273,128 @@ class ResearchPipelineRunsMixin:
             JOIN users u ON i.created_by_user_id = u.id
             LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
+            WHERE r.run_id = %s
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+    def list_all_research_pipeline_runs(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        user_id: Optional[int] = None,
+    ) -> tuple[list[dict], int]:
+        """
+        List all research pipeline runs with enriched data from related tables.
+
+        Args:
+            limit: Maximum number of results
+            offset: Number of results to skip
+            search: Search term to filter by run_id, idea_title, idea_hypothesis, or created_by_name
+            status: Filter by status (pending, running, completed, failed)
+            user_id: Filter by creator user ID
+
+        Returns a tuple of (list of run dicts, total count).
+        Each dict contains:
+        - run_id, status, gpu_type, error_message, created_at, updated_at
+        - idea_title, idea_hypothesis from idea_versions
+        - created_by_name from users
+        - current_stage, progress, best_metric from latest rp_run_stage_progress_events
+        - artifacts_count from rp_artifacts
+        - conversation_id from ideas
+        """
+        # Build WHERE clauses
+        where_clauses: List[str] = []
+        params: List[object] = []
+
+        if search:
+            where_clauses.append("""
+                (r.run_id ILIKE %s
+                OR iv.title ILIKE %s
+                OR iv.short_hypothesis ILIKE %s
+                OR u.name ILIKE %s)
+            """)
+            search_pattern = f"%{search}%"
+            params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+
+        if status:
+            where_clauses.append("r.status = %s")
+            params.append(status)
+
+        if user_id:
+            where_clauses.append("i.created_by_user_id = %s")
+            params.append(user_id)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        query = f"""
+            WITH latest_progress AS (
+                SELECT DISTINCT ON (run_id)
+                    run_id,
+                    stage,
+                    progress,
+                    best_metric
+                FROM rp_run_stage_progress_events
+                ORDER BY run_id, created_at DESC
+            ),
+            artifact_counts AS (
+                SELECT run_id, COUNT(*) as count
+                FROM rp_artifacts
+                GROUP BY run_id
+            )
+            SELECT
+                r.run_id,
+                r.status,
+                r.gpu_type,
+                r.error_message,
+                r.created_at,
+                r.updated_at,
+                iv.title AS idea_title,
+                iv.short_hypothesis AS idea_hypothesis,
+                u.name AS created_by_name,
+                u.id AS created_by_user_id,
+                lp.stage AS current_stage,
+                lp.progress,
+                lp.best_metric,
+                COALESCE(ac.count, 0) AS artifacts_count,
+                i.conversation_id
+            FROM research_pipeline_runs r
+            JOIN ideas i ON r.idea_id = i.id
+            JOIN idea_versions iv ON r.idea_version_id = iv.id
+            JOIN users u ON i.created_by_user_id = u.id
+            LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
+            LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
+            {where_sql}
             ORDER BY r.created_at DESC
             LIMIT %s OFFSET %s
         """
-        count_query = "SELECT COUNT(*) FROM research_pipeline_runs"
+
+        # Count query with same filters
+        count_query = f"""
+            SELECT COUNT(*)
+            FROM research_pipeline_runs r
+            JOIN ideas i ON r.idea_id = i.id
+            JOIN idea_versions iv ON r.idea_version_id = iv.id
+            JOIN users u ON i.created_by_user_id = u.id
+            {where_sql}
+        """
 
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(count_query)
+                cursor.execute(count_query, params)
                 total = cursor.fetchone()["count"]
 
-                cursor.execute(query, (limit, offset))
+                cursor.execute(query, params + [limit, offset])
                 rows = cursor.fetchall() or []
 
         return [dict(row) for row in rows], total

@@ -173,29 +173,22 @@ export default function ResearchRunDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
 
-  // First, we need to find which conversation this run belongs to
+  // Load run details by first fetching the run info to get conversation_id
   const loadRunDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // First, get the list to find the conversation ID for this run
-      const listResponse = await apiFetch<{
-        items: Array<{ run_id: string; conversation_id: number }>;
-      }>(`/research-runs?limit=500&offset=0`);
+      // Get the run info directly (includes conversation_id)
+      const runInfo = await apiFetch<{ run_id: string; conversation_id: number }>(
+        `/research-runs/${runId}/`
+      );
 
-      const runItem = listResponse.items.find(item => item.run_id === runId);
-      if (!runItem) {
-        setError("Research run not found");
-        setLoading(false);
-        return;
-      }
-
-      setConversationId(runItem.conversation_id);
+      setConversationId(runInfo.conversation_id);
 
       // Now fetch the detailed run info
       const detailsResponse = await apiFetch<ResearchRunDetails>(
-        `/conversations/${runItem.conversation_id}/idea/research-run/${runId}`
+        `/conversations/${runInfo.conversation_id}/idea/research-run/${runId}`
       );
 
       setDetails(detailsResponse);

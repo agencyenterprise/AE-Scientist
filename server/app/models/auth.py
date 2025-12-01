@@ -5,7 +5,7 @@ This module contains all models related to user authentication,
 sessions, and service-to-service authentication.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -62,3 +62,18 @@ class GoogleOAuthCallbackRequest(BaseModel):
 
     code: str = Field(..., description="Authorization code from Google")
     state: Optional[str] = Field(None, description="State parameter for security")
+
+
+class UserListItem(BaseModel):
+    """User item for list responses."""
+
+    id: int = Field(..., description="Database user ID")
+    email: str = Field(..., description="User email address")
+    name: str = Field(..., description="User display name")
+
+
+class UserListResponse(BaseModel):
+    """Response model for listing users."""
+
+    items: List[UserListItem] = Field(..., description="List of users")
+    total: int = Field(..., description="Total count of users")
