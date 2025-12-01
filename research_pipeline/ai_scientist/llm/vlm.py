@@ -1,13 +1,12 @@
 import base64
 import io
-import json
 import logging
-import re
 from typing import Any, Tuple
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from PIL import Image
+from pydantic import BaseModel
 
 from .token_tracker import track_token_usage
 
@@ -157,31 +156,43 @@ def get_response_from_vlm(
     return content_str, full_history
 
 
-def extract_json_between_markers_vlm(llm_output: str) -> dict[Any, Any] | None:
-    # Regular expression pattern to find JSON content between ```json and ```
-    json_pattern = r"```json(.*?)```"
-    matches = re.findall(json_pattern, llm_output, re.DOTALL)
+def get_structured_response_from_vlm(
+    *,
+    msg: str,
+    image_paths: str | list[str],
+    model: str,
+    system_message: str,
+    temperature: float,
+    schema_class: type[BaseModel],
+    print_debug: bool = False,
+    msg_history: list[BaseMessage] | None = None,
+    max_images: int = 25,
+) -> Tuple[BaseModel, list[BaseMessage]]:
+    if msg_history is None:
+        msg_history = []
+    paths_list = [image_paths] if isinstance(image_paths, str) else list(image_paths)
+    messages = _build_vlm_messages(
+        system_message=system_message,
+        history=msg_history,
+        msg=msg,
+        image_paths=paths_list,
+        max_images=max_images,
+    )
+    new_msg_history = msg_history + [messages[-1]]
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
+    structured_chat = chat.with_structured_output(schema=schema_class)
+    parsed = structured_chat.invoke(messages)
+    if not isinstance(parsed, BaseModel):
+        raise TypeError("Structured VLM response did not return a Pydantic model instance.")
 
-    if not matches:
-        # Fallback: Try to find any JSON-like content in the output
-        json_pattern = r"\{.*?\}"
-        matches = re.findall(json_pattern, llm_output, re.DOTALL)
+    if print_debug:
+        logger.debug("")
+        logger.debug("%s VLM STRUCTURED START %s", "*" * 20, "*" * 20)
+        logger.debug(parsed.model_dump_json(indent=2))
+        logger.debug("%s VLM STRUCTURED END %s", "*" * 21, "*" * 21)
+        logger.debug("")
 
-    for json_string in matches:
-        json_string = json_string.strip()
-        try:
-            parsed_json: dict[Any, Any] | list[Any] = json.loads(json_string)
-            if isinstance(parsed_json, dict):
-                return parsed_json
-        except json.JSONDecodeError:
-            # Attempt to fix common JSON issues
-            try:
-                # Remove invalid control characters
-                json_string_clean = re.sub(r"[\x00-\x1F\x7F]", "", json_string)
-                parsed_json = json.loads(json_string_clean)
-                if isinstance(parsed_json, dict):
-                    return parsed_json
-            except json.JSONDecodeError:
-                continue  # Try next match
-
-    return None  # No valid JSON found
+    return parsed, new_msg_history

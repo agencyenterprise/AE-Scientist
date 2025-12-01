@@ -1,10 +1,18 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, List, Tuple
+
+from pydantic import BaseModel
 
 from ..events import BaseEvent
 from ..journal import Journal, Node
 from ..utils.config import Config
+
+
+class StageCompletionEvaluation(BaseModel):
+    is_complete: bool
+    reasoning: str
+    missing_criteria: List[str]
 
 
 @dataclass
