@@ -1,13 +1,13 @@
 import argparse
 import json
 import logging
-import re
 import sys
-import traceback
+from enum import Enum
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from langchain_core.messages import BaseMessage
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ current_dir = Path(__file__).parent
 sys.path.append(str(current_dir.parent.parent))
 from ai_scientist.ideation.base_tool import BaseTool  # noqa: E402
 from ai_scientist.ideation.semantic_scholar import SemanticScholarSearchTool  # noqa: E402
-from ai_scientist.llm import get_response_from_llm  # noqa: E402
+from ai_scientist.llm import get_structured_response_from_llm  # noqa: E402
 from ai_scientist.perform_llm_review import load_paper  # noqa: E402
 
 # Create tool instances
@@ -59,6 +59,64 @@ tool_names = [
 ]
 tool_names_str = ", ".join(tool_names)
 
+
+class ToolAction(str, Enum):
+    SearchSemanticScholar = "SearchSemanticScholar"
+    FinalizeIdea = "FinalizeIdea"
+
+
+class IdeaDetails(BaseModel):
+    Name: str = Field(
+        ...,
+        description="Short descriptor for the idea (use lowercase with underscores).",
+    )
+    Title: str = Field(
+        ...,
+        description="Catchy, informative title summarizing the proposal.",
+    )
+    Short_Hypothesis: str = Field(
+        ...,
+        alias="Short Hypothesis",
+        description="Concise hypothesis or research question the idea investigates.",
+    )
+    Related_Work: str = Field(
+        ...,
+        alias="Related Work",
+        description="Discussion of the most relevant prior work and why this proposal is distinct.",
+    )
+    Abstract: str = Field(
+        ...,
+        description="~250-word abstract describing the proposal at a high level.",
+    )
+    Experiments: List[str] = Field(
+        ...,
+        description="List of simple, feasible experiments (with metrics) that validate the proposal.",
+    )
+    Risk_Factors_and_Limitations: List[str] = Field(
+        ...,
+        alias="Risk Factors and Limitations",
+        description="Potential risks or limitations that could affect the proposal.",
+    )
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class IdeaActionArguments(BaseModel):
+    query: Optional[str] = None
+    idea: Optional[IdeaDetails] = None
+
+
+class IdeaActionResponse(BaseModel):
+    action: ToolAction
+    arguments: IdeaActionArguments
+
+
+IDEA_ACTION_SCHEMA = IdeaActionResponse
+IDEA_ACTION_DESCRIPTION = (
+    "Decide whether to call a tool or finalize the idea, and supply structured arguments."
+)
+
 system_prompt = f"""You are an experienced AI researcher who aims to propose high-impact research ideas resembling exciting grant proposals. Feel free to propose any novel ideas or experiments; make sure they are novel. Be very creative and think out of the box. Each proposal should stem from a simple and elegant question, observation, or hypothesis about the topic. For example, they could involve very interesting and simple interventions or investigations that explore new possibilities or challenge existing assumptions. Clearly clarify how the proposal distinguishes from the existing literature.
 
 Ensure that the proposal does not require resources beyond what an academic lab could afford. These proposals should lead to papers that are publishable at top ML conferences.
@@ -67,34 +125,13 @@ You have access to the following tools:
 
 {tool_descriptions}
 
-Respond in the following format:
+Respond with a JSON object matching the IdeaActionResponse schema:
+- "action": exactly one of {tool_names_str}.
+- "arguments": the parameters for the chosen action.
+  - For "SearchSemanticScholar", supply `{{"query": "your search query"}}`.
+  - For "FinalizeIdea", supply `{{"idea": {{...}}}}` where the idea object strictly follows the IdeaDetails schema (field descriptions above specify the required content and formatting for each attribute).
 
-ACTION:
-<The action to take, exactly one of {tool_names_str}>
-
-ARGUMENTS:
-<If ACTION is "SearchSemanticScholar", provide the search query as {{"query": "your search query"}}. If ACTION is "FinalizeIdea", provide the idea details as {{"idea": {{ ... }}}} with the IDEA JSON specified below.>
-
-If you choose to finalize your idea, provide the IDEA JSON in the arguments:
-
-IDEA JSON:
-```json
-{{
-  "idea": {{
-    "Name": "...",
-    "Title": "...",
-    "Short Hypothesis": "...",
-    "Related Work": "...",
-    "Abstract": "...",
-    "Experiments": "...",
-    "Risk Factors and Limitations": "..."
-  }}
-}}
-```
-
-Ensure the JSON is properly formatted for automatic parsing.
-
-Note: You should perform at least one literature search before finalizing your idea to ensure it is well-informed by existing research."""
+Ensure the JSON is properly formatted for automatic parsing. Perform at least one literature search before finalizing your idea."""
 
 # Define the initial idea generation prompt
 idea_generation_prompt = """{workshop_description}
@@ -171,87 +208,46 @@ def generate_temp_free_idea(
                         last_tool_results=last_tool_results or "No new results.",
                     )
 
-                response_text, msg_history = get_response_from_llm(
-                    prompt=prompt_text,
-                    model=model,
-                    system_message=system_prompt,
-                    temperature=temperature,
-                    msg_history=msg_history,
-                )
-
-                # Parse the LLM's response
                 try:
-                    # Use regular expressions to extract the components
-                    action_pattern = r"ACTION:\s*(.*?)\s*ARGUMENTS:"
-                    arguments_pattern = r"ARGUMENTS:\s*(.*?)(?:$|\nTHOUGHT:|\n$)"
-
-                    action_match = re.search(
-                        action_pattern, response_text, re.DOTALL | re.IGNORECASE
+                    structured_response, msg_history = get_structured_response_from_llm(
+                        prompt=prompt_text,
+                        model=model,
+                        system_message=system_prompt,
+                        temperature=temperature,
+                        schema_class=IDEA_ACTION_SCHEMA,
+                        msg_history=msg_history,
                     )
-                    arguments_match = re.search(
-                        arguments_pattern, response_text, re.DOTALL | re.IGNORECASE
-                    )
-
-                    if not all([action_match, arguments_match]):
-                        raise ValueError("Failed to parse the LLM response.")
-
-                    assert action_match is not None
-                    assert arguments_match is not None
-                    action = action_match.group(1).strip()
-                    arguments_text = arguments_match.group(1).strip()
-                    logger.debug(f"Action: {action}")
-                    logger.debug(f"Arguments: {arguments_text}")
-
-                    # If arguments are wrapped in ```json blocks, extract the content
-                    if arguments_text.startswith("```json"):
-                        json_match = re.search(r"```json\s*(.*?)\s*```", arguments_text, re.DOTALL)
-                        arguments_text = json_match.group(1) if json_match else arguments_text
-
-                    # Process the action and arguments
-                    if action in tools_dict:
-                        # It's a tool we have defined
-                        tool = tools_dict[action]
-                        # Parse arguments
-                        try:
-                            # Use JSONDecoder to extract only the first valid JSON object
-                            # This handles cases where LLM outputs duplicate text after JSON
-                            decoder = json.JSONDecoder()
-                            arguments_json, _ = decoder.raw_decode(arguments_text.lstrip())
-                        except json.JSONDecodeError:
-                            raise ValueError(f"Invalid arguments JSON for {action}.")
-
-                        # Use the tool
-                        try:
-                            # Assuming the arguments match the parameters of the tool
-                            result = tool.use_tool(**arguments_json)
-                            last_tool_results = str(result) if result else ""
-                        except Exception as e:
-                            last_tool_results = f"Error using tool {action}: {str(e)}"
-                    elif action == "FinalizeIdea":
-                        # Parse arguments
-                        try:
-                            # Use JSONDecoder to extract only the first valid JSON object
-                            # This handles cases where LLM outputs duplicate text after JSON
-                            decoder = json.JSONDecoder()
-                            arguments_json, _ = decoder.raw_decode(arguments_text.lstrip())
-                            idea = arguments_json.get("idea")
-                            if not idea:
-                                raise ValueError("Missing 'idea' in arguments.")
-
-                            # Append the idea to the archive
-                            idea_str_archive.append(json.dumps(idea))
-                            logger.info(f"Proposal finalized: {idea}")
-                            idea_finalized = True
-                            break
-                        except json.JSONDecodeError:
-                            raise ValueError("Invalid arguments JSON for FinalizeIdea.")
-                    else:
-                        logger.warning("Invalid action. Please specify one of the available tools.")
-                        logger.warning(f"Available actions are: {tool_names_str}")
                 except Exception:
-                    logger.warning(f"Failed to parse LLM response. Response text:\n{response_text}")
-                    traceback.print_exc()
-                    break  # Exit the loop if parsing fails
+                    logger.exception("Failed to obtain structured response for idea generation.")
+                    break
+
+                action = structured_response.get("action")
+                arguments_obj = structured_response.get("arguments", {})
+                if not isinstance(arguments_obj, dict):
+                    logger.warning("Invalid arguments object: %s", arguments_obj)
+                    break
+                logger.debug("Action: %s", action)
+                logger.debug("Arguments: %s", arguments_obj)
+
+                if isinstance(action, str) and action in tools_dict:
+                    tool = tools_dict[action]
+                    try:
+                        result = tool.use_tool(**arguments_obj)
+                        last_tool_results = str(result) if result else ""
+                    except Exception as e:
+                        last_tool_results = f"Error using tool {action}: {str(e)}"
+                elif action == "FinalizeIdea":
+                    idea = arguments_obj.get("idea")
+                    if not isinstance(idea, dict):
+                        logger.warning("Missing or invalid 'idea' in arguments: %s", arguments_obj)
+                        break
+                    idea_str_archive.append(json.dumps(idea))
+                    logger.info(f"Proposal finalized: {idea}")
+                    idea_finalized = True
+                    break
+                else:
+                    logger.warning("Invalid action. Please specify one of the available tools.")
+                    logger.warning(f"Available actions are: {tool_names_str}")
 
             if idea_finalized:
                 continue  # Move to the next idea

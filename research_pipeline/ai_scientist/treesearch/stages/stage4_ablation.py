@@ -3,13 +3,13 @@ from typing import List, Protocol, Tuple
 
 from pydantic import BaseModel, Field
 
-from ai_scientist.llm import FunctionSpec, query, structured_query_with_schema
+from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal, Node
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
-from .base import Stage
+from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
 
@@ -176,48 +176,27 @@ class Stage4Ablation(Stage):
 
         Consider whether the ablation variations produce consistent and interpretable differences.
         """
-        spec = FunctionSpec(
-            name="evaluate_stage_completion",
-            description="Evaluate if a stage/sub-stage is complete",
-            json_schema={
-                "type": "object",
-                "properties": {
-                    "is_complete": {"type": "boolean"},
-                    "reasoning": {"type": "string"},
-                    "missing_criteria": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["is_complete", "reasoning", "missing_criteria"],
-            },
-        )
-        evaluation = query(
+        evaluation = structured_query_with_schema(
             system_message=prompt,
             user_message=None,
-            func_spec=spec,
             model=cfg.agent.feedback.model,
             temperature=cfg.agent.feedback.temp,
+            schema_class=StageCompletionEvaluation,
         )
-        if isinstance(evaluation, dict) and evaluation.get("is_complete"):
-            result = True, str(evaluation.get("reasoning", "sub-stage complete"))
+        if evaluation.is_complete:
+            result = True, str(evaluation.reasoning or "sub-stage complete")
             Stage4Ablation._substage_completion_cache[cache_key] = result
             logger.debug(
                 f"Stage4 substage-completion result cached for best_node={best_node.id[:8]} "
                 f"(metric={metric_val})."
             )
             return result
-        if isinstance(evaluation, dict):
-            missing = ", ".join(evaluation.get("missing_criteria", []))
-            result = False, "Missing criteria: " + missing
-            Stage4Ablation._substage_completion_cache[cache_key] = result
-            logger.debug(
-                f"Stage4 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Missing: {missing}"
-            )
-            return result
-        result = False, "Sub-stage not complete"
+        missing = ", ".join(evaluation.missing_criteria)
+        result = False, "Missing criteria: " + missing
         Stage4Ablation._substage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage4 substage-completion result cached (non-dict fallback) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val})."
+            f"Stage4 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
+            f"(metric={metric_val}). Missing: {missing}"
         )
         return result
 

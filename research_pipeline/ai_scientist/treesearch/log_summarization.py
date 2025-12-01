@@ -2,8 +2,9 @@ import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, cast
+from typing import Any, List
 
+from pydantic import BaseModel, Field
 from tqdm import tqdm
 
 from .journal import Journal, Node
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 sys.path.insert(0, parent_dir)
-from ai_scientist.llm import extract_json_between_markers, get_response_from_llm  # noqa: E402
+from ai_scientist.llm import structured_query_with_schema  # noqa: E402
 
 report_summarizer_sys_msg = """You are an expert machine learning researcher.
 You are given multiple experiment logs, each representing a node in a stage of exploring scientific ideas and implementations.
@@ -24,35 +25,46 @@ Important instructions:
 - Identify notable insights or differences across the nodes without repeating the same information.
 """
 
-output_format_control = """Respond in the following format:
 
-THOUGHT:
-<THOUGHT>
+class PlotAnalysis(BaseModel):
+    path: str
+    description: str
+    analysis: str
 
-JSON:
-```json
-<JSON>
-```
 
-In <THOUGHT>, thoroughly reason as an expert researcher. First, reason about each node, and then reason carefully by combining all the information. It is okay to be very detailed.
+class NumericalResult(BaseModel):
+    result: float
+    description: str
+    analysis: str
 
-In <JSON>, provide the review in JSON format with the following fields in exactly this order:
-- "Experiment_description": a string describing the conducted experiments
-- "Significance": a string explaining why these experiments are important and what impact their findings might have
-- "Description": a string describing the methods, steps taken, and any pertinent context needed to understand the experiments
-- "List_of_included_plots": a list of plots that should be included. Each entry should include:
-  • "path" (the plot path)
-  • "description" (its original description)
-  • "analysis" (your analysis of its scientific insights)
-- "Key_numerical_results": a list of all important numerical results. Be selective about results that contribute to scientific insights. Each entry should include:
-  • "result" (float number)
-  • "description" (your short description of the result)
-  • "analysis" (your analysis of its scientific insights)
 
-Ensure the JSON is valid and properly formatted, as it will be automatically parsed."""
+class StageSummaryResponse(BaseModel):
+    Experiment_description: str = Field(
+        ...,
+        description="Narrative describing the experiments conducted in the stage.",
+    )
+    Significance: str = Field(
+        ...,
+        description="Why the experiments matter and the impact of their findings.",
+    )
+    Description: str = Field(
+        ...,
+        description="Methodological details, steps taken, and context needed to understand the stage.",
+    )
+    List_of_included_plots: List[PlotAnalysis] = Field(
+        default_factory=list,
+        description="Curated plots to surface in the write-up (each entry must include path, original description, and analysis).",
+    )
+    Key_numerical_results: List[NumericalResult] = Field(
+        default_factory=list,
+        description="High-value numerical metrics extracted from the logs (each entry must include value, description, and analysis).",
+    )
 
-report_summarizer_prompt = (
-    """You are given multiple experiment logs from different "nodes". Each node represents attempts and experiments exploring various scientific ideas.
+
+STAGE_SUMMARY_SCHEMA = StageSummaryResponse
+STAGE_SUMMARY_DESCRIPTION = "Aggregate experiment logs into a structured summary."
+
+report_summarizer_prompt = """You are given multiple experiment logs from different "nodes". Each node represents attempts and experiments exploring various scientific ideas.
 
 One key point is that these nodes collectively illustrate a stage of testing different methods or approaches. The crucial task is to identify the scientific insights gleaned from this stage. For example, if one node tries method A and another node tries method B, you should compare any observed differences in performance or outcomes. Summarize both experiments in "Experiment_description", explain the processes in "Description", and place any key numerical findings (such as accuracy metrics, loss values, or runtime comparisons) in "Key_numerical_results."
 
@@ -63,9 +75,22 @@ The name of this stage of the experiment: {stage_name}
 Here are the experiment logs of the nodes:
 
 {node_infos}
-"""
-    + output_format_control
-)
+
+In <JSON>, provide the review in JSON format with the following fields in exactly this order:
+
+- "Experiment_description": a string describing the conducted experiments
+- "Significance": a string explaining why these experiments are important and what impact their findings might have
+- "Description": a string describing the methods, steps taken, and any pertinent context needed to understand the experiments
+- "List_of_included_plots": a list of plots that should be included. Each entry must contain:
+  • "path" (the plot path)
+  • "description" (its original description)
+  • "analysis" (your analysis of its scientific insights)
+- "Key_numerical_results": a list of all important numerical results. Be selective about results that contribute to scientific insights. Each entry must contain:
+  • "result" (float number)
+  • "description" (your short description of the result)
+  • "analysis" (your analysis of its scientific insights)
+
+Ensure every list entry contains the required subfields and that numerical results remain faithful to the logs."""
 
 stage_aggregate_prompt = """You are given:
 
@@ -97,17 +122,7 @@ Your task is to produce an **updated comprehensive summary** of all experiment s
    - The final summary will likely be **very long**. That is acceptable.
    - Present the updated summary in a format consistent with the style of the previous summaries (e.g., same section headings or structure).
 
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-JSON:
-```json
-<JSON>
-```
-Ensure the JSON is valid and properly formatted, as it will be automatically parsed.
-"""
+Return the updated summary in the exact JSON structure used for individual stage summaries."""
 
 
 def get_nodes_infos(nodes: list[Node]) -> str:
@@ -153,14 +168,18 @@ def get_stage_summary(
     temperature: float,
 ) -> dict[str, Any] | None:
     sys_msg, prompt = get_summarizer_prompt(journal=journal, stage_name=stage_name)
-    response_text, _ = get_response_from_llm(
-        prompt=prompt,
-        model=model,
-        system_message=sys_msg,
-        temperature=temperature,
-    )
-    summary_json = extract_json_between_markers(response_text)
-    return cast(dict[str, Any] | None, summary_json)
+    try:
+        response = structured_query_with_schema(
+            system_message=sys_msg,
+            user_message=prompt,
+            model=model,
+            temperature=temperature,
+            schema_class=STAGE_SUMMARY_SCHEMA,
+        ).model_dump(by_alias=True)
+    except Exception as exc:
+        logger.exception("Failed to generate stage summary: %s", exc)
+        return None
+    return response
 
 
 def get_node_log(node: Node) -> dict[str, Any]:
@@ -222,17 +241,17 @@ def update_summary(
         current_summary=cur_summary,
     )
     try:
-        response_text, _ = get_response_from_llm(
-            prompt=prompt,
-            model=model,
+        response = structured_query_with_schema(
             system_message="You are an expert machine learning researcher.",
+            user_message=prompt,
+            model=model,
             temperature=temperature,
-        )
-        summary_json = extract_json_between_markers(response_text)
-        assert summary_json
+            schema_class=STAGE_SUMMARY_SCHEMA,
+        ).model_dump(by_alias=True)
+        return response
     except Exception as e:
         if max_retry > 0:
-            logger.warning(f"Error occurred: {e}. Retrying... ({max_retry} attempts left)")
+            logger.warning("Error occurred: %s. Retrying... (%s attempts left)", e, max_retry)
             return update_summary(
                 prev_summary=prev_summary,
                 cur_stage_name=cur_stage_name,
@@ -242,10 +261,8 @@ def update_summary(
                 temperature=temperature,
                 max_retry=max_retry - 1,
             )
-        else:
-            logger.exception(f"Failed to update summary after multiple attempts. Error: {e}")
-            raise
-    return cast(dict[str, Any], summary_json)
+        logger.exception("Failed to update summary after multiple attempts. Error: %s", e)
+        raise
 
 
 overall_plan_summarizer_prompt = """You have been provided with the plans for both the parent node and the current node. Your task is to synthesize a comprehensive summary of the overall plan by integrating details from both the parent and current node plans.
@@ -259,23 +276,18 @@ Previous overall plan:
 Current plan:
 {current_plan}
 
-Respond in the following format:
+Return a JSON object matching the OverallPlanResponse schema (a single field named "overall_plan" that summarizes the combined plan in prose)."""
 
-THOUGHT:
-<THOUGHT>
 
-JSON:
-```json
-<JSON>
-```
+class OverallPlanResponse(BaseModel):
+    overall_plan: str = Field(
+        ...,
+        description="Narrative that merges the parent and current plans into a single coherent roadmap.",
+    )
 
-In <THOUGHT>, thoroughly reason as an expert researcher. First, reason over each node, and then carefully combine all information. It is okay to be very detailed.
 
-In <JSON>, provide the review in JSON format with the following field in exactly this order:
-- "overall_plan": a string that describes the overall plan based on the current and previous overall plans
-
-Ensure the JSON is valid and properly formatted, as it will be automatically parsed.
-"""
+OVERALL_PLAN_SCHEMA = OverallPlanResponse
+OVERALL_PLAN_DESCRIPTION = "Summarize parent and current node plans into a single narrative."
 
 
 def annotate_history(
@@ -289,20 +301,17 @@ def annotate_history(
             retry_count = 0
             while retry_count < max_retries:
                 try:
-                    response_text, _ = get_response_from_llm(
-                        prompt=overall_plan_summarizer_prompt.format(
+                    response = structured_query_with_schema(
+                        system_message=report_summarizer_sys_msg,
+                        user_message=overall_plan_summarizer_prompt.format(
                             prev_overall_plan=node.parent.overall_plan,
                             current_plan=node.plan,
                         ),
                         model=model,
-                        system_message=report_summarizer_sys_msg,
                         temperature=temperature,
+                        schema_class=OVERALL_PLAN_SCHEMA,
                     )
-                    parsed = extract_json_between_markers(response_text)
-                    if parsed and "overall_plan" in parsed:
-                        node.overall_plan = parsed["overall_plan"]
-                    else:
-                        raise ValueError("LLM did not return overall_plan JSON")
+                    node.overall_plan = str(response.overall_plan)
                     break
                 except Exception as e:
                     retry_count += 1

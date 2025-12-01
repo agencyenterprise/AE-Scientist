@@ -14,12 +14,11 @@ Scope:
 import logging
 import random
 import re
-from typing import cast
 
 import humanize
 from pydantic import BaseModel, Field
 
-from ai_scientist.llm import query, structured_query_with_schema
+from ai_scientist.llm import structured_query_with_schema
 
 from .gpu_manager import GPUSpec
 from .interpreter import ExecutionResult
@@ -27,7 +26,7 @@ from .journal import Node
 from .types import PromptType
 from .utils.config import Config
 from .utils.response import wrap_code
-from .vlm_function_specs import review_func_spec, summary_func_spec
+from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, SUMMARY_RESPONSE_SCHEMA
 
 logger = logging.getLogger("ai-scientist")
 
@@ -235,7 +234,8 @@ class MinimalAgent:
 
         return {"Implementation guideline": impl_guideline}
 
-    # Response format is fully specified by PlanAndCodeSchema and the FunctionSpec
+        # Response format is fully specified by the PlanAndCodeSchema Pydantic model
+
     # schemas used elsewhere; no additional response-format helpers are needed here.
 
     def debug(self, parent_node: Node) -> Node:
@@ -367,16 +367,14 @@ class MinimalAgent:
             "Execution output": wrap_code(node.term_out, lang=""),
         }
         # Query the feedback model using the review function spec
-        response = cast(
-            dict,
-            query(
-                system_message=prompt,
-                user_message=None,
-                func_spec=review_func_spec,
-                model=self.cfg.agent.feedback.model,
-                temperature=self.cfg.agent.feedback.temp,
-            ),
+        response_model = structured_query_with_schema(
+            system_message=prompt,
+            user_message=None,
+            model=self.cfg.agent.feedback.model,
+            temperature=self.cfg.agent.feedback.temp,
+            schema_class=REVIEW_RESPONSE_SCHEMA,
         )
+        response = response_model.model_dump(by_alias=True)
         # Update node-level analysis and bug status based on model output
         node.analysis = response["summary"]
         node.is_buggy = response["is_bug"] or node.exc_type is not None
@@ -405,13 +403,10 @@ class MinimalAgent:
             ),
         }
         # Query the feedback model for a structured summary
-        return cast(
-            dict,
-            query(
-                system_message=summary_prompt,
-                user_message=None,
-                func_spec=summary_func_spec,
-                model=self.cfg.agent.feedback.model,
-                temperature=self.cfg.agent.feedback.temp,
-            ),
-        )
+        return structured_query_with_schema(
+            system_message=summary_prompt,
+            user_message=None,
+            model=self.cfg.agent.feedback.model,
+            temperature=self.cfg.agent.feedback.temp,
+            schema_class=SUMMARY_RESPONSE_SCHEMA,
+        ).model_dump(by_alias=True)

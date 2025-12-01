@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 from typing import Callable, Optional
 
-from ai_scientist.llm import query
+from ai_scientist.llm import structured_query_with_schema
 
 from .codegen_agent import MinimalAgent
 from .events import BaseEvent, RunLogEvent
@@ -22,7 +22,7 @@ from .utils.config import Config as AppConfig
 from .utils.config import apply_log_level
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import wrap_code
-from .vlm_function_specs import metric_parse_spec
+from .vlm_function_specs import METRIC_PARSE_SCHEMA
 
 logger = logging.getLogger("ai-scientist")
 
@@ -614,16 +614,15 @@ def parse_and_assign_metrics(
                 ),
                 "Execution Output": metrics_exec_result.term_out,
             }
-            metrics_response = query(
+            metrics_model = structured_query_with_schema(
                 system_message=metrics_prompt,
                 user_message=None,
-                func_spec=metric_parse_spec,
                 model=cfg.agent.feedback.model,
                 temperature=cfg.agent.feedback.temp,
+                schema_class=METRIC_PARSE_SCHEMA,
             )
-            if isinstance(metrics_response, dict) and metrics_response.get(
-                "valid_metrics_received"
-            ):
+            metrics_response = metrics_model.model_dump(by_alias=True)
+            if metrics_model.valid_metrics_received:
                 metric_names = metrics_response.get("metric_names", [])
                 child_node.metric = MetricValue(value={"metric_names": metric_names})
                 _assign_datasets_from_metrics_response(

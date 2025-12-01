@@ -1,11 +1,7 @@
 import json
 import logging
-import re
-from dataclasses import dataclass
 from typing import Any, Tuple, TypeVar, cast
 
-import jsonschema
-from dataclasses_json import DataClassJsonMixin
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
@@ -122,36 +118,6 @@ def get_response_from_llm(
     return content, full_history
 
 
-def extract_json_between_markers(llm_output: str) -> dict | None:
-    # Regular expression pattern to find JSON content between ```json and ```
-    json_pattern = r"```json(.*?)```"
-    matches = re.findall(json_pattern, llm_output, re.DOTALL)
-
-    if not matches:
-        # Fallback: Try to find any JSON-like content in the output
-        json_pattern = r"\{.*?\}"
-        matches = re.findall(json_pattern, llm_output, re.DOTALL)
-
-    for json_string in matches:
-        json_string = json_string.strip()
-        try:
-            parsed_json: dict[Any, Any] | list[Any] = json.loads(json_string)
-            if isinstance(parsed_json, dict):
-                return parsed_json
-        except json.JSONDecodeError:
-            # Attempt to fix common JSON issues
-            try:
-                # Remove invalid control characters
-                json_string_clean = re.sub(r"[\x00-\x1F\x7F]", "", json_string)
-                parsed_json = json.loads(json_string_clean)
-                if isinstance(parsed_json, dict):
-                    return parsed_json
-            except json.JSONDecodeError:
-                continue  # Try next match
-
-    return None  # No valid JSON found
-
-
 def compile_prompt_to_md(
     prompt: PromptType,
     _header_depth: int = 1,
@@ -206,20 +172,56 @@ def compile_prompt_to_md(
         raise
 
 
-@dataclass
-class FunctionSpec(DataClassJsonMixin):
-    name: str
-    json_schema: dict[str, Any]
-    description: str
+def get_structured_response_from_llm(
+    *,
+    prompt: str,
+    model: str,
+    system_message: PromptType | None,
+    temperature: float,
+    schema_class: type[BaseModel],
+    print_debug: bool = True,
+    msg_history: list[BaseMessage] | None = None,
+) -> Tuple[dict[str, Any], list[BaseMessage]]:
+    if msg_history is None:
+        msg_history = []
 
-    def __post_init__(self) -> None:
-        jsonschema.Draft7Validator.check_schema(self.json_schema)
+    new_msg_history = msg_history + [HumanMessage(content=prompt)]
+
+    combined_system = system_message
+    messages: list[BaseMessage] = []
+    if combined_system is not None:
+        compiled_system = compile_prompt_to_md(prompt=combined_system)
+        messages.append(SystemMessage(content=str(compiled_system)))
+    messages.extend(new_msg_history)
+
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
+    structured_chat = chat.with_structured_output(schema=schema_class)
+    parsed_model = structured_chat.invoke(messages)
+    if not isinstance(parsed_model, BaseModel):
+        raise TypeError("Structured output must be a Pydantic model instance.")
+    parsed = parsed_model.model_dump(by_alias=True)
+    ai_message = AIMessage(content=json.dumps(parsed))
+    full_history = new_msg_history + [ai_message]
+
+    if print_debug:
+        logger.debug("")
+        logger.debug("%s", "*" * 20 + " LLM STRUCTURED START " + "*" * 20)
+        for idx, message in enumerate(full_history):
+            logger.debug("%s, %s: %s", idx, message.type, getattr(message, "content", ""))
+        logger.debug(json.dumps(parsed, indent=2))
+        logger.debug("%s", "*" * 21 + " LLM STRUCTURED END " + "*" * 21)
+        logger.debug("")
+
+    return parsed, full_history
 
 
 def _build_messages_for_query(
     *,
     system_message: PromptType | None,
-    user_message: PromptType | None,
+    user_message: PromptType | None = None,
 ) -> list[BaseMessage]:
     messages: list[BaseMessage] = []
     if system_message is not None:
@@ -318,7 +320,8 @@ def _invoke_structured_langchain_query(
 
 def structured_query_with_schema(
     *,
-    system_message: PromptType,
+    system_message: PromptType | None,
+    user_message: PromptType | None = None,
     model: str,
     temperature: float,
     schema_class: type[TStructured],
@@ -328,7 +331,7 @@ def structured_query_with_schema(
     """
     messages = _build_messages_for_query(
         system_message=system_message,
-        user_message=None,
+        user_message=user_message,
     )
     chat = init_chat_model(
         model=model,
@@ -348,48 +351,15 @@ def query(
     user_message: PromptType | None,
     model: str,
     temperature: float,
-    func_spec: FunctionSpec | None = None,
-    **model_kwargs: object,
 ) -> OutputType:
     """
     Unified LangChain-backed query interface for the tree search code.
 
-    When func_spec is provided, the model is instructed (via the system message)
-    to return a JSON object matching the given schema, and the result is parsed
-    into a Python dict.
+    Returns the raw string output (or function-call dict) from the backing LLM.
     """
-    del model_kwargs  # Unused for now; kept for call-site compatibility.
-
-    if func_spec is None:
-        return _invoke_langchain_query(
-            system_message=system_message,
-            user_message=user_message,
-            model=model,
-            temperature=temperature,
-        )
-
-    # Function-style JSON output: augment system message with schema instructions.
-    schema_text = json.dumps(func_spec.json_schema, indent=2)
-    schema_instruction = (
-        "You must respond ONLY with a JSON object that strictly follows this JSON schema:\n"
-        f"{schema_text}\n"
-        "Do not include any extra commentary or code fences; output raw JSON only."
+    return _invoke_langchain_query(
+        system_message=system_message,
+        user_message=user_message,
+        model=model,
+        temperature=temperature,
     )
-    if system_message is None:
-        combined_system: PromptType = schema_instruction
-    else:
-        combined_system = {
-            "Instructions": system_message,
-            "Output JSON schema": schema_instruction,
-        }
-
-    try:
-        parsed: dict[str, Any] = _invoke_structured_langchain_query(
-            system_message=combined_system,
-            user_message=user_message,
-            model=model,
-            temperature=temperature,
-        )
-        return parsed
-    except Exception as exc:
-        raise ValueError(f"Model did not return valid JSON for FunctionSpec query: {exc}") from exc

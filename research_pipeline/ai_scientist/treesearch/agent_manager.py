@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 
-from ai_scientist.llm import FunctionSpec, query
+from pydantic import BaseModel
+
+from ai_scientist.llm import structured_query_with_schema
 from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, RunStageProgressEvent
 
 from .journal import Journal, Node
@@ -36,34 +38,14 @@ from .utils.config import Config, TaskDescription
 logger = logging.getLogger(__name__)
 
 
+class SubstageGoalResponse(BaseModel):
+    goals: str
+    sub_stage_name: str
+
+
 class StageClass(Protocol):
     MAIN_STAGE_SLUG: str
     DEFAULT_GOALS: str
-
-
-stage_completion_eval_spec = FunctionSpec(
-    name="evaluate_stage_completion",
-    description="Evaluate if the current stage is complete",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "is_complete": {
-                "type": "boolean",
-                "description": "Whether the current stage is complete",
-            },
-            "reasoning": {
-                "type": "string",
-                "description": "Detailed reasoning for the decision",
-            },
-            "missing_criteria": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of criteria still needed",
-            },
-        },
-        "required": ["is_complete", "reasoning", "missing_criteria"],
-    },
-)
 
 
 @dataclass
@@ -405,43 +387,20 @@ Your research idea:\n\n
         4. Are concrete and measurable
         """
 
-        # Define the function specification for the LLM
-        substage_goal_spec = FunctionSpec(
-            name="generate_substage_goals",
-            description="Generate specific goals for the next experimental sub-stage",
-            json_schema={
-                "type": "object",
-                "properties": {
-                    "goals": {
-                        "type": "string",
-                        "description": "Detailed, specific goals for the next sub-stage",
-                    },
-                    "sub_stage_name": {
-                        "type": "string",
-                        "description": "The name of the next sub-stage",
-                    },
-                },
-                "required": ["goals", "sub_stage_name"],
-            },
-        )
-
         try:
             # Get response from LLM
-            response = query(
+            response = structured_query_with_schema(
                 system_message=prompt,
                 user_message=None,
-                func_spec=substage_goal_spec,
                 model=self.cfg.agent.feedback.model,
                 temperature=self.cfg.agent.feedback.temp,
+                schema_class=SubstageGoalResponse,
             )
-            response_dict = cast(Dict[str, Any], response)
-
-            # Format the response into a structured goal string
             goal_str = f"""
-            {response_dict['goals']}
+            {response.goals}
             """
 
-            return goal_str.strip(), str(response_dict["sub_stage_name"])
+            return goal_str.strip(), str(response.sub_stage_name)
 
         except Exception as e:
             logger.error(f"Error generating sub-stage goals: {e}")
