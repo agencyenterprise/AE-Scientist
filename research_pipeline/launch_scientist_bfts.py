@@ -658,14 +658,17 @@ def run_writeup_stage(
             except Exception:
                 logger.exception("Failed to upload PDF artifact: %s", pdf_path)
         if latex_path.exists():
-            artifact_callback(
-                ArtifactSpec(
-                    artifact_type="latex_archive",
-                    path=latex_path,
-                    packaging="zip",
-                    archive_name=f"{run_dir_path.name}-latex.zip",
+            try:
+                artifact_callback(
+                    ArtifactSpec(
+                        artifact_type="latex_archive",
+                        path=latex_path,
+                        packaging="zip",
+                        archive_name=f"{run_dir_path.name}-latex.zip",
+                    )
                 )
-            )
+            except Exception:
+                logger.exception("Failed to upload LaTeX archive artifact: %s", latex_path)
     return writeup_success
 
 
@@ -852,19 +855,19 @@ def execute_launcher(args: argparse.Namespace) -> None:
         failure_message = str(exc)
         raise
     finally:
-        if webhook_client is not None:
-            try:
+        try:
+            if webhook_client is not None:
                 webhook_client.publish_run_finished(success=run_success, message=failure_message)
-            except Exception:
-                logger.exception("Failed to notify run completion.")
-        if heartbeat_stop is not None:
-            heartbeat_stop.set()
-        if heartbeat_thread is not None:
-            heartbeat_thread.join(timeout=5)
-        if event_persistence is not None:
-            event_persistence.stop()
-        if artifact_publisher is not None:
-            artifact_publisher.close()
+            if heartbeat_stop is not None:
+                heartbeat_stop.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join(timeout=5)
+            if event_persistence is not None:
+                event_persistence.stop()
+            if artifact_publisher is not None:
+                artifact_publisher.close()
+        except Exception:
+            logger.exception("Encountered an error while cleaning up the research pipeline run.")
 
 
 def main() -> None:

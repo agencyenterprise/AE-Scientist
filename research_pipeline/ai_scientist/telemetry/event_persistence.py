@@ -171,12 +171,24 @@ class EventPersistenceManager:
             self._thread.join(timeout=timeout)
         finally:
             self._started = False
-        try:
-            self._queue.close()
-        except OSError:
-            pass
+        self._close_queue()
         if self._manager is not None:
             self._manager.shutdown()
+
+    def _close_queue(self) -> None:
+        def _invoke(obj: object, method_name: str) -> bool:
+            method = getattr(obj, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                    return True
+                except (OSError, AttributeError):
+                    return False
+            return False
+
+        if not _invoke(self._queue, "close"):
+            _invoke(self._queue, "_close")
+        _invoke(self._queue, "cancel_join_thread")
 
     def _drain_queue(self) -> None:
         conn: Optional[psycopg2.extensions.connection] = None

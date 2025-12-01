@@ -290,6 +290,7 @@ def _build_remote_script(
     idea_content_b64: str,
     config_filename: str,
     config_content_b64: str,
+    run_id: str,
 ) -> str:
     script_parts: list[str] = ["set -euo pipefail", ""]
     script_parts += [
@@ -312,6 +313,7 @@ def _build_remote_script(
         f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
         f"AWS_REGION={env.aws_region}",
         f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        f"RUN_ID={run_id}",
         "EOF",
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
@@ -326,6 +328,48 @@ def _build_remote_script(
         "source .venv/bin/activate",
         f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
         'echo "Research pipeline completed. Check /workspace/research_pipeline.log for full output."',
+        "",
+        "# === Upload Research Pipeline Log to S3 ===",
+        'echo "Uploading research pipeline log to S3 (best-effort)..."',
+        "python - <<'PY'",
+        "import boto3",
+        "import os",
+        "import pathlib",
+        "import sys",
+        "",
+        "log_path = pathlib.Path('/workspace/research_pipeline.log')",
+        "bucket = os.environ.get('AWS_S3_BUCKET_NAME')",
+        "aws_region = os.environ.get('AWS_REGION')",
+        "aws_key = os.environ.get('AWS_ACCESS_KEY_ID')",
+        "aws_secret = os.environ.get('AWS_SECRET_ACCESS_KEY')",
+        "run_id = os.environ.get('RUN_ID', 'unknown-run')",
+        "",
+        "if not bucket or not aws_region or not aws_key or not aws_secret:",
+        "    print('Missing AWS configuration; skipping log upload.')",
+        "    sys.exit(0)",
+        "",
+        "if not log_path.exists():",
+        "    print(f'Log file {log_path} not found; skipping upload.')",
+        "    sys.exit(0)",
+        "",
+        "key = f'research-pipeline/{run_id}/logs/research_pipeline.log'",
+        "try:",
+        "    client = boto3.client(",
+        "        's3',",
+        "        region_name=aws_region,",
+        "        aws_access_key_id=aws_key,",
+        "        aws_secret_access_key=aws_secret,",
+        "    )",
+        "    client.upload_file(",
+        "        str(log_path),",
+        "        bucket,",
+        "        key,",
+        "        ExtraArgs={'ContentType': 'text/plain', 'Metadata': {'run_id': run_id}},",
+        "    )",
+        "    print(f'Uploaded research pipeline log to s3://{bucket}/{key}')",
+        "except Exception as exc:  # noqa: BLE001",
+        "    print(f'Failed to upload research pipeline log: {exc}')",
+        "PY",
     ]
     return "\n".join(script_parts).strip()
 
@@ -367,6 +411,7 @@ def launch_research_pipeline_run(
         idea_content_b64=idea_b64,
         config_filename=config_filename,
         config_content_b64=config_b64,
+        run_id=run_id,
     )
 
     creator = RunPodCreator(api_key=runpod_api_key)
@@ -382,6 +427,7 @@ def launch_research_pipeline_run(
         "AWS_SECRET_ACCESS_KEY": env.aws_secret_access_key,
         "AWS_REGION": env.aws_region,
         "AWS_S3_BUCKET_NAME": env.aws_s3_bucket_name,
+        "RUN_ID": run_id,
     }
     gpu_types = [
         "NVIDIA GeForce RTX 5090",
