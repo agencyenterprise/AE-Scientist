@@ -32,6 +32,7 @@ from app.models.conversations import (
     ParseErrorResult,
     ParseResult,
     ParseSuccessResult,
+    ResearchRunSummary,
 )
 
 # Idea models
@@ -60,6 +61,14 @@ from app.models.llm_prompts import (
     LLMPromptResponse,
     LLMProvidersResponse,
 )
+from app.models.research_pipeline import (
+    ResearchRunArtifactMetadata,
+    ResearchRunDetailsResponse,
+    ResearchRunInfo,
+    ResearchRunLogEntry,
+    ResearchRunNodeEvent,
+    ResearchRunStageProgress,
+)
 
 __all__ = [
     # Conversation models
@@ -67,6 +76,13 @@ __all__ = [
     "ImportedChat",
     "ConversationResponse",
     "ConversationUpdate",
+    "ResearchRunSummary",
+    "ResearchRunInfo",
+    "ResearchRunStageProgress",
+    "ResearchRunLogEntry",
+    "ResearchRunNodeEvent",
+    "ResearchRunArtifactMetadata",
+    "ResearchRunDetailsResponse",
     "ImportChatGPTConversation",
     "ImportChatPrompt",
     "ImportChatCreateNew",

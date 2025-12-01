@@ -31,6 +31,7 @@ from app.models import (
     ManualIdeaSeedRequest,
     ParseErrorResult,
     ParseSuccessResult,
+    ResearchRunSummary,
 )
 from app.services import (
     AnthropicService,
@@ -47,6 +48,7 @@ from app.services.database.conversations import DashboardConversation as DBDashb
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
+from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
@@ -193,7 +195,10 @@ class SummaryResponse(BaseModel):
     summary: str = Field(..., description="Generated or updated summary")
 
 
-def convert_db_to_api_response(db_conversation: DBFullConversation) -> ConversationResponse:
+def convert_db_to_api_response(
+    db_conversation: DBFullConversation,
+    research_runs: Optional[List[ResearchRunSummary]] = None,
+) -> ConversationResponse:
     """Convert NamedTuple DBFullConversation to Pydantic ConversationResponse for API responses."""
     return ConversationResponse(
         id=db_conversation.id,
@@ -220,6 +225,27 @@ def convert_db_to_api_response(db_conversation: DBFullConversation) -> Conversat
         ),
         manual_title=db_conversation.manual_title,
         manual_hypothesis=db_conversation.manual_hypothesis,
+        research_runs=research_runs or [],
+    )
+
+
+def _run_to_summary(run: ResearchPipelineRun) -> ResearchRunSummary:
+    return ResearchRunSummary(
+        run_id=run.run_id,
+        status=run.status,
+        idea_id=run.idea_id,
+        idea_version_id=run.idea_version_id,
+        pod_id=run.pod_id,
+        pod_name=run.pod_name,
+        gpu_type=run.gpu_type,
+        public_ip=run.public_ip,
+        ssh_port=run.ssh_port,
+        pod_host_id=run.pod_host_id,
+        error_message=run.error_message,
+        last_heartbeat_at=run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
+        heartbeat_failures=run.heartbeat_failures,
+        created_at=run.created_at.isoformat(),
+        updated_at=run.updated_at.isoformat(),
     )
 
 
@@ -1134,7 +1160,10 @@ async def get_conversation(
             detail=f"No conversation found with ID {conversation_id}",
         )
 
-    return convert_db_to_api_response(conversation)
+    run_summaries = [
+        _run_to_summary(run) for run in db.list_research_runs_for_conversation(conversation_id)
+    ]
+    return convert_db_to_api_response(conversation, research_runs=run_summaries)
 
 
 @router.delete("/{conversation_id}")

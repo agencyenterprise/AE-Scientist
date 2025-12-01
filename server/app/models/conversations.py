@@ -68,6 +68,28 @@ class ConversationUpdate(BaseModel):
     title: str = Field(..., description="New title for the conversation", min_length=1)
 
 
+class ResearchRunSummary(BaseModel):
+    """Lightweight overview of a research pipeline run."""
+
+    run_id: str = Field(..., description="Unique identifier of the run")
+    status: str = Field(..., description="Current status of the run")
+    idea_id: int = Field(..., description="Idea ID associated with the run")
+    idea_version_id: int = Field(..., description="Idea version ID associated with the run")
+    pod_id: Optional[str] = Field(None, description="RunPod identifier, when available")
+    pod_name: Optional[str] = Field(None, description="Human-friendly pod name")
+    gpu_type: Optional[str] = Field(None, description="Requested GPU type")
+    public_ip: Optional[str] = Field(None, description="Pod public IP address")
+    ssh_port: Optional[str] = Field(None, description="Pod SSH port mapping")
+    pod_host_id: Optional[str] = Field(None, description="RunPod host identifier")
+    error_message: Optional[str] = Field(None, description="Failure details, if any")
+    last_heartbeat_at: Optional[str] = Field(
+        None, description="ISO timestamp of the most recent heartbeat"
+    )
+    heartbeat_failures: int = Field(0, description="Consecutive missed heartbeats")
+    created_at: str = Field(..., description="ISO timestamp when the run was created")
+    updated_at: str = Field(..., description="ISO timestamp when the run was last updated")
+
+
 class ConversationResponse(BaseModel):
     """Response model for conversation API endpoints."""
 
@@ -92,6 +114,10 @@ class ConversationResponse(BaseModel):
     manual_hypothesis: Optional[str] = Field(
         None,
         description="Manual hypothesis provided when the conversation originates from a manual seed",
+    )
+    research_runs: List[ResearchRunSummary] = Field(
+        default_factory=list,
+        description="Research pipeline runs associated with the conversation",
     )
 
 

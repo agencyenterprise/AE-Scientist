@@ -1680,6 +1680,115 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Research Run Details",
+        "operationId": "get_research_run_details_api_conversations__conversation_id__idea_research_run__run_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunDetailsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Download Research Run Artifact",
+        "operationId": "download_research_run_artifact_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__download_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Root",
@@ -2168,6 +2277,14 @@
             ],
             "title": "Manual Hypothesis",
             "description": "Manual hypothesis provided when the conversation originates from a manual seed"
+          },
+          "research_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunSummary"
+            },
+            "type": "array",
+            "title": "Research Runs",
+            "description": "Research pipeline runs associated with the conversation"
           }
         },
         "type": "object",
@@ -3114,6 +3231,575 @@
           "run_id"
         ],
         "title": "ResearchRunAcceptedResponse"
+      },
+      "ResearchRunArtifactMetadata": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Artifact identifier"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type",
+            "description": "Artifact type label"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size",
+            "description": "File size in bytes"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type",
+            "description": "MIME type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the artifact was recorded"
+          },
+          "download_path": {
+            "type": "string",
+            "title": "Download Path",
+            "description": "API path to initiate a download"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "artifact_type",
+          "filename",
+          "file_size",
+          "file_type",
+          "created_at",
+          "download_path"
+        ],
+        "title": "ResearchRunArtifactMetadata"
+      },
+      "ResearchRunDetailsResponse": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ResearchRunInfo",
+            "description": "Metadata describing the run"
+          },
+          "stage_progress": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageProgress"
+            },
+            "type": "array",
+            "title": "Stage Progress",
+            "description": "Stage progress telemetry"
+          },
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunLogEntry"
+            },
+            "type": "array",
+            "title": "Logs",
+            "description": "Log events generated by the run"
+          },
+          "experiment_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunNodeEvent"
+            },
+            "type": "array",
+            "title": "Experiment Nodes",
+            "description": "Experiment node completion events"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
+            },
+            "type": "array",
+            "title": "Artifacts",
+            "description": "Artifacts uploaded for the run"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run"
+        ],
+        "title": "ResearchRunDetailsResponse"
+      },
+      "ResearchRunInfo": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique identifier of the run"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current status of the run"
+          },
+          "idea_id": {
+            "type": "integer",
+            "title": "Idea Id",
+            "description": "Idea ID associated with the run"
+          },
+          "idea_version_id": {
+            "type": "integer",
+            "title": "Idea Version Id",
+            "description": "Idea version ID associated with the run"
+          },
+          "pod_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Id",
+            "description": "RunPod identifier, when available"
+          },
+          "pod_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Name",
+            "description": "Human-friendly pod name"
+          },
+          "gpu_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Type",
+            "description": "Requested GPU type"
+          },
+          "public_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Ip",
+            "description": "Pod public IP address"
+          },
+          "ssh_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Port",
+            "description": "Pod SSH port mapping"
+          },
+          "pod_host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Host Id",
+            "description": "RunPod host identifier"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Failure details, if any"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At",
+            "description": "ISO timestamp of the most recent heartbeat"
+          },
+          "heartbeat_failures": {
+            "type": "integer",
+            "title": "Heartbeat Failures",
+            "description": "Consecutive missed heartbeats",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the run was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp when the run was last updated"
+          },
+          "start_deadline_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Deadline At",
+            "description": "ISO timestamp representing the start deadline window"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "idea_id",
+          "idea_version_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResearchRunInfo"
+      },
+      "ResearchRunLogEntry": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the log event"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level",
+            "description": "Log level (info, warn, error, ...)"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Log message"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of the log event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "level",
+          "message",
+          "created_at"
+        ],
+        "title": "ResearchRunLogEntry"
+      },
+      "ResearchRunNodeEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the node event"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Identifier of the node"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary",
+            "description": "Summary payload stored in telemetry"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of the event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "summary",
+          "created_at"
+        ],
+        "title": "ResearchRunNodeEvent"
+      },
+      "ResearchRunStageProgress": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "iteration": {
+            "type": "integer",
+            "title": "Iteration",
+            "description": "Current iteration number"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "title": "Max Iterations",
+            "description": "Maximum iterations for the stage"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Progress percentage (0-1)"
+          },
+          "total_nodes": {
+            "type": "integer",
+            "title": "Total Nodes",
+            "description": "Total nodes considered so far"
+          },
+          "buggy_nodes": {
+            "type": "integer",
+            "title": "Buggy Nodes",
+            "description": "Number of buggy nodes"
+          },
+          "good_nodes": {
+            "type": "integer",
+            "title": "Good Nodes",
+            "description": "Number of good nodes"
+          },
+          "best_metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Metric",
+            "description": "Best metric reported at this stage"
+          },
+          "eta_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta S",
+            "description": "Estimated time remaining in seconds"
+          },
+          "latest_iteration_time_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Iteration Time S",
+            "description": "Duration of the latest iteration in seconds"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the event was recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "iteration",
+          "max_iterations",
+          "progress",
+          "total_nodes",
+          "buggy_nodes",
+          "good_nodes",
+          "created_at"
+        ],
+        "title": "ResearchRunStageProgress"
+      },
+      "ResearchRunSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique identifier of the run"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Current status of the run"
+          },
+          "idea_id": {
+            "type": "integer",
+            "title": "Idea Id",
+            "description": "Idea ID associated with the run"
+          },
+          "idea_version_id": {
+            "type": "integer",
+            "title": "Idea Version Id",
+            "description": "Idea version ID associated with the run"
+          },
+          "pod_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Id",
+            "description": "RunPod identifier, when available"
+          },
+          "pod_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Name",
+            "description": "Human-friendly pod name"
+          },
+          "gpu_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Type",
+            "description": "Requested GPU type"
+          },
+          "public_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Ip",
+            "description": "Pod public IP address"
+          },
+          "ssh_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Port",
+            "description": "Pod SSH port mapping"
+          },
+          "pod_host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pod Host Id",
+            "description": "RunPod host identifier"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Failure details, if any"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At",
+            "description": "ISO timestamp of the most recent heartbeat"
+          },
+          "heartbeat_failures": {
+            "type": "integer",
+            "title": "Heartbeat Failures",
+            "description": "Consecutive missed heartbeats",
+            "default": 0
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the run was created"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp when the run was last updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "idea_id",
+          "idea_version_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResearchRunSummary",
+        "description": "Lightweight overview of a research pipeline run."
       },
       "RunFinishedPayload": {
         "properties": {

@@ -145,25 +145,7 @@ class ResearchPipelineRunsMixin:
                 row = cursor.fetchone()
                 if not row:
                     return None
-                return ResearchPipelineRun(
-                    id=row["id"],
-                    run_id=row["run_id"],
-                    idea_id=row["idea_id"],
-                    idea_version_id=row["idea_version_id"],
-                    status=row["status"],
-                    pod_id=row.get("pod_id"),
-                    pod_name=row.get("pod_name"),
-                    gpu_type=row.get("gpu_type"),
-                    public_ip=row.get("public_ip"),
-                    ssh_port=row.get("ssh_port"),
-                    pod_host_id=row.get("pod_host_id"),
-                    error_message=row.get("error_message"),
-                    start_deadline_at=row.get("start_deadline_at"),
-                    last_heartbeat_at=row.get("last_heartbeat_at"),
-                    heartbeat_failures=row.get("heartbeat_failures", 0),
-                    created_at=row["created_at"],
-                    updated_at=row["updated_at"],
-                )
+                return self._row_to_run(row)
 
     def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]:
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
@@ -175,25 +157,74 @@ class ResearchPipelineRunsMixin:
                     """
                 )
                 rows = cursor.fetchall() or []
-        return [
-            ResearchPipelineRun(
-                id=row["id"],
-                run_id=row["run_id"],
-                idea_id=row["idea_id"],
-                idea_version_id=row["idea_version_id"],
-                status=row["status"],
-                pod_id=row.get("pod_id"),
-                pod_name=row.get("pod_name"),
-                gpu_type=row.get("gpu_type"),
-                public_ip=row.get("public_ip"),
-                ssh_port=row.get("ssh_port"),
-                pod_host_id=row.get("pod_host_id"),
-                error_message=row.get("error_message"),
-                start_deadline_at=row.get("start_deadline_at"),
-                last_heartbeat_at=row.get("last_heartbeat_at"),
-                heartbeat_failures=row.get("heartbeat_failures", 0),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_run(row) for row in rows]
+
+    def list_research_runs_for_conversation(
+        self, conversation_id: int
+    ) -> list[ResearchPipelineRun]:
+        query = """
+            SELECT r.*
+            FROM research_pipeline_runs r
+            JOIN ideas i ON r.idea_id = i.id
+            WHERE i.conversation_id = %s
+            ORDER BY r.created_at DESC
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (conversation_id,))
+                rows = cursor.fetchall() or []
+        return [self._row_to_run(row) for row in rows]
+
+    def get_run_for_conversation(
+        self, *, run_id: str, conversation_id: int
+    ) -> Optional[ResearchPipelineRun]:
+        query = """
+            SELECT r.*
+            FROM research_pipeline_runs r
+            JOIN ideas i ON r.idea_id = i.id
+            WHERE r.run_id = %s AND i.conversation_id = %s
+            LIMIT 1
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id, conversation_id))
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return self._row_to_run(row)
+
+    def get_run_conversation_id(self, run_id: str) -> Optional[int]:
+        query = """
+            SELECT i.conversation_id
+            FROM research_pipeline_runs r
+            JOIN ideas i ON r.idea_id = i.id
+            WHERE r.run_id = %s
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor() as cursor:
+                cursor.execute(query, (run_id,))
+                result = cursor.fetchone()
+        if not result:
+            return None
+        return int(result[0])
+
+    def _row_to_run(self, row: dict) -> ResearchPipelineRun:
+        return ResearchPipelineRun(
+            id=row["id"],
+            run_id=row["run_id"],
+            idea_id=row["idea_id"],
+            idea_version_id=row["idea_version_id"],
+            status=row["status"],
+            pod_id=row.get("pod_id"),
+            pod_name=row.get("pod_name"),
+            gpu_type=row.get("gpu_type"),
+            public_ip=row.get("public_ip"),
+            ssh_port=row.get("ssh_port"),
+            pod_host_id=row.get("pod_host_id"),
+            error_message=row.get("error_message"),
+            start_deadline_at=row.get("start_deadline_at"),
+            last_heartbeat_at=row.get("last_heartbeat_at"),
+            heartbeat_failures=row.get("heartbeat_failures", 0),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
