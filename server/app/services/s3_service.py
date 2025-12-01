@@ -10,10 +10,10 @@ import os
 import unicodedata
 from urllib.parse import quote
 
-import boto3  # type: ignore
+import boto3
 import magic
 import requests
-from botocore.exceptions import ClientError, NoCredentialsError  # type: ignore
+from botocore.exceptions import ClientError, NoCredentialsError
 
 logger = logging.getLogger(__name__)
 

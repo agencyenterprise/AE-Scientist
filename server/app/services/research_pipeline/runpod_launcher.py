@@ -179,6 +179,10 @@ class RunPodEnvironment:
     database_public_url: str
     telemetry_webhook_url: str
     telemetry_webhook_token: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_region: str
+    aws_s3_bucket_name: str
 
 
 logger = logging.getLogger(__name__)
@@ -212,6 +216,10 @@ def _load_runpod_environment() -> RunPodEnvironment:
         database_public_url=_require("DATABASE_PUBLIC_URL"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
         telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
+        aws_access_key_id=_require("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
+        aws_region=_require("AWS_REGION"),
+        aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
     )
 
 
@@ -300,6 +308,10 @@ def _build_remote_script(
         "cat > .env << 'EOF'",
         f"OPENAI_API_KEY={env.openai_api_key}",
         f"HF_TOKEN={env.hf_token}",
+        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
+        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
+        f"AWS_REGION={env.aws_region}",
+        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
         "EOF",
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
@@ -366,6 +378,10 @@ def launch_research_pipeline_run(
         "REPO_BRANCH": "main",
         "OPENAI_API_KEY": env.openai_api_key,
         "HF_TOKEN": env.hf_token,
+        "AWS_ACCESS_KEY_ID": env.aws_access_key_id,
+        "AWS_SECRET_ACCESS_KEY": env.aws_secret_access_key,
+        "AWS_REGION": env.aws_region,
+        "AWS_S3_BUCKET_NAME": env.aws_s3_bucket_name,
     }
     gpu_types = [
         "NVIDIA GeForce RTX 5090",

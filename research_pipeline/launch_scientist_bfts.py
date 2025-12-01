@@ -26,6 +26,7 @@ from typing import Callable, NamedTuple, Optional, cast
 
 from omegaconf import OmegaConf
 
+from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.llm import token_tracker
 from ai_scientist.perform_icbinb_writeup import gather_citations
@@ -68,6 +69,9 @@ class TelemetryHooks(NamedTuple):
     event_callback: Callable[[BaseEvent], None]
     persistence: Optional[EventPersistenceManager]
     webhook: Optional[WebhookClient]
+
+
+ArtifactCallback = Callable[[ArtifactSpec], None]
 
 
 def save_token_tracker(idea_dir: str) -> None:
@@ -295,6 +299,33 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         )
 
 
+def setup_artifact_publisher(
+    *, telemetry_cfg: TelemetryConfig
+) -> tuple[ArtifactPublisher, ArtifactCallback]:
+    try:
+        aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
+        aws_secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
+        aws_region = os.environ["AWS_REGION"]
+        aws_s3_bucket_name = os.environ["AWS_S3_BUCKET_NAME"]
+    except KeyError:
+        logger.error("Missing AWS environment variables; artifact publishing disabled.")
+        raise ValueError("Missing AWS environment variables; artifact publishing disabled.")
+
+    publisher = ArtifactPublisher(
+        run_id=telemetry_cfg.run_id,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_region=aws_region,
+        aws_s3_bucket_name=aws_s3_bucket_name,
+        database_url=telemetry_cfg.database_url,
+    )
+
+    def _callback(spec: ArtifactSpec) -> None:
+        publisher.publish(spec=spec)
+
+    return publisher, _callback
+
+
 def resume_run(
     base_cfg: Config,
     idea_json_path: str,
@@ -519,6 +550,7 @@ def run_plot_aggregation(
     reports_base: str,
     run_dir_path: Path | None,
     should_run_reports: bool,
+    artifact_callback: ArtifactCallback,
 ) -> bool:
     if writeup_cfg is None or not should_run_reports:
         return False
@@ -529,6 +561,22 @@ def run_plot_aggregation(
             temperature=writeup_cfg.temperature,
             run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         )
+        try:
+            if run_dir_path is None:
+                raise ValueError("run_dir_path is required to archive plots.")
+            figures_dir = Path(reports_base) / "figures" / run_dir_path.name
+            if not figures_dir.exists():
+                raise FileNotFoundError(f"figures directory missing: {figures_dir}")
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="plots_archive",
+                    path=figures_dir,
+                    packaging="zip",
+                    archive_name=f"{run_dir_path.name}-plots.zip",
+                )
+            )
+        except Exception:
+            logger.exception("Failed to record plots archive artifact for %s", run_dir_path)
         return True
     except Exception as e:
         logger.warning(f"Aggregate plots failed: {e}. Skipping writeup.")
@@ -546,6 +594,7 @@ def run_writeup_stage(
     run_dir_path: Path | None,
     should_run_reports: bool,
     agg_ok: bool,
+    artifact_callback: ArtifactCallback,
 ) -> bool:
     if writeup_cfg is None or not should_run_reports or not agg_ok:
         return False
@@ -593,6 +642,30 @@ def run_writeup_stage(
 
     if not writeup_success:
         logger.error("Writeup process did not complete successfully after all retries.")
+    elif run_dir_path is not None:
+        run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+        latex_path = run_out_dir / "latex"
+        pdf_paths = sorted(run_out_dir.glob("*.pdf"))
+        for pdf_path in pdf_paths:
+            try:
+                artifact_callback(
+                    ArtifactSpec(
+                        artifact_type="paper_pdf",
+                        path=pdf_path,
+                        packaging="file",
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to upload PDF artifact: %s", pdf_path)
+        if latex_path.exists():
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="latex_archive",
+                    path=latex_path,
+                    packaging="zip",
+                    archive_name=f"{run_dir_path.name}-latex.zip",
+                )
+            )
     return writeup_success
 
 
@@ -674,6 +747,16 @@ def execute_launcher(args: argparse.Namespace) -> None:
     event_callback = telemetry_hooks.event_callback
     event_persistence = telemetry_hooks.persistence
     webhook_client = telemetry_hooks.webhook
+    if base_cfg.telemetry is not None:
+        artifact_publisher, artifact_callback = setup_artifact_publisher(
+            telemetry_cfg=base_cfg.telemetry
+        )
+    else:
+        artifact_publisher = None
+
+        def artifact_callback(_spec: ArtifactSpec) -> None:
+            return
+
     heartbeat_thread: threading.Thread | None = None
     heartbeat_stop: threading.Event | None = None
     if webhook_client is not None:
@@ -725,6 +808,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
             reports_base=reports_base,
             run_dir_path=run_dir_path,
             should_run_reports=should_run_reports,
+            artifact_callback=artifact_callback,
         )
 
         cleanup_aggregated_results(reports_base=reports_base)
@@ -739,6 +823,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
             run_dir_path=run_dir_path,
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
+            artifact_callback=artifact_callback,
         )
 
         run_review_stage(
@@ -749,6 +834,17 @@ def execute_launcher(args: argparse.Namespace) -> None:
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
         )
+
+        if artifact_callback is not None and run_dir_path is not None:
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="workspace_archive",
+                    path=Path(base_cfg.workspace_dir),
+                    packaging="zip",
+                    archive_name=f"{run_dir_path.name}-workspace.zip",
+                    exclude_dir_names=(".ai_scientist_venv", ".venv"),
+                )
+            )
 
         logger.info("Finished running the experiment.")
         run_success = True
@@ -767,6 +863,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
             heartbeat_thread.join(timeout=5)
         if event_persistence is not None:
             event_persistence.stop()
+        if artifact_publisher is not None:
+            artifact_publisher.close()
 
 
 def main() -> None:
