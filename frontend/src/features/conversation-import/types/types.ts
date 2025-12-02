@@ -15,6 +15,7 @@ export interface ConflictItem {
 }
 
 export type SSEContent = { type: "content"; data: string };
+export type SSESectionUpdate = { type: "section_update"; field: string; data: string };
 export type SSEState = { type: "state"; data: ImportState };
 export type SSEProgress = {
   type: "progress";
@@ -40,6 +41,7 @@ export type SSEDone = { type: "done"; data: { conversation?: { id: number }; err
 
 export type SSEEvent =
   | SSEContent
+  | SSESectionUpdate
   | SSEState
   | SSEProgress
   | SSEConflict

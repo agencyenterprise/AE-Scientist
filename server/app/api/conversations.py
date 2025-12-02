@@ -348,7 +348,11 @@ async def _stream_structured_idea(
                 continue
             field_key, section_text = formatted
             streamed_sections[field_key] = section_text
-            yield json.dumps({"type": "content", "data": section_text}) + "\n"
+            yield json.dumps({
+                "type": "section_update",
+                "field": field_key,
+                "data": section_text
+            }) + "\n"
         elif event_type == "final_idea_payload":
             payload = event.get("data")
             if isinstance(payload, str):
@@ -390,7 +394,11 @@ async def _stream_structured_idea(
     for field_key, section_text in _iter_formatted_sections(idea=llm_idea):
         if streamed_sections.get(field_key) == section_text:
             continue
-        yield json.dumps({"type": "content", "data": section_text}) + "\n"
+        yield json.dumps({
+            "type": "section_update",
+            "field": field_key,
+            "data": section_text
+        }) + "\n"
 
 
 async def _generate_imported_chat_keywords(
