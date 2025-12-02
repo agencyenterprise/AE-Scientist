@@ -3,7 +3,12 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
+
+PROJECT_DIR = Path(__file__).resolve().parent
+load_dotenv(PROJECT_DIR / ".env")
 
 
 def _require_env(name: str) -> str:
