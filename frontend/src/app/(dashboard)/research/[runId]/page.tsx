@@ -20,6 +20,7 @@ import {
   StopCircle,
 } from "lucide-react";
 import { apiFetch } from "@/shared/lib/api-client";
+import { config } from "@/shared/lib/config";
 
 // Types from the existing API response
 interface ResearchRunInfo {
@@ -445,7 +446,7 @@ export default function ResearchRunDetailPage() {
                   </div>
                 </div>
                 <a
-                  href={artifact.download_path}
+                  href={`${config.apiBaseUrl}${artifact.download_path}`}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
                 >
                   <Download className="h-4 w-4" />
