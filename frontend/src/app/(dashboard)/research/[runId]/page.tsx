@@ -260,7 +260,7 @@ export default function ResearchRunDetailPage() {
   }
 
   const { run, stage_progress, logs, artifacts } = details;
-  const latestProgress = stage_progress[0];
+  const latestProgress = stage_progress[stage_progress.length - 1];
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 
