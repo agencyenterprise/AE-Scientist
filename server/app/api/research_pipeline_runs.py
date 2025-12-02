@@ -486,23 +486,23 @@ async def stream_research_run_events(
 
                 new_logs = db.list_run_log_events_since(run_id, last_log_check)
                 for log_event in new_logs:
-                    model = _log_event_to_model(log_event)
-                    yield f"data: {json.dumps({'type': 'log', 'data': model.model_dump()})}\n\n"
+                    log_model = _log_event_to_model(log_event)
+                    yield f"data: {json.dumps({'type': 'log', 'data': log_model.model_dump()})}\n\n"
                 last_log_check = now
 
                 current_progress = db.get_latest_stage_progress(run_id)
                 if current_progress and _is_meaningful_progress_change(
                     last_emitted_progress, current_progress
                 ):
-                    model = _stage_event_to_model(current_progress)
-                    yield f"data: {json.dumps({'type': 'stage_progress', 'data': model.model_dump()})}\n\n"
+                    progress_model = _stage_event_to_model(current_progress)
+                    yield f"data: {json.dumps({'type': 'stage_progress', 'data': progress_model.model_dump()})}\n\n"
                     last_emitted_progress = current_progress
 
                 current_artifacts = db.list_run_artifacts(run_id)
                 if len(current_artifacts) > last_artifact_count:
                     for artifact in current_artifacts[last_artifact_count:]:
-                        model = _artifact_to_model(artifact, conversation_id, run_id)
-                        yield f"data: {json.dumps({'type': 'artifact', 'data': model.model_dump()})}\n\n"
+                        artifact_model = _artifact_to_model(artifact, conversation_id, run_id)
+                        yield f"data: {json.dumps({'type': 'artifact', 'data': artifact_model.model_dump()})}\n\n"
                     last_artifact_count = len(current_artifacts)
 
                 if (now - last_heartbeat).total_seconds() > SSE_HEARTBEAT_INTERVAL_SECONDS:

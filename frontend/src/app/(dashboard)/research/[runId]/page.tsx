@@ -236,6 +236,7 @@ export default function ResearchRunDetailPage() {
   }, []);
 
   const handleSSEError = useCallback((errorMsg: string) => {
+    // eslint-disable-next-line no-console
     console.error("SSE error:", errorMsg);
   }, []);
 

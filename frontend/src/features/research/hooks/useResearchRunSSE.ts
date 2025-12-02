@@ -195,6 +195,7 @@ export function useResearchRunSSE({
                 break;
             }
           } catch (parseError) {
+            // eslint-disable-next-line no-console
             console.warn("Failed to parse SSE event:", line, parseError);
           }
         }

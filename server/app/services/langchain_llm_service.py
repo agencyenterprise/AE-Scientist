@@ -383,9 +383,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         if last_chunk_metadata:
             finish_reason = last_chunk_metadata.get("finish_reason", "")
             if finish_reason == "length":
-                logger.warning(
-                    "Idea generation response was truncated due to max_tokens limit"
-                )
+                logger.warning("Idea generation response was truncated due to max_tokens limit")
                 raise ValueError(
                     "Idea generation was truncated. The response exceeded the token limit. "
                     "Try a shorter conversation or increase IDEA_MAX_COMPLETION_TOKENS."
@@ -503,12 +501,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         except (ValidationError, ValueError) as exc:
             # Log more details for debugging truncation issues
             content_len = len(cleaned_content)
-            last_chars = (
-                cleaned_content[-100:] if content_len > 100 else cleaned_content
-            )
+            last_chars = cleaned_content[-100:] if content_len > 100 else cleaned_content
             logger.error(
-                "Failed to parse idea response for provider %s. "
-                "Length: %d, Last 100 chars: %s",
+                "Failed to parse idea response for provider %s. " "Length: %d, Last 100 chars: %s",
                 self.provider_name,
                 content_len,
                 last_chars,
