@@ -17,6 +17,7 @@ import {
   Activity,
   FileText,
   Terminal,
+  StopCircle,
 } from "lucide-react";
 import { apiFetch } from "@/shared/lib/api-client";
 
@@ -172,6 +173,8 @@ export default function ResearchRunDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [stopPending, setStopPending] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
 
   // Load run details by first fetching the run info to get conversation_id
   const loadRunDetails = useCallback(async () => {
@@ -214,6 +217,24 @@ export default function ResearchRunDetailPage() {
     return undefined;
   }, [details?.run.status, loadRunDetails]);
 
+  const handleStopRun = async () => {
+    if (!conversationId || stopPending) {
+      return;
+    }
+    try {
+      setStopError(null);
+      setStopPending(true);
+      await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
+        method: "POST",
+      });
+      await loadRunDetails();
+    } catch (err) {
+      setStopError(err instanceof Error ? err.message : "Failed to stop research run");
+    } finally {
+      setStopPending(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -239,6 +260,8 @@ export default function ResearchRunDetailPage() {
 
   const { run, stage_progress, logs, artifacts } = details;
   const latestProgress = stage_progress[0];
+  const canStopRun =
+    conversationId !== null && (run.status === "running" || run.status === "pending");
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -254,10 +277,34 @@ export default function ResearchRunDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold text-white">{run.run_id}</h1>
             {getStatusBadge(run.status)}
+            {canStopRun && (
+              <button
+                onClick={handleStopRun}
+                disabled={stopPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {stopPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Stopping...
+                  </>
+                ) : (
+                  <>
+                    <StopCircle className="h-4 w-4" />
+                    Stop Run
+                  </>
+                )}
+              </button>
+            )}
           </div>
           <p className="mt-1 text-sm text-slate-400">
             Created {formatRelativeTime(run.created_at)}
           </p>
+          {stopError && (
+            <p className="mt-2 text-sm text-red-400" role="alert">
+              {stopError}
+            </p>
+          )}
         </div>
       </div>
 

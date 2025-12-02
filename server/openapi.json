@@ -1731,6 +1731,57 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
+      "post": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Stop Research Run",
+        "operationId": "stop_research_run_api_conversations__conversation_id__idea_research_run__run_id__stop_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStopResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download": {
       "get": {
         "tags": [
@@ -1795,7 +1846,7 @@
           "research-runs"
         ],
         "summary": "List Research Runs",
-        "description": "List all research pipeline runs with enriched data.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information",
+        "description": "List all research pipeline runs with enriched data.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n\nSupports filtering by search term, status, and creator user ID.",
         "operationId": "list_research_runs_api_research_runs__get",
         "parameters": [
           {
@@ -1824,6 +1875,39 @@
               "title": "Offset"
             },
             "description": "Number of runs to skip"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Search term for run ID, title, hypothesis, or creator",
+              "title": "Search"
+            },
+            "description": "Search term for run ID, title, hypothesis, or creator"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by status (pending, running, completed, failed)",
+              "title": "Status"
+            },
+            "description": "Filter by status (pending, running, completed, failed)"
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Filter by creator user ID",
+              "title": "User Id"
+            },
+            "description": "Filter by creator user ID"
           }
         ],
         "responses": {
@@ -1843,6 +1927,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-runs/{run_id}/": {
+      "get": {
+        "tags": [
+          "research-runs"
+        ],
+        "summary": "Get Research Run",
+        "description": "Get a single research pipeline run by run_id.\n\nReturns the run with enriched data including:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n- conversation_id for navigation",
+        "operationId": "get_research_run_api_research_runs__run_id___get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunListItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "List Users",
+        "description": "List all active users.\n\nReturns all active users sorted by name.",
+        "operationId": "list_users_api_users__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
                 }
               }
             }
@@ -3867,6 +4016,29 @@
         ],
         "title": "ResearchRunStageProgress"
       },
+      "ResearchRunStopResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "message"
+        ],
+        "title": "ResearchRunStopResponse"
+      },
       "ResearchRunSummary": {
         "properties": {
           "run_id": {
@@ -4163,6 +4335,57 @@
         ],
         "title": "SummaryResponse",
         "description": "Response for summary operations."
+      },
+      "UserListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Database user ID"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "User email address"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "User display name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "UserListItem",
+        "description": "User item for list responses."
+      },
+      "UserListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserListItem"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "List of users"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total count of users"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "UserListResponse",
+        "description": "Response model for listing users."
       },
       "ValidationError": {
         "properties": {

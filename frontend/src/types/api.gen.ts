@@ -683,6 +683,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Research Run */
+        post: operations["stop_research_run_api_conversations__conversation_id__idea_research_run__run_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download": {
         parameters: {
             query?: never;
@@ -717,8 +734,60 @@ export interface paths {
          *     - Latest stage progress (stage, progress percentage, best metric)
          *     - Artifact count
          *     - Creator information
+         *
+         *     Supports filtering by search term, status, and creator user ID.
          */
         get: operations["list_research_runs_api_research_runs__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-runs/{run_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Research Run
+         * @description Get a single research pipeline run by run_id.
+         *
+         *     Returns the run with enriched data including:
+         *     - Run metadata (status, GPU, timestamps)
+         *     - Idea information (title, hypothesis)
+         *     - Latest stage progress (stage, progress percentage, best metric)
+         *     - Artifact count
+         *     - Creator information
+         *     - conversation_id for navigation
+         */
+        get: operations["get_research_run_api_research_runs__run_id___get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Users
+         * @description List all active users.
+         *
+         *     Returns all active users sorted by name.
+         */
+        get: operations["list_users_api_users__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2007,6 +2076,15 @@ export interface components {
              */
             created_at: string;
         };
+        /** ResearchRunStopResponse */
+        ResearchRunStopResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+        };
         /**
          * ResearchRunSummary
          * @description Lightweight overview of a research pipeline run.
@@ -2142,6 +2220,43 @@ export interface components {
              * @description Generated or updated summary
              */
             summary: string;
+        };
+        /**
+         * UserListItem
+         * @description User item for list responses.
+         */
+        UserListItem: {
+            /**
+             * Id
+             * @description Database user ID
+             */
+            id: number;
+            /**
+             * Email
+             * @description User email address
+             */
+            email: string;
+            /**
+             * Name
+             * @description User display name
+             */
+            name: string;
+        };
+        /**
+         * UserListResponse
+         * @description Response model for listing users.
+         */
+        UserListResponse: {
+            /**
+             * Items
+             * @description List of users
+             */
+            items: components["schemas"]["UserListItem"][];
+            /**
+             * Total
+             * @description Total count of users
+             */
+            total: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -3318,6 +3433,38 @@ export interface operations {
             };
         };
     };
+    stop_research_run_api_conversations__conversation_id__idea_research_run__run_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunStopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_research_run_artifact_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__download_get: {
         parameters: {
             query?: never;
@@ -3358,6 +3505,12 @@ export interface operations {
                 limit?: number;
                 /** @description Number of runs to skip */
                 offset?: number;
+                /** @description Search term for run ID, title, hypothesis, or creator */
+                search?: string;
+                /** @description Filter by status (pending, running, completed, failed) */
+                status?: string;
+                /** @description Filter by creator user ID */
+                user_id?: number;
             };
             header?: never;
             path?: never;
@@ -3381,6 +3534,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_research_run_api_research_runs__run_id___get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_users_api_users__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserListResponse"];
                 };
             };
         };

@@ -316,12 +316,14 @@ class ResearchPipelineRunsMixin:
         params: List[object] = []
 
         if search:
-            where_clauses.append("""
+            where_clauses.append(
+                """
                 (r.run_id ILIKE %s
                 OR iv.title ILIKE %s
                 OR iv.short_hypothesis ILIKE %s
                 OR u.name ILIKE %s)
-            """)
+            """
+            )
             search_pattern = f"%{search}%"
             params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
 
