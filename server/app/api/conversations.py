@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import AsyncGenerator, Awaitable, Callable, List, Optional, Union
+from typing import AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
@@ -66,6 +66,19 @@ grok_service = GrokService(summarizer_service=summarizer_service)
 mem0_service = Mem0Service()
 
 logger = logging.getLogger(__name__)
+
+IDEA_SECTION_CONFIG: List[tuple[str, str, bool]] = [
+    ("title", "Title", False),
+    ("short_hypothesis", "Short Hypothesis", False),
+    ("related_work", "Related Work", False),
+    ("abstract", "Abstract", False),
+    ("experiments", "Experiments", True),
+    ("expected_outcome", "Expected Outcome", False),
+    ("risk_factors_and_limitations", "Risk Factors and Limitations", True),
+]
+IDEA_SECTION_META: Dict[str, tuple[str, bool]] = {
+    field: (label, expects_list) for field, label, expects_list in IDEA_SECTION_CONFIG
+}
 
 
 def _resolve_llm_service(llm_provider: str) -> LangChainLLMService:
@@ -268,30 +281,42 @@ def _imported_chat_messages_to_text(imported_chat_messages: List[ImportedChatMes
     return "\n\n".join(formatted_messages)
 
 
-def _idea_sections_for_stream(idea: LLMIdeaGeneration) -> List[str]:
-    """Convert structured idea fields into readable streaming chunks."""
-
-    def _format_list(items: List[str]) -> str:
-        entries = [entry.strip() for entry in items if entry.strip()]
+def _format_section_value(*, value: object, expects_list: bool) -> str:
+    if expects_list:
+        entries: List[str] = []
+        if isinstance(value, list):
+            entries = [entry.strip() for entry in value if isinstance(entry, str) and entry.strip()]
+        elif isinstance(value, str):
+            entries = [entry.strip() for entry in value.split("\n") if entry.strip()]
         if not entries:
             return "No entries provided."
         return "\n".join(f"- {entry}" for entry in entries)
 
-    sections: List[tuple[str, str]] = [
-        ("Title", idea.title.strip()),
-        ("Short Hypothesis", idea.short_hypothesis.strip()),
-        ("Related Work", idea.related_work.strip()),
-        ("Abstract", idea.abstract.strip()),
-        ("Experiments", _format_list(items=idea.experiments)),
-        ("Expected Outcome", idea.expected_outcome.strip()),
-        ("Risk Factors and Limitations", _format_list(items=idea.risk_factors_and_limitations)),
-    ]
+    if isinstance(value, str):
+        text_value = value.strip()
+    elif value is None:
+        text_value = ""
+    else:
+        text_value = str(value).strip()
+    return text_value if text_value else "Not provided."
 
-    formatted_sections: List[str] = []
-    for label, body in sections:
-        section_body = body if body else "Not provided."
-        formatted_sections.append(f"{label}:\n{section_body}\n")
-    return formatted_sections
+
+def _format_section_from_value(field: str, value: object) -> Optional[tuple[str, str]]:
+    meta = IDEA_SECTION_META.get(field)
+    if not meta:
+        return None
+    label, expects_list = meta
+    formatted_value = _format_section_value(value=value, expects_list=expects_list)
+    return field, f"{label}:\n{formatted_value}\n"
+
+
+def _iter_formatted_sections(idea: LLMIdeaGeneration) -> List[tuple[str, str]]:
+    sections: List[tuple[str, str]] = []
+    for field, _, _ in IDEA_SECTION_CONFIG:
+        formatted = _format_section_from_value(field, getattr(idea, field))
+        if formatted:
+            sections.append(formatted)
+    return sections
 
 
 async def _stream_structured_idea(
@@ -303,11 +328,38 @@ async def _stream_structured_idea(
     user_id: int,
 ) -> AsyncGenerator[str, None]:
     """Persist structured idea output and stream formatted sections."""
-    collected_content = ""
-    async for content_chunk in idea_stream:
-        collected_content += content_chunk
+    final_payload: Optional[str] = None
+    streamed_sections: Dict[str, str] = {}
 
-    llm_idea = llm_service._parse_idea_response(content=collected_content)
+    async for content_chunk in idea_stream:
+        try:
+            event = json.loads(content_chunk)
+        except json.JSONDecodeError:
+            logger.warning("Received non-JSON chunk from idea stream: %s", content_chunk)
+            continue
+
+        event_type = event.get("event")
+        if event_type == "section_delta":
+            field = event.get("field")
+            if not isinstance(field, str):
+                continue
+            formatted = _format_section_from_value(field, event.get("value"))
+            if not formatted:
+                continue
+            field_key, section_text = formatted
+            streamed_sections[field_key] = section_text
+            yield json.dumps({"type": "content", "data": section_text}) + "\n"
+        elif event_type == "final_idea_payload":
+            payload = event.get("data")
+            if isinstance(payload, str):
+                final_payload = payload
+        else:
+            logger.debug("Ignoring unknown idea stream event: %s", event_type)
+
+    if not final_payload:
+        raise ValueError("LLM did not provide a final structured idea payload.")
+
+    llm_idea = llm_service._parse_idea_response(content=final_payload)
     existing_idea = db.get_idea_by_conversation_id(conversation_id)
     if existing_idea is None:
         db.create_idea(
@@ -335,7 +387,9 @@ async def _stream_structured_idea(
             is_manual_edit=False,
         )
 
-    for section_text in _idea_sections_for_stream(idea=llm_idea):
+    for field_key, section_text in _iter_formatted_sections(idea=llm_idea):
+        if streamed_sections.get(field_key) == section_text:
+            continue
         yield json.dumps({"type": "content", "data": section_text}) + "\n"
 
 

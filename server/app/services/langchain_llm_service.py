@@ -5,13 +5,22 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
+from collections import defaultdict
+from typing import Any, AsyncGenerator, Dict, List, Sequence, Union
 
 from langchain.tools import tool
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
+from langchain_core.utils.json import parse_partial_json
 from pydantic import BaseModel, Field, ValidationError
 
 from app.config import settings
@@ -45,6 +54,16 @@ from app.services.s3_service import S3Service, get_s3_service
 logger = logging.getLogger(__name__)
 
 THINKING_TAG_PATTERN = re.compile(r"<thinking>.*?</thinking>\s*", re.IGNORECASE | re.DOTALL)
+IDEA_STREAM_LIST_FIELDS = {"experiments", "risk_factors_and_limitations"}
+IDEA_STREAM_FIELD_ORDER = (
+    "title",
+    "short_hypothesis",
+    "related_work",
+    "abstract",
+    "experiments",
+    "expected_outcome",
+    "risk_factors_and_limitations",
+)
 
 
 class LangChainLLMService(BaseLLMService, ABC):
@@ -254,16 +273,11 @@ class LangChainLLMService(BaseLLMService, ABC):
             SystemMessage(content=self._text_content_block(text=system_prompt)),
             HumanMessage(content=self._text_content_block(text=user_prompt)),
         ]
-        base_model = self.get_or_create_model(llm_model=llm_model)
-        structured_model = base_model.with_structured_output(LLMIdeaGeneration)
-        idea = cast(
-            LLMIdeaGeneration,
-            await structured_model.ainvoke(
-                input=messages,
-                max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
-            ),
-        )
-        yield json.dumps(idea.model_dump())
+        async for event_payload in self._stream_structured_schema_response(
+            llm_model=llm_model,
+            messages=messages,
+        ):
+            yield event_payload
 
     async def generate_manual_seed_idea(
         self,
@@ -286,16 +300,121 @@ class LangChainLLMService(BaseLLMService, ABC):
             SystemMessage(content=self._text_content_block(text=system_prompt)),
             HumanMessage(content=self._text_content_block(text=user_prompt)),
         ]
+        async for event_payload in self._stream_structured_schema_response(
+            llm_model=llm_model,
+            messages=messages,
+        ):
+            yield event_payload
+
+    async def _stream_structured_schema_response(
+        self,
+        *,
+        llm_model: str,
+        messages: List[BaseMessage],
+    ) -> AsyncGenerator[str, None]:
         base_model = self.get_or_create_model(llm_model=llm_model)
-        structured_model = base_model.with_structured_output(LLMIdeaGeneration)
-        idea = cast(
-            LLMIdeaGeneration,
-            await structured_model.ainvoke(
-                input=messages,
-                max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
-            ),
+        tool_bound_model = base_model.bind_tools(
+            [LLMIdeaGeneration],
+            tool_choice="any",
+            ls_structured_output_format={
+                "kwargs": {"method": "function_calling"},
+                "schema": LLMIdeaGeneration,
+            },
         )
-        yield json.dumps(idea.model_dump())
+        accumulated_arguments: Dict[str, str] = defaultdict(str)
+        latest_emitted_fields: Dict[str, Union[str, List[str]]] = {}
+        active_tool_id: str | None = None
+
+        async for chunk in tool_bound_model.astream(
+            input=messages,
+            max_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
+        ):
+            if not isinstance(chunk, AIMessageChunk):
+                continue
+
+            for tool_chunk in chunk.tool_call_chunks:
+                tool_id = tool_chunk.get("id") or "structured_idea"
+                append_value_raw: object = tool_chunk.get("args")
+                if isinstance(append_value_raw, dict):
+                    append_value = json.dumps(append_value_raw)
+                elif isinstance(append_value_raw, str):
+                    append_value = append_value_raw
+                else:
+                    append_value = ""
+                if not append_value:
+                    continue
+
+                accumulated_arguments[tool_id] += append_value
+                active_tool_id = tool_id
+
+                partial_fields = self._parse_partial_idea_fields(
+                    payload=accumulated_arguments[tool_id]
+                )
+                if not partial_fields:
+                    continue
+
+                for field_name in IDEA_STREAM_FIELD_ORDER:
+                    if field_name not in partial_fields:
+                        continue
+                    normalized_value = self._normalize_partial_field_value(
+                        field=field_name,
+                        value=partial_fields[field_name],
+                    )
+                    if normalized_value is None:
+                        continue
+                    if latest_emitted_fields.get(field_name) == normalized_value:
+                        continue
+                    latest_emitted_fields[field_name] = normalized_value
+                    yield json.dumps(
+                        {
+                            "event": "section_delta",
+                            "field": field_name,
+                            "value": normalized_value,
+                        }
+                    )
+
+        if not active_tool_id:
+            raise ValueError("LLM did not return structured idea payload.")
+
+        final_payload = accumulated_arguments[active_tool_id]
+        if not final_payload.strip():
+            raise ValueError("LLM returned empty structured idea payload.")
+
+        yield json.dumps({"event": "final_idea_payload", "data": final_payload})
+
+    def _parse_partial_idea_fields(self, *, payload: str) -> Dict[str, Any]:
+        try:
+            parsed = parse_partial_json(payload)
+        except Exception:
+            logger.debug("Failed to parse partial idea payload", exc_info=True)
+            return {}
+
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
+
+    def _normalize_partial_field_value(
+        self,
+        *,
+        field: str,
+        value: object,
+    ) -> Union[str, List[str], None]:
+        if field in IDEA_STREAM_LIST_FIELDS:
+            if isinstance(value, list):
+                normalized = [
+                    str(item).strip() for item in value if isinstance(item, str) and item.strip()
+                ]
+            elif isinstance(value, str):
+                normalized = [item.strip() for item in value.split("\n") if item.strip()]
+            else:
+                return None
+            return normalized
+
+        if isinstance(value, str):
+            return value
+        if value is None:
+            return None
+        return str(value)
 
     async def summarize_document(self, llm_model: LLMModel, content: str) -> str:
         return await self._summarize_document(llm_model=llm_model, content=content)
