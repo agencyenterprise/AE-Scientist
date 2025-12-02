@@ -41,10 +41,9 @@ def list_research_runs(
     offset: int = Query(0, ge=0, description="Number of runs to skip"),
     search: str = Query(None, description="Search term for run ID, title, hypothesis, or creator"),
     status: str = Query(None, description="Filter by status (pending, running, completed, failed)"),
-    user_id: int = Query(None, description="Filter by creator user ID"),
 ) -> ResearchRunListResponse:
     """
-    List all research pipeline runs with enriched data.
+    List research pipeline runs for the current user.
 
     Returns runs ordered by creation date (newest first) with:
     - Run metadata (status, GPU, timestamps)
@@ -53,10 +52,9 @@ def list_research_runs(
     - Artifact count
     - Creator information
 
-    Supports filtering by search term, status, and creator user ID.
+    Supports filtering by search term and status.
     """
-    # Ensure user is authenticated
-    get_current_user(request)
+    user = get_current_user(request)
 
     db = get_database()
     rows, total = db.list_all_research_pipeline_runs(
@@ -64,7 +62,7 @@ def list_research_runs(
         offset=offset,
         search=search,
         status=status,
-        user_id=user_id,
+        user_id=user.id,
     )
 
     items = [_row_to_list_item(row) for row in rows]

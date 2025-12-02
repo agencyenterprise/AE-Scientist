@@ -2,16 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Search, FlaskConical, Loader2 } from "lucide-react";
-import { fetchUsers, UserListItem } from "@/shared/lib/api-adapters";
 
 interface ResearchBoardHeaderProps {
   searchTerm: string;
   onSearchChange: (term: string) => void;
   statusFilter: string;
   onStatusFilterChange: (status: string) => void;
-  selectedUserId: number | null;
-  onSelectedUserIdChange: (userId: number | null) => void;
-  currentUserId?: number;
   totalCount: number;
   filteredCount: number;
   isLoading?: boolean;
@@ -22,22 +18,11 @@ export function ResearchBoardHeader({
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
-  selectedUserId,
-  onSelectedUserIdChange,
-  currentUserId,
   totalCount,
   filteredCount,
   isLoading = false,
 }: ResearchBoardHeaderProps) {
-  const [users, setUsers] = useState<UserListItem[]>([]);
   const [localSearchTerm, setLocalSearchTerm] = useState(searchTerm);
-
-  // Fetch users on mount
-  useEffect(() => {
-    fetchUsers()
-      .then(setUsers)
-      .catch(() => {});
-  }, []);
 
   // Keep local search term in sync with prop (for when it resets)
   useEffect(() => {
@@ -50,27 +35,7 @@ export function ResearchBoardHeader({
     onSearchChange(value);
   };
 
-  // Check if "Only mine" mode is active
-  const onlyMine = selectedUserId === currentUserId && currentUserId !== undefined;
-
-  const handleOnlyMineToggle = () => {
-    if (onlyMine) {
-      // Turn off "only mine" - show all
-      onSelectedUserIdChange(null);
-    } else {
-      // Turn on "only mine"
-      if (currentUserId) {
-        onSelectedUserIdChange(currentUserId);
-      }
-    }
-  };
-
-  const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    onSelectedUserIdChange(value ? Number(value) : null);
-  };
-
-  const hasFilters = searchTerm.trim() || statusFilter !== "all" || selectedUserId !== null;
+  const hasFilters = searchTerm.trim() || statusFilter !== "all";
 
   return (
     <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -96,42 +61,6 @@ export function ResearchBoardHeader({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        {currentUserId && (
-          <label className="flex cursor-pointer items-center gap-2">
-            <span className="text-sm text-slate-400">Only mine</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={onlyMine}
-              onClick={handleOnlyMineToggle}
-              className={`relative h-6 w-11 rounded-full transition-colors ${
-                onlyMine ? "bg-emerald-500" : "bg-slate-700"
-              }`}
-            >
-              <span
-                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                  onlyMine ? "translate-x-5" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </label>
-        )}
-
-        {!onlyMine && (
-          <select
-            value={selectedUserId ?? ""}
-            onChange={handleUserChange}
-            className="rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2.5 text-sm text-white transition-colors focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-          >
-            <option value="">All Users</option>
-            {users.map(user => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </select>
-        )}
-
         <select
           value={statusFilter}
           onChange={e => onStatusFilterChange(e.target.value)}

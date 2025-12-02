@@ -43,7 +43,6 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
   // Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
   // Debounce timer ref
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,9 +62,6 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
       if (statusFilter && statusFilter !== "all") {
         params.set("status", statusFilter);
       }
-      if (selectedUserId) {
-        params.set("user_id", String(selectedUserId));
-      }
 
       const apiResponse = await apiFetch<ResearchRunListResponseApi>(
         `/research-runs/?${params.toString()}`
@@ -78,7 +74,7 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, pageSize, searchTerm, statusFilter, selectedUserId]);
+  }, [currentPage, pageSize, searchTerm, statusFilter]);
 
   // Load data when filters or page change
   useEffect(() => {
@@ -93,11 +89,6 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
 
   const handleSetStatusFilter = useCallback((status: string) => {
     setStatusFilter(status);
-    setCurrentPage(1);
-  }, []);
-
-  const handleSetSelectedUserId = useCallback((userId: number | null) => {
-    setSelectedUserId(userId);
     setCurrentPage(1);
   }, []);
 
@@ -147,8 +138,6 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
     setSearchTerm: handleDebouncedSearchTerm,
     statusFilter,
     setStatusFilter: handleSetStatusFilter,
-    selectedUserId,
-    setSelectedUserId: handleSetSelectedUserId,
     isLoading,
   };
 
