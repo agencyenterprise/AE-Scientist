@@ -422,6 +422,7 @@ def launch_research_pipeline_run(
         env=metadata_env,
         docker_cmd=docker_cmd,
     )
+    logger.debug("Pod created: %s", pod)
     pod_id = pod["id"]
     ready_pod = creator.wait_for_pod_ready(pod_id=pod_id)
     pod_host_id = creator.get_pod_host_id(pod_id=pod_id)
@@ -429,6 +430,7 @@ def launch_research_pipeline_run(
         "pod_id": pod_id,
         "pod_name": pod.get("name"),
         "gpu_type": pod.get("gpu_type_requested"),
+        "costPerHr": pod.get("costPerHr"),
         "public_ip": ready_pod.get("publicIp"),
         "ssh_port": ready_pod.get("portMappings", {}).get("22"),
         "pod_host_id": pod_host_id,

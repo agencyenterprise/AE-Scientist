@@ -248,7 +248,7 @@ export interface paths {
         };
         /**
          * List Conversations
-         * @description Get a paginated list of all imported conversations.
+         * @description Get a paginated list of conversations for the current user.
          */
         get: operations["list_conversations_api_conversations_get"];
         put?: never;
@@ -717,6 +717,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Research Run Events
+         * @description Stream research run events via Server-Sent Events.
+         *
+         *     Event types:
+         *     - initial: Full snapshot on connection
+         *     - log: New log entries
+         *     - stage_progress: Meaningful progress changes only
+         *     - artifact: New artifacts
+         *     - run_update: Run status/info changes
+         *     - complete: Run finished (completed/failed)
+         *     - heartbeat: Keep-alive every 30s
+         *     - error: Error occurred
+         */
+        get: operations["stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-runs/": {
         parameters: {
             query?: never;
@@ -726,7 +756,7 @@ export interface paths {
         };
         /**
          * List Research Runs
-         * @description List all research pipeline runs with enriched data.
+         * @description List research pipeline runs for the current user.
          *
          *     Returns runs ordered by creation date (newest first) with:
          *     - Run metadata (status, GPU, timestamps)
@@ -735,7 +765,7 @@ export interface paths {
          *     - Artifact count
          *     - Creator information
          *
-         *     Supports filtering by search term, status, and creator user ID.
+         *     Supports filtering by search term and status.
          */
         get: operations["list_research_runs_api_research_runs__get"];
         put?: never;
@@ -1783,10 +1813,45 @@ export interface components {
              */
             experiment_nodes?: components["schemas"]["ResearchRunNodeEvent"][];
             /**
+             * Events
+             * @description Audit events describing run-level lifecycle transitions
+             */
+            events?: components["schemas"]["ResearchRunEvent"][];
+            /**
              * Artifacts
              * @description Artifacts uploaded for the run
              */
             artifacts?: components["schemas"]["ResearchRunArtifactMetadata"][];
+        };
+        /** ResearchRunEvent */
+        ResearchRunEvent: {
+            /**
+             * Id
+             * @description Unique identifier of the audit event
+             */
+            id: number;
+            /**
+             * Run Id
+             * @description Run identifier that produced the event
+             */
+            run_id: string;
+            /**
+             * Event Type
+             * @description Audit event type label
+             */
+            event_type: string;
+            /**
+             * Metadata
+             * @description Structured metadata captured for the event
+             */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Occurred At
+             * @description ISO timestamp when the event was recorded
+             */
+            occurred_at: string;
         };
         /** ResearchRunInfo */
         ResearchRunInfo: {
@@ -1825,6 +1890,11 @@ export interface components {
              * @description Requested GPU type
              */
             gpu_type?: string | null;
+            /**
+             * Cost
+             * @description Hourly RunPod cost (USD) captured when the run launched
+             */
+            cost: number;
             /**
              * Public Ip
              * @description Pod public IP address
@@ -1912,6 +1982,11 @@ export interface components {
              * @description GPU type used for the run
              */
             gpu_type?: string | null;
+            /**
+             * Cost
+             * @description Hourly RunPod cost (USD) captured when the pod launched
+             */
+            cost: number;
             /**
              * Best Metric
              * @description Best metric from latest progress event
@@ -2125,6 +2200,11 @@ export interface components {
              * @description Requested GPU type
              */
             gpu_type?: string | null;
+            /**
+             * Cost
+             * @description Hourly RunPod cost (USD) captured when the run launched
+             */
+            cost: number;
             /**
              * Public Ip
              * @description Pod public IP address
@@ -3498,6 +3578,36 @@ export interface operations {
             };
         };
     };
+    stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_research_runs_api_research_runs__get: {
         parameters: {
             query?: {
@@ -3509,8 +3619,6 @@ export interface operations {
                 search?: string;
                 /** @description Filter by status (pending, running, completed, failed) */
                 status?: string;
-                /** @description Filter by creator user ID */
-                user_id?: number;
             };
             header?: never;
             path?: never;

@@ -251,6 +251,7 @@ def _run_to_summary(run: ResearchPipelineRun) -> ResearchRunSummary:
         pod_id=run.pod_id,
         pod_name=run.pod_name,
         gpu_type=run.gpu_type,
+        cost=run.cost,
         public_ip=run.public_ip,
         ssh_port=run.ssh_port,
         pod_host_id=run.pod_host_id,

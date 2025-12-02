@@ -64,6 +64,7 @@ from app.models.llm_prompts import (
 from app.models.research_pipeline import (
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
+    ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunListItem,
     ResearchRunListResponse,
@@ -83,6 +84,7 @@ __all__ = [
     "ResearchRunStageProgress",
     "ResearchRunLogEntry",
     "ResearchRunNodeEvent",
+    "ResearchRunEvent",
     "ResearchRunArtifactMetadata",
     "ResearchRunDetailsResponse",
     "ResearchRunListItem",

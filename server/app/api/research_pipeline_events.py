@@ -113,12 +113,24 @@ def ingest_run_started(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     now = datetime.now(timezone.utc)
+    new_deadline = now + timedelta(minutes=5)
     db.update_research_pipeline_run(
         run_id=payload.run_id,
         status="running",
         last_heartbeat_at=now,
         heartbeat_failures=0,
-        start_deadline_at=now + timedelta(minutes=5),
+        start_deadline_at=new_deadline,
+    )
+    db.insert_research_pipeline_run_event(
+        run_id=payload.run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": "running",
+            "reason": "pipeline_event_start",
+            "start_deadline_at": new_deadline.isoformat(),
+        },
+        occurred_at=now,
     )
     logger.info("RP run started: run=%s", payload.run_id)
 
@@ -134,12 +146,25 @@ def ingest_run_finished(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     new_status = "completed" if payload.success else "failed"
+    now = datetime.now(timezone.utc)
     db.update_research_pipeline_run(
         run_id=payload.run_id,
         status=new_status,
         error_message=payload.message,
-        last_heartbeat_at=datetime.now(timezone.utc),
+        last_heartbeat_at=now,
         heartbeat_failures=0,
+    )
+    db.insert_research_pipeline_run_event(
+        run_id=payload.run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": new_status,
+            "reason": "pipeline_event_finish",
+            "success": payload.success,
+            "message": payload.message,
+        },
+        occurred_at=now,
     )
 
     if run.pod_id:

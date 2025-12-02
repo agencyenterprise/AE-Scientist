@@ -24,6 +24,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         current_stage=row.get("current_stage"),
         progress=row.get("progress"),
         gpu_type=row.get("gpu_type"),
+        cost=float(row["cost"]),
         best_metric=row.get("best_metric"),
         created_by_name=row["created_by_name"],
         created_at=row["created_at"].isoformat(),

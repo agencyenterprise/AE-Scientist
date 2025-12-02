@@ -158,6 +158,17 @@ class ResearchPipelineMonitor:
             status="failed",
             error_message=message,
         )
+        db.insert_research_pipeline_run_event(
+            run_id=run.run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run.status,
+                "to_status": "failed",
+                "reason": "pipeline_monitor",
+                "error_message": message,
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
         if run.pod_id:
             try:
                 terminate_pod(pod_id=run.pod_id)

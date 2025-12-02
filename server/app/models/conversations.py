@@ -78,6 +78,7 @@ class ResearchRunSummary(BaseModel):
     pod_id: Optional[str] = Field(None, description="RunPod identifier, when available")
     pod_name: Optional[str] = Field(None, description="Human-friendly pod name")
     gpu_type: Optional[str] = Field(None, description="Requested GPU type")
+    cost: float = Field(..., description="Hourly RunPod cost (USD) captured when the run launched")
     public_ip: Optional[str] = Field(None, description="Pod public IP address")
     ssh_port: Optional[str] = Field(None, description="Pod SSH port mapping")
     pod_host_id: Optional[str] = Field(None, description="RunPod host identifier")

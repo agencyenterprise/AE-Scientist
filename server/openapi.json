@@ -421,7 +421,7 @@
     "/api/conversations": {
       "get": {
         "summary": "List Conversations",
-        "description": "Get a paginated list of all imported conversations.",
+        "description": "Get a paginated list of conversations for the current user.",
         "operationId": "list_conversations_api_conversations_get",
         "parameters": [
           {
@@ -1840,13 +1840,58 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Stream Research Run Events",
+        "description": "Stream research run events via Server-Sent Events.\n\nEvent types:\n- initial: Full snapshot on connection\n- log: New log entries\n- stage_progress: Meaningful progress changes only\n- artifact: New artifacts\n- run_update: Run status/info changes\n- complete: Run finished (completed/failed)\n- heartbeat: Keep-alive every 30s\n- error: Error occurred",
+        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-runs/": {
       "get": {
         "tags": [
           "research-runs"
         ],
         "summary": "List Research Runs",
-        "description": "List all research pipeline runs with enriched data.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n\nSupports filtering by search term, status, and creator user ID.",
+        "description": "List research pipeline runs for the current user.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n\nSupports filtering by search term and status.",
         "operationId": "list_research_runs_api_research_runs__get",
         "parameters": [
           {
@@ -1897,17 +1942,6 @@
               "title": "Status"
             },
             "description": "Filter by status (pending, running, completed, failed)"
-          },
-          {
-            "name": "user_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "description": "Filter by creator user ID",
-              "title": "User Id"
-            },
-            "description": "Filter by creator user ID"
           }
         ],
         "responses": {
@@ -3522,6 +3556,14 @@
             "title": "Experiment Nodes",
             "description": "Experiment node completion events"
           },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunEvent"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Audit events describing run-level lifecycle transitions"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
@@ -3536,6 +3578,44 @@
           "run"
         ],
         "title": "ResearchRunDetailsResponse"
+      },
+      "ResearchRunEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the audit event"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Run identifier that produced the event"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type",
+            "description": "Audit event type label"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Structured metadata captured for the event"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At",
+            "description": "ISO timestamp when the event was recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "event_type",
+          "occurred_at"
+        ],
+        "title": "ResearchRunEvent"
       },
       "ResearchRunInfo": {
         "properties": {
@@ -3594,6 +3674,11 @@
             ],
             "title": "Gpu Type",
             "description": "Requested GPU type"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the run launched"
           },
           "public_ip": {
             "anyOf": [
@@ -3690,6 +3775,7 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "cost",
           "created_at",
           "updated_at"
         ],
@@ -3760,6 +3846,11 @@
             "title": "Gpu Type",
             "description": "GPU type used for the run"
           },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the pod launched"
+          },
           "best_metric": {
             "anyOf": [
               {
@@ -3816,6 +3907,7 @@
           "run_id",
           "status",
           "idea_title",
+          "cost",
           "created_by_name",
           "created_at",
           "updated_at",
@@ -4097,6 +4189,11 @@
             "title": "Gpu Type",
             "description": "Requested GPU type"
           },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the run launched"
+          },
           "public_ip": {
             "anyOf": [
               {
@@ -4180,6 +4277,7 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "cost",
           "created_at",
           "updated_at"
         ],

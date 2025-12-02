@@ -5,6 +5,7 @@ from typing import List, NamedTuple, Optional
 
 import psycopg2
 import psycopg2.extras
+from psycopg2.extensions import cursor as PsycopgCursor
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,20 @@ class ResearchPipelineRun(NamedTuple):
     ssh_port: Optional[str]
     pod_host_id: Optional[str]
     error_message: Optional[str]
+    cost: float
     start_deadline_at: Optional[datetime]
     last_heartbeat_at: Optional[datetime]
     heartbeat_failures: int
     created_at: datetime
     updated_at: datetime
+
+
+class ResearchPipelineRunEvent(NamedTuple):
+    id: int
+    run_id: str
+    event_type: str
+    metadata: dict
+    occurred_at: datetime
 
 
 class ResearchPipelineRunsMixin:
@@ -52,8 +62,9 @@ class ResearchPipelineRunsMixin:
         run_id: str,
         idea_id: int,
         idea_version_id: int,
-        status: str = "pending",
-        start_deadline_at: Optional[datetime] = None,
+        status: str,
+        start_deadline_at: Optional[datetime],
+        cost: float,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
             raise ValueError(f"Invalid status '{status}'")
@@ -68,16 +79,30 @@ class ResearchPipelineRunsMixin:
                         idea_id,
                         idea_version_id,
                         status,
+                        cost,
                         start_deadline_at,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, idea_id, idea_version_id, status, deadline, now, now),
+                    (run_id, idea_id, idea_version_id, status, cost, deadline, now, now),
                 )
                 new_id = cursor.fetchone()[0]
+                self._insert_run_event_with_cursor(
+                    cursor=cursor,
+                    run_id=run_id,
+                    event_type="created",
+                    metadata={
+                        "status": status,
+                        "idea_id": idea_id,
+                        "idea_version_id": idea_version_id,
+                        "cost": cost,
+                        "start_deadline_at": deadline.isoformat() if deadline else None,
+                    },
+                    occurred_at=now,
+                )
                 conn.commit()
                 return int(new_id)
 
@@ -91,6 +116,7 @@ class ResearchPipelineRunsMixin:
         last_heartbeat_at: Optional[datetime] = None,
         heartbeat_failures: Optional[int] = None,
         start_deadline_at: Optional[datetime] = None,
+        cost: Optional[float] = None,
     ) -> None:
         fields = []
         values: list[object] = []
@@ -123,6 +149,9 @@ class ResearchPipelineRunsMixin:
         if start_deadline_at is not None:
             fields.append("start_deadline_at = %s")
             values.append(start_deadline_at)
+        if cost is not None:
+            fields.append("cost = %s")
+            values.append(cost)
         fields.append("updated_at = %s")
         values.append(datetime.now())
         values.append(run_id)
@@ -134,6 +163,73 @@ class ResearchPipelineRunsMixin:
                     tuple(values),
                 )
                 conn.commit()
+
+    def insert_research_pipeline_run_event(
+        self,
+        *,
+        run_id: str,
+        event_type: str,
+        metadata: dict[str, object],
+        occurred_at: datetime,
+    ) -> None:
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor() as cursor:
+                self._insert_run_event_with_cursor(
+                    cursor=cursor,
+                    run_id=run_id,
+                    event_type=event_type,
+                    metadata=metadata,
+                    occurred_at=occurred_at,
+                )
+                conn.commit()
+
+    def list_research_pipeline_run_events(self, run_id: str) -> list[ResearchPipelineRunEvent]:
+        query = """
+            SELECT id, run_id, event_type, metadata, occurred_at
+            FROM research_pipeline_run_events
+            WHERE run_id = %s
+            ORDER BY occurred_at ASC, id ASC
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                rows = cursor.fetchall() or []
+        return [ResearchPipelineRunEvent(**row) for row in rows]
+
+    def _insert_run_event_with_cursor(
+        self,
+        *,
+        cursor: PsycopgCursor,
+        run_id: str,
+        event_type: str,
+        metadata: dict[str, object],
+        occurred_at: datetime,
+    ) -> None:
+        cursor.execute(
+            """
+            INSERT INTO research_pipeline_run_events (run_id, event_type, metadata, occurred_at)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                run_id,
+                event_type,
+                psycopg2.extras.Json(self._normalize_metadata(metadata)),
+                occurred_at,
+            ),
+        )
+
+    @staticmethod
+    def _normalize_metadata(metadata: dict[str, object]) -> dict[str, object]:
+        def _convert(value: object) -> object:
+            if isinstance(value, datetime):
+                return value.isoformat()
+            if isinstance(value, dict):
+                return {key: _convert(val) for key, val in value.items()}
+            if isinstance(value, list):
+                return [_convert(item) for item in value]
+            return value
+
+        return {key: _convert(value) for key, value in metadata.items()}
 
     def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]:
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
@@ -222,6 +318,7 @@ class ResearchPipelineRunsMixin:
             ssh_port=row.get("ssh_port"),
             pod_host_id=row.get("pod_host_id"),
             error_message=row.get("error_message"),
+            cost=float(row.get("cost", 0)),
             start_deadline_at=row.get("start_deadline_at"),
             last_heartbeat_at=row.get("last_heartbeat_at"),
             heartbeat_failures=row.get("heartbeat_failures", 0),
@@ -256,6 +353,7 @@ class ResearchPipelineRunsMixin:
                 r.status,
                 r.gpu_type,
                 r.error_message,
+                r.cost,
                 r.created_at,
                 r.updated_at,
                 iv.title AS idea_title,
@@ -304,7 +402,7 @@ class ResearchPipelineRunsMixin:
 
         Returns a tuple of (list of run dicts, total count).
         Each dict contains:
-        - run_id, status, gpu_type, error_message, created_at, updated_at
+        - run_id, status, gpu_type, cost, error_message, created_at, updated_at
         - idea_title, idea_hypothesis from idea_versions
         - created_by_name from users
         - current_stage, progress, best_metric from latest rp_run_stage_progress_events
@@ -358,6 +456,7 @@ class ResearchPipelineRunsMixin:
                 r.run_id,
                 r.status,
                 r.gpu_type,
+                r.cost,
                 r.error_message,
                 r.created_at,
                 r.updated_at,

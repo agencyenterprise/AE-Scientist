@@ -3,7 +3,7 @@ import json
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
@@ -14,6 +14,7 @@ from app.middleware.auth import get_current_user
 from app.models import (
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
+    ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
     ResearchRunNodeEvent,
@@ -21,7 +22,10 @@ from app.models import (
 )
 from app.services import get_database
 from app.services.database.ideas import IdeaData
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import (
+    ResearchPipelineRun,
+    ResearchPipelineRunEvent,
+)
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import ExperimentNodeEvent, RunLogEvent, StageProgressEvent
 from app.services.research_pipeline.runpod_manager import (
@@ -64,6 +68,28 @@ def _idea_version_to_payload(idea_data: IdeaData) -> Dict[str, object]:
     }
 
 
+def _extract_cost_per_hour(pod_info: Dict[str, Any], run_id: str) -> float:
+    try:
+        value = pod_info["costPerHr"]
+    except KeyError:
+        logger.warning(
+            "Run %s pod response missing costPerHr. Full payload: %s",
+            run_id,
+            pod_info,
+        )
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Run %s pod response costPerHr is invalid (%s); payload=%s",
+            run_id,
+            value,
+            pod_info,
+        )
+        return 0.0
+
+
 def _launch_research_pipeline_job(
     *,
     run_id: str,
@@ -104,10 +130,39 @@ def _launch_research_pipeline_job(
                     )
             return
 
-        db.update_research_pipeline_run(run_id=run_id, pod_info=pod_info)
+        db.update_research_pipeline_run(
+            run_id=run_id,
+            pod_info=pod_info,
+            cost=_extract_cost_per_hour(pod_info, run_id),
+        )
+        db.insert_research_pipeline_run_event(
+            run_id=run_id,
+            event_type="pod_info_updated",
+            metadata={
+                "pod_id": pod_info.get("pod_id"),
+                "pod_name": pod_info.get("pod_name"),
+                "gpu_type": pod_info.get("gpu_type"),
+                "public_ip": pod_info.get("public_ip"),
+                "ssh_port": pod_info.get("ssh_port"),
+                "cost_per_hr": pod_info.get("costPerHr"),
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
     except (RunPodError, FileNotFoundError, ValueError, RuntimeError) as exc:
         logger.exception("Failed to launch research pipeline run.")
+        run_before = db.get_research_pipeline_run(run_id)
         db.update_research_pipeline_run(run_id=run_id, status="failed", error_message=str(exc))
+        db.insert_research_pipeline_run_event(
+            run_id=run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run_before.status if run_before else None,
+                "to_status": "failed",
+                "reason": "launch_error",
+                "error_message": str(exc),
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
     else:
         logger.info("Background launch complete for run_id=%s", run_id)
     finally:
@@ -127,6 +182,7 @@ def _run_to_info(run: ResearchPipelineRun) -> ResearchRunInfo:
         pod_id=run.pod_id,
         pod_name=run.pod_name,
         gpu_type=run.gpu_type,
+        cost=run.cost,
         public_ip=run.public_ip,
         ssh_port=run.ssh_port,
         pod_host_id=run.pod_host_id,
@@ -161,6 +217,16 @@ def _log_event_to_model(event: RunLogEvent) -> ResearchRunLogEntry:
         level=event.level,
         message=event.message,
         created_at=event.created_at.isoformat(),
+    )
+
+
+def _run_event_to_model(event: ResearchPipelineRunEvent) -> ResearchRunEvent:
+    return ResearchRunEvent(
+        id=event.id,
+        run_id=event.run_id,
+        event_type=event.event_type,
+        metadata=event.metadata,
+        occurred_at=event.occurred_at.isoformat(),
     )
 
 
@@ -221,6 +287,9 @@ def submit_idea_for_research(
         run_id=run_id,
         idea_id=idea_data.idea_id,
         idea_version_id=idea_data.version_id,
+        status="pending",
+        start_deadline_at=None,
+        cost=0.0,
     )
 
     idea_payload = _idea_version_to_payload(idea_data)
@@ -260,12 +329,23 @@ def get_research_run_details(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    stage_events = [_stage_event_to_model(event) for event in db.list_stage_progress_events(run_id)]
-    log_events = [_log_event_to_model(event) for event in db.list_run_log_events(run_id)]
-    node_events = [_node_event_to_model(event) for event in db.list_experiment_node_events(run_id)]
+    stage_events = [
+        _stage_event_to_model(event) for event in db.list_stage_progress_events(run_id=run_id)
+    ]
+    log_events = [_log_event_to_model(event) for event in db.list_run_log_events(run_id=run_id)]
+    node_events = [
+        _node_event_to_model(event) for event in db.list_experiment_node_events(run_id=run_id)
+    ]
     artifacts = [
-        _artifact_to_model(artifact, conversation_id, run_id)
-        for artifact in db.list_run_artifacts(run_id)
+        _artifact_to_model(
+            artifact=artifact,
+            conversation_id=conversation_id,
+            run_id=run_id,
+        )
+        for artifact in db.list_run_artifacts(run_id=run_id)
+    ]
+    run_events = [
+        _run_event_to_model(event) for event in db.list_research_pipeline_run_events(run_id=run_id)
     ]
 
     return ResearchRunDetailsResponse(
@@ -273,6 +353,7 @@ def get_research_run_details(
         stage_progress=stage_events,
         logs=log_events,
         experiment_nodes=node_events,
+        events=run_events,
         artifacts=artifacts,
     )
 
@@ -322,6 +403,17 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
         run_id=run_id,
         status="failed",
         error_message=stop_message,
+    )
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": "failed",
+            "reason": "user_stop",
+            "error_message": stop_message,
+        },
+        occurred_at=datetime.now(timezone.utc),
     )
 
     return ResearchRunStopResponse(

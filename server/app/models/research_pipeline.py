@@ -2,7 +2,7 @@
 Pydantic models for research pipeline run APIs.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,7 @@ class ResearchRunListItem(BaseModel):
         None, description="Progress percentage (0-1) from latest event"
     )
     gpu_type: Optional[str] = Field(None, description="GPU type used for the run")
+    cost: float = Field(..., description="Hourly RunPod cost (USD) captured when the pod launched")
     best_metric: Optional[str] = Field(None, description="Best metric from latest progress event")
     created_by_name: str = Field(..., description="Name of the user who created the run")
     created_at: str = Field(..., description="ISO timestamp when the run was created")
@@ -74,6 +75,17 @@ class ResearchRunLogEntry(BaseModel):
     created_at: str = Field(..., description="ISO timestamp of the log event")
 
 
+class ResearchRunEvent(BaseModel):
+    id: int = Field(..., description="Unique identifier of the audit event")
+    run_id: str = Field(..., description="Run identifier that produced the event")
+    event_type: str = Field(..., description="Audit event type label")
+    metadata: Dict[str, object] = Field(
+        default_factory=dict,
+        description="Structured metadata captured for the event",
+    )
+    occurred_at: str = Field(..., description="ISO timestamp when the event was recorded")
+
+
 class ResearchRunNodeEvent(BaseModel):
     id: int = Field(..., description="Unique identifier of the node event")
     stage: str = Field(..., description="Stage identifier")
@@ -102,6 +114,10 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     experiment_nodes: List[ResearchRunNodeEvent] = Field(
         default_factory=list, description="Experiment node completion events"
+    )
+    events: List[ResearchRunEvent] = Field(
+        default_factory=list,
+        description="Audit events describing run-level lifecycle transitions",
     )
     artifacts: List[ResearchRunArtifactMetadata] = Field(
         default_factory=list, description="Artifacts uploaded for the run"
