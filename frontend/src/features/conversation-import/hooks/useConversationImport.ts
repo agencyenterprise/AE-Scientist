@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiStream } from "@/shared/lib/api-client";
 import {
@@ -10,8 +10,20 @@ import {
   SSEEvent,
   SSEModelLimit,
   SSEProgress,
+  SSESectionUpdate,
   SSEState,
 } from "../types/types";
+
+// Order of sections as streamed from the backend
+const SECTION_ORDER = [
+  "title",
+  "short_hypothesis",
+  "related_work",
+  "abstract",
+  "experiments",
+  "expected_outcome",
+  "risk_factors_and_limitations",
+] as const;
 import { getUrlValidationError, validateUrl } from "../utils/urlValidation";
 
 // Re-export ConflictItem for consumers
@@ -107,10 +119,17 @@ export function useConversationImport(
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState("");
+  const [sections, setSections] = useState<Record<string, string>>({});
   const [currentState, setCurrentState] = useState<ImportState | "">("");
   const [summaryProgress, setSummaryProgress] = useState<number | null>(null);
   const [isUpdateMode, setIsUpdateMode] = useState(false);
+
+  // Compute streamingContent from sections in correct order
+  const streamingContent = useMemo(() => {
+    return SECTION_ORDER.filter(key => sections[key])
+      .map(key => sections[key])
+      .join("\n");
+  }, [sections]);
 
   // Conflict state
   const [hasConflict, setHasConflict] = useState(false);
@@ -136,7 +155,7 @@ export function useConversationImport(
   const reset = useCallback(() => {
     setUrl("");
     setError("");
-    setStreamingContent("");
+    setSections({});
     setCurrentState("");
     setSelectedModel("");
     setSelectedProvider("");
@@ -211,7 +230,6 @@ export function useConversationImport(
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let accumulatedContent = "";
       let buffer = "";
 
       while (true) {
@@ -235,10 +253,14 @@ export function useConversationImport(
           }
 
           switch (eventData.type) {
+            case "section_update": {
+              const { field, data } = eventData as SSESectionUpdate;
+              setSections(prev => ({ ...prev, [field]: data }));
+              break;
+            }
             case "content": {
-              const content = (eventData as { type: "content"; data: string }).data;
-              accumulatedContent += content;
-              setStreamingContent(accumulatedContent);
+              // Legacy fallback - kept for backwards compatibility
+              // This shouldn't be used anymore as backend sends section_update
               break;
             }
             case "state": {
@@ -342,7 +364,7 @@ export function useConversationImport(
     setError("");
     setIsStreaming(true);
     setIsUpdateMode(false);
-    setStreamingContent("");
+    setSections({});
     setCurrentState("");
     onImportStart?.();
 
@@ -383,7 +405,7 @@ export function useConversationImport(
     setError("");
     setIsStreaming(true);
     setIsUpdateMode(true);
-    setStreamingContent("");
+    setSections({});
     setCurrentState("");
     onImportStart?.();
 
@@ -405,7 +427,7 @@ export function useConversationImport(
     setError("");
     setIsStreaming(true);
     setIsUpdateMode(false);
-    setStreamingContent("");
+    setSections({});
     setCurrentState("");
     onImportStart?.();
 
@@ -432,7 +454,7 @@ export function useConversationImport(
     setError("");
     setIsStreaming(true);
     setIsUpdateMode(false);
-    setStreamingContent("");
+    setSections({});
     setCurrentState("");
     onImportStart?.();
 

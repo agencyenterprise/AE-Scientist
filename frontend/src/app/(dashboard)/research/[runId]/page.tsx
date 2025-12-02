@@ -18,9 +18,12 @@ import {
   FileText,
   Terminal,
   StopCircle,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { apiFetch } from "@/shared/lib/api-client";
 import { config } from "@/shared/lib/config";
+import { useResearchRunSSE } from "@/features/research/hooks/useResearchRunSSE";
 
 // Types from the existing API response
 interface ResearchRunInfo {
@@ -177,46 +180,97 @@ export default function ResearchRunDetailPage() {
   const [stopPending, setStopPending] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
 
-  // Load run details by first fetching the run info to get conversation_id
-  const loadRunDetails = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // SSE callback handlers
+  const handleInitialData = useCallback((data: ResearchRunDetails) => {
+    setDetails(data);
+    setLoading(false);
+    setError(null);
+  }, []);
 
-      // Get the run info directly (includes conversation_id)
-      const runInfo = await apiFetch<{ run_id: string; conversation_id: number }>(
-        `/research-runs/${runId}/`
-      );
+  const handleStageProgress = useCallback((event: StageProgress) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            stage_progress: [...prev.stage_progress, event],
+          }
+        : null
+    );
+  }, []);
 
-      setConversationId(runInfo.conversation_id);
+  const handleLog = useCallback((event: LogEntry) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            logs: [event, ...prev.logs],
+          }
+        : null
+    );
+  }, []);
 
-      // Now fetch the detailed run info
-      const detailsResponse = await apiFetch<ResearchRunDetails>(
-        `/conversations/${runInfo.conversation_id}/idea/research-run/${runId}`
-      );
+  const handleArtifact = useCallback((event: ArtifactMetadata) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            artifacts: [...prev.artifacts, event],
+          }
+        : null
+    );
+  }, []);
 
-      setDetails(detailsResponse);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load research run details");
-    } finally {
-      setLoading(false);
-    }
+  const handleRunUpdate = useCallback((run: ResearchRunInfo) => {
+    setDetails(prev => (prev ? { ...prev, run } : null));
+  }, []);
+
+  const handleComplete = useCallback((status: string) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            run: { ...prev.run, status },
+          }
+        : null
+    );
+  }, []);
+
+  const handleSSEError = useCallback((errorMsg: string) => {
+    // eslint-disable-next-line no-console
+    console.error("SSE error:", errorMsg);
+  }, []);
+
+  // Use SSE for real-time updates
+  const { isConnected, connectionError, reconnect } = useResearchRunSSE({
+    runId,
+    conversationId,
+    enabled:
+      !!conversationId &&
+      (details?.run.status === "running" || details?.run.status === "pending" || !details),
+    onInitialData: handleInitialData,
+    onStageProgress: handleStageProgress,
+    onLog: handleLog,
+    onArtifact: handleArtifact,
+    onRunUpdate: handleRunUpdate,
+    onComplete: handleComplete,
+    onError: handleSSEError,
+  });
+
+  // Initial load to get conversation_id (SSE takes over after that)
+  useEffect(() => {
+    const fetchConversationId = async () => {
+      try {
+        const runInfo = await apiFetch<{ run_id: string; conversation_id: number }>(
+          `/research-runs/${runId}/`
+        );
+        setConversationId(runInfo.conversation_id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load research run");
+        setLoading(false);
+      }
+    };
+    fetchConversationId();
   }, [runId]);
-
-  useEffect(() => {
-    loadRunDetails();
-  }, [loadRunDetails]);
-
-  // Auto-refresh for running jobs
-  useEffect(() => {
-    if (details?.run.status === "running" || details?.run.status === "pending") {
-      const interval = setInterval(() => {
-        loadRunDetails();
-      }, 10000); // Refresh every 10 seconds
-      return () => clearInterval(interval);
-    }
-    return undefined;
-  }, [details?.run.status, loadRunDetails]);
 
   const handleStopRun = async () => {
     if (!conversationId || stopPending) {
@@ -228,7 +282,7 @@ export default function ResearchRunDetailPage() {
       await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
         method: "POST",
       });
-      await loadRunDetails();
+      // SSE will automatically receive the status update
     } catch (err) {
       setStopError(err instanceof Error ? err.message : "Failed to stop research run");
     } finally {
@@ -260,7 +314,7 @@ export default function ResearchRunDetailPage() {
   }
 
   const { run, stage_progress, logs, artifacts } = details;
-  const latestProgress = stage_progress[0];
+  const latestProgress = stage_progress[stage_progress.length - 1];
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 
@@ -296,6 +350,25 @@ export default function ResearchRunDetailPage() {
                   </>
                 )}
               </button>
+            )}
+            {/* Connection status indicator */}
+            {(run.status === "running" || run.status === "pending") && (
+              <>
+                {isConnected ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400">
+                    <Wifi className="h-3 w-3" />
+                    Live
+                  </span>
+                ) : connectionError ? (
+                  <button
+                    onClick={reconnect}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/25"
+                  >
+                    <WifiOff className="h-3 w-3" />
+                    Reconnect
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
           <p className="mt-1 text-sm text-slate-400">

@@ -244,23 +244,27 @@ class ConversationsMixin:
             for row in rows
         ]
 
-    def list_conversations(self, limit: int = 100, offset: int = 0) -> List[DashboardConversation]:
+    def list_conversations(
+        self, limit: int = 100, offset: int = 0, user_id: int | None = None
+    ) -> List[DashboardConversation]:
         """List conversations for dashboard (from view), with pagination."""
         with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
-                    """
+                query = """
                     SELECT id, url, title, import_date, created_at, updated_at,
                            user_id, user_name, user_email,
                            idea_title, idea_abstract,
                            last_user_message_content, last_assistant_message_content,
                            manual_title, manual_hypothesis
                     FROM conversation_dashboard_view
-                    ORDER BY updated_at DESC
-                    LIMIT %s OFFSET %s
-                """,
-                    (limit, offset),
-                )
+                """
+                params: list = []
+                if user_id is not None:
+                    query += " WHERE user_id = %s"
+                    params.append(user_id)
+                query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
+                params.extend([limit, offset])
+                cursor.execute(query, params)
                 rows = cursor.fetchall()
 
         return [

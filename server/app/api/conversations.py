@@ -348,7 +348,9 @@ async def _stream_structured_idea(
                 continue
             field_key, section_text = formatted
             streamed_sections[field_key] = section_text
-            yield json.dumps({"type": "content", "data": section_text}) + "\n"
+            yield json.dumps(
+                {"type": "section_update", "field": field_key, "data": section_text}
+            ) + "\n"
         elif event_type == "final_idea_payload":
             payload = event.get("data")
             if isinstance(payload, str):
@@ -390,7 +392,9 @@ async def _stream_structured_idea(
     for field_key, section_text in _iter_formatted_sections(idea=llm_idea):
         if streamed_sections.get(field_key) == section_text:
             continue
-        yield json.dumps({"type": "content", "data": section_text}) + "\n"
+        yield json.dumps(
+            {"type": "section_update", "field": field_key, "data": section_text}
+        ) + "\n"
 
 
 async def _generate_imported_chat_keywords(
@@ -1147,11 +1151,13 @@ async def import_manual_seed(
 
 @router.get("")
 async def list_conversations(
-    response: Response, limit: int = 100, offset: int = 0
+    request: Request, response: Response, limit: int = 100, offset: int = 0
 ) -> Union[ConversationListResponse, ErrorResponse]:
     """
-    Get a paginated list of all imported conversations.
+    Get a paginated list of conversations for the current user.
     """
+    user = get_current_user(request)
+
     if limit <= 0 or limit > 1000:
         response.status_code = 400
         return ErrorResponse(error="Invalid limit", detail="Limit must be between 1 and 1000")
@@ -1161,7 +1167,9 @@ async def list_conversations(
         return ErrorResponse(error="Invalid offset", detail="Offset must be non-negative")
 
     db = get_database()
-    conversations: List[DBDashboardConversation] = db.list_conversations(limit=limit, offset=offset)
+    conversations: List[DBDashboardConversation] = db.list_conversations(
+        limit=limit, offset=offset, user_id=user.id
+    )
     return ConversationListResponse(
         conversations=[
             ConversationListItem(

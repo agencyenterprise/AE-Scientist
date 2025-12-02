@@ -89,3 +89,37 @@ class ResearchPipelineEventsMixin:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
         return [ExperimentNodeEvent(**row) for row in rows]
+
+    def list_run_log_events_since(
+        self, run_id: str, since: datetime, limit: int = 100
+    ) -> List[RunLogEvent]:
+        """Fetch log events created after the given timestamp."""
+        query = """
+            SELECT id, run_id, message, level, created_at
+            FROM rp_run_log_events
+            WHERE run_id = %s AND created_at > %s
+            ORDER BY created_at ASC
+            LIMIT %s
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id, since, limit))
+                rows = cursor.fetchall() or []
+        return [RunLogEvent(**row) for row in rows]
+
+    def get_latest_stage_progress(self, run_id: str) -> Optional[StageProgressEvent]:
+        """Fetch the most recent stage progress event for a run."""
+        query = """
+            SELECT id, run_id, stage, iteration, max_iterations, progress, total_nodes,
+                   buggy_nodes, good_nodes, best_metric, eta_s, latest_iteration_time_s,
+                   created_at
+            FROM rp_run_stage_progress_events
+            WHERE run_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                row = cursor.fetchone()
+        return StageProgressEvent(**row) if row else None

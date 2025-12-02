@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
 import { apiFetch } from "@/shared/lib/api-client";
 import { constants } from "@/shared/lib/config";
@@ -45,6 +46,7 @@ interface UseProjectDraftStateReturn {
 export function useProjectDraftState({
   conversation,
 }: UseProjectDraftStateProps): UseProjectDraftStateReturn {
+  const router = useRouter();
   const [projectDraft, setProjectDraft] = useState<Idea | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -156,6 +158,7 @@ export function useProjectDraftState({
         method: "POST",
       });
       setIsCreateModalOpen(false);
+      router.push("/research");
     } catch (error) {
       // Re-throw to let the caller handle the error
       throw error;

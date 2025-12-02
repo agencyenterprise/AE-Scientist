@@ -324,6 +324,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         accumulated_arguments: Dict[str, str] = defaultdict(str)
         latest_emitted_fields: Dict[str, Union[str, List[str]]] = {}
         active_tool_id: str | None = None
+        last_chunk_metadata: Dict[str, Any] | None = None
 
         async for chunk in tool_bound_model.astream(
             input=messages,
@@ -331,6 +332,8 @@ class LangChainLLMService(BaseLLMService, ABC):
         ):
             if not isinstance(chunk, AIMessageChunk):
                 continue
+
+            last_chunk_metadata = getattr(chunk, "response_metadata", None)
 
             for tool_chunk in chunk.tool_call_chunks:
                 tool_id = tool_chunk.get("id") or "structured_idea"
@@ -375,6 +378,16 @@ class LangChainLLMService(BaseLLMService, ABC):
 
         if not active_tool_id:
             raise ValueError("LLM did not return structured idea payload.")
+
+        # Check if the response was truncated due to max_tokens limit
+        if last_chunk_metadata:
+            finish_reason = last_chunk_metadata.get("finish_reason", "")
+            if finish_reason == "length":
+                logger.warning("Idea generation response was truncated due to max_tokens limit")
+                raise ValueError(
+                    "Idea generation was truncated. The response exceeded the token limit. "
+                    "Try a shorter conversation or increase IDEA_MAX_COMPLETION_TOKENS."
+                )
 
         final_payload = accumulated_arguments[active_tool_id]
         if not final_payload.strip():
@@ -486,11 +499,14 @@ class LangChainLLMService(BaseLLMService, ABC):
         try:
             return LLMIdeaGeneration.model_validate_json(cleaned_content)
         except (ValidationError, ValueError) as exc:
-            preview = cleaned_content.replace("\n", " ")
-            logger.debug(
-                "Failed to parse structured idea response for provider %s. Preview: %s",
+            # Log more details for debugging truncation issues
+            content_len = len(cleaned_content)
+            last_chars = cleaned_content[-100:] if content_len > 100 else cleaned_content
+            logger.error(
+                "Failed to parse idea response for provider %s. " "Length: %d, Last 100 chars: %s",
                 self.provider_name,
-                preview,
+                content_len,
+                last_chars,
             )
             raise ValueError("Failed to parse structured idea response.") from exc
 

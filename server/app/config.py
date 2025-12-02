@@ -52,7 +52,7 @@ class Settings:
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
     # LLM generation constraints
-    IDEA_MAX_COMPLETION_TOKENS: int = int(os.getenv("IDEA_MAX_COMPLETION_TOKENS", "4096"))
+    IDEA_MAX_COMPLETION_TOKENS: int = int(os.getenv("IDEA_MAX_COMPLETION_TOKENS", "8192"))
 
     # Database settings (PostgreSQL only)
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
