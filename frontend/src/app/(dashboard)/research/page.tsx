@@ -3,7 +3,6 @@
 import { useResearch, PAGE_SIZE_OPTIONS } from "@/features/research/contexts/ResearchContext";
 import { ResearchBoardHeader } from "@/features/research/components/ResearchBoardHeader";
 import { ResearchBoardTable } from "@/features/research/components/ResearchBoardTable";
-import { useAuthContext } from "@/shared/contexts/AuthContext";
 import {
   Pagination,
   PaginationContent,
@@ -15,15 +14,12 @@ import {
 } from "@/shared/components/ui/pagination";
 
 export default function ResearchPage() {
-  const { user } = useAuthContext();
   const {
     researchRuns,
     searchTerm,
     setSearchTerm,
     statusFilter,
     setStatusFilter,
-    selectedUserId,
-    setSelectedUserId,
     totalCount,
     currentPage,
     setCurrentPage,
@@ -79,9 +75,6 @@ export default function ResearchPage() {
         onSearchChange={setSearchTerm}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
-        selectedUserId={selectedUserId}
-        onSelectedUserIdChange={setSelectedUserId}
-        currentUserId={user?.id}
         totalCount={totalCount}
         filteredCount={researchRuns.length}
         isLoading={isLoading}

@@ -27,8 +27,6 @@ interface ResearchContextType {
   setSearchTerm: (term: string) => void;
   statusFilter: string;
   setStatusFilter: (status: string) => void;
-  selectedUserId: number | null;
-  setSelectedUserId: (userId: number | null) => void;
   isLoading: boolean;
 }
 
