@@ -417,7 +417,7 @@ def launch_research_pipeline_run(
     pod_name = f"ae-scientist-{int(time.time())}"
     pod = creator.create_pod(
         name=pod_name,
-        image="runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404",
+        image="newtonsander/runpod_pytorch_texdeps:v1",
         gpu_types=gpu_types,
         env=metadata_env,
         docker_cmd=docker_cmd,

@@ -271,6 +271,23 @@ For GPU-accelerated experiments:
 
 See [Research Pipeline Documentation](./research_pipeline/README.md) for RunPod setup.
 
+#### RunPod Base Image
+
+The RunPod pipeline uses a pre-baked Docker image defined at `server/app/services/research_pipeline/Dockerfile`. This image installs the LaTeX/PDF toolchain so pods skip long `apt-get` steps.
+
+**Build + push (macOS/Apple Silicon friendly):**
+```bash
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker buildx build \
+  --platform linux/amd64 \
+  -t <dockerhub-username>/runpod_pytorch_texdeps:<tag> \
+  -f server/app/services/research_pipeline/Dockerfile \
+  --load .
+docker push <dockerhub-username>/runpod_pytorch_texdeps:<tag>
+```
+Setting `DOCKER_DEFAULT_PLATFORM=linux/amd64` ensures you build an x86 image compatible with RunPod’s GPU hosts even when running on Apple Silicon.
+
+**Reference in code:** `server/app/services/research_pipeline/runpod_manager.py` passes the image name to `RunPodCreator.create_pod()`. Update that constant when you publish a new tag so deployments use the latest base image.
+
 ## Contributing
 
 1. Follow the code style guidelines above
