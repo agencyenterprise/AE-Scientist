@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 from typing import List, NamedTuple, Optional
 
 import psycopg2.extras
-from psycopg2.extensions import connection
+
+from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class UserData(NamedTuple):
     updated_at: datetime
 
 
-class UsersDatabaseMixin:
+class UsersDatabaseMixin(ConnectionProvider):
     """Mixin for user and session database operations."""
 
     def create_user(self, google_id: str, email: str, name: str) -> Optional[UserData]:
@@ -241,7 +242,3 @@ class UsersDatabaseMixin:
         except Exception as e:
             logger.exception(f"Error listing users: {e}")
             return []
-
-    def _get_connection(self) -> connection:
-        """Get database connection. Must be implemented by parent class."""
-        raise NotImplementedError("Must be implemented by parent class")

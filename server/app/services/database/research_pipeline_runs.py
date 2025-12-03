@@ -1,11 +1,13 @@
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import List, NamedTuple, Optional
 
 import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import cursor as PsycopgCursor
+
+from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class ResearchPipelineRunEvent(NamedTuple):
     occurred_at: datetime
 
 
-class ResearchPipelineRunsMixin:
+class ResearchPipelineRunsMixin(ConnectionProvider):
     def create_research_pipeline_run(
         self,
         *,
@@ -68,9 +70,9 @@ class ResearchPipelineRunsMixin:
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
             raise ValueError(f"Invalid status '{status}'")
-        now = datetime.now()
-        deadline = start_deadline_at or (now + timedelta(seconds=_startup_grace_seconds()))
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        now = datetime.now(timezone.utc)
+        deadline = start_deadline_at
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -89,7 +91,10 @@ class ResearchPipelineRunsMixin:
                     """,
                     (run_id, idea_id, idea_version_id, status, cost, deadline, now, now),
                 )
-                new_id = cursor.fetchone()[0]
+                new_id_row = cursor.fetchone()
+                if not new_id_row:
+                    raise ValueError("Failed to create research pipeline run (missing id).")
+                new_id = new_id_row[0]
                 self._insert_run_event_with_cursor(
                     cursor=cursor,
                     run_id=run_id,
@@ -156,7 +161,7 @@ class ResearchPipelineRunsMixin:
         values.append(datetime.now())
         values.append(run_id)
         set_clause = ", ".join(fields)
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     f"UPDATE research_pipeline_runs SET {set_clause} WHERE run_id = %s",
@@ -172,7 +177,7 @@ class ResearchPipelineRunsMixin:
         metadata: dict[str, object],
         occurred_at: datetime,
     ) -> None:
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 self._insert_run_event_with_cursor(
                     cursor=cursor,
@@ -190,7 +195,7 @@ class ResearchPipelineRunsMixin:
             WHERE run_id = %s
             ORDER BY occurred_at ASC, id ASC
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
@@ -232,7 +237,7 @@ class ResearchPipelineRunsMixin:
         return {key: _convert(value) for key, value in metadata.items()}
 
     def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]:
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     "SELECT * FROM research_pipeline_runs WHERE run_id = %s",
@@ -244,7 +249,7 @@ class ResearchPipelineRunsMixin:
                 return self._row_to_run(row)
 
     def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]:
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -265,7 +270,7 @@ class ResearchPipelineRunsMixin:
             WHERE i.conversation_id = %s
             ORDER BY r.created_at DESC
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (conversation_id,))
                 rows = cursor.fetchall() or []
@@ -281,7 +286,7 @@ class ResearchPipelineRunsMixin:
             WHERE r.run_id = %s AND i.conversation_id = %s
             LIMIT 1
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id, conversation_id))
                 row = cursor.fetchone()
@@ -296,7 +301,7 @@ class ResearchPipelineRunsMixin:
             JOIN ideas i ON r.idea_id = i.id
             WHERE r.run_id = %s
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(query, (run_id,))
                 result = cursor.fetchone()
@@ -373,7 +378,7 @@ class ResearchPipelineRunsMixin:
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             WHERE r.run_id = %s
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 row = cursor.fetchone()
@@ -490,10 +495,11 @@ class ResearchPipelineRunsMixin:
             {where_sql}
         """
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(count_query, params)
-                total = cursor.fetchone()["count"]
+                total_row = cursor.fetchone()
+                total = int(total_row["count"]) if total_row else 0
 
                 cursor.execute(query, params + [limit, offset])
                 rows = cursor.fetchall() or []

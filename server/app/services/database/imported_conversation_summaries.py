@@ -11,6 +11,8 @@ from typing import NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ class ImportedConversationSummary(NamedTuple):
     updated_at: datetime
 
 
-class ImportedConversationSummariesMixin:
+class ImportedConversationSummariesMixin(ConnectionProvider):
     """Database operations for imported conversation summaries."""
 
     def create_imported_conversation_summary(
@@ -34,7 +36,7 @@ class ImportedConversationSummariesMixin:
         """Create a new imported conversation summary in the database."""
         now = datetime.now()
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -65,7 +67,7 @@ class ImportedConversationSummariesMixin:
     def update_imported_conversation_summary(self, conversation_id: int, new_summary: str) -> bool:
         """Update a conversation's summary. Returns True if updated, False if not found."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "UPDATE imported_conversation_summaries SET summary = %s, updated_at = %s WHERE conversation_id = %s",
@@ -78,7 +80,7 @@ class ImportedConversationSummariesMixin:
         self, conversation_id: int
     ) -> Optional[ImportedConversationSummary]:
         """Get a conversation's summary by conversation ID."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     "SELECT id, conversation_id, external_id, summary, created_at, updated_at FROM imported_conversation_summaries WHERE conversation_id = %s",
@@ -89,7 +91,7 @@ class ImportedConversationSummariesMixin:
 
     def delete_imported_conversation_summary(self, conversation_id: int) -> bool:
         """Delete a conversation's summary by conversation ID."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "DELETE FROM imported_conversation_summaries WHERE conversation_id = %s",

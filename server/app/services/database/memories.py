@@ -11,6 +11,8 @@ from typing import Any, Dict, List, NamedTuple
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,14 +25,14 @@ class ConversationMemories(NamedTuple):
     memories: List[Dict[str, Any]]
 
 
-class ConversationMemoriesMixin:
+class ConversationMemoriesMixin(ConnectionProvider):
     """Database operations for conversation memories blocks."""
 
     def store_memories_block(
         self, conversation_id: int, source: str, memories_block: List[Dict[str, Any]]
     ) -> int:
         """Insert or replace memories block for a conversation and source. Returns row id."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -50,7 +52,7 @@ class ConversationMemoriesMixin:
 
     def get_memories_block(self, conversation_id: int, source: str) -> ConversationMemories:
         """Retrieve memories block for a conversation and source. Raises if not found."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """

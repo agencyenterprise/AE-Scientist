@@ -13,6 +13,8 @@ from typing import List, NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +80,7 @@ class UrlConversationBrief(NamedTuple):
     url: str
 
 
-class ConversationsMixin:
+class ConversationsMixin(ConnectionProvider):
     """Database operations for conversations."""
 
     def create_conversation(self, conversation: Conversation, imported_by_user_id: int) -> int:
@@ -86,7 +88,7 @@ class ConversationsMixin:
         now = datetime.now()
         content_data = [msg._asdict() for msg in conversation.imported_chat]
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -116,7 +118,7 @@ class ConversationsMixin:
 
     def get_conversation_by_id(self, conversation_id: int) -> Optional[FullConversation]:
         """Get a conversation by its ID, including full content and file attachment flags."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -175,7 +177,7 @@ class ConversationsMixin:
 
     def get_conversation_id_by_url(self, url: str) -> Optional[int]:
         """Get a conversation by its URL (without full content)."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -197,7 +199,7 @@ class ConversationsMixin:
     def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
         """List conversations with the same URL, newest first, for conflict resolution UI."""
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -222,7 +224,7 @@ class ConversationsMixin:
 
         Orders prefix matches first, then by most recently updated.
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 substring_pattern = f"%{title_query}%"
                 prefix_pattern = f"{title_query}%"
@@ -248,7 +250,7 @@ class ConversationsMixin:
         self, limit: int = 100, offset: int = 0, user_id: int | None = None
     ) -> List[DashboardConversation]:
         """List conversations for dashboard (from view), with pagination."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 query = """
                     SELECT id, url, title, import_date, created_at, updated_at,
@@ -298,7 +300,7 @@ class ConversationsMixin:
         """Create a conversation originating from manual seed data."""
         now = datetime.now()
         manual_url = f"manual://{uuid.uuid4()}"
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -329,7 +331,7 @@ class ConversationsMixin:
 
     def delete_conversation(self, conversation_id: int) -> bool:
         """Delete a conversation by its ID. Returns True if deleted, False if not found."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM conversations WHERE id = %s", (conversation_id,))
                 conn.commit()
@@ -338,7 +340,7 @@ class ConversationsMixin:
     def update_conversation_title(self, conversation_id: int, new_title: str) -> bool:
         """Update a conversation's title. Returns True if updated, False if not found."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "UPDATE conversations SET title = %s, updated_at = %s WHERE id = %s",
@@ -352,7 +354,7 @@ class ConversationsMixin:
     ) -> bool:
         """Update an existing conversation's messages with new data. Returns updated conversation."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """

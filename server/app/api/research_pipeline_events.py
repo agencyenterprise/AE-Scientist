@@ -8,7 +8,13 @@ from pydantic import BaseModel
 from app.config import settings
 from app.services import get_database
 from app.services.database import DatabaseManager
-from app.services.research_pipeline import RunPodError, fetch_pod_billing_summary, terminate_pod
+from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.research_pipeline import (
+    RunPodError,
+    fetch_pod_billing_summary,
+    terminate_pod,
+    upload_runpod_log_via_ssh,
+)
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
 logger = logging.getLogger(__name__)
@@ -94,6 +100,15 @@ def _record_pod_billing_event(
         metadata=metadata,
         occurred_at=datetime.now(timezone.utc),
     )
+
+
+def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+    host = run.public_ip
+    port = run.ssh_port
+    if not host or not port:
+        logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
+        return
+    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 @router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -193,6 +208,7 @@ def ingest_run_finished(
     )
 
     if run.pod_id:
+        _upload_pod_log_if_possible(run)
         try:
             logger.info(
                 "Run %s finished (success=%s, message=%s); terminating pod %s.",

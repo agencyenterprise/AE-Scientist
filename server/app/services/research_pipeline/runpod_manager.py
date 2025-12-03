@@ -6,6 +6,9 @@ import base64
 import json
 import logging
 import os
+import shlex
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -514,3 +517,106 @@ def fetch_pod_billing_summary(*, pod_id: str) -> dict[str, Any] | None:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
     return manager.get_pod_billing_summary(pod_id=pod_id)
+
+
+_LOG_UPLOAD_REQUIRED_ENVS = [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION",
+    "AWS_S3_BUCKET_NAME",
+]
+
+
+def _gather_log_env(run_id: str) -> dict[str, str] | None:
+    env_values: dict[str, str] = {"RUN_ID": run_id}
+    missing: list[str] = []
+    for name in _LOG_UPLOAD_REQUIRED_ENVS:
+        value = os.environ.get(name)
+        if not value:
+            missing.append(name)
+        else:
+            env_values[name] = value
+    database_public = os.environ.get("DATABASE_PUBLIC_URL")
+    if not database_public:
+        missing.append("DATABASE_PUBLIC_URL")
+    else:
+        env_values["DATABASE_PUBLIC_URL"] = database_public
+        env_values["DATABASE_URL"] = os.environ.get("DATABASE_URL", database_public)
+    if missing:
+        logger.info("Missing env vars for pod log upload: %s", ", ".join(sorted(set(missing))))
+        return None
+    return env_values
+
+
+def _write_temp_key_file(raw_key: str) -> str:
+    key_material = raw_key.replace("\\n", "\n").strip() + "\n"
+    fd, path = tempfile.mkstemp(prefix="runpod-key-", suffix=".pem")
+    with os.fdopen(fd, "w") as handle:
+        handle.write(key_material)
+    os.chmod(path, 0o600)
+    return path
+
+
+def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
+    if not host or not port:
+        logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
+        return
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        logger.info("RUN_POD_SSH_ACCESS_KEY is not configured; skipping pod log upload.")
+        return
+    env_values = _gather_log_env(run_id)
+    if env_values is None:
+        return
+    key_path = _write_temp_key_file(private_key)
+    remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
+    remote_command = (
+        "cd /workspace/AE-Scientist/research_pipeline && "
+        "source .venv/bin/activate && "
+        f"{remote_env} python upload_runpod_log.py "
+        "--log-path /workspace/research_pipeline.log --artifact-type run_log"
+    )
+    ssh_command = [
+        "ssh",
+        "-i",
+        key_path,
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-p",
+        str(port),
+        f"root@{host}",
+        "bash",
+        "-lc",
+        shlex.quote(remote_command),
+    ]
+    try:
+        result = subprocess.run(
+            ssh_command,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "Pod log upload via SSH failed for run %s (exit %s): %s",
+                run_id,
+                result.returncode,
+                result.stderr.strip(),
+            )
+        else:
+            if result.stdout:
+                logger.info(
+                    "Pod log upload output for run %s: %s",
+                    run_id,
+                    result.stdout.strip(),
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Error uploading pod log for run %s: %s", run_id, exc)
+    finally:
+        try:
+            Path(key_path).unlink(missing_ok=True)
+        except OSError:
+            pass

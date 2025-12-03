@@ -8,6 +8,8 @@ from typing import List, NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 
 class ResearchPipelineArtifact(NamedTuple):
     id: int
@@ -21,7 +23,7 @@ class ResearchPipelineArtifact(NamedTuple):
     created_at: datetime
 
 
-class ResearchPipelineArtifactsMixin:
+class ResearchPipelineArtifactsMixin(ConnectionProvider):
     """Helpers to read artifact metadata stored in rp_artifacts."""
 
     def list_run_artifacts(self, run_id: str) -> List[ResearchPipelineArtifact]:
@@ -32,7 +34,7 @@ class ResearchPipelineArtifactsMixin:
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
@@ -45,7 +47,7 @@ class ResearchPipelineArtifactsMixin:
             FROM rp_artifacts
             WHERE id = %s
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (artifact_id,))
                 row = cursor.fetchone()

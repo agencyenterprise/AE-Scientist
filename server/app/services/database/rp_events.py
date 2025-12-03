@@ -8,6 +8,8 @@ from typing import List, NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 
 class StageProgressEvent(NamedTuple):
     id: int
@@ -42,7 +44,7 @@ class ExperimentNodeEvent(NamedTuple):
     created_at: datetime
 
 
-class ResearchPipelineEventsMixin:
+class ResearchPipelineEventsMixin(ConnectionProvider):
     """Methods to read pipeline telemetry events."""
 
     def list_stage_progress_events(self, run_id: str) -> List[StageProgressEvent]:
@@ -54,7 +56,7 @@ class ResearchPipelineEventsMixin:
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
@@ -71,7 +73,7 @@ class ResearchPipelineEventsMixin:
         if limit is not None and limit > 0:
             query += " LIMIT %s"
             params = (run_id, limit)
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, params)
                 rows = cursor.fetchall() or []
@@ -84,7 +86,7 @@ class ResearchPipelineEventsMixin:
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
@@ -101,7 +103,7 @@ class ResearchPipelineEventsMixin:
             ORDER BY created_at ASC
             LIMIT %s
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id, since, limit))
                 rows = cursor.fetchall() or []
@@ -118,7 +120,7 @@ class ResearchPipelineEventsMixin:
             ORDER BY created_at DESC
             LIMIT 1
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 row = cursor.fetchone()

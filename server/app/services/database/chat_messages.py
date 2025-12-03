@@ -12,6 +12,8 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import cursor
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,12 +31,12 @@ class ChatMessageData(NamedTuple):
     sent_by_user_email: str
 
 
-class ChatMessagesMixin:
+class ChatMessagesMixin(ConnectionProvider):
     """Database operations for chat messages."""
 
     def get_chat_messages(self, idea_id: int) -> List[ChatMessageData]:
         """Get all chat messages for an idea, ordered by sequence number."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -54,7 +56,7 @@ class ChatMessagesMixin:
         self, idea_id: int, role: str, content: str, sent_by_user_id: int
     ) -> int:
         """Create a new chat message with the next sequence number."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # Get the next sequence number
                 sequence_number = self._get_next_sequence_number(cursor, idea_id)
@@ -81,7 +83,7 @@ class ChatMessagesMixin:
         """Get chat messages by a list of ids."""
         if not message_ids:
             return []
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """

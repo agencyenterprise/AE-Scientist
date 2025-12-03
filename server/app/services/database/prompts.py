@@ -11,6 +11,8 @@ from typing import NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,12 +26,12 @@ class ActivePromptData(NamedTuple):
     is_active: bool
 
 
-class PromptsMixin:
+class PromptsMixin(ConnectionProvider):
     """Database operations for LLM prompts."""
 
     def get_active_prompt(self, prompt_type: str) -> Optional[ActivePromptData]:
         """Get the currently active prompt for a given type."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     "SELECT id, created_at, prompt_type, system_prompt, is_active FROM llm_prompts WHERE prompt_type = %s AND is_active = TRUE",
@@ -42,7 +44,7 @@ class PromptsMixin:
         """Create a new prompt and set it as active, deactivating any existing active prompt."""
         now = datetime.now()
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # First deactivate any existing active prompt of this type
                 cursor.execute(
@@ -55,14 +57,17 @@ class PromptsMixin:
                     "INSERT INTO llm_prompts (created_at, prompt_type, system_prompt, is_active, created_by_user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                     (now, prompt_type, system_prompt, True, created_by_user_id),
                 )
-                new_prompt_id: int = cursor.fetchone()[0]
+                new_prompt_row = cursor.fetchone()
+                if not new_prompt_row:
+                    raise ValueError("Failed to create prompt (missing id).")
+                new_prompt_id: int = int(new_prompt_row[0])
 
                 conn.commit()
                 return new_prompt_id
 
     def deactivate_prompt(self, prompt_type: str) -> bool:
         """Deactivate ALL active prompts for a given type."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # Set ALL prompts of this type to inactive (not just the currently active one)
                 cursor.execute(

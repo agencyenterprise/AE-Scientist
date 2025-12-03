@@ -5,27 +5,34 @@ Provides common database connection and initialization logic.
 """
 
 import logging
-from typing import Any, Dict
+import os
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator
 from urllib.parse import urlparse
 
-import psycopg2
 from psycopg2.extensions import connection
+from psycopg2.pool import ThreadedConnectionPool
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-class BaseDatabaseManager:
-    """Base database manager with connection and initialization logic."""
+class ConnectionProvider:
+    @contextmanager
+    def _get_connection(self) -> Iterator[connection]:
+        raise NotImplementedError
+
+
+class BaseDatabaseManager(ConnectionProvider):
+    """Base database manager with pooled connection logic."""
+
+    _pool: ThreadedConnectionPool | None = None
 
     def __init__(self) -> None:
         """Initialize database manager."""
-        # PostgreSQL connection parameters
         if settings.DATABASE_URL:
-            # Parse DATABASE_URL if provided
             parsed = urlparse(settings.DATABASE_URL)
-            # Any is used here because psycopg2.connect accepts flexible configuration types
             self.pg_config: Dict[str, Any] = {
                 "host": parsed.hostname,
                 "port": parsed.port or 5432,
@@ -34,7 +41,6 @@ class BaseDatabaseManager:
                 "password": parsed.password,
             }
         else:
-            # Use individual settings
             self.pg_config = {
                 "host": settings.POSTGRES_HOST,
                 "port": settings.POSTGRES_PORT,
@@ -42,14 +48,26 @@ class BaseDatabaseManager:
                 "user": settings.POSTGRES_USER,
                 "password": settings.POSTGRES_PASSWORD,
             }
+        if BaseDatabaseManager._pool is None:
+            min_conn = int(os.environ.get("DB_POOL_MIN_CONN", "1"))
+            max_conn = int(os.environ.get("DB_POOL_MAX_CONN", "10"))
+            BaseDatabaseManager._pool = ThreadedConnectionPool(
+                minconn=min_conn,
+                maxconn=max_conn,
+                **self.pg_config,
+            )
 
-        # Database schema is now managed by Alembic migrations
-        # Run: alembic upgrade head
-
-    def _get_connection(self) -> connection:
-        """Get a PostgreSQL database connection."""
-        return psycopg2.connect(**self.pg_config)  # type: ignore[no-any-return]
-
-    # Database schema is now managed by Alembic migrations
-    # All table creation and initialization has been moved to Alembic migration files
-    # To initialize the database, run: alembic upgrade head
+    @contextmanager
+    def _get_connection(self) -> Iterator[connection]:
+        """Context manager that provides a pooled PostgreSQL connection."""
+        assert BaseDatabaseManager._pool is not None, "Connection pool not initialized"
+        conn = BaseDatabaseManager._pool.getconn()
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            BaseDatabaseManager._pool.putconn(conn)
+            raise
+        else:
+            conn.commit()
+            BaseDatabaseManager._pool.putconn(conn)
