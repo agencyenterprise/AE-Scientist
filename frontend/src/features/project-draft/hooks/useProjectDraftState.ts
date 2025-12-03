@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
+import type { ConversationDetail, Idea } from "@/types";
 import { apiFetch } from "@/shared/lib/api-client";
-import { constants } from "@/shared/lib/config";
-import { isIdeaGenerating } from "../utils/versionUtils";
+import { useProjectDraftData } from "./use-project-draft-data";
+import { useProjectDraftEdit } from "./use-project-draft-edit";
 
 interface UseProjectDraftStateProps {
   conversation: ConversationDetail;
@@ -43,115 +43,77 @@ interface UseProjectDraftStateReturn {
   }) => Promise<void>;
 }
 
+/**
+ * Hook for managing project draft state.
+ *
+ * This is a facade hook that composes:
+ * - useProjectDraftData: Data loading and polling
+ * - useProjectDraftEdit: Edit mode state management
+ *
+ * The original API is preserved for backward compatibility while
+ * the implementation is now properly split by responsibility.
+ */
 export function useProjectDraftState({
   conversation,
 }: UseProjectDraftStateProps): UseProjectDraftStateReturn {
   const router = useRouter();
-  const [projectDraft, setProjectDraft] = useState<Idea | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Compose sub-hooks
+  const dataState = useProjectDraftData({ conversation });
+  const editState = useProjectDraftEdit();
+
+  // Modal and project creation state (kept local as they're simple)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const updateProjectDraft = useCallback(
-    async (ideaData: {
-      title: string;
-      short_hypothesis: string;
-      related_work: string;
-      abstract: string;
-      experiments: string[];
-      expected_outcome: string;
-      risk_factors_and_limitations: string[];
-    }): Promise<void> => {
-      setIsUpdating(true);
-      try {
-        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`, {
-          method: "PATCH",
-          body: ideaData,
-        });
-        setProjectDraft(result.idea);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to update idea:", error);
-        throw error;
-      } finally {
-        setIsUpdating(false);
-      }
-    },
-    [conversation.id]
-  );
+  // Wrapper for handleEdit to pass current project draft
+  const handleEdit = useCallback((): void => {
+    editState.handleEdit(dataState.projectDraft);
+  }, [editState, dataState.projectDraft]);
 
-  const handleEdit = (): void => {
-    if (!projectDraft?.active_version) return;
-
-    setEditTitle(projectDraft.active_version.title || "");
-    // Serialize all idea fields as JSON for editing
-    const ideaJson = JSON.stringify(
-      {
-        title: projectDraft.active_version.title,
-        short_hypothesis: projectDraft.active_version.short_hypothesis,
-        related_work: projectDraft.active_version.related_work,
-        abstract: projectDraft.active_version.abstract,
-        experiments: projectDraft.active_version.experiments,
-        expected_outcome: projectDraft.active_version.expected_outcome,
-        risk_factors_and_limitations: projectDraft.active_version.risk_factors_and_limitations,
-      },
-      null,
-      2
-    );
-    setEditDescription(ideaJson);
-    setIsEditing(true);
-  };
-
-  const handleSave = async (): Promise<void> => {
-    const trimmedTitle = editTitle.trim();
-    const trimmedDescription = editDescription.trim();
-
-    if (!trimmedTitle || !trimmedDescription) return;
+  // Wrapper for handleSave to integrate with data state
+  const handleSave = useCallback(async (): Promise<void> => {
+    const editedData = editState.getEditedData();
+    if (!editedData) return;
 
     try {
-      // Parse the JSON from editDescription
-      const ideaData = JSON.parse(trimmedDescription);
-      // Override title from the title field
-      ideaData.title = trimmedTitle;
-      await updateProjectDraft(ideaData);
-      setIsEditing(false);
-      setEditTitle("");
-      setEditDescription("");
+      await dataState.updateProjectDraft(
+        editedData.ideaData as {
+          title: string;
+          short_hypothesis: string;
+          related_work: string;
+          abstract: string;
+          experiments: string[];
+          expected_outcome: string;
+          risk_factors_and_limitations: string[];
+        }
+      );
+      editState.handleCancelEdit();
     } catch (error) {
       // eslint-disable-next-line no-console
-      console.error("Failed to parse or save idea:", error);
+      console.error("Failed to save idea:", error);
       throw error;
     }
-  };
+  }, [editState, dataState]);
 
-  const handleCancelEdit = (): void => {
-    setIsEditing(false);
-    setEditTitle("");
-    setEditDescription("");
-  };
+  // Wrapper for handleKeyDown to pass save action
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent, action: () => void): void => {
+      editState.handleKeyDown(event, action);
+    },
+    [editState]
+  );
 
-  const handleKeyDown = (event: React.KeyboardEvent, action: () => void): void => {
-    if (event.key === "Enter" && event.ctrlKey) {
-      action();
-    } else if (event.key === "Escape") {
-      handleCancelEdit();
-    }
-  };
-
-  const handleCreateProject = (): void => {
+  const handleCreateProject = useCallback((): void => {
     setIsCreateModalOpen(true);
-  };
+  }, []);
 
-  const handleCloseCreateModal = (): void => {
+  const handleCloseCreateModal = useCallback((): void => {
     setIsCreateModalOpen(false);
-  };
+  }, []);
 
-  const handleConfirmCreateProject = async (): Promise<void> => {
+  const handleConfirmCreateProject = useCallback(async (): Promise<void> => {
     setIsCreatingProject(true);
     try {
       await apiFetch(`/conversations/${conversation.id}/idea/research-run`, {
@@ -165,61 +127,11 @@ export function useProjectDraftState({
     } finally {
       setIsCreatingProject(false);
     }
-  };
-
-  // Load initial data
-  useEffect(() => {
-    const loadData = async (): Promise<void> => {
-      try {
-        const draftResult = await apiFetch<IdeaGetResponse>(
-          `/conversations/${conversation.id}/idea`
-        );
-        setProjectDraft(draftResult.idea);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to load data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [conversation.id]);
-
-  // Poll for idea updates when idea is being generated
-  useEffect(() => {
-    const checkAndPoll = async () => {
-      try {
-        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`);
-        const draft = result.idea;
-        setProjectDraft(draft);
-
-        // Only continue polling if idea is still being generated
-        if (isIdeaGenerating(draft)) {
-          return true; // Continue polling
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error("Polling error:", error);
-      }
-      return false; // Stop polling
-    };
-
-    const pollInterval = setInterval(async () => {
-      const shouldContinue = await checkAndPoll();
-      if (!shouldContinue) {
-        clearInterval(pollInterval);
-      }
-    }, constants.POLL_INTERVAL_MS);
-
-    return () => {
-      clearInterval(pollInterval);
-    };
-  }, [conversation.id]);
+  }, [conversation.id, router]);
 
   // Scroll to bottom when component mounts or project draft loads
   useEffect(() => {
-    if (containerRef.current && !isLoading) {
+    if (containerRef.current && !dataState.isLoading) {
       // Scroll to bottom after a brief delay to ensure content is rendered
       setTimeout(() => {
         if (containerRef.current) {
@@ -227,19 +139,19 @@ export function useProjectDraftState({
         }
       }, 100);
     }
-  }, [isLoading, projectDraft]);
+  }, [dataState.isLoading, dataState.projectDraft]);
 
   return {
-    projectDraft,
-    setProjectDraft,
-    isLoading,
-    isEditing,
-    setIsEditing,
-    editTitle,
-    setEditTitle,
-    editDescription,
-    setEditDescription,
-    isUpdating,
+    projectDraft: dataState.projectDraft,
+    setProjectDraft: dataState.setProjectDraft,
+    isLoading: dataState.isLoading,
+    isEditing: editState.isEditing,
+    setIsEditing: editState.setIsEditing,
+    editTitle: editState.editTitle,
+    setEditTitle: editState.setEditTitle,
+    editDescription: editState.editDescription,
+    setEditDescription: editState.setEditDescription,
+    isUpdating: dataState.isUpdating,
     isCreateModalOpen,
     setIsCreateModalOpen,
     isCreatingProject,
@@ -247,11 +159,11 @@ export function useProjectDraftState({
     containerRef,
     handleEdit,
     handleSave,
-    handleCancelEdit,
+    handleCancelEdit: editState.handleCancelEdit,
     handleKeyDown,
     handleCreateProject,
     handleCloseCreateModal,
     handleConfirmCreateProject,
-    updateProjectDraft,
+    updateProjectDraft: dataState.updateProjectDraft,
   };
 }

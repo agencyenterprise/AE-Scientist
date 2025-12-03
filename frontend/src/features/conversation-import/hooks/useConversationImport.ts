@@ -1,30 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { apiStream } from "@/shared/lib/api-client";
-import {
-  ConflictItem,
-  ImportState,
-  SSEConflict,
-  SSEEvent,
-  SSEModelLimit,
-  SSEProgress,
-  SSESectionUpdate,
-  SSEState,
-} from "../types/types";
-
-// Order of sections as streamed from the backend
-const SECTION_ORDER = [
-  "title",
-  "short_hypothesis",
-  "related_work",
-  "abstract",
-  "experiments",
-  "expected_outcome",
-  "risk_factors_and_limitations",
-] as const;
-import { getUrlValidationError, validateUrl } from "../utils/urlValidation";
+import { useStreamingImport } from "@/shared/hooks/use-streaming-import";
+import { useImportFormState } from "./use-import-form-state";
+import { useImportConflictResolution } from "./use-import-conflict-resolution";
+import type { ConflictItem, ImportState } from "../types/types";
 
 // Re-export ConflictItem for consumers
 export type { ConflictItem } from "../types/types";
@@ -102,87 +83,73 @@ export interface UseConversationImportReturn {
   streamingRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
+/**
+ * Hook for managing conversation import flow.
+ *
+ * This is a facade hook that composes:
+ * - useImportFormState: URL input and validation
+ * - useImportConflictResolution: Conflict handling
+ * - useStreamingImport: SSE streaming logic
+ *
+ * The original API is preserved for backward compatibility while
+ * the implementation is now properly split by responsibility.
+ */
 export function useConversationImport(
   options: UseConversationImportOptions = {}
 ): UseConversationImportReturn {
   const { onImportStart, onImportEnd, onSuccess, onError, autoRedirect = true } = options;
 
-  // Form state
-  const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
+  // Compose sub-hooks
+  const formState = useImportFormState();
+  const conflictState = useImportConflictResolution();
 
-  // Model state
+  // Model state (kept local as it's tightly coupled with this flow)
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("");
   const [currentModel, setCurrentModel] = useState("");
   const [currentProvider, setCurrentProvider] = useState("");
 
-  // Streaming state
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [sections, setSections] = useState<Record<string, string>>({});
-  const [currentState, setCurrentState] = useState<ImportState | "">("");
-  const [summaryProgress, setSummaryProgress] = useState<number | null>(null);
-  const [isUpdateMode, setIsUpdateMode] = useState(false);
-
-  // Compute streamingContent from sections in correct order
-  const streamingContent = useMemo(() => {
-    return SECTION_ORDER.filter(key => sections[key])
-      .map(key => sections[key])
-      .join("\n");
-  }, [sections]);
-
-  // Conflict state
-  const [hasConflict, setHasConflict] = useState(false);
-  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
-  const [selectedConflictId, setSelectedConflictId] = useState<number | null>(null);
-
-  // Model limit state
-  const [hasModelLimitConflict, setHasModelLimitConflict] = useState(false);
-  const [modelLimitMessage, setModelLimitMessage] = useState("");
-  const [modelLimitSuggestion, setModelLimitSuggestion] = useState("");
-
-  // Ref for auto-scrolling
-  const streamingRef = useRef<HTMLTextAreaElement>(null);
+  // Streaming import hook
+  const streaming = useStreamingImport({
+    onStart: onImportStart,
+    onEnd: onImportEnd,
+    onSuccess,
+    onError,
+    autoRedirect,
+  });
 
   // Auto-scroll streaming content
   useEffect(() => {
-    if (isStreaming && streamingRef.current) {
-      streamingRef.current.scrollTop = streamingRef.current.scrollHeight;
+    if (streaming.state.isStreaming && streaming.streamingRef.current) {
+      streaming.streamingRef.current.scrollTop = streaming.streamingRef.current.scrollHeight;
     }
-  }, [streamingContent, isStreaming]);
+  }, [streaming.state.streamingContent, streaming.state.isStreaming, streaming.streamingRef]);
 
   // Reset all state
   const reset = useCallback(() => {
-    setUrl("");
-    setError("");
-    setSections({});
-    setCurrentState("");
+    formState.actions.reset();
+    conflictState.actions.reset();
+    streaming.actions.reset();
     setSelectedModel("");
     setSelectedProvider("");
-    setHasConflict(false);
-    setConflicts([]);
-    setSelectedConflictId(null);
-    setIsUpdateMode(false);
-    setHasModelLimitConflict(false);
-    setModelLimitMessage("");
-    setModelLimitSuggestion("");
-    setIsStreaming(false);
-    setSummaryProgress(null);
-  }, []);
+  }, [formState.actions, conflictState.actions, streaming.actions]);
 
   // Model handlers
-  const setModel = useCallback((model: string, provider: string) => {
-    setError("");
-    if (model && provider) {
-      setSelectedModel(model);
-      setSelectedProvider(provider);
-      setCurrentModel(model);
-      setCurrentProvider(provider);
-    } else {
-      setSelectedModel("");
-      setSelectedProvider("");
-    }
-  }, []);
+  const setModel = useCallback(
+    (model: string, provider: string) => {
+      formState.actions.clearError();
+      if (model && provider) {
+        setSelectedModel(model);
+        setSelectedProvider(provider);
+        setCurrentModel(model);
+        setCurrentProvider(provider);
+      } else {
+        setSelectedModel("");
+        setSelectedProvider("");
+      }
+    },
+    [formState.actions]
+  );
 
   const setModelDefaults = useCallback(
     (model: string, provider: string) => {
@@ -194,7 +161,7 @@ export function useConversationImport(
     [selectedModel, selectedProvider]
   );
 
-  // Core streaming import function
+  // Core streaming import function with conflict handling
   const handleStreamingImport = useCallback(
     async (
       trimmedUrl: string,
@@ -202,284 +169,153 @@ export function useConversationImport(
       targetConversationId?: number,
       acceptSummarization: boolean = false
     ): Promise<void> => {
-      const body =
-        targetConversationId !== undefined
-          ? {
-              url: trimmedUrl,
-              llm_model: currentModel,
-              llm_provider: currentProvider,
-              accept_summarization: acceptSummarization,
-              duplicate_resolution: duplicateResolution,
-              target_conversation_id: targetConversationId,
-            }
-          : {
-              url: trimmedUrl,
-              llm_model: currentModel,
-              llm_provider: currentProvider,
-              accept_summarization: acceptSummarization,
-              duplicate_resolution: duplicateResolution,
-            };
-
-      const response = await apiStream("/conversations/import", {
-        method: "POST",
-        headers: { Accept: "text/event-stream" },
-        body: JSON.stringify(body),
+      const result = await streaming.actions.startStream({
+        url: trimmedUrl,
+        model: currentModel,
+        provider: currentProvider,
+        duplicateResolution,
+        targetConversationId,
+        acceptSummarization,
       });
 
-      if (!response.body) throw new Error("No response body");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-
-          let eventData: SSEEvent;
-          try {
-            eventData = JSON.parse(line);
-          } catch (e) {
-            // eslint-disable-next-line no-console
-            console.warn("Failed to parse JSON line:", line, "Error:", e);
-            continue;
-          }
-
-          switch (eventData.type) {
-            case "section_update": {
-              const { field, data } = eventData as SSESectionUpdate;
-              setSections(prev => ({ ...prev, [field]: data }));
-              break;
-            }
-            case "content": {
-              // Legacy fallback - kept for backwards compatibility
-              // This shouldn't be used anymore as backend sends section_update
-              break;
-            }
-            case "state": {
-              const stateValue = (eventData as SSEState).data;
-              setCurrentState(stateValue);
-              if (stateValue !== "summarizing") setSummaryProgress(null);
-              break;
-            }
-            case "progress": {
-              const prog = (eventData as SSEProgress).data;
-              if (prog.phase === "summarizing" && prog.total > 0) {
-                const pct = Math.max(
-                  0,
-                  Math.min(100, Math.round((prog.current / prog.total) * 100))
-                );
-                setSummaryProgress(pct);
-                setCurrentState(ImportState.Summarizing);
-              }
-              break;
-            }
-            case "conflict": {
-              setIsStreaming(false);
-              setCurrentState("");
-              const conflictEvt = eventData as SSEConflict;
-              const items = conflictEvt.data.conversations;
-              setConflicts(items);
-              const firstItem = items[0];
-              setSelectedConflictId(firstItem ? firstItem.id : null);
-              setHasConflict(true);
-              onImportEnd?.();
-              return;
-            }
-            case "model_limit_conflict": {
-              setIsStreaming(false);
-              setCurrentState("");
-              const mdlEvt = eventData as SSEModelLimit;
-              setModelLimitMessage(mdlEvt.data.message);
-              setModelLimitSuggestion(mdlEvt.data.suggestion);
-              setHasModelLimitConflict(true);
-              onImportEnd?.();
-              return;
-            }
-            case "error": {
-              const err = eventData as { type: "error"; data: string; code?: string };
-              setIsStreaming(false);
-              onImportEnd?.();
-              if (err.code === "CHAT_NOT_FOUND") {
-                throw new Error(
-                  "This conversation no longer exists or has been deleted. Please check the URL and try again."
-                );
-              }
-              throw new Error(err.data);
-            }
-            case "done": {
-              const doneEvt = eventData as {
-                type: "done";
-                data: { conversation?: { id: number }; error?: string };
-              };
-              const conv = doneEvt.data.conversation;
-              if (conv && typeof conv.id === "number") {
-                setUrl("");
-                setIsStreaming(false);
-                setIsUpdateMode(false);
-                setCurrentState("");
-                onImportEnd?.();
-                onSuccess?.(conv.id);
-                if (autoRedirect) {
-                  window.location.href = `/conversations/${conv.id}`;
-                }
-                return;
-              }
-              const errMsg = doneEvt.data.error ?? "Import failed";
-              throw new Error(errMsg);
-            }
-            default:
-              break;
-          }
-        }
+      // Handle conflicts detected by the stream
+      if (result.hasConflict && result.conflicts) {
+        conflictState.actions.setConflict(result.conflicts);
+      } else if (result.hasModelLimitConflict) {
+        conflictState.actions.setModelLimit(
+          result.modelLimitMessage || "",
+          result.modelLimitSuggestion || ""
+        );
+      } else if (!result.success && result.error) {
+        formState.actions.setError(result.error);
       }
     },
-    [currentModel, currentProvider, onImportEnd, onSuccess, autoRedirect]
+    [currentModel, currentProvider, streaming.actions, conflictState.actions, formState.actions]
   );
 
   // Start import action
   const startImport = useCallback(async () => {
-    const trimmedUrl = url.trim();
+    const trimmedUrl = formState.state.url.trim();
 
-    if (!validateUrl(trimmedUrl)) {
-      setError(getUrlValidationError());
-      onError?.(getUrlValidationError());
+    if (!formState.actions.validate()) {
+      onError?.(formState.state.error);
       return;
     }
 
     if (!currentModel || !currentProvider) {
       const modelError = "LLM model and provider are required. Please wait for model to load.";
-      setError(modelError);
+      formState.actions.setError(modelError);
       onError?.(modelError);
       return;
     }
 
-    setError("");
-    setIsStreaming(true);
-    setIsUpdateMode(false);
-    setSections({});
-    setCurrentState("");
-    onImportStart?.();
+    formState.actions.clearError();
 
     try {
       await handleStreamingImport(trimmedUrl, "prompt");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to import conversation";
-      setError(errorMessage);
-      setIsStreaming(false);
-      onImportEnd?.();
+      formState.actions.setError(errorMessage);
       onError?.(errorMessage);
     }
   }, [
-    url,
+    formState.state.url,
+    formState.state.error,
+    formState.actions,
     currentModel,
     currentProvider,
     handleStreamingImport,
-    onImportStart,
-    onImportEnd,
     onError,
   ]);
 
   // Conflict resolution actions
-  const selectConflict = useCallback((id: number) => {
-    setSelectedConflictId(id);
-  }, []);
-
   const resolveConflictGoTo = useCallback(() => {
-    if (selectedConflictId) {
-      window.location.href = `/conversations/${selectedConflictId}`;
+    if (conflictState.conflict.selectedId) {
+      window.location.href = `/conversations/${conflictState.conflict.selectedId}`;
     }
-  }, [selectedConflictId]);
+  }, [conflictState.conflict.selectedId]);
 
   const resolveConflictUpdate = useCallback(async () => {
-    setHasConflict(false);
-    setConflicts([]);
-    setSelectedConflictId(null);
-    setError("");
-    setIsStreaming(true);
-    setIsUpdateMode(true);
-    setSections({});
-    setCurrentState("");
-    onImportStart?.();
+    const selectedId = conflictState.conflict.selectedId;
+    conflictState.actions.clearConflict();
+    formState.actions.clearError();
 
     try {
-      await handleStreamingImport(url.trim(), "update_existing", selectedConflictId ?? undefined);
+      await handleStreamingImport(
+        formState.state.url.trim(),
+        "update_existing",
+        selectedId ?? undefined
+      );
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to import conversation";
-      setError(errorMessage);
-      setIsStreaming(false);
-      setIsUpdateMode(false);
+      formState.actions.setError(errorMessage);
       onError?.(errorMessage);
     }
-  }, [url, selectedConflictId, handleStreamingImport, onImportStart, onError]);
+  }, [
+    formState.state.url,
+    formState.actions,
+    conflictState.conflict.selectedId,
+    conflictState.actions,
+    handleStreamingImport,
+    onError,
+  ]);
 
   const resolveConflictCreateNew = useCallback(async () => {
-    setHasConflict(false);
-    setConflicts([]);
-    setSelectedConflictId(null);
-    setError("");
-    setIsStreaming(true);
-    setIsUpdateMode(false);
-    setSections({});
-    setCurrentState("");
-    onImportStart?.();
+    conflictState.actions.clearConflict();
+    formState.actions.clearError();
 
     try {
-      await handleStreamingImport(url.trim(), "create_new");
+      await handleStreamingImport(formState.state.url.trim(), "create_new");
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to import conversation";
-      setError(errorMessage);
-      setIsStreaming(false);
+      formState.actions.setError(errorMessage);
       onError?.(errorMessage);
     }
-  }, [url, handleStreamingImport, onImportStart, onError]);
+  }, [
+    formState.state.url,
+    formState.actions,
+    conflictState.actions,
+    handleStreamingImport,
+    onError,
+  ]);
 
   const cancelConflict = useCallback(() => {
-    setHasConflict(false);
-    setConflicts([]);
-    setSelectedConflictId(null);
-    setError("");
-  }, []);
+    conflictState.actions.clearConflict();
+    formState.actions.clearError();
+  }, [conflictState.actions, formState.actions]);
 
   // Model limit actions
   const proceedWithSummarization = useCallback(async () => {
-    setHasModelLimitConflict(false);
-    setError("");
-    setIsStreaming(true);
-    setIsUpdateMode(false);
-    setSections({});
-    setCurrentState("");
-    onImportStart?.();
+    conflictState.actions.clearModelLimit();
+    formState.actions.clearError();
 
     try {
-      await handleStreamingImport(url.trim(), "create_new", undefined, true);
+      await handleStreamingImport(formState.state.url.trim(), "create_new", undefined, true);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to import conversation";
-      setError(errorMessage);
-      setIsStreaming(false);
+      formState.actions.setError(errorMessage);
       onError?.(errorMessage);
     }
-  }, [url, handleStreamingImport, onImportStart, onError]);
+  }, [
+    formState.state.url,
+    formState.actions,
+    conflictState.actions,
+    handleStreamingImport,
+    onError,
+  ]);
 
   const cancelModelLimit = useCallback(() => {
-    setHasModelLimitConflict(false);
-  }, []);
+    conflictState.actions.clearModelLimit();
+  }, [conflictState.actions]);
 
   return {
     state: {
-      url,
-      error,
-      streamingContent,
-      currentState,
-      summaryProgress,
-      isUpdateMode,
+      url: formState.state.url,
+      error: formState.state.error,
+      streamingContent: streaming.state.streamingContent,
+      currentState: streaming.state.currentState,
+      summaryProgress: streaming.state.summaryProgress,
+      isUpdateMode: streaming.state.isUpdateMode,
     },
     model: {
       selected: selectedModel,
@@ -488,29 +324,32 @@ export function useConversationImport(
       currentProvider,
     },
     conflict: {
-      hasConflict,
-      items: conflicts,
-      selectedId: selectedConflictId,
+      hasConflict: conflictState.conflict.hasConflict,
+      items: conflictState.conflict.items,
+      selectedId: conflictState.conflict.selectedId,
     },
     modelLimit: {
-      hasConflict: hasModelLimitConflict,
-      message: modelLimitMessage,
-      suggestion: modelLimitSuggestion,
+      hasConflict: conflictState.modelLimit.hasConflict,
+      message: conflictState.modelLimit.message,
+      suggestion: conflictState.modelLimit.suggestion,
     },
     status: {
-      isIdle: !isStreaming && !hasConflict && !hasModelLimitConflict,
-      isImporting: isStreaming,
-      hasError: !!error,
-      hasConflict,
-      hasModelLimitConflict,
-      canSubmit: !!url.trim() && !!currentModel && !isStreaming,
+      isIdle:
+        !streaming.state.isStreaming &&
+        !conflictState.conflict.hasConflict &&
+        !conflictState.modelLimit.hasConflict,
+      isImporting: streaming.state.isStreaming,
+      hasError: !!formState.state.error,
+      hasConflict: conflictState.conflict.hasConflict,
+      hasModelLimitConflict: conflictState.modelLimit.hasConflict,
+      canSubmit: !!formState.state.url.trim() && !!currentModel && !streaming.state.isStreaming,
     },
     actions: {
-      setUrl,
+      setUrl: formState.actions.setUrl,
       setModel,
       setModelDefaults,
       startImport,
-      selectConflict,
+      selectConflict: conflictState.actions.selectConflict,
       resolveConflictGoTo,
       resolveConflictUpdate,
       resolveConflictCreateNew,
@@ -519,6 +358,6 @@ export function useConversationImport(
       cancelModelLimit,
       reset,
     },
-    streamingRef,
+    streamingRef: streaming.streamingRef,
   };
 }

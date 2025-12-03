@@ -2,20 +2,10 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
-import {
-  Eye,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Package,
-  Cpu,
-  User,
-  ArrowRight,
-  Activity,
-} from "lucide-react";
+import { Eye, AlertCircle, Package, Cpu, User, ArrowRight, Activity } from "lucide-react";
 import type { ResearchRun } from "@/shared/lib/api-adapters";
+import { formatRelativeTime } from "@/shared/lib/date-utils";
+import { getStatusBadge } from "../utils/research-utils";
 
 interface ResearchBoardTableProps {
   researchRuns: ResearchRun[];
@@ -24,49 +14,6 @@ interface ResearchBoardTableProps {
 function truncateRunId(runId: string): string {
   if (runId.length <= 14) return runId;
   return `${runId.slice(0, 14)}...`;
-}
-
-function formatRelativeTime(dateString: string): string {
-  try {
-    const date = new Date(dateString);
-    return formatDistanceToNow(date, { addSuffix: true });
-  } catch {
-    return dateString;
-  }
-}
-
-function getStatusBadge(status: string) {
-  switch (status) {
-    case "completed":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-400">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          Completed
-        </span>
-      );
-    case "running":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-3 py-1.5 text-xs font-medium text-sky-400">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Running
-        </span>
-      );
-    case "failed":
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-400">
-          <AlertCircle className="h-3.5 w-3.5" />
-          Failed
-        </span>
-      );
-    case "pending":
-    default:
-      return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-400">
-          <Clock className="h-3.5 w-3.5" />
-          Pending
-        </span>
-      );
-  }
 }
 
 function getStageBadge(stage: string | null) {

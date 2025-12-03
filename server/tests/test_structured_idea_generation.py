@@ -69,6 +69,66 @@ def test_idea_sections_for_stream_formats_lists() -> None:
     assert "Risk Factors and Limitations" in combined
 
 
+def test_parse_idea_response_with_trailing_text() -> None:
+    """Test that JSON extraction works when LLM appends commentary after JSON."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+    json_with_trailing = (
+        json.dumps(payload)
+        + ' This includes a minor formatting issue at the end due to an accidental '
+        'inclusion of extra characters ("]}'
+    )
+
+    result = service._parse_idea_response(content=json_with_trailing)
+
+    assert result.title == payload["title"]
+    assert result.expected_outcome == payload["expected_outcome"]
+    assert result.risk_factors_and_limitations == payload["risk_factors_and_limitations"]
+
+
+def test_parse_idea_response_with_leading_text() -> None:
+    """Test that JSON extraction works when there's leading text."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+    json_with_leading = "Here is the JSON: " + json.dumps(payload)
+
+    result = service._parse_idea_response(content=json_with_leading)
+
+    assert result.title == payload["title"]
+    assert result.experiments == payload["experiments"]
+
+
+def test_parse_idea_response_clean_json() -> None:
+    """Test that clean JSON still parses correctly."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+
+    result = service._parse_idea_response(content=json.dumps(payload))
+
+    assert result.title == payload["title"]
+    assert result.abstract == payload["abstract"]
+
+
+def test_parse_idea_response_missing_fields_raises() -> None:
+    """Test that missing required fields raises ValueError with helpful message."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    incomplete_payload = {
+        "title": "Test",
+        "short_hypothesis": "Test hypothesis",
+        "related_work": "Related work",
+        "abstract": "Abstract",
+        "experiments": ["Exp 1"],
+        # Missing: expected_outcome, risk_factors_and_limitations
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        service._parse_idea_response(content=json.dumps(incomplete_payload))
+
+    error_message = str(exc_info.value)
+    assert "missing fields" in error_message.lower()
+    assert "expected_outcome" in error_message or "risk_factors" in error_message
+
+
 @pytest.mark.asyncio
 async def test_stream_structured_idea_creates_new_idea() -> None:
     db = MagicMock()

@@ -1,8 +1,5 @@
 import { ReactElement } from "react";
-import ReactMarkdown from "react-markdown";
-import { Pencil } from "lucide-react";
-
-import { markdownComponents } from "../utils/markdownComponents";
+import { StringSection } from "./StringSection";
 
 interface ExpectedOutcomeSectionProps {
   content: string;
@@ -10,34 +7,23 @@ interface ExpectedOutcomeSectionProps {
   onEdit?: () => void;
 }
 
+/**
+ * Section component for displaying the expected outcome.
+ *
+ * Uses the success-box variant with green background styling.
+ */
 export function ExpectedOutcomeSection({
   content,
   diffContent,
   onEdit,
 }: ExpectedOutcomeSectionProps) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Expected Outcome
-        </h3>
-        {onEdit && (
-          <button
-            onClick={onEdit}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-            aria-label="Edit expected outcome"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="text-sm text-foreground bg-green-500/10 border border-green-500/30 rounded-xl p-4 leading-relaxed">
-        {diffContent ? (
-          <div className="whitespace-pre-wrap">{diffContent}</div>
-        ) : (
-          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
-        )}
-      </div>
-    </div>
+    <StringSection
+      title="Expected Outcome"
+      content={content}
+      diffContent={diffContent}
+      onEdit={onEdit}
+      variant="success-box"
+    />
   );
 }

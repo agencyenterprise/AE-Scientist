@@ -1,8 +1,5 @@
 import { ReactElement } from "react";
-import ReactMarkdown from "react-markdown";
-import { Pencil } from "lucide-react";
-
-import { markdownComponents } from "../utils/markdownComponents";
+import { StringSection } from "./StringSection";
 
 interface HypothesisSectionProps {
   content: string;
@@ -10,30 +7,19 @@ interface HypothesisSectionProps {
   onEdit?: () => void;
 }
 
+/**
+ * Section component for displaying the hypothesis.
+ *
+ * Uses the primary-border variant for visual emphasis.
+ */
 export function HypothesisSection({ content, diffContent, onEdit }: HypothesisSectionProps) {
   return (
-    <div className="border-l-4 border-primary pl-4">
-      <div className="flex items-center justify-between mb-1">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Hypothesis
-        </h3>
-        {onEdit && (
-          <button
-            onClick={onEdit}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-            aria-label="Edit hypothesis"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="text-sm text-foreground leading-relaxed">
-        {diffContent ? (
-          <div className="whitespace-pre-wrap">{diffContent}</div>
-        ) : (
-          <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>
-        )}
-      </div>
-    </div>
+    <StringSection
+      title="Hypothesis"
+      content={content}
+      diffContent={diffContent}
+      onEdit={onEdit}
+      variant="primary-border"
+    />
   );
 }
