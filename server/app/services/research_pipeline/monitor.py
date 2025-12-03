@@ -8,7 +8,7 @@ from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.research_pipeline import RunPodError, terminate_pod
-from app.services.research_pipeline.runpod_manager import RunPodCreator
+from app.services.research_pipeline.runpod_manager import RunPodManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,9 @@ class ResearchPipelineMonitor:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         api_key = os.environ.get("RUNPOD_API_KEY")
-        self._runpod_creator: Optional[RunPodCreator] = (
-            RunPodCreator(api_key=api_key) if api_key else None
-        )
+        if not api_key:
+            raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
+        self._runpod_manager: RunPodManager = RunPodManager(api_key=api_key)
 
     async def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -130,9 +130,9 @@ class ResearchPipelineMonitor:
         if run.heartbeat_failures > 0:
             db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
 
-        if run.pod_id and self._runpod_creator is not None:
+        if run.pod_id:
             try:
-                pod = self._runpod_creator.get_pod(run.pod_id)
+                pod = self._runpod_manager.get_pod(run.pod_id)
                 status = pod.get("desiredStatus")
                 if status == "PENDING":
                     logger.info(
@@ -174,6 +174,36 @@ class ResearchPipelineMonitor:
                 terminate_pod(pod_id=run.pod_id)
             except RuntimeError as exc:
                 logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
+            self._record_pod_billing_event(
+                db=db,
+                run_id=run.run_id,
+                pod_id=run.pod_id,
+                context="pipeline_monitor_failure",
+            )
+
+    def _record_pod_billing_event(
+        self,
+        db: "DatabaseManager",
+        *,
+        run_id: str,
+        pod_id: str,
+        context: str,
+    ) -> None:
+        try:
+            summary = self._runpod_manager.get_pod_billing_summary(pod_id=pod_id)
+        except RunPodError as exc:
+            logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
+            return
+        if summary is None:
+            return
+        metadata = dict(summary)
+        metadata["context"] = context
+        db.insert_research_pipeline_run_event(
+            run_id=run_id,
+            event_type="pod_billing_summary",
+            metadata=metadata,
+            occurred_at=datetime.now(timezone.utc),
+        )
 
 
 def _require_int(name: str) -> int:

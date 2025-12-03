@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.services import get_database
-from app.services.research_pipeline import terminate_pod
+from app.services.database import DatabaseManager
+from app.services.research_pipeline import RunPodError, fetch_pod_billing_summary, terminate_pod
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
 logger = logging.getLogger(__name__)
@@ -69,6 +70,30 @@ def _verify_bearer_token(authorization: str = Header(...)) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token.",
         )
+
+
+def _record_pod_billing_event(
+    db: DatabaseManager,
+    *,
+    run_id: str,
+    pod_id: str,
+    context: str,
+) -> None:
+    try:
+        summary = fetch_pod_billing_summary(pod_id=pod_id)
+    except (RuntimeError, RunPodError) as exc:
+        logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
+        return
+    if summary is None:
+        return
+    metadata = dict(summary)
+    metadata["context"] = context
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="pod_billing_summary",
+        metadata=metadata,
+        occurred_at=datetime.now(timezone.utc),
+    )
 
 
 @router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -180,6 +205,13 @@ def ingest_run_finished(
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
+        finally:
+            _record_pod_billing_event(
+                db,
+                run_id=payload.run_id,
+                pod_id=run.pod_id,
+                context="pipeline_event_finish",
+            )
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)

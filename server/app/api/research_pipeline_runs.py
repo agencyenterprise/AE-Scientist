@@ -21,6 +21,7 @@ from app.models import (
     ResearchRunStageProgress,
 )
 from app.services import get_database
+from app.services.database import DatabaseManager
 from app.services.database.ideas import IdeaData
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRun,
@@ -30,6 +31,7 @@ from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import ExperimentNodeEvent, RunLogEvent, StageProgressEvent
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
+    fetch_pod_billing_summary,
     launch_research_pipeline_run,
     terminate_pod,
 )
@@ -51,6 +53,30 @@ class ResearchRunStopResponse(BaseModel):
     run_id: str
     status: str
     message: str
+
+
+def _record_pod_billing_event(
+    db: DatabaseManager,
+    *,
+    run_id: str,
+    pod_id: str,
+    context: str,
+) -> None:
+    try:
+        summary = fetch_pod_billing_summary(pod_id=pod_id)
+    except (RuntimeError, RunPodError) as exc:
+        logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
+        return
+    if summary is None:
+        return
+    metadata = dict(summary)
+    metadata["context"] = context
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="pod_billing_summary",
+        metadata=metadata,
+        occurred_at=datetime.now(timezone.utc),
+    )
 
 
 def _idea_version_to_payload(idea_data: IdeaData) -> Dict[str, object]:
@@ -395,6 +421,13 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
             raise HTTPException(
                 status_code=502, detail="Failed to terminate the research run pod."
             ) from exc
+        finally:
+            _record_pod_billing_event(
+                db,
+                run_id=run_id,
+                pod_id=pod_id,
+                context="user_stop",
+            )
     else:
         logger.info("Run %s has no pod_id; marking as stopped without pod termination.", run_id)
 
