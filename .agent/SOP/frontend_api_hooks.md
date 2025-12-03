@@ -529,7 +529,86 @@ const fetchWithCache = useCallback(async (key: string) => {
 
 ## React Query Integration
 
-The frontend uses React Query for server state management via `QueryProvider`:
+The frontend uses React Query for server state management via `QueryProvider`.
+
+### When to Use React Query vs useState/useEffect
+
+> Added from: research-history-home implementation (2025-12-03)
+
+**Use React Query (`useQuery`) when:**
+- Fetching read-only data from an API endpoint
+- Data should be cached and potentially shared across components
+- You want automatic background refetching on window focus
+- You need loading, error, and success states managed automatically
+- The component may mount/unmount frequently (caching prevents refetch)
+
+**Use useState/useEffect when:**
+- Managing purely local UI state (no API)
+- One-time data transformations
+- Side effects that aren't data fetching
+- Highly custom streaming scenarios (though `useSSEStream` is preferred)
+
+**Example - Simple Data Fetch (Recommended: React Query)**:
+
+```typescript
+// RECOMMENDED: React Query
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/shared/lib/api-client";
+
+export function useRecentItems() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["recent-items"],
+    queryFn: () => apiFetch<ItemsResponse>("/items/?limit=10"),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  return {
+    items: data?.items ?? [],
+    isLoading,
+    error: error instanceof Error ? error.message : null,
+    refetch,
+  };
+}
+```
+
+```typescript
+// AVOID: useState/useEffect for simple fetches
+// This pattern misses caching, deduplication, and standardized error handling
+import { useState, useEffect, useCallback } from "react";
+
+export function useRecentItems() {
+  const [items, setItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchItems = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiFetch("/items/?limit=10");
+      setItems(data.items);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  return { items, isLoading, error, refetch: fetchItems };
+}
+```
+
+### Stale Time Recommendations
+
+| Use Case | Stale Time | Rationale |
+|----------|------------|-----------|
+| Frequently changing data (home page feeds) | 30 seconds | Balance freshness vs performance |
+| Configuration/settings | 5 minutes | Rarely changes during session |
+| User profile | 1 minute | Moderate update frequency |
+| Search results | 0 (default) | Always fresh for new searches |
 
 ### QueryProvider Configuration
 

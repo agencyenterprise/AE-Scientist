@@ -323,6 +323,7 @@ Current features in the codebase:
 | `project-draft` | `src/features/project-draft/` | Project drafting with chat, diff viewer (30+ components) |
 | `input-pipeline` | `src/features/input-pipeline/` | Hypothesis creation form with model selection |
 | `model-selector` | `src/features/model-selector/` | Model selection dropdown UI |
+| `research` | `src/features/research/` | Research run management, history display, status utilities |
 | `search` | `src/features/search/` | Vector-based semantic search |
 | `dashboard` | `src/features/dashboard/` | Dashboard-specific components |
 | `layout` | `src/features/layout/` | Sidebar navigation |
