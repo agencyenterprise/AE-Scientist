@@ -75,7 +75,7 @@ def test_parse_idea_response_with_trailing_text() -> None:
     payload = _sample_payload()
     json_with_trailing = (
         json.dumps(payload)
-        + ' This includes a minor formatting issue at the end due to an accidental '
+        + " This includes a minor formatting issue at the end due to an accidental "
         'inclusion of extra characters ("]}'
     )
 

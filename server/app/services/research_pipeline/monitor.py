@@ -25,11 +25,13 @@ class ResearchPipelineMonitor:
         heartbeat_timeout_seconds: int,
         max_missed_heartbeats: int,
         startup_grace_seconds: int,
+        max_runtime_hours: int,
     ) -> None:
         self._poll_interval = poll_interval_seconds
         self._heartbeat_timeout = timedelta(seconds=heartbeat_timeout_seconds)
         self._max_missed_heartbeats = max_missed_heartbeats
         self._startup_grace = timedelta(seconds=startup_grace_seconds)
+        self._max_runtime = timedelta(hours=max_runtime_hours)
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         api_key = os.environ.get("RUNPOD_API_KEY")
@@ -105,6 +107,15 @@ class ResearchPipelineMonitor:
     def _handle_running_run(
         self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
     ) -> None:
+        runtime = now - run.created_at
+        if runtime > self._max_runtime:
+            self._fail_run(
+                db,
+                run,
+                f"Pipeline exceeded maximum runtime of {self._max_runtime.total_seconds() / 3600:.1f} hours.",
+            )
+            return
+
         if run.last_heartbeat_at is None:
             deadline = run.start_deadline_at
             if deadline is None:
@@ -246,10 +257,12 @@ DEFAULT_POLL_INTERVAL_SECONDS = _require_int("PIPELINE_MONITOR_POLL_INTERVAL_SEC
 DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = _require_int("PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS")
 DEFAULT_MAX_MISSED_HEARTBEATS = _require_int("PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS")
 DEFAULT_STARTUP_GRACE_SECONDS = _require_int("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
+DEFAULT_MAX_RUNTIME_HOURS = _require_int("PIPELINE_MONITOR_MAX_RUNTIME_HOURS")
 
 pipeline_monitor = ResearchPipelineMonitor(
     poll_interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS,
     heartbeat_timeout_seconds=DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
     max_missed_heartbeats=DEFAULT_MAX_MISSED_HEARTBEATS,
     startup_grace_seconds=DEFAULT_STARTUP_GRACE_SECONDS,
+    max_runtime_hours=DEFAULT_MAX_RUNTIME_HOURS,
 )
