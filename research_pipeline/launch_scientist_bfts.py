@@ -567,14 +567,17 @@ def run_plot_aggregation(
             figures_dir = Path(reports_base) / "figures" / run_dir_path.name
             if not figures_dir.exists():
                 raise FileNotFoundError(f"figures directory missing: {figures_dir}")
-            artifact_callback(
-                ArtifactSpec(
-                    artifact_type="plots_archive",
-                    path=figures_dir,
-                    packaging="zip",
-                    archive_name=f"{run_dir_path.name}-plots.zip",
+            plot_paths = sorted(p for p in figures_dir.glob("*.png") if p.is_file())
+            if not plot_paths:
+                logger.warning("No plot files found to upload in %s", figures_dir)
+            for plot_path in plot_paths:
+                artifact_callback(
+                    ArtifactSpec(
+                        artifact_type="plot",
+                        path=plot_path,
+                        packaging="file",
+                    )
                 )
-            )
         except Exception:
             logger.exception("Failed to record plots archive artifact for %s", run_dir_path)
         return True
