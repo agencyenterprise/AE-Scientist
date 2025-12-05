@@ -581,7 +581,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/experiment-node-completed": {
+    "/api/research-pipeline/events/substage-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -590,8 +590,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ingest Experiment Node Completed */
-        post: operations["ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post"];
+        /** Ingest Substage Completed */
+        post: operations["ingest_substage_completed_api_research_pipeline_events_substage_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1161,23 +1161,6 @@ export interface components {
              * @description Additional error details
              */
             detail?: string | null;
-        };
-        /** ExperimentNodeCompletedEvent */
-        ExperimentNodeCompletedEvent: {
-            /** Stage */
-            stage: string;
-            /** Node Id */
-            node_id?: string | null;
-            /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
-        };
-        /** ExperimentNodeCompletedPayload */
-        ExperimentNodeCompletedPayload: {
-            /** Run Id */
-            run_id: string;
-            event: components["schemas"]["ExperimentNodeCompletedEvent"];
         };
         /**
          * FileAttachment
@@ -1808,10 +1791,10 @@ export interface components {
              */
             logs?: components["schemas"]["ResearchRunLogEntry"][];
             /**
-             * Experiment Nodes
-             * @description Experiment node completion events
+             * Substage Events
+             * @description Sub-stage completion events
              */
-            experiment_nodes?: components["schemas"]["ResearchRunNodeEvent"][];
+            substage_events?: components["schemas"]["ResearchRunSubstageEvent"][];
             /**
              * Events
              * @description Audit events describing run-level lifecycle transitions
@@ -2063,36 +2046,6 @@ export interface components {
              */
             created_at: string;
         };
-        /** ResearchRunNodeEvent */
-        ResearchRunNodeEvent: {
-            /**
-             * Id
-             * @description Unique identifier of the node event
-             */
-            id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
-            /**
-             * Node Id
-             * @description Identifier of the node
-             */
-            node_id?: string | null;
-            /**
-             * Summary
-             * @description Summary payload stored in telemetry
-             */
-            summary: {
-                [key: string]: unknown;
-            };
-            /**
-             * Created At
-             * @description ISO timestamp of the event
-             */
-            created_at: string;
-        };
         /** ResearchRunStageProgress */
         ResearchRunStageProgress: {
             /**
@@ -2159,6 +2112,36 @@ export interface components {
             status: string;
             /** Message */
             message: string;
+        };
+        /** ResearchRunSubstageEvent */
+        ResearchRunSubstageEvent: {
+            /**
+             * Id
+             * @description Unique identifier of the sub-stage completion event
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Optional identifier associated with the sub-stage (reserved for future use)
+             */
+            node_id?: string | null;
+            /**
+             * Summary
+             * @description Summary payload stored for this sub-stage
+             */
+            summary: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * @description ISO timestamp of the event
+             */
+            created_at: string;
         };
         /**
          * ResearchRunSummary
@@ -2289,6 +2272,29 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["StageProgressEvent"];
+        };
+        /** SubstageCompletedEvent */
+        SubstageCompletedEvent: {
+            /** Stage */
+            stage: string;
+            /** Main Stage Number */
+            main_stage_number: number;
+            /** Substage Number */
+            substage_number: number;
+            /** Substage Name */
+            substage_name: string;
+            /** Reason */
+            reason: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** SubstageCompletedPayload */
+        SubstageCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["SubstageCompletedEvent"];
         };
         /**
          * SummaryResponse
@@ -3318,7 +3324,7 @@ export interface operations {
             };
         };
     };
-    ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post: {
+    ingest_substage_completed_api_research_pipeline_events_substage_completed_post: {
         parameters: {
             query?: never;
             header: {
@@ -3329,7 +3335,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExperimentNodeCompletedPayload"];
+                "application/json": components["schemas"]["SubstageCompletedPayload"];
             };
         };
         responses: {
