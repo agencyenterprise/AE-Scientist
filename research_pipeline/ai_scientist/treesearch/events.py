@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, Tuple
 
-EventKind = Literal["run_stage_progress", "run_log", "experiment_node_completed"]
+EventKind = Literal["run_stage_progress", "run_log", "substage_completed"]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
 
@@ -89,23 +89,39 @@ class RunLogEvent(BaseEvent):
 
 
 @dataclass(frozen=True)
-class ExperimentNodeCompletedEvent(BaseEvent):
-    stage: str
-    node_id: Optional[str]
+class SubstageCompletedEvent(BaseEvent):
+    """Event emitted when a sub-stage completes."""
+
+    stage: str  # Full stage identifier, e.g. "2_baseline_tuning_1_first_attempt"
+    main_stage_number: int
+    substage_number: int
+    substage_name: str
+    reason: str
     summary: Dict[str, Any]
 
     def type(self) -> str:
-        return "ai.experiment.node_completed"
+        return "ai.run.substage_completed"
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"stage": self.stage, "node_id": self.node_id, "summary": self.summary}
+        return {
+            "stage": self.stage,
+            "main_stage_number": self.main_stage_number,
+            "substage_number": self.substage_number,
+            "substage_name": self.substage_name,
+            "reason": self.reason,
+            "summary": self.summary,
+        }
 
     def persistence_record(self) -> PersistenceRecord:
+        # Persist a compact payload; detailed information lives in the summary.
         return (
-            "experiment_node_completed",
+            "substage_completed",
             {
                 "stage": self.stage,
-                "node_id": self.node_id,
+                "main_stage_number": self.main_stage_number,
+                "substage_number": self.substage_number,
+                "substage_name": self.substage_name,
+                "reason": self.reason,
                 "summary": self.summary,
             },
         )

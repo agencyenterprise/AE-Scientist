@@ -40,7 +40,8 @@ class WebhookClient:
     _EVENT_PATHS: dict[EventKind, str] = {
         "run_stage_progress": "/stage-progress",
         "run_log": "",
-        "experiment_node_completed": "/experiment-node-completed",
+        # Sub-stage completion events are also forwarded to the web server.
+        "substage_completed": "/substage-completed",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
@@ -237,8 +238,8 @@ class EventPersistenceManager:
                 self._insert_stage_progress(connection=connection, payload=event.data)
             elif event.kind == "run_log":
                 self._insert_run_log(connection=connection, payload=event.data)
-            else:
-                self._insert_node_completed(connection=connection, payload=event.data)
+            elif event.kind == "substage_completed":
+                self._insert_substage_completed(connection=connection, payload=event.data)
         if self._webhook_client is not None:
             self._webhook_client.publish(kind=event.kind, payload=event.data)
 
@@ -294,25 +295,23 @@ class EventPersistenceManager:
                 ),
             )
 
-    def _insert_node_completed(
+    def _insert_substage_completed(
         self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
     ) -> None:
         summary = payload.get("summary") or {}
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO rp_experiment_node_completed_events (
+                INSERT INTO rp_substage_completed_events (
                     run_id,
                     stage,
-                    node_id,
                     summary
                 )
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s)
                 """,
                 (
                     self._run_id,
                     payload.get("stage"),
-                    payload.get("node_id"),
                     psycopg2.extras.Json(summary),
                 ),
             )
@@ -336,7 +335,7 @@ class EventQueueEmitter:
         if record is None:
             return
         kind, payload_data = record
-        if kind == "experiment_node_completed":
+        if kind == "substage_completed":
             payload_data = {
                 **payload_data,
                 "summary": _sanitize_payload(payload_data.get("summary") or {}),

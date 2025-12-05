@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 from pydantic import BaseModel
 
 from ai_scientist.llm import structured_query_with_schema
-from ai_scientist.treesearch.events import BaseEvent, RunLogEvent
+from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, SubstageCompletedEvent
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
@@ -594,6 +594,34 @@ Your research idea:\n\n
             )
 
             if substage_complete:
+                # Emit a sub-stage completion event with a lightweight summary
+                try:
+                    journal = self.journals[current_substage.name]
+                    best_node = journal.get_best_node()
+                    summary: Dict[str, Any] = {
+                        "goals": current_substage.goals,
+                        "total_nodes": len(journal.nodes),
+                        "buggy_nodes": len(journal.buggy_nodes),
+                        "good_nodes": len(journal.good_nodes),
+                        "best_metric": (
+                            str(best_node.metric) if best_node and best_node.metric else None
+                        ),
+                        "feedback": substage_feedback,
+                    }
+                    self.event_callback(
+                        SubstageCompletedEvent(
+                            stage=current_substage.name,
+                            main_stage_number=current_substage.number,
+                            substage_number=current_substage.substage_number,
+                            substage_name=current_substage.substage_name,
+                            reason=substage_feedback,
+                            summary=summary,
+                        )
+                    )
+                except Exception:
+                    # Best-effort telemetry; never block progression on event errors
+                    logger.exception("Failed to emit SubstageCompletedEvent")
+
                 # Create next sub-stage
                 next_substage = self._create_next_substage(
                     current_substage=current_substage,

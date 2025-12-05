@@ -69,8 +69,8 @@ from app.models.research_pipeline import (
     ResearchRunListItem,
     ResearchRunListResponse,
     ResearchRunLogEntry,
-    ResearchRunNodeEvent,
     ResearchRunStageProgress,
+    ResearchRunSubstageEvent,
 )
 
 __all__ = [
@@ -83,7 +83,7 @@ __all__ = [
     "ResearchRunInfo",
     "ResearchRunStageProgress",
     "ResearchRunLogEntry",
-    "ResearchRunNodeEvent",
+    "ResearchRunSubstageEvent",
     "ResearchRunEvent",
     "ResearchRunArtifactMetadata",
     "ResearchRunDetailsResponse",

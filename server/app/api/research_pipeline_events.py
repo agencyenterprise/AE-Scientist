@@ -38,15 +38,18 @@ class StageProgressPayload(BaseModel):
     event: StageProgressEvent
 
 
-class ExperimentNodeCompletedEvent(BaseModel):
+class SubstageCompletedEvent(BaseModel):
     stage: str
-    node_id: Optional[str] = None
+    main_stage_number: int
+    substage_number: int
+    substage_name: str
+    reason: str
     summary: Dict[str, Any]
 
 
-class ExperimentNodeCompletedPayload(BaseModel):
+class SubstageCompletedPayload(BaseModel):
     run_id: str
-    event: ExperimentNodeCompletedEvent
+    event: SubstageCompletedEvent
 
 
 class RunStartedPayload(BaseModel):
@@ -127,19 +130,19 @@ def ingest_stage_progress(
     )
 
 
-@router.post("/experiment-node-completed", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_experiment_node_completed(
-    payload: ExperimentNodeCompletedPayload,
+@router.post("/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_substage_completed(
+    payload: SubstageCompletedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     event = payload.event
-    summary_keys = ", ".join(event.summary.keys())
     logger.info(
-        "RP node completed: run=%s stage=%s node_id=%s summary_keys=[%s]",
+        "RP sub-stage completed: run=%s stage=%s substage=%s-%s reason=%s",
         payload.run_id,
         event.stage,
-        event.node_id,
-        summary_keys,
+        f"{event.main_stage_number}.{event.substage_number}",
+        event.substage_name,
+        event.reason,
     )
 
 

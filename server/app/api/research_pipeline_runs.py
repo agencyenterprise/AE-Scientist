@@ -18,8 +18,8 @@ from app.models import (
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
-    ResearchRunNodeEvent,
     ResearchRunStageProgress,
+    ResearchRunSubstageEvent,
 )
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -29,7 +29,7 @@ from app.services.database.research_pipeline_runs import (
     ResearchPipelineRunEvent,
 )
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
-from app.services.database.rp_events import ExperimentNodeEvent, RunLogEvent, StageProgressEvent
+from app.services.database.rp_events import RunLogEvent, StageProgressEvent, SubstageCompletedEvent
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -276,11 +276,11 @@ def _run_event_to_model(event: ResearchPipelineRunEvent) -> ResearchRunEvent:
     )
 
 
-def _node_event_to_model(event: ExperimentNodeEvent) -> ResearchRunNodeEvent:
-    return ResearchRunNodeEvent(
+def _node_event_to_model(event: SubstageCompletedEvent) -> ResearchRunSubstageEvent:
+    return ResearchRunSubstageEvent(
         id=event.id,
         stage=event.stage,
-        node_id=event.node_id,
+        node_id=None,
         summary=event.summary,
         created_at=event.created_at.isoformat(),
     )
@@ -379,8 +379,8 @@ def get_research_run_details(
         _stage_event_to_model(event) for event in db.list_stage_progress_events(run_id=run_id)
     ]
     log_events = [_log_event_to_model(event) for event in db.list_run_log_events(run_id=run_id)]
-    node_events = [
-        _node_event_to_model(event) for event in db.list_experiment_node_events(run_id=run_id)
+    substage_events = [
+        _node_event_to_model(event) for event in db.list_substage_completed_events(run_id=run_id)
     ]
     artifacts = [
         _artifact_to_model(
@@ -398,7 +398,7 @@ def get_research_run_details(
         run=_run_to_info(run),
         stage_progress=stage_events,
         logs=log_events,
-        experiment_nodes=node_events,
+        substage_events=substage_events,
         events=run_events,
         artifacts=artifacts,
     )
@@ -584,7 +584,7 @@ async def stream_research_run_events(
 
         stage_events = db.list_stage_progress_events(run_id)
         log_events = db.list_run_log_events(run_id)
-        node_events = db.list_experiment_node_events(run_id)
+        substage_events = db.list_substage_completed_events(run_id)
 
         initial_data = {
             "type": "initial",
@@ -592,7 +592,7 @@ async def stream_research_run_events(
                 "run": _run_to_info(run).model_dump(),
                 "stage_progress": [_stage_event_to_model(e).model_dump() for e in stage_events],
                 "logs": [_log_event_to_model(e).model_dump() for e in log_events],
-                "experiment_nodes": [_node_event_to_model(e).model_dump() for e in node_events],
+                "substage_events": [_node_event_to_model(e).model_dump() for e in substage_events],
                 "artifacts": [
                     _artifact_to_model(a, conversation_id, run_id).model_dump() for a in artifacts
                 ],

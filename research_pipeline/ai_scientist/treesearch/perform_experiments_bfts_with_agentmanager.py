@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from .agent_manager import AgentManager
-from .events import BaseEvent, ExperimentNodeCompletedEvent, RunLogEvent, RunStageProgressEvent
+from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .interpreter import ExecutionResult
 from .journal import Journal
 from .log_summarization import overall_summarize
@@ -94,7 +94,6 @@ def perform_experiments_bfts(
             notes_dir.mkdir(parents=True, exist_ok=True)
 
             # Save latest node summary
-            latest_node_summary = None
             latest_node = None
             if journal.nodes:
                 latest_node = journal.nodes[-1]
@@ -102,7 +101,6 @@ def perform_experiments_bfts(
                     summary = latest_node._agent._generate_node_summary(latest_node)
                     with open(notes_dir / f"node_{latest_node.id}_summary.json", "w") as f:
                         json.dump(summary, f, indent=2)
-                    latest_node_summary = summary
 
             # Generate and save stage progress summary
             best_node = journal.get_best_node()
@@ -197,16 +195,6 @@ def perform_experiments_bfts(
                     RunLogEvent(
                         message=f"Found {good_nodes_count} working implementation(s), continuing...",
                         level="info",
-                    )
-                )
-
-            # Emit node completion if we have a latest node
-            if latest_node is not None and latest_node_summary:
-                event_callback(
-                    ExperimentNodeCompletedEvent(
-                        stage=stage.name,
-                        node_id=latest_node.id if hasattr(latest_node, "id") else None,
-                        summary=latest_node_summary,
                     )
                 )
 
