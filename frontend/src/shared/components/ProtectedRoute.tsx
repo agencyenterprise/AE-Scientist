@@ -30,12 +30,12 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   if (isLoading) {
     return (
       fallback || (
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
           <div className="sm:mx-auto sm:w-full sm:max-w-md">
             <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
-            <p className="mt-4 text-center text-gray-600">Loading...</p>
+            <p className="mt-4 text-center text-muted-foreground">Loading...</p>
           </div>
         </div>
       )

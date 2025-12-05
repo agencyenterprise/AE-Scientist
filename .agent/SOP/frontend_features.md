@@ -620,6 +620,113 @@ interface UseMyHookReturn {
 
 ---
 
+## Filter UI Pattern
+
+> Added from: log-level-filter implementation (2025-12-04)
+
+When adding filter buttons to a component (e.g., log level filters, status filters), follow this pattern:
+
+### Configuration Object
+
+Use a Record to map filter values to their display properties. This ensures explicit Tailwind classes (required for Tailwind v4):
+
+```typescript
+type LogLevelFilter = "all" | "info" | "warn" | "error";
+
+const LOG_FILTER_CONFIG: Record<LogLevelFilter, { label: string; activeClass: string }> = {
+  all: { label: "all", activeClass: "bg-slate-500/15 text-slate-300" },
+  info: { label: "info", activeClass: "bg-sky-500/15 text-sky-400" },
+  warn: { label: "warn", activeClass: "bg-amber-500/15 text-amber-400" },
+  error: { label: "error", activeClass: "bg-red-500/15 text-red-400" },
+};
+
+const LOG_FILTER_OPTIONS: LogLevelFilter[] = ["all", "info", "warn", "error"];
+```
+
+### Header with Inline Filters
+
+Place filter buttons in the card header using flexbox `justify-between`:
+
+```typescript
+<div className="mb-4 flex items-center justify-between">
+  {/* Left side: Icon, Title, Count */}
+  <div className="flex items-center gap-2">
+    <Terminal className="h-5 w-5 text-slate-400" />
+    <h2 className="text-lg font-semibold text-white">Logs</h2>
+    <span className="text-sm text-slate-400">
+      ({filteredLogs.length}{activeFilter !== "all" ? `/${logs.length}` : ""})
+    </span>
+  </div>
+
+  {/* Right side: Filter Buttons */}
+  <div className="flex items-center gap-1" role="group" aria-label="Log level filter">
+    {LOG_FILTER_OPTIONS.map(option => (
+      <button
+        key={option}
+        type="button"
+        onClick={() => setActiveFilter(option)}
+        aria-pressed={activeFilter === option}
+        className={cn(
+          "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+          activeFilter === option
+            ? LOG_FILTER_CONFIG[option].activeClass
+            : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+        )}
+      >
+        {LOG_FILTER_CONFIG[option].label}
+      </button>
+    ))}
+  </div>
+</div>
+```
+
+### State and Filtering
+
+Use `useState` for filter state and `useMemo` for derived filtered data:
+
+```typescript
+const [activeFilter, setActiveFilter] = useState<LogLevelFilter>("all");
+
+const filteredLogs = useMemo(() => {
+  if (activeFilter === "all") return logs;
+  return logs.filter(log => {
+    const level = log.level.toLowerCase();
+    if (activeFilter === "warn") {
+      return level === "warn" || level === "warning";
+    }
+    return level === activeFilter;
+  });
+}, [logs, activeFilter]);
+```
+
+### Empty State with Filter Context
+
+Show different messages based on whether filtering caused the empty state:
+
+```typescript
+{filteredLogs.length === 0 ? (
+  <div className="flex h-full items-center justify-center">
+    <span className="text-slate-400">
+      {activeFilter === "all" ? "No logs yet" : `No ${activeFilter}-level logs`}
+    </span>
+  </div>
+) : (
+  // Render filtered items
+)}
+```
+
+### Accessibility Requirements
+
+- Use `role="group"` on the button container
+- Add `aria-label` describing the filter group (e.g., "Log level filter")
+- Add `aria-pressed` to each button indicating current selection state
+
+### Reference Implementation
+
+See `frontend/src/features/research/components/run-detail/research-logs-list.tsx` for a complete example.
+
+---
+
 ## Verification
 
 1. Import the component in a page:

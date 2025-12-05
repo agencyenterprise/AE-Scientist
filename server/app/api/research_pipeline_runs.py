@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user
 from app.models import (
+    ArtifactPresignedUrlResponse,
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
     ResearchRunEvent,
@@ -509,6 +510,57 @@ def download_research_run_artifact(
         logger.exception("Failed to generate download URL for artifact %s", artifact_id)
         raise HTTPException(status_code=500, detail="Failed to generate download URL") from exc
     return RedirectResponse(url=download_url)
+
+
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign",
+    response_model=ArtifactPresignedUrlResponse,
+)
+def get_artifact_presigned_url(
+    conversation_id: int,
+    run_id: str,
+    artifact_id: int,
+    request: Request,
+) -> ArtifactPresignedUrlResponse:
+    """Generate presigned S3 URL for artifact download."""
+
+    # Validation
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    # Auth & ownership checks (same as download endpoint)
+    user = get_current_user(request)
+    db = get_database()
+
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    artifact = db.get_run_artifact(artifact_id)
+    if artifact is None or artifact.run_id != run_id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # Generate presigned URL
+    s3 = get_s3_service()
+    expires_in = 3600
+    try:
+        download_url = s3.generate_download_url(artifact.s3_key, expires_in=expires_in)
+    except Exception as exc:
+        logger.exception("Failed to generate presigned URL for artifact %s", artifact_id)
+        raise HTTPException(status_code=500, detail="Failed to generate download URL") from exc
+
+    return ArtifactPresignedUrlResponse(
+        url=download_url,
+        expires_in=expires_in,
+        artifact_id=artifact.id,
+        filename=artifact.filename,
+    )
 
 
 SSE_POLL_INTERVAL_SECONDS = 2.0

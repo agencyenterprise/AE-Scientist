@@ -104,6 +104,15 @@ class ResearchRunArtifactMetadata(BaseModel):
     download_path: str = Field(..., description="API path to initiate a download")
 
 
+class ArtifactPresignedUrlResponse(BaseModel):
+    """Response containing presigned S3 download URL."""
+
+    url: str = Field(..., description="Presigned S3 download URL (valid for 1 hour)")
+    expires_in: int = Field(..., description="URL expiration time in seconds")
+    artifact_id: int = Field(..., description="Artifact identifier")
+    filename: str = Field(..., description="Original filename")
+
+
 class ResearchRunDetailsResponse(BaseModel):
     run: ResearchRunInfo = Field(..., description="Metadata describing the run")
     stage_progress: List[ResearchRunStageProgress] = Field(

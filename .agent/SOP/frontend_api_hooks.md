@@ -859,6 +859,142 @@ export function useChatStreaming(
 
 ---
 
+## S3 Artifact Download Pattern
+
+> Added from: frontend-final-pdf-banner implementation (2025-12-04)
+
+For downloading files from S3 with authentication/authorization validation, use the presigned URL pattern. This avoids CORS and browser redirect handling issues.
+
+### Problem Solved
+HTTP 307 redirects to presigned S3 URLs can fail with AccessDenied errors due to browser handling and CORS issues. The solution is to return the presigned URL as JSON, then redirect the browser directly.
+
+### Implementation Pattern
+
+**Backend Endpoint** (returns presigned URL as JSON):
+```python
+# server/app/api/my_feature.py
+from app.models import ArtifactPresignedUrlResponse
+
+@router.get("/{artifact_id}/presign")
+def get_artifact_presigned_url(
+    artifact_id: int,
+    request: Request
+) -> ArtifactPresignedUrlResponse:
+    user = get_current_user(request)
+
+    # Validate ownership/access
+    artifact = db.get_artifact(artifact_id)
+    if not artifact or artifact.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # Generate presigned URL using existing S3 service
+    s3 = get_s3_service()
+    download_url = s3.generate_download_url(artifact.s3_key, expires_in=3600)
+
+    return ArtifactPresignedUrlResponse(
+        url=download_url,
+        expires_in=3600,
+        artifact_id=artifact_id,
+        filename=artifact.filename
+    )
+```
+
+**Frontend Hook** (fetches URL and redirects):
+```typescript
+// features/my-feature/hooks/useArtifactDownload.ts
+import { useState } from "react";
+import { apiFetch } from "@/shared/lib/api-client";
+
+interface ArtifactPresignedUrlResponse {
+  url: string;
+  expires_in: number;
+  artifact_id: number;
+  filename: string;
+}
+
+interface UseArtifactDownloadReturn {
+  downloadArtifact: (artifactId: number) => Promise<void>;
+  isDownloading: boolean;
+  downloadingArtifactId: number | null;  // For per-item loading states
+  error: string | null;
+}
+
+export function useArtifactDownload(baseUrl: string): UseArtifactDownloadReturn {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingArtifactId, setDownloadingArtifactId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const downloadArtifact = async (artifactId: number) => {
+    setIsDownloading(true);
+    setDownloadingArtifactId(artifactId);
+    setError(null);
+
+    try {
+      // Fetch presigned URL from backend
+      const response = await apiFetch<ArtifactPresignedUrlResponse>(
+        `${baseUrl}/${artifactId}/presign`
+      );
+
+      // Redirect browser to presigned URL (triggers download)
+      window.location.href = response.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download");
+    } finally {
+      setIsDownloading(false);
+      setDownloadingArtifactId(null);
+    }
+  };
+
+  return { downloadArtifact, isDownloading, downloadingArtifactId, error };
+}
+```
+
+**Component Usage** (button with loading state):
+```typescript
+function ArtifactsList({ artifacts, baseUrl }) {
+  const { downloadArtifact, isDownloading, downloadingArtifactId, error } =
+    useArtifactDownload(baseUrl);
+
+  return (
+    <ul>
+      {artifacts.map(artifact => (
+        <li key={artifact.id}>
+          <span>{artifact.filename}</span>
+          <button
+            onClick={() => downloadArtifact(artifact.id)}
+            disabled={isDownloading}
+          >
+            {downloadingArtifactId === artifact.id ? (
+              <span>Downloading...</span>
+            ) : (
+              <span>Download</span>
+            )}
+          </button>
+        </li>
+      ))}
+      {error && <div className="text-red-500">{error}</div>}
+    </ul>
+  );
+}
+```
+
+### When to Use
+
+- Downloading files from S3 that require authentication
+- User-initiated downloads (not background fetches)
+- When you need ownership/access validation before providing the URL
+- Avoiding CORS issues with redirect-based downloads
+
+### Key Points
+
+1. **Use button, not anchor link**: The download is async (needs API call first)
+2. **Track artifact ID**: Enables per-item loading indicators in lists
+3. **Disable all during download**: Prevents concurrent downloads
+4. **Show error in UI**: Don't fail silently
+5. **Use `window.location.href`**: Triggers browser's native download handling
+
+---
+
 ## Context-Based Hook Pattern
 
 For shared state across components using React Context:

@@ -62,6 +62,7 @@ from app.models.llm_prompts import (
     LLMProvidersResponse,
 )
 from app.models.research_pipeline import (
+    ArtifactPresignedUrlResponse,
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
     ResearchRunEvent,
@@ -86,6 +87,7 @@ __all__ = [
     "ResearchRunNodeEvent",
     "ResearchRunEvent",
     "ResearchRunArtifactMetadata",
+    "ArtifactPresignedUrlResponse",
     "ResearchRunDetailsResponse",
     "ResearchRunListItem",
     "ResearchRunListResponse",

@@ -199,6 +199,31 @@ import { AuthContext } from "@/shared/contexts/AuthContext"
 - **Global styles**: `app/globals.css`
 - **Utility function**: Use `cn()` from `@/lib/utils` for conditional classes
 
+### Tailwind v4: Explicit Class Requirement
+
+> Added from: log-level-filter implementation (2025-12-04)
+
+**IMPORTANT**: Tailwind v4 scans files at build time and only includes classes it finds as complete strings. Dynamic class names using template literals will NOT work.
+
+```typescript
+// WRONG - Will NOT work with Tailwind v4!
+className={`bg-${color}-500/15 text-${color}-400`}
+
+// CORRECT - Use explicit class mappings
+const COLOR_CONFIG: Record<ColorType, { activeClass: string }> = {
+  info: { activeClass: "bg-sky-500/15 text-sky-400" },
+  warn: { activeClass: "bg-amber-500/15 text-amber-400" },
+  error: { activeClass: "bg-red-500/15 text-red-400" },
+};
+
+// Then use:
+className={COLOR_CONFIG[colorType].activeClass}
+```
+
+This pattern is used throughout the codebase, including:
+- `research-utils.tsx` - `getStatusBadge()` function
+- `research-logs-list.tsx` - `LOG_FILTER_CONFIG` for filter buttons
+
 ### Component Example
 
 ```typescript

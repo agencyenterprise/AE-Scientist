@@ -1,71 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { config } from "@/shared/lib/config";
+import type {
+  ResearchRunInfo,
+  StageProgress,
+  LogEntry,
+  ArtifactMetadata,
+  ResearchRunDetails,
+} from "@/types/research";
 
-interface ResearchRunInfo {
-  run_id: string;
-  status: string;
-  idea_id: number;
-  idea_version_id: number;
-  pod_id: string | null;
-  pod_name: string | null;
-  gpu_type: string | null;
-  public_ip: string | null;
-  ssh_port: string | null;
-  pod_host_id: string | null;
-  error_message: string | null;
-  last_heartbeat_at: string | null;
-  heartbeat_failures: number;
-  created_at: string;
-  updated_at: string;
-  start_deadline_at: string | null;
-}
-
-interface StageProgress {
-  stage: string;
-  iteration: number;
-  max_iterations: number;
-  progress: number;
-  total_nodes: number;
-  buggy_nodes: number;
-  good_nodes: number;
-  best_metric: string | null;
-  eta_s: number | null;
-  latest_iteration_time_s: number | null;
-  created_at: string;
-}
-
-interface LogEntry {
-  id: number;
-  level: string;
-  message: string;
-  created_at: string;
-}
-
-interface NodeEvent {
-  id: number;
-  stage: string;
-  node_id: string | null;
-  summary: Record<string, unknown>;
-  created_at: string;
-}
-
-interface ArtifactMetadata {
-  id: number;
-  artifact_type: string;
-  filename: string;
-  file_size: number;
-  file_type: string;
-  created_at: string;
-  download_path: string;
-}
-
-export interface ResearchRunDetails {
-  run: ResearchRunInfo;
-  stage_progress: StageProgress[];
-  logs: LogEntry[];
-  experiment_nodes: NodeEvent[];
-  artifacts: ArtifactMetadata[];
-}
+export type { ResearchRunDetails };
 
 interface SSEEvent {
   type: string;
