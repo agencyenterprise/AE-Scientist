@@ -1101,10 +1101,20 @@ def perform_writeup(
             logger.info(f"Compiling PDF for reflection {i + 1}...")
             compile_latex(latex_folder, reflection_pdf)
 
-            review_img_cap_ref = perform_imgs_cap_ref_review(
+            review_img_cap_ref_models = perform_imgs_cap_ref_review(
                 model=model,
                 pdf_path=reflection_pdf,
                 temperature=temperature,
+            )
+            review_img_cap_ref = json.dumps(
+                [
+                    {
+                        "figure_name": item.figure_name,
+                        "review": item.review.model_dump(by_alias=True),
+                    }
+                    for item in review_img_cap_ref_models
+                ],
+                indent=2,
             )
 
             # Detect duplicate figures between main text and appendix

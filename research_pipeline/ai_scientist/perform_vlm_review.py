@@ -78,6 +78,11 @@ class ImageReview(BaseModel):
     )
 
 
+class FigureImageCaptionRefReview(BaseModel):
+    figure_name: str = Field(..., description="Normalized identifier for the figure.")
+    review: ImageCaptionRefReview
+
+
 img_cap_ref_review_prompt = """The abstract of the paper is:
 
 {abstract}
@@ -347,7 +352,7 @@ def generate_vlm_img_cap_ref_review(
     abstract: str,
     model: str,
     temperature: float,
-) -> Dict[str, Any] | None:
+) -> ImageCaptionRefReview | None:
     prompt = img_cap_ref_review_prompt.format(
         abstract=abstract,
         caption=img["caption"],
@@ -365,7 +370,7 @@ def generate_vlm_img_cap_ref_review(
     except Exception:
         logger.exception("Failed to obtain structured VLM caption/reference review.")
         return None
-    return parsed.model_dump(by_alias=True)
+    return ImageCaptionRefReview.model_validate(parsed.model_dump())
 
 
 def generate_vlm_img_review(
@@ -393,7 +398,7 @@ def perform_imgs_cap_ref_review(
     model: str,
     pdf_path: str,
     temperature: float,
-) -> Dict[str, Any]:
+) -> List[FigureImageCaptionRefReview]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -402,7 +407,7 @@ def perform_imgs_cap_ref_review(
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
-    img_reviews: Dict[str, Any] = {}
+    img_reviews: List[FigureImageCaptionRefReview] = []
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
         review = generate_vlm_img_cap_ref_review(
@@ -411,7 +416,10 @@ def perform_imgs_cap_ref_review(
             model=model,
             temperature=temperature,
         )
-        img_reviews[img["img_name"]] = review
+        if review is not None:
+            img_reviews.append(
+                FigureImageCaptionRefReview(figure_name=img["img_name"], review=review)
+            )
     return img_reviews
 
 
