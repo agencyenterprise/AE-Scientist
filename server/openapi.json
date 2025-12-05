@@ -1638,6 +1638,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/gpu-shortage": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Gpu Shortage",
+        "operationId": "ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GPUShortagePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [
@@ -1824,6 +1869,67 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Artifact Presigned Url",
+        "description": "Generate presigned S3 URL for artifact download.",
+        "operationId": "get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPresignedUrlResponse"
+                }
               }
             }
           },
@@ -2082,6 +2188,39 @@
   },
   "components": {
     "schemas": {
+      "ArtifactPresignedUrlResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Presigned S3 download URL (valid for 1 hour)"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "URL expiration time in seconds"
+          },
+          "artifact_id": {
+            "type": "integer",
+            "title": "Artifact Id",
+            "description": "Artifact identifier"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_in",
+          "artifact_id",
+          "filename"
+        ],
+        "title": "ArtifactPresignedUrlResponse",
+        "description": "Response containing presigned S3 download URL."
+      },
       "AuthStatus": {
         "properties": {
           "authenticated": {
@@ -2736,6 +2875,40 @@
         ],
         "title": "FileUploadResponse",
         "description": "File upload response."
+      },
+      "GPUShortagePayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "required_gpus": {
+            "type": "integer",
+            "title": "Required Gpus"
+          },
+          "available_gpus": {
+            "type": "integer",
+            "title": "Available Gpus"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "required_gpus",
+          "available_gpus"
+        ],
+        "title": "GPUShortagePayload"
       },
       "HTTPValidationError": {
         "properties": {

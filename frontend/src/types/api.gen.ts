@@ -649,6 +649,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/gpu-shortage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Gpu Shortage */
+        post: operations["ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run": {
         parameters: {
             query?: never;
@@ -709,6 +726,26 @@ export interface paths {
         };
         /** Download Research Run Artifact */
         get: operations["download_research_run_artifact_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact Presigned Url
+         * @description Generate presigned S3 URL for artifact download.
+         */
+        get: operations["get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -870,6 +907,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ArtifactPresignedUrlResponse
+         * @description Response containing presigned S3 download URL.
+         */
+        ArtifactPresignedUrlResponse: {
+            /**
+             * Url
+             * @description Presigned S3 download URL (valid for 1 hour)
+             */
+            url: string;
+            /**
+             * Expires In
+             * @description URL expiration time in seconds
+             */
+            expires_in: number;
+            /**
+             * Artifact Id
+             * @description Artifact identifier
+             */
+            artifact_id: number;
+            /**
+             * Filename
+             * @description Original filename
+             */
+            filename: string;
+        };
         /**
          * AuthStatus
          * @description Authentication status response.
@@ -1262,6 +1325,17 @@ export interface components {
              * @description Success message
              */
             message: string;
+        };
+        /** GPUShortagePayload */
+        GPUShortagePayload: {
+            /** Run Id */
+            run_id: string;
+            /** Required Gpus */
+            required_gpus: number;
+            /** Available Gpus */
+            available_gpus: number;
+            /** Message */
+            message?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3456,6 +3530,39 @@ export interface operations {
             };
         };
     };
+    ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GPUShortagePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post: {
         parameters: {
             query?: never;
@@ -3571,6 +3678,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+                artifact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPresignedUrlResponse"];
                 };
             };
             /** @description Validation Error */

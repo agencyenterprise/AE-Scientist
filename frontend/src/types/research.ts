@@ -104,11 +104,10 @@ export interface NodeSummary {
   metric?: string | null;
 }
 
-export interface NodeEventApi {
+export interface SubstageEventApi {
   id: number;
   stage: string;
-  node_id: string | null;
-  summary: NodeSummary | Record<string, unknown>; // Allow both typed and legacy format
+  summary: NodeSummary | Record<string, unknown>; // Summary payload stored for this sub-stage
   created_at: string;
 }
 
@@ -126,7 +125,7 @@ export interface ResearchRunDetailsApi {
   run: ResearchRunInfoApi;
   stage_progress: StageProgressApi[];
   logs: LogEntryApi[];
-  experiment_nodes: NodeEventApi[];
+  substage_events: SubstageEventApi[];
   artifacts: ArtifactMetadataApi[];
 }
 
@@ -171,11 +170,10 @@ export interface LogEntry {
   created_at: string;
 }
 
-export interface NodeEvent {
+export interface SubstageEvent {
   id: number;
   stage: string;
-  node_id: string | null;
-  summary: NodeSummary | Record<string, unknown>; // Allow both typed and legacy format
+  summary: NodeSummary | Record<string, unknown>; // Summary payload stored for this sub-stage
   created_at: string;
 }
 
@@ -200,6 +198,6 @@ export interface ResearchRunDetails {
   run: ResearchRunInfo;
   stage_progress: StageProgress[];
   logs: LogEntry[];
-  experiment_nodes: NodeEvent[];
+  substage_events: SubstageEvent[];
   artifacts: ArtifactMetadata[];
 }
