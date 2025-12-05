@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from .agent_manager import AgentManager
-from .events import BaseEvent, ExperimentNodeCompletedEvent, RunLogEvent, RunStageProgressEvent
+from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .interpreter import ExecutionResult
 from .journal import Journal
 from .log_summarization import overall_summarize
@@ -73,6 +73,10 @@ def perform_experiments_bfts(
     # Track iteration timing for smart ETA calculation
     iteration_start_times: list[float] = []
     iteration_durations: list[float] = []
+    # Track per-stage iteration state to avoid duplicate progress events and
+    # to ensure iteration counts start from 1 for each main stage.
+    last_reported_iteration_by_stage: dict[str, int] = {}
+    baseline_nodes_by_stage: dict[str, int] = {}
 
     def step_callback(stage: StageMeta, journal: Journal) -> None:
         # Persist progress snapshot and emit progress events after each step
@@ -90,7 +94,6 @@ def perform_experiments_bfts(
             notes_dir.mkdir(parents=True, exist_ok=True)
 
             # Save latest node summary
-            latest_node_summary = None
             latest_node = None
             if journal.nodes:
                 latest_node = journal.nodes[-1]
@@ -98,7 +101,6 @@ def perform_experiments_bfts(
                     summary = latest_node._agent._generate_node_summary(latest_node)
                     with open(notes_dir / f"node_{latest_node.id}_summary.json", "w") as f:
                         json.dump(summary, f, indent=2)
-                    latest_node_summary = summary
 
             # Generate and save stage progress summary
             best_node = journal.get_best_node()
@@ -120,16 +122,23 @@ def perform_experiments_bfts(
             # Save the run as before
             save_run(cfg, journal, stage_name=f"stage_{stage.name}")
 
-            # ALWAYS emit progress - show actual work being done
-            # Use total nodes as iteration count so progress shows even when all buggy,
-            # but clamp displayed iteration to max_iterations to avoid "Step N/(N-1)" logs.
-            current_iteration = len(journal.nodes)
-            iteration_display = min(current_iteration, stage.max_iterations)
-            progress = (
-                max(0.0, min(current_iteration / stage.max_iterations, 1.0))
-                if stage.max_iterations > 0
-                else 0.0
-            )
+            # ALWAYS emit progress - show actual work being done.
+            # Derive an effective iteration count for this stage that:
+            # - Ignores seed nodes (multi-seed eval and aggregation nodes)
+            # - For stages > 1, treats the single carried-over best node from the
+            #   previous stage as baseline (not counted as a new iteration).
+            non_seed_nodes = [n for n in journal.nodes if not n.is_seed_node]
+            if stage.name not in baseline_nodes_by_stage:
+                baseline_nodes_by_stage[stage.name] = 0 if stage.number == 1 else 1
+            baseline = baseline_nodes_by_stage[stage.name]
+            effective_iteration = max(len(non_seed_nodes) - baseline, 0)
+
+            if stage.max_iterations > 0:
+                iteration_display = min(effective_iteration, stage.max_iterations)
+                progress = max(0.0, min(effective_iteration / stage.max_iterations, 1.0))
+            else:
+                iteration_display = effective_iteration
+                progress = 0.0
 
             # Calculate smart ETA using moving average of recent iterations
             eta_s = None
@@ -137,7 +146,7 @@ def perform_experiments_bfts(
                 # Use last 5 iterations (or fewer if not enough data)
                 recent_durations = iteration_durations[-5:]
                 avg_duration = sum(recent_durations) / len(recent_durations)
-                remaining_iterations = max(stage.max_iterations - current_iteration, 0)
+                remaining_iterations = max(stage.max_iterations - effective_iteration, 0)
                 eta_s = int(remaining_iterations * avg_duration)
 
             # Get latest node execution time for display
@@ -149,21 +158,29 @@ def perform_experiments_bfts(
             ):
                 latest_exec_time_s = int(latest_node.exec_time)
 
-            # Emit progress with the actual stage name to reflect current substage accurately
-            event_callback(
-                RunStageProgressEvent(
-                    stage=stage.name,
-                    iteration=iteration_display,
-                    max_iterations=stage.max_iterations,
-                    progress=progress,
-                    total_nodes=len(journal.nodes),
-                    buggy_nodes=len(journal.buggy_nodes),
-                    good_nodes=good_nodes_count,
-                    best_metric=str(best_node.metric) if best_node else None,
-                    eta_s=eta_s,
-                    latest_iteration_time_s=latest_exec_time_s,
+            # Emit progress with the actual stage name to reflect current substage accurately.
+            # To avoid duplicate events (for example, during multi-seed evaluation where
+            # additional nodes do not advance the effective iteration), only emit when
+            # the iteration for this stage actually increases.
+            previous_iteration = last_reported_iteration_by_stage.get(stage.name)
+            if iteration_display > 0 and (
+                previous_iteration is None or iteration_display > previous_iteration
+            ):
+                last_reported_iteration_by_stage[stage.name] = iteration_display
+                event_callback(
+                    RunStageProgressEvent(
+                        stage=stage.name,
+                        iteration=iteration_display,
+                        max_iterations=stage.max_iterations,
+                        progress=progress,
+                        total_nodes=len(journal.nodes),
+                        buggy_nodes=len(journal.buggy_nodes),
+                        good_nodes=good_nodes_count,
+                        best_metric=str(best_node.metric) if best_node else None,
+                        eta_s=eta_s,
+                        latest_iteration_time_s=latest_exec_time_s,
+                    )
                 )
-            )
 
             # Also emit a log event describing what's happening
             if good_nodes_count == 0 and len(journal.buggy_nodes) > 0:
@@ -178,16 +195,6 @@ def perform_experiments_bfts(
                     RunLogEvent(
                         message=f"Found {good_nodes_count} working implementation(s), continuing...",
                         level="info",
-                    )
-                )
-
-            # Emit node completion if we have a latest node
-            if latest_node is not None and latest_node_summary:
-                event_callback(
-                    ExperimentNodeCompletedEvent(
-                        stage=stage.name,
-                        node_id=latest_node.id if hasattr(latest_node, "id") else None,
-                        summary=latest_node_summary,
                     )
                 )
 

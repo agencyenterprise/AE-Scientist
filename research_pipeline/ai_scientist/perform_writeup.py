@@ -10,14 +10,21 @@ import traceback
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from langchain_core.messages import BaseMessage
+from pydantic import BaseModel, Field
 
+from ai_scientist.citations_specs import CITATION_SEARCH_SCHEMA, CITATION_SELECTION_SCHEMA
 from ai_scientist.ideation.semantic_scholar import search_for_papers
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
-from ai_scientist.llm import extract_json_between_markers, get_response_from_llm
-from ai_scientist.perform_vlm_review import generate_vlm_img_review
+from ai_scientist.llm import get_structured_response_from_llm
+from ai_scientist.perform_vlm_review import (
+    detect_duplicate_figures,
+    generate_vlm_img_review,
+    perform_imgs_cap_ref_review,
+    perform_imgs_cap_ref_review_selection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -337,50 +344,24 @@ Your current list of citations is:
 
 Identify the most important citation that you still need to add, and the query to find the paper.
 
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-RESPONSE:
-```json
-<JSON>
-```
-
-In <THOUGHT>, first briefly reason and identify which citations are missing.
-If no more citations are needed, add "No more citations needed" to your thoughts.
-Do not add "No more citations needed" if you are adding citations this round.
-
-In <JSON>, respond in JSON format with the following fields:
-- "Description": The purpose of the desired citation and a brief description of what you are looking for.
-- "Query": The search query to find the paper (e.g., attention is all you need).
-This JSON will be automatically parsed, so ensure the format is precise."""
+Return a JSON object matching the CitationSearchResponse schema:
+- "needs_more_citations": whether another citation is still required.
+- "description": purpose of the desired citation (what you are looking for).
+- "query": Semantic Scholar search query to find the paper.
+If "needs_more_citations" is false, leave the other fields blank."""
 
     citation_second_prompt_template = """Search has recovered the following articles:
 
 {papers}
 
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-RESPONSE:
-```json
-<JSON>
-```
-
-In <THOUGHT>, first briefly reason over the search results and identify which citation(s) best fit your paper.
-If none are appropriate or would contribute significantly to the write-up, add "Do not add any" to your thoughts.
-Do not select papers that are already in the `references.bib` file, or if the same citation exists under a different name.
-
-In <JSON>, respond in JSON format with the following fields:
-- "Selected": A list of integer indices for the selected papers, for example [0, 1]. Do not use quotes for the indices, e.g. "['0', '1']" is invalid.
-- "Description": Update the previous description of the citation(s) with the additional context. This should be a brief description of the work(s), their relevance, and where in a paper these should be cited.
-This JSON will be automatically parsed, so ensure the format is precise."""
+Return a JSON object matching the CitationSelectionResponse schema:
+- "should_add": whether any of the retrieved papers should be added.
+- "selected_indices": array of integer indices referencing the papers above.
+- "description": brief summary of the selected work(s), their relevance, and where to cite them.
+If "should_add" is false, leave "selected_indices" empty."""
 
     try:
-        text, msg_history = get_response_from_llm(
+        structured_response, msg_history = get_structured_response_from_llm(
             prompt=citation_first_prompt_template.format(
                 current_round=current_round + 1,
                 total_rounds=total_rounds,
@@ -391,18 +372,16 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             temperature=temperature,
+            schema_class=CITATION_SEARCH_SCHEMA,
             msg_history=msg_history,
         )
-        if "No more citations needed" in text:
+        if not structured_response.get("needs_more_citations", True):
             logger.info("No more citations needed.")
             return None
-
-        json_output = extract_json_between_markers(text)
-        if json_output is None:
-            logger.warning("Failed to extract JSON from LLM output (initial search). Raw response:")
-            logger.debug(text)
+        query = structured_response.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            logger.warning("Citation search response missing query.")
             return None
-        query = json_output["Query"]
         papers = search_for_papers(query)
     except Exception:
         logger.exception("EXCEPTION in get_citation_addition (initial search):")
@@ -427,7 +406,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
     papers_str = "\n\n".join(paper_strings)
 
     try:
-        text, msg_history = get_response_from_llm(
+        selection_response, msg_history = get_structured_response_from_llm(
             prompt=citation_second_prompt_template.format(
                 papers=papers_str,
                 current_round=current_round + 1,
@@ -436,43 +415,31 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             temperature=temperature,
+            schema_class=CITATION_SELECTION_SCHEMA,
             msg_history=msg_history,
         )
-        if "Do not add any" in text:
+        if not selection_response.get("should_add", False):
             logger.info("Do not add any.")
             return None
-
-        json_output = extract_json_between_markers(text)
-        if json_output is None:
-            logger.warning(
-                "Failed to extract JSON from LLM output (selecting papers). Raw response:"
-            )
-            logger.debug(text)
+        selected_indices = selection_response.get("selected_indices", [])
+        if not isinstance(selected_indices, list) or not selected_indices:
+            logger.warning("Citation selection returned no indices.")
             return None
-        desc = json_output["Description"]
-        selected_papers = str(json_output["Selected"])
-
-        if selected_papers != "[]":
-            selected_indices = []
-            for x in selected_papers.strip("[]").split(","):
-                x_str = x.strip().strip('"').strip("'")
-                if x_str:
-                    selected_indices.append(int(x_str))
-            assert all([0 <= i < len(papers) for i in selected_indices]), "Invalid paper index"
-            bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
-
-            cleaned_bibtexs = []
-            for bibtex in bibtexs:
-                newline_index = bibtex.find("\n")
-                cite_key_line = bibtex[:newline_index]
-                cite_key_line = remove_accents_and_clean(cite_key_line)
-                cleaned_bibtexs.append(cite_key_line + bibtex[newline_index:])
-            bibtexs = cleaned_bibtexs
-
-            bibtex_string = "\n".join(bibtexs)
-        else:
+        if not all(isinstance(idx, int) and 0 <= idx < len(papers) for idx in selected_indices):
+            logger.warning("Received invalid citation indices: %s", selected_indices)
             return None
+        bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
 
+        cleaned_bibtexs = []
+        for bibtex in bibtexs:
+            newline_index = bibtex.find("\n")
+            cite_key_line = bibtex[:newline_index]
+            cite_key_line = remove_accents_and_clean(cite_key_line)
+            cleaned_bibtexs.append(cite_key_line + bibtex[newline_index:])
+        bibtexs = cleaned_bibtexs
+
+        bibtex_string = "\n".join(bibtexs)
+        desc = selection_response.get("description", "")
     except Exception:
         logger.exception("EXCEPTION in get_citation_addition (selecting papers):")
         return None
@@ -482,6 +449,260 @@ This JSON will be automatically parsed, so ensure the format is precise."""
 
     references_prompt = references_format.format(bibtex=bibtex_string, description=desc)
     return references_prompt
+
+
+# --------------------------------------------------------------------------- #
+# Structured response schemas                                                 #
+# --------------------------------------------------------------------------- #
+
+
+class LatexWriteupResponse(BaseModel):
+    latex_code: str = Field(
+        ...,
+        description="Complete LaTeX contents for template.tex, ready to write to disk.",
+    )
+    should_stop: bool = Field(
+        False,
+        description=(
+            "Set to true when no further edits are required. "
+            "When true, latex_code should match the current file."
+        ),
+    )
+
+
+LATEX_WRITEUP_SCHEMA = LatexWriteupResponse
+
+# --------------------------------------------------------------------------- #
+# Helper utilities shared across the writeup pipeline                         #
+# --------------------------------------------------------------------------- #
+
+
+def load_idea_text(base_path: Path, logs_dir: Path, run_dir_name: str | None) -> str:
+    """
+    Load the idea markdown content by checking project-level and run-level files.
+    """
+    candidates: List[Path] = [
+        base_path / "research_idea.md",
+        base_path / "idea.md",
+    ]
+    if run_dir_name:
+        candidates.append(logs_dir / run_dir_name / "research_idea.md")
+
+    for candidate in candidates:
+        if candidate.exists():
+            try:
+                return candidate.read_text(encoding="utf-8")
+            except Exception:
+                logger.warning("Warning: failed to read idea text from %s", candidate)
+                logger.debug(traceback.format_exc())
+    logger.warning("Warning: Missing idea markdown files under %s and %s", base_path, logs_dir)
+    return ""
+
+
+def load_exp_summaries(base_path: Path, run_dir_name: str) -> Dict[str, Any]:
+    """
+    Load experiment summary artifacts (baseline, research, ablations) from the run directory.
+    """
+    logs_dir = base_path / "logs"
+    summary_map: Dict[str, Path] = {
+        "BASELINE_SUMMARY": logs_dir / run_dir_name / "baseline_summary.json",
+        "RESEARCH_SUMMARY": logs_dir / run_dir_name / "research_summary.json",
+        "ABLATION_SUMMARY": logs_dir / run_dir_name / "ablation_summary.json",
+    }
+    loaded: Dict[str, Any] = {}
+    for key, path in summary_map.items():
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if key == "ABLATION_SUMMARY":
+                    loaded[key] = data if isinstance(data, list) else []
+                else:
+                    loaded[key] = data if isinstance(data, dict) else {}
+            except json.JSONDecodeError:
+                logger.warning("Warning: %s is not valid JSON. Using empty data.", path)
+                logger.debug(traceback.format_exc())
+                loaded[key] = [] if key == "ABLATION_SUMMARY" else {}
+        else:
+            logger.warning("Summary file not found for %s: %s", key, path)
+            loaded[key] = [] if key == "ABLATION_SUMMARY" else {}
+    return loaded
+
+
+def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -> Dict[str, Any]:
+    """
+    Reduce experiment summaries to the fields needed by a specific pipeline step.
+    """
+    if step_name == "citation_gathering":
+        node_keys_to_keep = {
+            "overall_plan",
+            "analysis",
+            "metric",
+            "vlm_feedback_summary",
+        }
+    elif step_name == "writeup":
+        node_keys_to_keep = {
+            "overall_plan",
+            "analysis",
+            "metric",
+            "code",
+            "plot_analyses",
+            "vlm_feedback_summary",
+        }
+    elif step_name == "plot_aggregation":
+        node_keys_to_keep = {
+            "overall_plan",
+            "analysis",
+            "plot_plan",
+            "plot_code",
+            "plot_analyses",
+            "vlm_feedback_summary",
+            "exp_results_npy_files",
+        }
+    else:
+        raise ValueError(f"Invalid step name: {step_name}")
+
+    filtered: Dict[str, Any] = {}
+    for stage_name, stage_content in exp_summaries.items():
+        if stage_name in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
+            filtered[stage_name] = {}
+            best_node = stage_content.get("best node", {})
+            filtered_best: Dict[str, Any] = {}
+            for node_key, node_value in best_node.items():
+                if node_key in node_keys_to_keep:
+                    filtered_best[node_key] = node_value
+            filtered[stage_name]["best node"] = filtered_best
+        elif stage_name == "ABLATION_SUMMARY":
+            if step_name == "plot_aggregation":
+                filtered[stage_name] = {}
+                for ablation_summary in stage_content:
+                    ablation_name = ablation_summary.get("ablation_name")
+                    if not ablation_name:
+                        continue
+                    filtered[stage_name][ablation_name] = {}
+                    for node_key, node_value in ablation_summary.items():
+                        if node_key in node_keys_to_keep:
+                            filtered[stage_name][ablation_name][node_key] = node_value
+            else:
+                filtered[stage_name] = stage_content
+    return filtered
+
+
+def gather_citations(
+    base_path: Path,
+    logs_dir: Path,
+    model: str,
+    temperature: float,
+    num_cite_rounds: int,
+    run_dir_name: str,
+) -> str | None:
+    """
+    Resume-aware citation gathering that persists progress per run directory.
+    """
+    cache_base = logs_dir / run_dir_name if run_dir_name else base_path
+    cache_base.mkdir(parents=True, exist_ok=True)
+    citations_cache_path = cache_base / "cached_citations.bib"
+    progress_path = cache_base / "citations_progress.json"
+
+    citations_text = ""
+    current_round = 0
+    if citations_cache_path.exists() and progress_path.exists():
+        try:
+            citations_text = citations_cache_path.read_text(encoding="utf-8")
+            progress_data = json.loads(progress_path.read_text(encoding="utf-8"))
+            current_round = int(progress_data.get("completed_rounds", 0))
+            logger.info("Resuming citation gathering from round %s", current_round)
+        except Exception:
+            logger.warning("Warning: failed to load cached citations; starting fresh.")
+            logger.debug(traceback.format_exc())
+            citations_text = ""
+            current_round = 0
+
+    idea_text = load_idea_text(base_path=base_path, logs_dir=logs_dir, run_dir_name=run_dir_name)
+    summaries = load_exp_summaries(base_path=base_path, run_dir_name=run_dir_name)
+    filtered_summaries = filter_experiment_summaries(
+        exp_summaries=summaries, step_name="citation_gathering"
+    )
+    filtered_summaries_str = json.dumps(filtered_summaries, indent=2)
+
+    for round_idx in range(current_round, num_cite_rounds):
+        try:
+            context_for_citation = (filtered_summaries_str, citations_text)
+            addition = get_citation_addition(
+                model=model,
+                context=context_for_citation,
+                current_round=round_idx,
+                total_rounds=num_cite_rounds,
+                idea_text=idea_text,
+                temperature=temperature,
+            )
+            if addition is None:
+                citations_cache_path.write_text(citations_text, encoding="utf-8")
+                progress_path.write_text(
+                    json.dumps(
+                        {"completed_rounds": round_idx, "status": "completed"},
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                break
+
+            title_match = re.search(r" title = {(.*?)}", addition, flags=re.IGNORECASE)
+            if title_match:
+                new_title = title_match.group(1).lower()
+                existing_titles = [
+                    t.lower()
+                    for t in re.findall(r" title = {(.*?)}", citations_text, flags=re.IGNORECASE)
+                ]
+                if new_title in existing_titles:
+                    logger.info("Skipping duplicate citation: %s", new_title)
+                    continue
+
+            citations_text = f"{citations_text}\n{addition}".strip()
+            citations_cache_path.write_text(citations_text, encoding="utf-8")
+            progress_path.write_text(
+                json.dumps(
+                    {"completed_rounds": round_idx + 1, "status": "in_progress"},
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.exception("EXCEPTION in gather_citations during round %s:", round_idx)
+            citations_cache_path.write_text(citations_text, encoding="utf-8")
+            progress_path.write_text(
+                json.dumps({"completed_rounds": round_idx, "status": "error"}, indent=2),
+                encoding="utf-8",
+            )
+            continue
+
+    return citations_text if citations_text else None
+
+
+def update_references_block(writeup_path: Path, citations_text: str) -> None:
+    """
+    Replace the contents of the references filecontents block with the provided text.
+    """
+    if not citations_text.strip():
+        return
+    try:
+        content = writeup_path.read_text(encoding="utf-8")
+    except Exception:
+        logger.warning("Warning: failed to read %s when updating references.", writeup_path)
+        logger.debug(traceback.format_exc())
+        return
+
+    pattern = r"(\\begin{filecontents}{references\.bib})(.*?)(\\end{filecontents})"
+
+    def _repl(match: re.Match[str]) -> str:
+        return f"{match.group(1)}\n{citations_text.strip()}\n{match.group(3)}"
+
+    updated_content, count = re.subn(
+        pattern, _repl, content, count=1, flags=re.DOTALL | re.IGNORECASE
+    )
+    if count == 0:
+        logger.warning("Warning: references block not found in %s", writeup_path)
+        return
+    writeup_path.write_text(updated_content, encoding="utf-8")
 
 
 # Using a template string to allow injection of the {page_limit} argument
@@ -585,13 +806,7 @@ Your current progress on the LaTeX write-up is:
 Produce the final version of the LaTeX manuscript now, ensuring the paper is coherent, concise, and reports results accurately.
 Return the entire file in full, with no unfilled placeholders!
 This must be an acceptable complete LaTeX writeup.
-
-Please provide the updated LaTeX code for 'template.tex', wrapped in triple backticks
-with "latex" syntax highlighting, like so:
-
-```latex
-<UPDATED LATEX CODE>
-```
+Use the structured response schema (fields: latex_code, should_stop). Set should_stop=true only if no edits are required.
 """
 
 
@@ -609,8 +824,6 @@ def perform_writeup(
     logger.info("\n" + "=" * 80)
     logger.info("STARTING PERFORM_WRITEUP")
     logger.debug(f"base_folder: {base_folder}")
-    logger.debug(f"base_folder exists: {osp.exists(base_folder)}")
-    logger.debug(f"base_folder is absolute: {osp.isabs(base_folder)}")
     logger.debug(f"Current working directory: {os.getcwd()}")
     logger.debug(f"model: {model}")
     logger.debug(f"n_writeup_reflections: {n_writeup_reflections}")
@@ -618,250 +831,92 @@ def perform_writeup(
     logger.info("=" * 80 + "\n")
 
     compile_attempt = 0
-
-    # Cleanup will be set after run output directory is resolved
-    # if osp.exists(pdf_file):
-    #     os.remove(pdf_file)
+    final_pdf_path: Path | None = None
 
     try:
-        # Load idea text
-        idea_text = ""
-        research_idea_path = osp.join(base_folder, "research_idea.md")
-        if osp.exists(research_idea_path):
-            with open(research_idea_path, "r") as f_idea:
-                idea_text = f_idea.read()
-        else:
-            idea_md_path = osp.join(base_folder, "idea.md")
-            if osp.exists(idea_md_path):
-                with open(idea_md_path, "r") as f_idea:
-                    idea_text = f_idea.read()
-            else:
-                # defer to run-specific path after latest_run_dir is computed below
-                logger.warning(
-                    f"Warning: Missing idea markdown files in base folder. "
-                    f"Not found: {research_idea_path} and {idea_md_path}. "
-                    "Will check run-specific location under logs/<run>/research_idea.md."
-                )
+        base_path = Path(base_folder)
+        logs_dir = base_path / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load summaries
-        logs_dir = osp.join(base_folder, "logs")
         latest_run_dir = "0-run"
-        if run_dir_name and osp.exists(osp.join(logs_dir, run_dir_name)):
+        if run_dir_name and (logs_dir / run_dir_name).exists():
             latest_run_dir = run_dir_name
-        elif osp.exists(logs_dir):
+        elif logs_dir.exists():
             try:
-                latest_run_dir = find_latest_run_dir_name(logs_dir=Path(logs_dir))
+                latest_run_dir = find_latest_run_dir_name(logs_dir=logs_dir)
             except Exception:
-                traceback.print_exc()
+                logger.debug("Falling back to default run directory.", exc_info=True)
                 latest_run_dir = "0-run"
 
-        # Set run-specific output directories for latex and PDFs
-        run_out_dir = osp.join(logs_dir, latest_run_dir)
-        os.makedirs(run_out_dir, exist_ok=True)
-        base_pdf_file = osp.join(run_out_dir, "paper")
-        latex_folder = osp.join(run_out_dir, "latex")
-        logger.debug(f" base_pdf_file (without extension): {base_pdf_file}")
-        logger.debug(f" latex_folder: {latex_folder}")
-        # If idea_text is still empty, attempt to load from run-specific location
-        if not idea_text:
-            run_md_path = osp.join(run_out_dir, "research_idea.md")
-            if osp.exists(run_md_path):
-                with open(run_md_path, "r") as f_idea:
-                    idea_text = f_idea.read()
-                    logger.debug(f" Loaded research_idea.md from run dir: {run_md_path}")
-            else:
-                logger.warning(
-                    f"Warning: research_idea.md not found in run dir: {run_md_path}. "
-                    "Proceeding with empty idea_text."
-                )
+        run_out_dir = logs_dir / latest_run_dir
+        run_out_dir.mkdir(parents=True, exist_ok=True)
+        base_pdf_stem = run_out_dir / "paper"
+        latex_folder = run_out_dir / "latex"
+        figures_dir = base_path / "figures" / latest_run_dir
+        logger.debug("latex_folder: %s", latex_folder)
 
-        # Cleanup any previous latex folder
-        if osp.exists(latex_folder):
-            logger.debug(f" Removing existing latex folder: {latex_folder}")
+        idea_text = load_idea_text(
+            base_path=base_path, logs_dir=logs_dir, run_dir_name=latest_run_dir
+        )
+        summaries = load_exp_summaries(base_path=base_path, run_dir_name=latest_run_dir)
+        filtered_summaries_for_writeup = filter_experiment_summaries(
+            exp_summaries=summaries, step_name="writeup"
+        )
+        combined_summaries_str = json.dumps(filtered_summaries_for_writeup, indent=2)
+
+        if latex_folder.exists():
             shutil.rmtree(latex_folder)
+        shutil.copytree(
+            src="ai_scientist/blank_icml_latex",
+            dst=latex_folder,
+            dirs_exist_ok=True,
+        )
 
-        summary_files = [
-            (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
-            (osp.join("logs", latest_run_dir, "research_summary.json"), "RESEARCH_SUMMARY"),
-            (osp.join("logs", latest_run_dir, "ablation_summary.json"), "ABLATION_SUMMARY"),
-        ]
-        loaded_summaries: dict[str, Any] = {}
-        for fname, key in summary_files:
-            path = osp.join(base_folder, fname)
-            if osp.exists(path):
-                try:
-                    with open(path, "r") as f:
-                        data = json.load(f)
-                        if key in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
-                            loaded_summaries[key] = data if isinstance(data, dict) else {}
-                        elif key == "ABLATION_SUMMARY":
-                            loaded_summaries[key] = data if isinstance(data, list) else []
-                        else:
-                            loaded_summaries[key] = data
-                except json.JSONDecodeError:
-                    traceback.print_exc()
-                    logger.warning(f" {fname} is not valid JSON. Using empty data for {key}.")
-                    loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
-            else:
-                logger.warning(f" Summary file not found for {key}: {path}")
-                loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
+        writeup_file = latex_folder / "template.tex"
+        writeup_text = writeup_file.read_text(encoding="utf-8")
 
-        # Convert them to one big JSON string for context
-        combined_summaries_str = json.dumps(loaded_summaries, indent=2)
+        plot_names: List[str] = []
+        if figures_dir.exists():
+            plot_names = sorted(
+                [
+                    entry.name
+                    for entry in figures_dir.iterdir()
+                    if entry.is_file() and entry.suffix.lower() == ".png"
+                ]
+            )
 
-        # Prepare a new fresh latex folder
-        if not osp.exists(osp.join(latex_folder, "template.tex")):
-            shutil.copytree("ai_scientist/blank_icml_latex", latex_folder, dirs_exist_ok=True)
-
-        writeup_file = osp.join(latex_folder, "template.tex")
-        with open(writeup_file, "r") as f:
-            writeup_text = f.read()
-
-        # Gather plot filenames from figures/ folder (per-run when provided)
-        figures_dir = osp.join(base_folder, "figures", latest_run_dir)
-        plot_names = []
-        if osp.exists(figures_dir):
-            for fplot in os.listdir(figures_dir):
-                if fplot.lower().endswith(".png"):
-                    plot_names.append(fplot)
-
-        # Seed citations from per-run cache if available
-        try:
-            cache_base = osp.join(logs_dir, latest_run_dir)
-            os.makedirs(cache_base, exist_ok=True)
-            citations_cache_path = osp.join(cache_base, "cached_citations.bib")
-            progress_path = osp.join(cache_base, "citations_progress.json")
-            if osp.exists(citations_cache_path):
-                with open(citations_cache_path, "r") as f:
-                    cached_citations = f.read()
-                logger.debug(f" Loaded cached citations from: {citations_cache_path}")
-                try:
-                    with open(writeup_file, "r") as f:
-                        content = f.read()
-                    pattern_end = r"\end{filecontents}"
-                    content = content.replace(pattern_end, f"\n{cached_citations}{pattern_end}")
-                    with open(writeup_file, "w") as f:
-                        f.write(content)
-                    logger.debug(" Seeded LaTeX references with cached citations.")
-                except Exception:
-                    logger.warning(" Failed to seed LaTeX with cached citations.")
-                    logger.debug(traceback.format_exc())
-        except Exception:
-            logger.warning(" Exception while initializing citation cache paths.")
-            logger.debug(traceback.format_exc())
-
-        # Load aggregator script to include in the prompt
-        aggregator_path = osp.join(base_folder, "auto_plot_aggregator.py")
-        aggregator_code = ""
-        if osp.exists(aggregator_path):
-            with open(aggregator_path, "r") as fa:
-                aggregator_code = fa.read()
-        else:
-            aggregator_code = "No aggregator script found."
+        aggregator_path = base_path / "auto_plot_aggregator.py"
+        aggregator_code = (
+            aggregator_path.read_text(encoding="utf-8")
+            if aggregator_path.exists()
+            else "No aggregator script found."
+        )
 
         if no_writing:
-            compile_latex(latex_folder, base_pdf_file + ".pdf")
-            return osp.exists(base_pdf_file + ".pdf")
+            pdf_target = f"{base_pdf_stem}.pdf"
+            compile_latex(cwd=str(latex_folder), pdf_file=pdf_target)
+            return Path(pdf_target).exists()
 
-        # Run model for citation additions
-        citation_model = model
-        for round_idx in range(num_cite_rounds):
-            with open(writeup_file, "r") as f:
-                writeup_text = f.read()
-            try:
-                references_bib = re.search(
-                    r"\\begin{filecontents}{references.bib}(.*?)\\end{filecontents}",
-                    writeup_text,
-                    re.DOTALL,
-                )
-                if references_bib is None:
-                    raise ValueError("No references.bib found in template.tex")
-                citations_text = references_bib.group(1)
-                context_for_citation = (combined_summaries_str, citations_text)
+        if citations_text is None:
+            citations_text = gather_citations(
+                base_path=base_path,
+                logs_dir=logs_dir,
+                model=model,
+                temperature=temperature,
+                num_cite_rounds=num_cite_rounds,
+                run_dir_name=latest_run_dir,
+            )
+        if citations_text:
+            update_references_block(writeup_path=writeup_file, citations_text=citations_text)
 
-                addition = get_citation_addition(
-                    model=citation_model,
-                    context=context_for_citation,
-                    current_round=round_idx,
-                    total_rounds=num_cite_rounds,
-                    idea_text=idea_text,
-                    temperature=temperature,
-                )
-                if addition is None:
-                    # Mark citation gathering as done in progress cache
-                    try:
-                        with open(progress_path, "w") as f:
-                            json.dump({"done": True, "round_idx": round_idx}, f, indent=2)
-                    except Exception:
-                        logger.warning(" Failed to update citations progress cache on completion.")
-                        logger.debug(traceback.format_exc())
-                    break
-
-                if addition is not None:
-                    # Simple check to avoid duplicating the same title
-                    title_match = re.search(r" title = {(.*?)}", addition)
-                    if title_match:
-                        new_title = title_match.group(1).lower()
-                        existing_titles = re.findall(r" title = {(.*?)}", citations_text)
-                        existing_titles = [t.lower() for t in existing_titles]
-                        if new_title not in existing_titles:
-                            pattern_end = r"\end{filecontents}"
-                            revised = writeup_text.replace(
-                                pattern_end, f"\n{addition}{pattern_end}"
-                            )
-                            with open(writeup_file, "w") as fo:
-                                fo.write(revised)
-                            # Save updated citations to cache
-                            try:
-                                with open(writeup_file, "r") as f:
-                                    current_text = f.read()
-                                current_refs = re.search(
-                                    r"\\begin{filecontents}{references.bib}(.*?)\\end{filecontents}",
-                                    current_text,
-                                    re.DOTALL,
-                                )
-                                if current_refs:
-                                    with open(citations_cache_path, "w") as f:
-                                        f.write(current_refs.group(1))
-                                with open(progress_path, "w") as f:
-                                    json.dump(
-                                        {"done": False, "round_idx": round_idx + 1},
-                                        f,
-                                        indent=2,
-                                    )
-                            except Exception:
-                                logger.warning(" Failed to update citations cache/progress.")
-                                logger.debug(traceback.format_exc())
-            except Exception:
-                logger.exception("EXCEPTION in perform_writeup (citation round):")
-                # Save progress and current citations in case of error
-                try:
-                    with open(writeup_file, "r") as f:
-                        current_text = f.read()
-                    current_refs = re.search(
-                        r"\\begin{filecontents}{references.bib}(.*?)\\end{filecontents}",
-                        current_text,
-                        re.DOTALL,
-                    )
-                    if current_refs:
-                        with open(citations_cache_path, "w") as f:
-                            f.write(current_refs.group(1))
-                    with open(progress_path, "w") as f:
-                        json.dump({"done": False, "round_idx": round_idx}, f, indent=2)
-                except Exception:
-                    logger.warning(" Failed to persist citations after exception.")
-                    logger.debug(traceback.format_exc())
-                continue
-
-        # Generate VLM-based descriptions but do not overwrite plot_names
         try:
-            desc_map = {}
-            for pf in plot_names:
-                ppath = osp.join(figures_dir, pf)
-                if not osp.exists(ppath):
+            desc_map: Dict[str, str] = {}
+            for plot_name in plot_names:
+                plot_path = figures_dir / plot_name
+                if not plot_path.exists():
                     continue
                 img_dict = {
-                    "images": [ppath],
+                    "images": [str(plot_path)],
                     "caption": "No direct caption",
                 }
                 review_data = generate_vlm_img_review(
@@ -869,27 +924,21 @@ def perform_writeup(
                     model=model,
                     temperature=temperature,
                 )
-                if review_data:
-                    desc_map[pf] = review_data.get("Img_description", "No description found")
-                else:
-                    desc_map[pf] = "No description found"
-
-            # Prepare a string listing all figure descriptions in order
-            plot_descriptions_list = []
-            for fname in plot_names:
-                desc_text = desc_map.get(fname, "No description found")
-                plot_descriptions_list.append(f"{fname}: {desc_text}")
+                desc_map[plot_name] = (
+                    review_data.get("Img_description", "No description found")
+                    if review_data
+                    else "No description found"
+                )
+            plot_descriptions_list = [
+                f"{plot_name}: {desc_map.get(plot_name, 'No description found')}"
+                for plot_name in plot_names
+            ]
             plot_descriptions_str = "\n".join(plot_descriptions_list)
         except Exception:
             logger.exception("EXCEPTION in VLM figure description generation:")
             plot_descriptions_str = "No descriptions available."
 
-        # Construct final prompt for big model, placing the figure descriptions alongside the plot list
         big_model_system_message = writeup_system_message_template.format(page_limit=page_limit)
-        big_client_model = model
-        with open(writeup_file, "r") as f:
-            writeup_text = f.read()
-
         combined_prompt = writeup_prompt.format(
             idea_text=idea_text,
             summaries=combined_summaries_str,
@@ -899,155 +948,205 @@ def perform_writeup(
             plot_descriptions=plot_descriptions_str,
         )
 
-        logger.info("\n" + "=" * 80)
-        logger.debug("Requesting initial LaTeX generation from LLM...")
-        logger.debug(f"Model: {big_client_model}")
-        logger.debug(f"Prompt length: {len(combined_prompt)} chars")
-        logger.info("=" * 80)
-
-        response, msg_history = get_response_from_llm(
+        response_data, msg_history = get_structured_response_from_llm(
             prompt=combined_prompt,
-            model=big_client_model,
+            model=model,
             system_message=big_model_system_message,
             temperature=temperature,
+            schema_class=LATEX_WRITEUP_SCHEMA,
         )
 
-        logger.info("\n" + "=" * 80)
-        logger.debug(f"LLM response received. Length: {len(response)} chars")
-        logger.debug(f"First 500 chars of response: {response[:500]}")
-        logger.info("=" * 80)
-
-        latex_code_match = re.search(r"```latex(.*?)```", response, re.DOTALL)
-        if not latex_code_match:
-            logger.error(" No LaTeX code block found in LLM response!")
-            logger.error(f"Full response (first 2000 chars): {response[:2000]}")
-            logger.error(" Checking for other code block markers...")
-            if "```" in response:
-                logger.error(
-                    f"Found code blocks but not ```latex. First block: {response[response.find('```'):response.find('```') + 200]}"
-                )
-            else:
-                logger.error(" No code blocks found at all in response")
+        updated_latex_code = response_data.get("latex_code", "").strip()
+        if not updated_latex_code:
+            logger.error("Structured LLM response missing latex_code.")
             return False
-
-        logger.debug(f" Found LaTeX code block. Length: {len(latex_code_match.group(1))} chars")
-        updated_latex_code = latex_code_match.group(1).strip()
-        logger.debug(f" Writing LaTeX to: {writeup_file}")
-        with open(writeup_file, "w") as f:
-            f.write(updated_latex_code)
-        logger.info(f" Wrote {len(updated_latex_code)} chars to template.tex")
-        # Ensure LaTeX \graphicspath points to the run-specific figures directory
+        writeup_file.write_text(updated_latex_code, encoding="utf-8")
         _ensure_graphicspath(
-            writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
+            writeup_file=str(writeup_file),
+            latex_folder=str(latex_folder),
+            figures_dir=str(figures_dir),
         )
-        # Ensure that all available figures are actually referenced in the LaTeX
-        _ensure_all_figures_referenced(writeup_file=writeup_file, plot_names=plot_names)
+        _ensure_all_figures_referenced(
+            writeup_file=str(writeup_file),
+            plot_names=plot_names,
+        )
 
-        # Multiple reflection loops on the final LaTeX
-        for i in range(n_writeup_reflections):
-            with open(writeup_file, "r") as f:
-                current_latex = f.read()
-
-            # Check for unused or invalid figure references
+        for reflection_idx in range(n_writeup_reflections):
+            current_latex = writeup_file.read_text(encoding="utf-8")
             referenced_figs_temp = re.findall(
                 r"\\includegraphics(?:\[[^\]]*\])?{([^}]+)}", current_latex
             )
-            used_figs = set(os.path.basename(fig) for fig in referenced_figs_temp)
+            used_figs = {Path(ref).name for ref in referenced_figs_temp}
             all_figs = set(plot_names)
-            unused_figs = all_figs - used_figs
-            invalid_figs = used_figs - all_figs
+            unused_figs = sorted(all_figs - used_figs)
+            invalid_figs = sorted(used_figs - all_figs)
 
-            # Compile current version before reflection
-            compile_latex(latex_folder, base_pdf_file + f"_{compile_attempt}.pdf")
+            reflection_pdf = f"{base_pdf_stem}_{compile_attempt}.pdf"
+            compile_latex(cwd=str(latex_folder), pdf_file=reflection_pdf)
+            final_pdf_path = Path(reflection_pdf)
             compile_attempt += 1
-            logger.info(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
 
-            # Detect where "Impact Statement" appears
-            impact_loc = detect_pages_before_impact(latex_folder)
+            impact_loc = detect_pages_before_impact(str(latex_folder))
             if impact_loc is not None:
                 page_num, line_num = impact_loc
                 reflection_page_info = (
-                    f"\nCurrently, 'Impact Statement' begins on page {page_num}, approximately on line {line_num}. "
-                    f"The page limit is {page_limit}, which is before the Impact Statement. "
-                    f"Papers often look more professional if the main text is near or just under {page_limit} pages in length.\n"
+                    f"\n'Impact Statement' currently starts on page {page_num}, approximately line {line_num}. "
+                    f"The target length is about {page_limit} pages; keep the narrative concise but informative.\n"
                 )
             else:
-                reflection_page_info = "\nCould not detect 'Impact Statement' page (compilation or detection failed).\n"
+                reflection_page_info = "\nCould not detect the 'Impact Statement' location (compilation or detection failed).\n"
 
             check_output = os.popen(f"chktex {writeup_file} -q -n2 -n24 -n13 -n1").read()
+            review_img_cap_ref = perform_imgs_cap_ref_review(
+                model=model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
+            )
+            analysis_duplicate_figs = detect_duplicate_figures(
+                model=model,
+                pdf_path=reflection_pdf,
+                temperature=temperature,
+            )
 
             reflection_prompt = f"""
-Now let's reflect and identify any issues (including but not limited to):
-1) Are there any LaTeX syntax errors or style violations we can fix? Refer to the chktex output below.
-2) Is the writing clear, and scientifically rigorous?
+Now let's reflect and identify issues (including but not limited to):
+1) LaTeX syntax errors or style violations? Use chktex output below.
+2) Is the writing clear and scientifically rigorous?
 3) Have we included all relevant details from the summaries without hallucinating?
-4) The following figures are available in the folder but not used in the LaTeX: {sorted(unused_figs)}
-5) The following figure references in the LaTeX do not match any actual file: {sorted(invalid_figs)}
+4) Figures available but not used: {unused_figs}
+5) Figure references with no backing files: {invalid_figs}
 {reflection_page_info}
 chktex results:
 ```
 {check_output}
 ```
+VLM caption/reference review:
+```
+{review_img_cap_ref}
+```
+Duplicate figure analysis:
+```
+{analysis_duplicate_figs}
+```
 
-Please provide a revised complete LaTeX in triple backticks, or repeat the same if no changes are needed.
-Return the entire file in full, with no unfilled placeholders!
-This must be an acceptable complete LaTeX writeup.
-Do not hallucinate any details!
-
-If you believe you are done, simply say: "I am done".
+Respond using the structured schema (latex_code, should_stop). Set should_stop=true only if no revisions are necessary.
 """
 
-            reflection_response, msg_history = get_response_from_llm(
+            reflection_data, msg_history = get_structured_response_from_llm(
                 prompt=reflection_prompt,
-                model=big_client_model,
+                model=model,
                 system_message=big_model_system_message,
                 temperature=temperature,
+                schema_class=LATEX_WRITEUP_SCHEMA,
                 msg_history=msg_history,
             )
 
-            if "I am done" in reflection_response:
-                logger.info("LLM indicated it is done with reflections. Exiting reflection loop.")
+            if reflection_data.get("should_stop", False):
+                logger.info("LLM indicated reflections are complete.")
                 break
 
-            reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
-            if reflection_code_match:
-                reflected_latex_code = reflection_code_match.group(1).strip()
-                if reflected_latex_code != current_latex:
-                    final_text = reflected_latex_code
-                    cleanup_map = {
-                        "</end": r"\\end",
-                        "</begin": r"\\begin",
-                        "’": "'",
-                    }
-                    for bad_str, repl_str in cleanup_map.items():
-                        final_text = final_text.replace(bad_str, repl_str)
-                    final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
-
-                    with open(writeup_file, "w") as fo:
-                        fo.write(final_text)
-
-                    # Ensure LaTeX \graphicspath stays correct after edits
-                    _ensure_graphicspath(
-                        writeup_file=writeup_file,
-                        latex_folder=latex_folder,
-                        figures_dir=figures_dir,
-                    )
-                    # Ensure that all available figures are still referenced
-                    _ensure_all_figures_referenced(
-                        writeup_file=writeup_file,
-                        plot_names=plot_names,
-                    )
-                    compile_latex(latex_folder, base_pdf_file + f"_{compile_attempt}.pdf")
-                    compile_attempt += 1
-                    logger.info(f"Compiled {base_pdf_file}_{compile_attempt}.pdf")
-                else:
-                    logger.debug(f"No changes in reflection step {i + 1}.")
-                    break
+            reflected_latex_code = reflection_data.get("latex_code", "").strip()
+            if not reflected_latex_code:
+                logger.warning(
+                    "Structured reflection response missing latex_code (step %s).",
+                    reflection_idx + 1,
+                )
+                break
+            if reflected_latex_code != current_latex:
+                final_text = reflected_latex_code
+                cleanup_map = {"</end": r"\\end", "</begin": r"\\begin", "’": "'"}
+                for bad_str, repl_str in cleanup_map.items():
+                    final_text = final_text.replace(bad_str, repl_str)
+                final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
+                writeup_file.write_text(final_text, encoding="utf-8")
+                _ensure_graphicspath(
+                    writeup_file=str(writeup_file),
+                    latex_folder=str(latex_folder),
+                    figures_dir=str(figures_dir),
+                )
+                _ensure_all_figures_referenced(
+                    writeup_file=str(writeup_file),
+                    plot_names=plot_names,
+                )
+                compile_latex(cwd=str(latex_folder), pdf_file=reflection_pdf)
+                final_pdf_path = Path(reflection_pdf)
             else:
-                logger.warning(f"No valid LaTeX code block found in reflection step {i + 1}.")
+                logger.debug("No changes detected in reflection step %s.", reflection_idx + 1)
                 break
 
-        return osp.exists(base_pdf_file + f"_{compile_attempt - 1}.pdf")
+            review_img_selection = perform_imgs_cap_ref_review_selection(
+                model=model,
+                pdf_path=reflection_pdf,
+                reflection_page_info=reflection_page_info,
+                temperature=temperature,
+            )
+            img_reflection_prompt = f"""Review the figures with these goals:
+1. Move low-impact figures to the appendix.
+2. Remove redundant or uninformative visuals.
+3. Combine sparse plots into richer groups.
+4. Update accompanying text to reflect figure changes.
+
+Currently used figures: {sorted(used_figs)}
+Unused figures: {unused_figs}
+{reflection_page_info}
+
+VLM figure selection feedback:
+```
+{review_img_selection}
+```
+
+Use the structured response schema (latex_code, should_stop). Set should_stop=true if no changes are required.
+"""
+            img_reflection_data, msg_history = get_structured_response_from_llm(
+                prompt=img_reflection_prompt,
+                model=model,
+                system_message=big_model_system_message,
+                temperature=temperature,
+                schema_class=LATEX_WRITEUP_SCHEMA,
+                msg_history=msg_history,
+            )
+            if img_reflection_data.get("should_stop", False):
+                logger.info("Figure reflection complete.")
+                break
+            reflected_latex_code = img_reflection_data.get("latex_code", "").strip()
+            if not reflected_latex_code:
+                logger.warning(
+                    "Structured figure reflection missing latex_code (step %s).",
+                    reflection_idx + 1,
+                )
+                break
+            current_after_text = writeup_file.read_text(encoding="utf-8")
+            if reflected_latex_code != current_after_text:
+                final_text = reflected_latex_code
+                cleanup_map = {"</end": r"\\end", "</begin": r"\\begin", "’": "'"}
+                for bad_str, repl_str in cleanup_map.items():
+                    final_text = final_text.replace(bad_str, repl_str)
+                final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
+                writeup_file.write_text(final_text, encoding="utf-8")
+                _ensure_graphicspath(
+                    writeup_file=str(writeup_file),
+                    latex_folder=str(latex_folder),
+                    figures_dir=str(figures_dir),
+                )
+                _ensure_all_figures_referenced(
+                    writeup_file=str(writeup_file),
+                    plot_names=plot_names,
+                )
+                compile_latex(cwd=str(latex_folder), pdf_file=reflection_pdf)
+                final_pdf_path = Path(reflection_pdf)
+            else:
+                logger.debug(
+                    "No changes detected in figure reflection step %s.",
+                    reflection_idx + 1,
+                )
+                break
+
+        if final_pdf_path is None:
+            fallback_pdf = f"{base_pdf_stem}_{compile_attempt}.pdf"
+            compile_latex(cwd=str(latex_folder), pdf_file=fallback_pdf)
+            final_pdf_path = Path(fallback_pdf)
+
+        return final_pdf_path.exists()
 
     except Exception:
         logger.exception("EXCEPTION in perform_writeup:")

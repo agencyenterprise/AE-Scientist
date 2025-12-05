@@ -195,3 +195,25 @@ export function convertApiResearchRunList(
     total: apiResponse.total,
   };
 }
+
+// ============================================================================
+// User types and API functions
+// ============================================================================
+
+import { apiFetch } from "./api-client";
+
+export interface UserListItem {
+  id: number;
+  email: string;
+  name: string;
+}
+
+interface UserListResponseApi {
+  items: UserListItem[];
+  total: number;
+}
+
+export async function fetchUsers(): Promise<UserListItem[]> {
+  const response = await apiFetch<UserListResponseApi>("/users/");
+  return response.items;
+}

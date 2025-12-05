@@ -40,11 +40,13 @@ class WebhookClient:
     _EVENT_PATHS: dict[EventKind, str] = {
         "run_stage_progress": "/stage-progress",
         "run_log": "",
-        "experiment_node_completed": "/experiment-node-completed",
+        # Sub-stage completion events are also forwarded to the web server.
+        "substage_completed": "/substage-completed",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
     _HEARTBEAT_PATH = "/heartbeat"
+    _GPU_SHORTAGE_PATH = "/gpu-shortage"
 
     def __init__(self, *, base_url: str, token: str, run_id: str) -> None:
         self._base_url = base_url.rstrip("/")
@@ -89,6 +91,22 @@ class WebhookClient:
 
     def publish_heartbeat(self) -> None:
         self._post(path=self._HEARTBEAT_PATH, payload={"run_id": self._run_id})
+
+    def publish_gpu_shortage(
+        self,
+        *,
+        required_gpus: int,
+        available_gpus: int,
+        message: Optional[str] = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "run_id": self._run_id,
+            "required_gpus": required_gpus,
+            "available_gpus": available_gpus,
+        }
+        if message:
+            payload["message"] = message
+        self._post(path=self._GPU_SHORTAGE_PATH, payload=payload)
 
 
 def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:
@@ -171,12 +189,24 @@ class EventPersistenceManager:
             self._thread.join(timeout=timeout)
         finally:
             self._started = False
-        try:
-            self._queue.close()
-        except OSError:
-            pass
+        self._close_queue()
         if self._manager is not None:
             self._manager.shutdown()
+
+    def _close_queue(self) -> None:
+        def _invoke(obj: object, method_name: str) -> bool:
+            method = getattr(obj, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                    return True
+                except (OSError, AttributeError):
+                    return False
+            return False
+
+        if not _invoke(self._queue, "close"):
+            _invoke(self._queue, "_close")
+        _invoke(self._queue, "cancel_join_thread")
 
     def _drain_queue(self) -> None:
         conn: Optional[psycopg2.extensions.connection] = None
@@ -225,8 +255,8 @@ class EventPersistenceManager:
                 self._insert_stage_progress(connection=connection, payload=event.data)
             elif event.kind == "run_log":
                 self._insert_run_log(connection=connection, payload=event.data)
-            else:
-                self._insert_node_completed(connection=connection, payload=event.data)
+            elif event.kind == "substage_completed":
+                self._insert_substage_completed(connection=connection, payload=event.data)
         if self._webhook_client is not None:
             self._webhook_client.publish(kind=event.kind, payload=event.data)
 
@@ -282,25 +312,23 @@ class EventPersistenceManager:
                 ),
             )
 
-    def _insert_node_completed(
+    def _insert_substage_completed(
         self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
     ) -> None:
         summary = payload.get("summary") or {}
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO rp_experiment_node_completed_events (
+                INSERT INTO rp_substage_completed_events (
                     run_id,
                     stage,
-                    node_id,
                     summary
                 )
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s)
                 """,
                 (
                     self._run_id,
                     payload.get("stage"),
-                    payload.get("node_id"),
                     psycopg2.extras.Json(summary),
                 ),
             )
@@ -324,7 +352,7 @@ class EventQueueEmitter:
         if record is None:
             return
         kind, payload_data = record
-        if kind == "experiment_node_completed":
+        if kind == "substage_completed":
             payload_data = {
                 **payload_data,
                 "summary": _sanitize_payload(payload_data.get("summary") or {}),

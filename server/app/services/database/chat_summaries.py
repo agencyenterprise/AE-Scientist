@@ -11,6 +11,8 @@ from typing import NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ class ChatSummary(NamedTuple):
     updated_at: datetime
 
 
-class ChatSummariesMixin:
+class ChatSummariesMixin(ConnectionProvider):
     """Database operations for chat summaries."""
 
     def create_chat_summary(
@@ -34,7 +36,7 @@ class ChatSummariesMixin:
         """Create a new chat summary in the database."""
         now = datetime.now()
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -65,7 +67,7 @@ class ChatSummariesMixin:
     ) -> bool:
         """Update a conversation's summary. Returns True if updated, False if not found."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 if latest_message_id is not None:
                     cursor.execute(
@@ -82,7 +84,7 @@ class ChatSummariesMixin:
 
     def get_chat_summary_by_conversation_id(self, conversation_id: int) -> Optional[ChatSummary]:
         """Get a conversation's summary by conversation ID."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     "SELECT id, conversation_id, summary, latest_message_id, created_at, updated_at FROM chat_summaries WHERE conversation_id = %s",

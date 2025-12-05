@@ -323,6 +323,7 @@ Current features in the codebase:
 | `project-draft` | `src/features/project-draft/` | Project drafting with chat, diff viewer (30+ components) |
 | `input-pipeline` | `src/features/input-pipeline/` | Hypothesis creation form with model selection |
 | `model-selector` | `src/features/model-selector/` | Model selection dropdown UI |
+| `research` | `src/features/research/` | Research run management, history display, status utilities |
 | `search` | `src/features/search/` | Vector-based semantic search |
 | `dashboard` | `src/features/dashboard/` | Dashboard-specific components |
 | `layout` | `src/features/layout/` | Sidebar navigation |
@@ -340,12 +341,13 @@ The `project-draft` feature demonstrates a well-modularized component structure 
 - `ChatMarkdown.tsx` - Markdown rendering for chat
 - `ChatStreamingMessage.tsx` - Streaming message indicator
 - `DiffViewer.tsx` - Side-by-side diff display
+- `StringSection.tsx` - Generic string section with variants (used by section components)
 
 **Section Components:**
-- `AbstractSection.tsx` - Abstract content section
-- `HypothesisSection.tsx` - Hypothesis display
-- `RelatedWorkSection.tsx` - Related work references
-- `ExpectedOutcomeSection.tsx` - Expected outcomes
+- `AbstractSection.tsx` - Abstract content section (uses StringSection)
+- `HypothesisSection.tsx` - Hypothesis display (uses StringSection)
+- `RelatedWorkSection.tsx` - Related work references (uses StringSection)
+- `ExpectedOutcomeSection.tsx` - Expected outcomes (uses StringSection)
 - `ExperimentsSection.tsx` - Experiment descriptions
 - `RiskFactorsSection.tsx` - Risk factors
 
@@ -354,7 +356,91 @@ The `project-draft` feature demonstrates a well-modularized component structure 
 - `useChatStreaming.ts` - SSE streaming for chat responses
 - `useChatFileUpload.ts` - File upload handling
 - `useVersionManagement.ts` - Version history management
-- `useProjectDraftState.ts` - Overall feature state
+- `useProjectDraftState.ts` - Overall feature state (facade)
+- `use-project-draft-data.ts` - Data loading and polling (sub-hook)
+- `use-project-draft-edit.ts` - Edit mode state (sub-hook)
+
+### Generic Component Pattern (StringSection)
+
+> Added from: frontend-solid-refactoring implementation (2025-12-03)
+
+When you have 3+ nearly-identical components differing only in styling/content, create a generic component with variants:
+
+```typescript
+// features/project-draft/components/StringSection.tsx
+import { cn } from "@/shared/lib/utils"
+
+type StringSectionVariant = 'default' | 'primary-border' | 'success-box'
+
+interface StringSectionProps {
+  title: string
+  content: string
+  diffContent?: React.ReactElement[] | null
+  onEdit?: () => void
+  variant?: StringSectionVariant
+  className?: string
+}
+
+const variantStyles: Record<StringSectionVariant, { container: string; content: string }> = {
+  default: {
+    container: '',
+    content: 'text-foreground/90',
+  },
+  'primary-border': {
+    container: 'border-l-4 border-primary pl-4',
+    content: 'text-foreground',
+  },
+  'success-box': {
+    container: 'bg-green-50 dark:bg-green-950/20 rounded-lg p-4',
+    content: 'text-foreground',
+  },
+}
+
+export function StringSection({
+  title,
+  content,
+  diffContent,
+  onEdit,
+  variant = 'default',
+  className,
+}: StringSectionProps) {
+  const styles = variantStyles[variant]
+
+  return (
+    <div className={cn('relative group', styles.container, className)}>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
+        {onEdit && (
+          <button onClick={onEdit} className="opacity-0 group-hover:opacity-100">
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <div className={cn('prose prose-sm max-w-none', styles.content)}>
+        {diffContent ?? <ReactMarkdown>{content}</ReactMarkdown>}
+      </div>
+    </div>
+  )
+}
+```
+
+**Usage in existing section components:**
+```typescript
+// HypothesisSection.tsx
+export function HypothesisSection({ content, diffContent, onEdit }: Props) {
+  return (
+    <StringSection
+      title="Hypothesis"
+      content={content}
+      diffContent={diffContent}
+      onEdit={onEdit}
+      variant="primary-border"
+    />
+  )
+}
+```
 
 ---
 
@@ -380,6 +466,122 @@ The `project-draft` feature demonstrates a well-modularized component structure 
 | Hook files | camelCase with `use` prefix | `useMyFeatureState.ts` |
 | Utility files | camelCase | `myFeatureUtils.ts` |
 | Type files | camelCase | `types.ts` |
+
+---
+
+## Hook Splitting Pattern (Facade)
+
+> Added from: frontend-solid-refactoring implementation (2025-12-03)
+
+When a hook grows beyond ~200 lines or manages multiple unrelated concerns, split it using the **facade pattern** to maintain backward compatibility.
+
+### When to Use
+
+- Hook exceeds 200 lines
+- Hook manages 3+ distinct concerns (e.g., form state, streaming, conflict resolution)
+- Different consumers need different subsets of the hook's functionality
+- Testing individual concerns is difficult
+
+### How to Implement
+
+1. **Identify distinct concerns** in the large hook
+2. **Create focused sub-hooks** for each concern
+3. **Keep the original hook as a facade** that composes sub-hooks
+4. **Preserve the original API** so existing consumers don't break
+
+### Example
+
+**Before** (500+ line hook with multiple concerns):
+```typescript
+// useConversationImport.ts - TOO LARGE
+export function useConversationImport() {
+  // Form state (url, error)
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [sections, setSections] = useState({});
+
+  // Conflict resolution
+  const [hasConflict, setHasConflict] = useState(false);
+  const [conflicts, setConflicts] = useState([]);
+
+  // ... 400+ more lines mixing all concerns
+}
+```
+
+**After** (facade with focused sub-hooks):
+```typescript
+// use-import-form-state.ts (~90 lines)
+export function useImportFormState() {
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+
+  const validate = useCallback(() => {
+    if (!validateUrl(url)) {
+      setError(getUrlValidationError());
+      return false;
+    }
+    return true;
+  }, [url]);
+
+  return {
+    state: { url, error },
+    actions: { setUrl, setError, validate, reset }
+  };
+}
+
+// use-import-conflict-resolution.ts (~120 lines)
+export function useImportConflictResolution() {
+  const [hasConflict, setHasConflict] = useState(false);
+  const [conflicts, setConflicts] = useState([]);
+  // ... focused on conflict handling only
+
+  return {
+    conflict: { hasConflict, items: conflicts, selectedId },
+    actions: { setConflict, selectConflict, clearConflict }
+  };
+}
+
+// useConversationImport.ts - FACADE (~150 lines)
+export function useConversationImport(options) {
+  // Compose sub-hooks
+  const formState = useImportFormState();
+  const conflictState = useImportConflictResolution();
+  const streaming = useStreamingImport({ onSuccess: options.onSuccess });
+
+  // Coordinate between sub-hooks
+  const startImport = useCallback(async () => {
+    if (!formState.actions.validate()) return;
+    await streaming.actions.startStream({ url: formState.state.url });
+  }, [formState, streaming]);
+
+  // Return SAME API as before for backward compatibility
+  return {
+    state: { url: formState.state.url, error: formState.state.error, ... },
+    conflict: conflictState.conflict,
+    actions: { setUrl: formState.actions.setUrl, startImport, ... },
+  };
+}
+```
+
+### Benefits
+
+- Each sub-hook is independently testable
+- Consumers can import sub-hooks directly for granular access
+- Original API preserved (no breaking changes)
+- Clear separation of concerns
+- Smaller, more maintainable files
+
+### File Structure After Splitting
+
+```
+features/conversation-import/hooks/
+  useConversationImport.ts           # Facade (composes sub-hooks)
+  use-import-form-state.ts           # Sub-hook: form state
+  use-import-conflict-resolution.ts  # Sub-hook: conflict handling
+```
 
 ---
 
@@ -415,6 +617,113 @@ interface UseMyHookReturn {
 - **Co-locate hooks**: Keep feature-specific hooks inside the feature folder
 - **Type all props**: Define interfaces for all component props
 - **Use kebab-case for folders**: Feature folders use kebab-case (e.g., `my-feature`)
+
+---
+
+## Filter UI Pattern
+
+> Added from: log-level-filter implementation (2025-12-04)
+
+When adding filter buttons to a component (e.g., log level filters, status filters), follow this pattern:
+
+### Configuration Object
+
+Use a Record to map filter values to their display properties. This ensures explicit Tailwind classes (required for Tailwind v4):
+
+```typescript
+type LogLevelFilter = "all" | "info" | "warn" | "error";
+
+const LOG_FILTER_CONFIG: Record<LogLevelFilter, { label: string; activeClass: string }> = {
+  all: { label: "all", activeClass: "bg-slate-500/15 text-slate-300" },
+  info: { label: "info", activeClass: "bg-sky-500/15 text-sky-400" },
+  warn: { label: "warn", activeClass: "bg-amber-500/15 text-amber-400" },
+  error: { label: "error", activeClass: "bg-red-500/15 text-red-400" },
+};
+
+const LOG_FILTER_OPTIONS: LogLevelFilter[] = ["all", "info", "warn", "error"];
+```
+
+### Header with Inline Filters
+
+Place filter buttons in the card header using flexbox `justify-between`:
+
+```typescript
+<div className="mb-4 flex items-center justify-between">
+  {/* Left side: Icon, Title, Count */}
+  <div className="flex items-center gap-2">
+    <Terminal className="h-5 w-5 text-slate-400" />
+    <h2 className="text-lg font-semibold text-white">Logs</h2>
+    <span className="text-sm text-slate-400">
+      ({filteredLogs.length}{activeFilter !== "all" ? `/${logs.length}` : ""})
+    </span>
+  </div>
+
+  {/* Right side: Filter Buttons */}
+  <div className="flex items-center gap-1" role="group" aria-label="Log level filter">
+    {LOG_FILTER_OPTIONS.map(option => (
+      <button
+        key={option}
+        type="button"
+        onClick={() => setActiveFilter(option)}
+        aria-pressed={activeFilter === option}
+        className={cn(
+          "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+          activeFilter === option
+            ? LOG_FILTER_CONFIG[option].activeClass
+            : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+        )}
+      >
+        {LOG_FILTER_CONFIG[option].label}
+      </button>
+    ))}
+  </div>
+</div>
+```
+
+### State and Filtering
+
+Use `useState` for filter state and `useMemo` for derived filtered data:
+
+```typescript
+const [activeFilter, setActiveFilter] = useState<LogLevelFilter>("all");
+
+const filteredLogs = useMemo(() => {
+  if (activeFilter === "all") return logs;
+  return logs.filter(log => {
+    const level = log.level.toLowerCase();
+    if (activeFilter === "warn") {
+      return level === "warn" || level === "warning";
+    }
+    return level === activeFilter;
+  });
+}, [logs, activeFilter]);
+```
+
+### Empty State with Filter Context
+
+Show different messages based on whether filtering caused the empty state:
+
+```typescript
+{filteredLogs.length === 0 ? (
+  <div className="flex h-full items-center justify-center">
+    <span className="text-slate-400">
+      {activeFilter === "all" ? "No logs yet" : `No ${activeFilter}-level logs`}
+    </span>
+  </div>
+) : (
+  // Render filtered items
+)}
+```
+
+### Accessibility Requirements
+
+- Use `role="group"` on the button container
+- Add `aria-label` describing the filter group (e.g., "Log level filter")
+- Add `aria-pressed` to each button indicating current selection state
+
+### Reference Implementation
+
+See `frontend/src/features/research/components/run-detail/research-logs-list.tsx` for a complete example.
 
 ---
 

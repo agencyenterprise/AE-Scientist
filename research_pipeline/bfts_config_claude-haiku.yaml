@@ -4,6 +4,7 @@ log_level: "DEBUG"
 desc_file: idea_example.json
 workspace_dir: workspaces
 log_dir: "workspaces/logs"
+min_num_gpus: 1
 
 telemetry: null
 

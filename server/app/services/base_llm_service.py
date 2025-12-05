@@ -67,7 +67,7 @@ class BaseLLMService(ABC):
         self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
-        Generate a research idea by streaming the response.
+        Generate a research idea by streaming structured events.
 
         Args:
             llm_model: The LLM model to use for generation
@@ -76,7 +76,8 @@ class BaseLLMService(ABC):
             conversation_id: the conversation id
 
         Yields:
-            str: Chunks of the generated idea content
+            str: JSON-encoded events. Partial events describe section updates,
+                 and the final event includes the complete structured payload.
 
         Raises:
             Exception: If the LLM API call fails

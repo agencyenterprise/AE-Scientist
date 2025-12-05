@@ -164,6 +164,7 @@ class Config(Hashable):
 
     exp_name: str
     log_level: str
+    min_num_gpus: int
 
     exec: ExecConfig
     generate_report: bool
@@ -226,6 +227,9 @@ def prep_cfg(cfg: object) -> Config:
 
     if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
+
+    if cfg_obj.min_num_gpus < 0:
+        raise ValueError("min_num_gpus must be non-negative")
 
     # Apply logging level from config uniformly
     apply_log_level(level_name=cfg_obj.log_level)

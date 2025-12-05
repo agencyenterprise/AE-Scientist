@@ -529,7 +529,86 @@ const fetchWithCache = useCallback(async (key: string) => {
 
 ## React Query Integration
 
-The frontend uses React Query for server state management via `QueryProvider`:
+The frontend uses React Query for server state management via `QueryProvider`.
+
+### When to Use React Query vs useState/useEffect
+
+> Added from: research-history-home implementation (2025-12-03)
+
+**Use React Query (`useQuery`) when:**
+- Fetching read-only data from an API endpoint
+- Data should be cached and potentially shared across components
+- You want automatic background refetching on window focus
+- You need loading, error, and success states managed automatically
+- The component may mount/unmount frequently (caching prevents refetch)
+
+**Use useState/useEffect when:**
+- Managing purely local UI state (no API)
+- One-time data transformations
+- Side effects that aren't data fetching
+- Highly custom streaming scenarios (though `useSSEStream` is preferred)
+
+**Example - Simple Data Fetch (Recommended: React Query)**:
+
+```typescript
+// RECOMMENDED: React Query
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/shared/lib/api-client";
+
+export function useRecentItems() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["recent-items"],
+    queryFn: () => apiFetch<ItemsResponse>("/items/?limit=10"),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+
+  return {
+    items: data?.items ?? [],
+    isLoading,
+    error: error instanceof Error ? error.message : null,
+    refetch,
+  };
+}
+```
+
+```typescript
+// AVOID: useState/useEffect for simple fetches
+// This pattern misses caching, deduplication, and standardized error handling
+import { useState, useEffect, useCallback } from "react";
+
+export function useRecentItems() {
+  const [items, setItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchItems = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiFetch("/items/?limit=10");
+      setItems(data.items);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  return { items, isLoading, error, refetch: fetchItems };
+}
+```
+
+### Stale Time Recommendations
+
+| Use Case | Stale Time | Rationale |
+|----------|------------|-----------|
+| Frequently changing data (home page feeds) | 30 seconds | Balance freshness vs performance |
+| Configuration/settings | 5 minutes | Rarely changes during session |
+| User profile | 1 minute | Moderate update frequency |
+| Search results | 0 (default) | Always fresh for new searches |
 
 ### QueryProvider Configuration
 
@@ -599,7 +678,119 @@ export function useDeleteConversation() {
 
 ## Streaming Hook Pattern
 
-For Server-Sent Events (SSE) streaming responses:
+> Updated from: frontend-solid-refactoring implementation (2025-12-03)
+
+For Server-Sent Events (SSE) streaming responses, use the shared `useSSEStream` hook:
+
+### Using the Generic SSE Hook
+
+```typescript
+// features/my-feature/hooks/useMyFeatureStream.ts
+import { useCallback } from "react"
+import { useSSEStream } from "@/shared/hooks/use-sse-stream"
+
+interface MyEvent {
+  type: 'data' | 'status' | 'complete'
+  data: unknown
+}
+
+export function useMyFeatureStream(
+  conversationId: number,
+  onData: (data: unknown) => void,
+  onStatus: (status: string) => void
+) {
+  // Parser function converts raw SSE lines to typed events
+  const parseEvent = useCallback((line: string): MyEvent | null => {
+    if (!line.trim()) return null
+    try {
+      return JSON.parse(line) as MyEvent
+    } catch {
+      console.warn("Failed to parse SSE line:", line)
+      return null
+    }
+  }, [])
+
+  // Handler dispatches events to appropriate callbacks
+  const handleEvent = useCallback((event: MyEvent) => {
+    switch (event.type) {
+      case 'data':
+        onData(event.data)
+        break
+      case 'status':
+        onStatus(event.data as string)
+        break
+    }
+  }, [onData, onStatus])
+
+  return useSSEStream({
+    url: `/conversations/${conversationId}/stream`,
+    enabled: true,
+    parseEvent,
+    onEvent: handleEvent,
+    onComplete: () => console.log("Stream complete"),
+    onError: (error) => console.error("Stream error:", error),
+    delimiter: '\n',        // '\n' for JSON lines, '\n\n' for SSE format
+    reconnect: true,        // auto-reconnect on failure
+    maxReconnectAttempts: 5,
+  })
+}
+```
+
+### For SSE with `data: ` Prefix
+
+Some endpoints use the standard SSE format with `data: ` prefix:
+
+```typescript
+const parseEvent = useCallback((line: string) => {
+  // Handle SSE format: "data: {...}"
+  if (!line.startsWith('data: ')) return null
+  const jsonStr = line.slice(6) // Remove "data: " prefix
+  return JSON.parse(jsonStr)
+}, [])
+
+// Use with '\n\n' delimiter for SSE format
+return useSSEStream({
+  url: `/api/events`,
+  parseEvent,
+  delimiter: '\n\n',  // SSE uses double newline
+  // ...
+})
+```
+
+### For Import Streaming
+
+Use `useStreamingImport` for conversation/idea import operations:
+
+```typescript
+import { useStreamingImport } from "@/shared/hooks/use-streaming-import"
+
+export function useMyImport(options: { onSuccess?: (id: number) => void }) {
+  const { state, actions, streamingRef } = useStreamingImport({
+    onSuccess: options.onSuccess,
+    onError: (error) => toast.error(error),
+  })
+
+  const startImport = async (url: string, model: string, provider: string) => {
+    await actions.startStream({
+      url,
+      model,
+      provider,
+      duplicateResolution: 'prompt',
+    })
+  }
+
+  return {
+    ...state,
+    startImport,
+    reset: actions.reset,
+    streamingRef,
+  }
+}
+```
+
+### Legacy Pattern (Direct Implementation)
+
+For simple streaming without the shared hook:
 
 ```typescript
 // features/project-draft/hooks/useChatStreaming.ts
@@ -665,6 +856,142 @@ export function useChatStreaming(
   return { isStreaming, streamMessage, cancelStream }
 }
 ```
+
+---
+
+## S3 Artifact Download Pattern
+
+> Added from: frontend-final-pdf-banner implementation (2025-12-04)
+
+For downloading files from S3 with authentication/authorization validation, use the presigned URL pattern. This avoids CORS and browser redirect handling issues.
+
+### Problem Solved
+HTTP 307 redirects to presigned S3 URLs can fail with AccessDenied errors due to browser handling and CORS issues. The solution is to return the presigned URL as JSON, then redirect the browser directly.
+
+### Implementation Pattern
+
+**Backend Endpoint** (returns presigned URL as JSON):
+```python
+# server/app/api/my_feature.py
+from app.models import ArtifactPresignedUrlResponse
+
+@router.get("/{artifact_id}/presign")
+def get_artifact_presigned_url(
+    artifact_id: int,
+    request: Request
+) -> ArtifactPresignedUrlResponse:
+    user = get_current_user(request)
+
+    # Validate ownership/access
+    artifact = db.get_artifact(artifact_id)
+    if not artifact or artifact.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # Generate presigned URL using existing S3 service
+    s3 = get_s3_service()
+    download_url = s3.generate_download_url(artifact.s3_key, expires_in=3600)
+
+    return ArtifactPresignedUrlResponse(
+        url=download_url,
+        expires_in=3600,
+        artifact_id=artifact_id,
+        filename=artifact.filename
+    )
+```
+
+**Frontend Hook** (fetches URL and redirects):
+```typescript
+// features/my-feature/hooks/useArtifactDownload.ts
+import { useState } from "react";
+import { apiFetch } from "@/shared/lib/api-client";
+
+interface ArtifactPresignedUrlResponse {
+  url: string;
+  expires_in: number;
+  artifact_id: number;
+  filename: string;
+}
+
+interface UseArtifactDownloadReturn {
+  downloadArtifact: (artifactId: number) => Promise<void>;
+  isDownloading: boolean;
+  downloadingArtifactId: number | null;  // For per-item loading states
+  error: string | null;
+}
+
+export function useArtifactDownload(baseUrl: string): UseArtifactDownloadReturn {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingArtifactId, setDownloadingArtifactId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const downloadArtifact = async (artifactId: number) => {
+    setIsDownloading(true);
+    setDownloadingArtifactId(artifactId);
+    setError(null);
+
+    try {
+      // Fetch presigned URL from backend
+      const response = await apiFetch<ArtifactPresignedUrlResponse>(
+        `${baseUrl}/${artifactId}/presign`
+      );
+
+      // Redirect browser to presigned URL (triggers download)
+      window.location.href = response.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download");
+    } finally {
+      setIsDownloading(false);
+      setDownloadingArtifactId(null);
+    }
+  };
+
+  return { downloadArtifact, isDownloading, downloadingArtifactId, error };
+}
+```
+
+**Component Usage** (button with loading state):
+```typescript
+function ArtifactsList({ artifacts, baseUrl }) {
+  const { downloadArtifact, isDownloading, downloadingArtifactId, error } =
+    useArtifactDownload(baseUrl);
+
+  return (
+    <ul>
+      {artifacts.map(artifact => (
+        <li key={artifact.id}>
+          <span>{artifact.filename}</span>
+          <button
+            onClick={() => downloadArtifact(artifact.id)}
+            disabled={isDownloading}
+          >
+            {downloadingArtifactId === artifact.id ? (
+              <span>Downloading...</span>
+            ) : (
+              <span>Download</span>
+            )}
+          </button>
+        </li>
+      ))}
+      {error && <div className="text-red-500">{error}</div>}
+    </ul>
+  );
+}
+```
+
+### When to Use
+
+- Downloading files from S3 that require authentication
+- User-initiated downloads (not background fetches)
+- When you need ownership/access validation before providing the URL
+- Avoiding CORS issues with redirect-based downloads
+
+### Key Points
+
+1. **Use button, not anchor link**: The download is async (needs API call first)
+2. **Track artifact ID**: Enables per-item loading indicators in lists
+3. **Disable all during download**: Prevents concurrent downloads
+4. **Show error in UI**: Don't fail silently
+5. **Use `window.location.href`**: Triggers browser's native download handling
 
 ---
 

@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, cast
 
 from dataclasses_json import DataClassJsonMixin
+from pydantic import BaseModel
 
-from ai_scientist.llm import FunctionSpec, query
+from ai_scientist.llm import query, structured_query_with_schema
 
 from .events import BaseEvent, RunLogEvent
 from .interpreter import ExecutionResult
@@ -19,24 +20,13 @@ from .utils.response import trim_long_string
 
 logger = logging.getLogger(__name__)
 
-node_selection_spec = FunctionSpec(
-    name="select_best_implementation",
-    description="Select the best implementation based on comprehensive analysis",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "selected_id": {
-                "type": "string",
-                "description": "ID of the selected best implementation",
-            },
-            "reasoning": {
-                "type": "string",
-                "description": "Detailed explanation of why this implementation was chosen",
-            },
-        },
-        "required": ["selected_id", "reasoning"],
-    },
-)
+
+class NodeSelectionResponse(BaseModel):
+    selected_id: str
+    reasoning: str
+
+
+NODE_SELECTION_SCHEMA = NodeSelectionResponse
 
 
 @dataclass(eq=False)
@@ -628,40 +618,21 @@ class Journal:
                 f"Invoking LLM for best-node selection with {len(candidate_ids)} candidates: "
                 f"{[cid[:8] for cid in candidate_ids]}"
             )
-            selection = query(
+            selection = structured_query_with_schema(
                 system_message=prompt,
                 user_message=None,
-                func_spec=node_selection_spec,
                 model=self.node_selection_model,
                 temperature=self.node_selection_temperature,
+                schema_class=NODE_SELECTION_SCHEMA,
             )
 
-            # Find and return the selected node
-            if not isinstance(selection, dict):
-                logger.warning("Falling back to metric-based selection")
-                nodes_with_metric = [n for n in nodes if n.metric is not None]
-                selected_fb = (
-                    max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
-                    if nodes_with_metric
-                    else None
-                )
-                self._best_cache[sig] = selected_fb
-                self._best_cache_time_map[sig] = time.time()
-                self._best_cache_candidate_ids_map[sig] = candidate_ids
-                self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-                logger.warning(
-                    f"LLM returned non-dict selection. Falling back to metric. "
-                    f"Selected: {selected_fb.id[:8] if selected_fb else None}. Cached."
-                )
-                return selected_fb
-
-            selected_id = str(selection.get("selected_id", ""))
+            selected_id = str(selection.selected_id)
             selected_node = next(
                 (node for node in candidate_nodes if str(node.id) == selected_id), None
             )
             if selected_node:
                 logger.info(f"Selected node {selected_node.id} as best implementation")
-                logger.info(f"Reasoning: {selection.get('reasoning', '')}")
+                logger.info(f"Reasoning: {selection.reasoning}")
                 logger.info(
                     f"LLM-selected best node: {selected_node.id[:8]}. "
                     "Emitting events and caching result."
@@ -675,7 +646,7 @@ class Journal:
                     )
                 )
                 # Send detailed reasoning
-                reasoning_text = str(selection.get("reasoning", ""))
+                reasoning_text = str(selection.reasoning or "")
                 reasoning_preview = (
                     reasoning_text[:500] + "..." if len(reasoning_text) > 500 else reasoning_text
                 )

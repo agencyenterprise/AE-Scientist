@@ -11,6 +11,8 @@ from typing import List, NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ class AttachmentTexts(NamedTuple):
     summary_text: str
 
 
-class FileAttachmentsMixin:
+class FileAttachmentsMixin(ConnectionProvider):
     """Database operations for file attachments."""
 
     def create_file_attachment_upload(
@@ -66,7 +68,7 @@ class FileAttachmentsMixin:
         Raises:
             Exception: If database operation fails
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -95,7 +97,7 @@ class FileAttachmentsMixin:
         Raises:
             Exception: If database operation fails
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -126,7 +128,7 @@ class FileAttachmentsMixin:
         if not chat_message_ids:
             return []
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -156,7 +158,7 @@ class FileAttachmentsMixin:
         if not attachment_ids:
             return []
 
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 # Use tuple for IN clause
                 placeholders = ",".join(["%s"] * len(attachment_ids))
@@ -185,7 +187,7 @@ class FileAttachmentsMixin:
         Raises:
             Exception: If database operation fails
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -213,7 +215,7 @@ class FileAttachmentsMixin:
         Returns:
             True if the record was updated, False otherwise
         """
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """

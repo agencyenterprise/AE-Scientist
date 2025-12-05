@@ -12,12 +12,15 @@ from typing import List, NamedTuple, Optional
 import psycopg2
 import psycopg2.extras
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
 class IdeaVersionData(NamedTuple):
     """Idea version data."""
 
+    idea_id: int
     version_id: int
     title: str
     short_hypothesis: str
@@ -51,7 +54,7 @@ class IdeaData(NamedTuple):
     updated_at: datetime
 
 
-class IdeasMixin:
+class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Database operations for ideas."""
 
     def create_idea(
@@ -68,7 +71,7 @@ class IdeasMixin:
     ) -> int:
         """Create a new idea with initial version. Returns idea_id."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # Create idea
                 cursor.execute(
@@ -79,7 +82,10 @@ class IdeasMixin:
                 """,
                     (conversation_id, now, now, created_by_user_id),
                 )
-                idea_id: int = cursor.fetchone()[0]
+                idea_row = cursor.fetchone()
+                if not idea_row:
+                    raise ValueError("Failed to create idea (missing id).")
+                idea_id: int = int(idea_row[0])
 
                 # Create initial version
                 cursor.execute(
@@ -104,7 +110,10 @@ class IdeasMixin:
                         created_by_user_id,
                     ),
                 )
-                version_id: int = cursor.fetchone()[0]
+                version_row = cursor.fetchone()
+                if not version_row:
+                    raise ValueError("Failed to create idea version (missing id).")
+                version_id: int = int(version_row[0])
 
                 # Set as active version
                 cursor.execute(
@@ -117,7 +126,7 @@ class IdeasMixin:
 
     def get_idea_by_conversation_id(self, conversation_id: int) -> Optional[IdeaData]:
         """Get idea with active version for a conversation."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -177,7 +186,7 @@ class IdeasMixin:
         risk_factors_and_limitations: List[str],
         is_manual_edit: bool,
     ) -> bool:
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """UPDATE idea_versions SET 
@@ -221,14 +230,17 @@ class IdeasMixin:
     ) -> int:
         """Create a new version of an idea. Returns version_id."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # Get next version number
                 cursor.execute(
                     "SELECT COALESCE(MAX(version_number), 0) + 1 FROM idea_versions WHERE idea_id = %s",
                     (idea_id,),
                 )
-                next_version = cursor.fetchone()[0]
+                next_version_row = cursor.fetchone()
+                if not next_version_row:
+                    raise ValueError("Failed to fetch next idea version id.")
+                next_version = int(next_version_row[0])
 
                 # Create new version
                 cursor.execute(
@@ -253,7 +265,10 @@ class IdeasMixin:
                         created_by_user_id,
                     ),
                 )
-                version_id: int = cursor.fetchone()[0]
+                insert_version_row = cursor.fetchone()
+                if not insert_version_row:
+                    raise ValueError("Failed to create idea version (missing id).")
+                version_id: int = int(insert_version_row[0])
 
                 # Update active version and idea timestamp
                 cursor.execute(
@@ -266,11 +281,12 @@ class IdeasMixin:
 
     def get_idea_versions(self, idea_id: int) -> List[IdeaVersionData]:
         """Get all versions of an idea, ordered by version number desc."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
                     SELECT
+                        idea_id,
                         id as version_id,
                         title,
                         short_hypothesis,
@@ -291,6 +307,7 @@ class IdeasMixin:
                 results = cursor.fetchall()
                 return [
                     IdeaVersionData(
+                        idea_id=row["idea_id"],
                         version_id=row["version_id"],
                         title=row["title"],
                         short_hypothesis=row["short_hypothesis"],
@@ -306,9 +323,51 @@ class IdeasMixin:
                     for row in results
                 ]
 
+    def get_idea_version_by_id(self, version_id: int) -> Optional[IdeaVersionData]:
+        """Get a single idea version by id."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        idea_id,
+                        id as version_id,
+                        title,
+                        short_hypothesis,
+                        related_work,
+                        abstract,
+                        experiments,
+                        expected_outcome,
+                        risk_factors_and_limitations,
+                        is_manual_edit,
+                        version_number,
+                        created_at
+                    FROM idea_versions
+                    WHERE id = %s
+                    """,
+                    (version_id,),
+                )
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return IdeaVersionData(
+            idea_id=row["idea_id"],
+            version_id=row["version_id"],
+            title=row["title"],
+            short_hypothesis=row["short_hypothesis"],
+            related_work=row["related_work"],
+            abstract=row["abstract"],
+            experiments=row["experiments"],
+            expected_outcome=row["expected_outcome"],
+            risk_factors_and_limitations=row["risk_factors_and_limitations"],
+            is_manual_edit=row["is_manual_edit"],
+            version_number=row["version_number"],
+            created_at=row["created_at"],
+        )
+
     def get_idea_by_id(self, idea_id: int) -> Optional[IdeaData]:
         """Get an idea with its active version by idea id."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     """
@@ -358,7 +417,7 @@ class IdeasMixin:
     def set_active_idea_version(self, idea_id: int, version_id: int) -> bool:
         """Set a specific version as the active version for an idea."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "UPDATE ideas SET active_idea_version_id = %s, updated_at = %s WHERE id = %s",
@@ -378,7 +437,7 @@ class IdeasMixin:
         Returns the new version ID if successful, None otherwise.
         """
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # Get the source version data
                 cursor.execute(
@@ -408,7 +467,10 @@ class IdeasMixin:
                     "SELECT COALESCE(MAX(version_number), 0) + 1 FROM idea_versions WHERE idea_id = %s",
                     (idea_id,),
                 )
-                next_version_number = cursor.fetchone()[0]
+                next_version_row = cursor.fetchone()
+                if not next_version_row:
+                    raise ValueError("Failed to compute next version number.")
+                next_version_number = int(next_version_row[0])
 
                 # Create the new version with copied data
                 cursor.execute(
@@ -430,7 +492,10 @@ class IdeasMixin:
                         created_by_user_id,
                     ),
                 )
-                new_version_id: int = cursor.fetchone()[0]
+                new_version_row = cursor.fetchone()
+                if not new_version_row:
+                    raise ValueError("Failed to duplicate idea version (missing id).")
+                new_version_id: int = int(new_version_row[0])
 
                 # Set this new version as the active version
                 cursor.execute(

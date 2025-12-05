@@ -167,6 +167,28 @@ All routes prefixed with `/api`.
 | POST | `/{id}/upload` | Upload file attachment |
 | GET | `/{id}/download` | Download file (signed S3 URL) |
 
+### Research Pipeline Artifacts
+
+> Added from: frontend-final-pdf-banner implementation (2025-12-04)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/conversations/{id}/idea/research-run/{run_id}/artifacts` | List artifacts for a research run |
+| GET | `/conversations/{id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download` | Download artifact (307 redirect to S3) |
+| GET | `/conversations/{id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign` | Get presigned S3 URL as JSON (preferred) |
+
+**Presign Endpoint Response**:
+```json
+{
+  "url": "https://s3.amazonaws.com/bucket/key?...",
+  "expires_in": 3600,
+  "artifact_id": 123,
+  "filename": "paper.pdf"
+}
+```
+
+**Note**: The `/presign` endpoint is preferred over `/download` because HTTP 307 redirects to S3 can fail with AccessDenied errors due to browser handling and CORS issues. The presign endpoint returns the URL as JSON, allowing the frontend to redirect the browser directly.
+
 ### LLM Configuration (`/api/llm-prompts`, `/api/llm-defaults`)
 
 | Method | Endpoint | Description |

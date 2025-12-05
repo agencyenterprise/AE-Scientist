@@ -8,3 +8,4 @@ We keep all important docs in. agent folder and keep updating them, structure li
 
 We should always update . agent docs after we implement certain feature, to make sure it fully reflect the up to date information
 Before you plan any implementation, always read the •agent/README first to get context
+- never run build commands.

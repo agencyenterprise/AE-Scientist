@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
-import { config } from "@/shared/lib/config";
-import { isErrorResponse } from "@/shared/lib/api-adapters";
+import { apiFetch } from "@/shared/lib/api-client";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { SectionEditModal } from "./SectionEditModal";
 
@@ -82,16 +81,14 @@ export function ProjectDraft({
     const previousActiveVersionNumber = projectState.projectDraft.active_version.version_number;
 
     try {
-      const response = await fetch(
-        `${config.apiUrl}/conversations/${conversation.id}/idea/versions/${versionState.comparisonVersion.version_id}/activate`,
+      const result = await apiFetch<{ idea: IdeaType }>(
+        `/conversations/${conversation.id}/idea/versions/${versionState.comparisonVersion.version_id}/activate`,
         {
           method: "POST",
-          credentials: "include",
         }
       );
 
-      const result = await response.json();
-      if (!isErrorResponse(result) && result.idea) {
+      if (result.idea) {
         projectState.setProjectDraft(result.idea);
         animations.triggerUpdateAnimation();
         // Reload versions after revert
@@ -99,8 +96,6 @@ export function ProjectDraft({
 
         // Set the comparison to show the diff leading up to the new reverted version
         versionState.setSelectedVersionForComparison(previousActiveVersionNumber);
-      } else {
-        throw new Error(result.error || "Failed to revert changes");
       }
     } catch (error) {
       // eslint-disable-next-line no-console

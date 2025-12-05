@@ -13,6 +13,8 @@ import psycopg2.extras
 
 from app.prompt_types import PromptTypes
 
+from .base import ConnectionProvider
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,12 +25,12 @@ class DefaultLLMParametersData(NamedTuple):
     llm_provider: str
 
 
-class LLMDefaultsMixin:
+class LLMDefaultsMixin(ConnectionProvider):
     """Database operations for LLM default parameters."""
 
     def get_default_llm_parameters(self, prompt_type: PromptTypes) -> DefaultLLMParametersData:
         """Get the default LLM parameters for a given prompt type."""
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(
                     "SELECT llm_model, llm_provider FROM default_llm_parameters WHERE prompt_type = %s",
@@ -48,7 +50,7 @@ class LLMDefaultsMixin:
     ) -> bool:
         """Set the default LLM parameters for a given prompt type (upsert operation)."""
         now = datetime.now()
-        with psycopg2.connect(**self.pg_config) as conn:  # type: ignore[attr-defined]
+        with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """

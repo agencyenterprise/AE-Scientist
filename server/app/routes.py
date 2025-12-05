@@ -18,6 +18,7 @@ from app.api.llm_prompts import router as llm_prompts_router
 from app.api.research_pipeline_events import router as rp_events_router
 from app.api.research_pipeline_runs import router as rp_runs_router
 from app.api.research_runs import router as research_runs_router
+from app.api.users import router as users_router
 
 # Load environment variables first
 load_dotenv()
@@ -36,3 +37,4 @@ router.include_router(llm_prompts_router)
 router.include_router(rp_events_router)
 router.include_router(rp_runs_router)
 router.include_router(research_runs_router)
+router.include_router(users_router)

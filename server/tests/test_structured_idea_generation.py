@@ -11,7 +11,7 @@ from anthropic import BadRequestError as AnthropicBadRequestError
 from dotenv import load_dotenv
 from openai import BadRequestError as OpenAIBadRequestError
 
-from app.api.conversations import _idea_sections_for_stream, _stream_structured_idea
+from app.api.conversations import _iter_formatted_sections, _stream_structured_idea
 from app.config import settings
 from app.models import LLMModel
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
@@ -50,9 +50,10 @@ def _sample_payload() -> dict[str, Any]:
     }
 
 
-def _build_fake_stream(payload: str) -> AsyncGenerator[str, None]:
+def _build_fake_stream(*payloads: dict[str, Any]) -> AsyncGenerator[str, None]:
     async def _generator() -> AsyncGenerator[str, None]:
-        yield payload
+        for payload in payloads:
+            yield json.dumps(payload)
 
     return _generator()
 
@@ -60,12 +61,72 @@ def _build_fake_stream(payload: str) -> AsyncGenerator[str, None]:
 def test_idea_sections_for_stream_formats_lists() -> None:
     idea = LLMIdeaGeneration(**_sample_payload())
 
-    sections = _idea_sections_for_stream(idea=idea)
+    sections = [text for _, text in _iter_formatted_sections(idea=idea)]
     combined = "".join(sections)
 
     assert "Title:\nAgentic Memory Consolidation" in combined
     assert "- Experiment A: Measure retrieval quality after consolidation." in combined
     assert "Risk Factors and Limitations" in combined
+
+
+def test_parse_idea_response_with_trailing_text() -> None:
+    """Test that JSON extraction works when LLM appends commentary after JSON."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+    json_with_trailing = (
+        json.dumps(payload)
+        + " This includes a minor formatting issue at the end due to an accidental "
+        'inclusion of extra characters ("]}'
+    )
+
+    result = service._parse_idea_response(content=json_with_trailing)
+
+    assert result.title == payload["title"]
+    assert result.expected_outcome == payload["expected_outcome"]
+    assert result.risk_factors_and_limitations == payload["risk_factors_and_limitations"]
+
+
+def test_parse_idea_response_with_leading_text() -> None:
+    """Test that JSON extraction works when there's leading text."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+    json_with_leading = "Here is the JSON: " + json.dumps(payload)
+
+    result = service._parse_idea_response(content=json_with_leading)
+
+    assert result.title == payload["title"]
+    assert result.experiments == payload["experiments"]
+
+
+def test_parse_idea_response_clean_json() -> None:
+    """Test that clean JSON still parses correctly."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    payload = _sample_payload()
+
+    result = service._parse_idea_response(content=json.dumps(payload))
+
+    assert result.title == payload["title"]
+    assert result.abstract == payload["abstract"]
+
+
+def test_parse_idea_response_missing_fields_raises() -> None:
+    """Test that missing required fields raises ValueError with helpful message."""
+    service = OpenAIService(summarizer_service=MagicMock())
+    incomplete_payload = {
+        "title": "Test",
+        "short_hypothesis": "Test hypothesis",
+        "related_work": "Related work",
+        "abstract": "Abstract",
+        "experiments": ["Exp 1"],
+        # Missing: expected_outcome, risk_factors_and_limitations
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        service._parse_idea_response(content=json.dumps(incomplete_payload))
+
+    error_message = str(exc_info.value)
+    assert "missing fields" in error_message.lower()
+    assert "expected_outcome" in error_message or "risk_factors" in error_message
 
 
 @pytest.mark.asyncio
@@ -79,7 +140,13 @@ async def test_stream_structured_idea_creates_new_idea() -> None:
     async for chunk in _stream_structured_idea(
         db=db,
         llm_service=llm_service,
-        idea_stream=_build_fake_stream(json.dumps(_sample_payload())),
+        idea_stream=_build_fake_stream(
+            {"event": "section_delta", "field": "title", "value": "Agentic Memory"},
+            {
+                "event": "final_idea_payload",
+                "data": json.dumps(_sample_payload()),
+            },
+        ),
         conversation_id=1,
         user_id=2,
     ):
@@ -101,7 +168,12 @@ async def test_stream_structured_idea_updates_existing_idea() -> None:
     async for _ in _stream_structured_idea(
         db=db,
         llm_service=llm_service,
-        idea_stream=_build_fake_stream(json.dumps(_sample_payload())),
+        idea_stream=_build_fake_stream(
+            {
+                "event": "final_idea_payload",
+                "data": json.dumps(_sample_payload()),
+            }
+        ),
         conversation_id=3,
         user_id=4,
     ):
@@ -180,7 +252,8 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
     )
 
     with patch("app.services.langchain_llm_service.get_database", return_value=fake_db):
-        chunks: List[str] = []
+        final_payload: str | None = None
+        partial_events = 0
         try:
             async for content_chunk in service.generate_idea(
                 llm_model=config.model.id,
@@ -188,8 +261,13 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
                 _user_id=123,
                 conversation_id=456,
             ):
-                if content_chunk:
-                    chunks.append(content_chunk)
+                if not content_chunk:
+                    continue
+                event = json.loads(content_chunk)
+                if event.get("event") == "section_delta":
+                    partial_events += 1
+                elif event.get("event") == "final_idea_payload":
+                    final_payload = event.get("data")
         except AnthropicBadRequestError as exc:
             if config.provider == "anthropic" and "credit balance" in str(exc).lower():
                 pytest.fail("Anthropic credits unavailable for smoke test")
@@ -199,9 +277,9 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
                 pytest.fail("Grok API rejected payload; verify account access before running")
             raise
 
-    assembled = "".join(chunks).strip()
-    assert assembled, "Provider returned empty idea content"
+    assert final_payload, "Provider returned empty idea content"
+    assert partial_events >= 0
 
-    idea = service._parse_idea_response(content=assembled)
+    idea = service._parse_idea_response(content=final_payload)
     assert idea.title
     assert idea.abstract

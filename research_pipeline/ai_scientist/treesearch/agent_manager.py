@@ -18,8 +18,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 
-from ai_scientist.llm import FunctionSpec, query
-from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, RunStageProgressEvent
+from pydantic import BaseModel
+
+from ai_scientist.llm import structured_query_with_schema
+from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, SubstageCompletedEvent
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
@@ -36,34 +38,14 @@ from .utils.config import Config, TaskDescription
 logger = logging.getLogger(__name__)
 
 
+class SubstageGoalResponse(BaseModel):
+    goals: str
+    sub_stage_name: str
+
+
 class StageClass(Protocol):
     MAIN_STAGE_SLUG: str
     DEFAULT_GOALS: str
-
-
-stage_completion_eval_spec = FunctionSpec(
-    name="evaluate_stage_completion",
-    description="Evaluate if the current stage is complete",
-    json_schema={
-        "type": "object",
-        "properties": {
-            "is_complete": {
-                "type": "boolean",
-                "description": "Whether the current stage is complete",
-            },
-            "reasoning": {
-                "type": "string",
-                "description": "Detailed reasoning for the decision",
-            },
-            "missing_criteria": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "List of criteria still needed",
-            },
-        },
-        "required": ["is_complete", "reasoning", "missing_criteria"],
-    },
-)
 
 
 @dataclass
@@ -405,43 +387,20 @@ Your research idea:\n\n
         4. Are concrete and measurable
         """
 
-        # Define the function specification for the LLM
-        substage_goal_spec = FunctionSpec(
-            name="generate_substage_goals",
-            description="Generate specific goals for the next experimental sub-stage",
-            json_schema={
-                "type": "object",
-                "properties": {
-                    "goals": {
-                        "type": "string",
-                        "description": "Detailed, specific goals for the next sub-stage",
-                    },
-                    "sub_stage_name": {
-                        "type": "string",
-                        "description": "The name of the next sub-stage",
-                    },
-                },
-                "required": ["goals", "sub_stage_name"],
-            },
-        )
-
         try:
             # Get response from LLM
-            response = query(
+            response = structured_query_with_schema(
                 system_message=prompt,
                 user_message=None,
-                func_spec=substage_goal_spec,
                 model=self.cfg.agent.feedback.model,
                 temperature=self.cfg.agent.feedback.temp,
+                schema_class=SubstageGoalResponse,
             )
-            response_dict = cast(Dict[str, Any], response)
-
-            # Format the response into a structured goal string
             goal_str = f"""
-            {response_dict['goals']}
+            {response.goals}
             """
 
-            return goal_str.strip(), str(response_dict["sub_stage_name"])
+            return goal_str.strip(), str(response.sub_stage_name)
 
         except Exception as e:
             logger.error(f"Error generating sub-stage goals: {e}")
@@ -588,7 +547,7 @@ Your research idea:\n\n
         - If False and next_substage is provided, the caller should continue with that sub-stage.
         """
         while True:
-            # Emit iteration progress before each step
+            # Emit iteration log before each step; progress events are handled in step_callback.
             journal = self.journals[current_substage.name]
             max_iters = current_substage.max_iterations
             current_iter = len(journal.nodes) + 1
@@ -600,17 +559,6 @@ Your research idea:\n\n
                             f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}"
                         ),
                         level="info",
-                    )
-                )
-                self.event_callback(
-                    RunStageProgressEvent(
-                        stage=current_substage.name,
-                        iteration=current_iter,
-                        max_iterations=max_iters,
-                        progress=min(len(journal.nodes) / max_iters, 1.0),
-                        total_nodes=len(journal.nodes),
-                        buggy_nodes=len(journal.buggy_nodes),
-                        good_nodes=len(journal.good_nodes),
                     )
                 )
             except Exception:
@@ -646,6 +594,34 @@ Your research idea:\n\n
             )
 
             if substage_complete:
+                # Emit a sub-stage completion event with a lightweight summary
+                try:
+                    journal = self.journals[current_substage.name]
+                    best_node = journal.get_best_node()
+                    summary: Dict[str, Any] = {
+                        "goals": current_substage.goals,
+                        "total_nodes": len(journal.nodes),
+                        "buggy_nodes": len(journal.buggy_nodes),
+                        "good_nodes": len(journal.good_nodes),
+                        "best_metric": (
+                            str(best_node.metric) if best_node and best_node.metric else None
+                        ),
+                        "feedback": substage_feedback,
+                    }
+                    self.event_callback(
+                        SubstageCompletedEvent(
+                            stage=current_substage.name,
+                            main_stage_number=current_substage.number,
+                            substage_number=current_substage.substage_number,
+                            substage_name=current_substage.substage_name,
+                            reason=substage_feedback,
+                            summary=summary,
+                        )
+                    )
+                except Exception:
+                    # Best-effort telemetry; never block progression on event errors
+                    logger.exception("Failed to emit SubstageCompletedEvent")
+
                 # Create next sub-stage
                 next_substage = self._create_next_substage(
                     current_substage=current_substage,

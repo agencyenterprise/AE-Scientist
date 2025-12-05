@@ -5,12 +5,12 @@ from typing import List, Protocol, Tuple
 
 from pydantic import BaseModel, Field
 
-from ai_scientist.llm import query, structured_query_with_schema
+from ai_scientist.llm import structured_query_with_schema
 
 from .journal import Node
 from .types import PromptType
 from .utils.config import Config as AppConfig
-from .vlm_function_specs import plot_selection_spec, vlm_feedback_spec
+from .vlm_function_specs import PLOT_SELECTION_SCHEMA, VLM_FEEDBACK_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -248,27 +248,23 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
             "Plot paths": node.plot_paths,
         }
         try:
-            response_select_plots = query(
+            response_select_plots = structured_query_with_schema(
                 system_message=prompt_select_plots,
                 user_message=None,
-                func_spec=plot_selection_spec,
                 model=agent.cfg.agent.feedback.model,
                 temperature=agent.cfg.agent.feedback.temp,
+                schema_class=PLOT_SELECTION_SCHEMA,
             )
             selected_plots = node.plot_paths[:10]
-            if isinstance(response_select_plots, dict):
-                candidate = response_select_plots.get("selected_plots", [])
-                valid_plots: list[str] = []
-                if isinstance(candidate, list):
-                    for plot_path in candidate:
-                        if (
-                            isinstance(plot_path, str)
-                            and os.path.exists(plot_path)
-                            and plot_path.lower().endswith((".png", ".jpg", ".jpeg"))
-                        ):
-                            valid_plots.append(plot_path)
-                if valid_plots:
-                    selected_plots = valid_plots
+            candidate = response_select_plots.selected_plots
+            valid_plots: list[str] = []
+            for plot_path in candidate:
+                if os.path.exists(plot_path) and plot_path.lower().endswith(
+                    (".png", ".jpg", ".jpeg")
+                ):
+                    valid_plots.append(plot_path)
+            if valid_plots:
+                selected_plots = valid_plots
         except Exception:
             selected_plots = node.plot_paths[:10]
 
@@ -315,49 +311,20 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
 
     user_message = [text_part] + image_parts
 
-    response = query(
+    response_model = structured_query_with_schema(
         system_message=None,
         user_message=user_message,
-        func_spec=vlm_feedback_spec,
         model=agent.cfg.agent.vlm_feedback.model,
         temperature=agent.cfg.agent.vlm_feedback.temp,
+        schema_class=VLM_FEEDBACK_SCHEMA,
     )
+    response = response_model.model_dump(by_alias=True)
     # Log raw response for debugging/traceability
-    logger.debug(f"VLM plot analysis raw response type: {type(response)}")
+    logger.debug("VLM plot analysis raw response type: %s", type(response))
     try:
-        logger.debug(f"VLM plot analysis raw response: {response}")
+        logger.debug("VLM plot analysis raw response: %s", response)
     except Exception:
         logger.debug("VLM plot analysis raw response: <unprintable>")
-
-    if not isinstance(response, dict):
-        warning_msg = (
-            "=" * 100
-            + "\n"
-            + "!" * 100
-            + "\n"
-            + "!" * 100
-            + "\n"
-            + "!" * 100
-            + "\n"
-            + "⚠️  ⚠️  ⚠️  BIG WARNING: VLM analysis response is not a dict! ⚠️  ⚠️  ⚠️\n"
-            + f"⚠️  Node ID: {node.id}\n"
-            + f"⚠️  Response type: {type(response)}\n"
-            + "⚠️  This means VLM analysis failed or returned unexpected format\n"
-            + "⚠️  Setting is_buggy_plots = False (assuming plots are fine, but unverified)\n"
-            + "⚠️  Execution will continue, but plots were not validated by VLM\n"
-            + "!" * 100
-            + "\n"
-            + "!" * 100
-            + "\n"
-            + "!" * 100
-            + "\n"
-            + "=" * 100
-        )
-        logger.warning(warning_msg)
-        # Set is_buggy_plots to False to allow the node to be considered "good"
-        # but mark that we couldn't verify the plots via VLM
-        node.is_buggy_plots = False
-        return
     valid_plots_received = bool(response.get("valid_plots_received"))
     node.is_buggy_plots = not valid_plots_received
     # Sanitize plot_analyses to ensure a list of dicts with at least {"analysis": str, "plot_path": str|None}

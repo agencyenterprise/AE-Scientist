@@ -421,7 +421,7 @@
     "/api/conversations": {
       "get": {
         "summary": "List Conversations",
-        "description": "Get a paginated list of all imported conversations.",
+        "description": "Get a paginated list of conversations for the current user.",
         "operationId": "list_conversations_api_conversations_get",
         "parameters": [
           {
@@ -1458,13 +1458,13 @@
         }
       }
     },
-    "/api/research-pipeline/events/experiment-node-completed": {
+    "/api/research-pipeline/events/substage-completed": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
-        "summary": "Ingest Experiment Node Completed",
-        "operationId": "ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post",
+        "summary": "Ingest Substage Completed",
+        "operationId": "ingest_substage_completed_api_research_pipeline_events_substage_completed_post",
         "parameters": [
           {
             "name": "authorization",
@@ -1481,7 +1481,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExperimentNodeCompletedPayload"
+                "$ref": "#/components/schemas/SubstageCompletedPayload"
               }
             }
           }
@@ -1638,6 +1638,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/gpu-shortage": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Gpu Shortage",
+        "operationId": "ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GPUShortagePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [
@@ -1731,6 +1776,57 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
+      "post": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Stop Research Run",
+        "operationId": "stop_research_run_api_conversations__conversation_id__idea_research_run__run_id__stop_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStopResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download": {
       "get": {
         "tags": [
@@ -1789,13 +1885,119 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Artifact Presigned Url",
+        "description": "Generate presigned S3 URL for artifact download.",
+        "operationId": "get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPresignedUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Stream Research Run Events",
+        "description": "Stream research run events via Server-Sent Events.\n\nEvent types:\n- initial: Full snapshot on connection\n- log: New log entries\n- stage_progress: Meaningful progress changes only\n- artifact: New artifacts\n- run_update: Run status/info changes\n- complete: Run finished (completed/failed)\n- heartbeat: Keep-alive every 30s\n- error: Error occurred",
+        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-runs/": {
       "get": {
         "tags": [
           "research-runs"
         ],
         "summary": "List Research Runs",
-        "description": "List all research pipeline runs with enriched data.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information",
+        "description": "List research pipeline runs for the current user.\n\nReturns runs ordered by creation date (newest first) with:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n\nSupports filtering by search term and status.",
         "operationId": "list_research_runs_api_research_runs__get",
         "parameters": [
           {
@@ -1824,6 +2026,28 @@
               "title": "Offset"
             },
             "description": "Number of runs to skip"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Search term for run ID, title, hypothesis, or creator",
+              "title": "Search"
+            },
+            "description": "Search term for run ID, title, hypothesis, or creator"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter by status (pending, running, completed, failed)",
+              "title": "Status"
+            },
+            "description": "Filter by status (pending, running, completed, failed)"
           }
         ],
         "responses": {
@@ -1843,6 +2067,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-runs/{run_id}/": {
+      "get": {
+        "tags": [
+          "research-runs"
+        ],
+        "summary": "Get Research Run",
+        "description": "Get a single research pipeline run by run_id.\n\nReturns the run with enriched data including:\n- Run metadata (status, GPU, timestamps)\n- Idea information (title, hypothesis)\n- Latest stage progress (stage, progress percentage, best metric)\n- Artifact count\n- Creator information\n- conversation_id for navigation",
+        "operationId": "get_research_run_api_research_runs__run_id___get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunListItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "List Users",
+        "description": "List all active users.\n\nReturns all active users sorted by name.",
+        "operationId": "list_users_api_users__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
                 }
               }
             }
@@ -1899,6 +2188,39 @@
   },
   "components": {
     "schemas": {
+      "ArtifactPresignedUrlResponse": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Presigned S3 download URL (valid for 1 hour)"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "URL expiration time in seconds"
+          },
+          "artifact_id": {
+            "type": "integer",
+            "title": "Artifact Id",
+            "description": "Artifact identifier"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_in",
+          "artifact_id",
+          "filename"
+        ],
+        "title": "ArtifactPresignedUrlResponse",
+        "description": "Response containing presigned S3 download URL."
+      },
       "AuthStatus": {
         "properties": {
           "authenticated": {
@@ -2420,53 +2742,6 @@
         "title": "ErrorResponse",
         "description": "Standard error response schema."
       },
-      "ExperimentNodeCompletedEvent": {
-        "properties": {
-          "stage": {
-            "type": "string",
-            "title": "Stage"
-          },
-          "node_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Node Id"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Summary"
-          }
-        },
-        "type": "object",
-        "required": [
-          "stage",
-          "summary"
-        ],
-        "title": "ExperimentNodeCompletedEvent"
-      },
-      "ExperimentNodeCompletedPayload": {
-        "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
-          "event": {
-            "$ref": "#/components/schemas/ExperimentNodeCompletedEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "run_id",
-          "event"
-        ],
-        "title": "ExperimentNodeCompletedPayload"
-      },
       "FileAttachment": {
         "properties": {
           "id": {
@@ -2600,6 +2875,40 @@
         ],
         "title": "FileUploadResponse",
         "description": "File upload response."
+      },
+      "GPUShortagePayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "required_gpus": {
+            "type": "integer",
+            "title": "Required Gpus"
+          },
+          "available_gpus": {
+            "type": "integer",
+            "title": "Available Gpus"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "required_gpus",
+          "available_gpus"
+        ],
+        "title": "GPUShortagePayload"
       },
       "HTTPValidationError": {
         "properties": {
@@ -3347,13 +3656,21 @@
             "title": "Logs",
             "description": "Log events generated by the run"
           },
-          "experiment_nodes": {
+          "substage_events": {
             "items": {
-              "$ref": "#/components/schemas/ResearchRunNodeEvent"
+              "$ref": "#/components/schemas/ResearchRunSubstageEvent"
             },
             "type": "array",
-            "title": "Experiment Nodes",
-            "description": "Experiment node completion events"
+            "title": "Substage Events",
+            "description": "Sub-stage completion events"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunEvent"
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "Audit events describing run-level lifecycle transitions"
           },
           "artifacts": {
             "items": {
@@ -3369,6 +3686,44 @@
           "run"
         ],
         "title": "ResearchRunDetailsResponse"
+      },
+      "ResearchRunEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the audit event"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Run identifier that produced the event"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type",
+            "description": "Audit event type label"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Structured metadata captured for the event"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At",
+            "description": "ISO timestamp when the event was recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "event_type",
+          "occurred_at"
+        ],
+        "title": "ResearchRunEvent"
       },
       "ResearchRunInfo": {
         "properties": {
@@ -3427,6 +3782,11 @@
             ],
             "title": "Gpu Type",
             "description": "Requested GPU type"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the run launched"
           },
           "public_ip": {
             "anyOf": [
@@ -3523,6 +3883,7 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "cost",
           "created_at",
           "updated_at"
         ],
@@ -3593,6 +3954,11 @@
             "title": "Gpu Type",
             "description": "GPU type used for the run"
           },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the pod launched"
+          },
           "best_metric": {
             "anyOf": [
               {
@@ -3649,6 +4015,7 @@
           "run_id",
           "status",
           "idea_title",
+          "cost",
           "created_by_name",
           "created_at",
           "updated_at",
@@ -3711,51 +4078,6 @@
           "created_at"
         ],
         "title": "ResearchRunLogEntry"
-      },
-      "ResearchRunNodeEvent": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Unique identifier of the node event"
-          },
-          "stage": {
-            "type": "string",
-            "title": "Stage",
-            "description": "Stage identifier"
-          },
-          "node_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Node Id",
-            "description": "Identifier of the node"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Summary",
-            "description": "Summary payload stored in telemetry"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp of the event"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "stage",
-          "summary",
-          "created_at"
-        ],
-        "title": "ResearchRunNodeEvent"
       },
       "ResearchRunStageProgress": {
         "properties": {
@@ -3849,6 +4171,74 @@
         ],
         "title": "ResearchRunStageProgress"
       },
+      "ResearchRunStopResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "message"
+        ],
+        "title": "ResearchRunStopResponse"
+      },
+      "ResearchRunSubstageEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the sub-stage completion event"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Optional identifier associated with the sub-stage (reserved for future use)"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary",
+            "description": "Summary payload stored for this sub-stage"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of the event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "summary",
+          "created_at"
+        ],
+        "title": "ResearchRunSubstageEvent"
+      },
       "ResearchRunSummary": {
         "properties": {
           "run_id": {
@@ -3906,6 +4296,11 @@
             ],
             "title": "Gpu Type",
             "description": "Requested GPU type"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost",
+            "description": "Hourly RunPod cost (USD) captured when the run launched"
           },
           "public_ip": {
             "anyOf": [
@@ -3990,6 +4385,7 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "cost",
           "created_at",
           "updated_at"
         ],
@@ -4131,6 +4527,62 @@
         ],
         "title": "StageProgressPayload"
       },
+      "SubstageCompletedEvent": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "main_stage_number": {
+            "type": "integer",
+            "title": "Main Stage Number"
+          },
+          "substage_number": {
+            "type": "integer",
+            "title": "Substage Number"
+          },
+          "substage_name": {
+            "type": "string",
+            "title": "Substage Name"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "main_stage_number",
+          "substage_number",
+          "substage_name",
+          "reason",
+          "summary"
+        ],
+        "title": "SubstageCompletedEvent"
+      },
+      "SubstageCompletedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/SubstageCompletedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "SubstageCompletedPayload"
+      },
       "SummaryResponse": {
         "properties": {
           "summary": {
@@ -4145,6 +4597,57 @@
         ],
         "title": "SummaryResponse",
         "description": "Response for summary operations."
+      },
+      "UserListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Database user ID"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "User email address"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "User display name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "title": "UserListItem",
+        "description": "User item for list responses."
+      },
+      "UserListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserListItem"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "List of users"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total count of users"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "UserListResponse",
+        "description": "Response model for listing users."
       },
       "ValidationError": {
         "properties": {

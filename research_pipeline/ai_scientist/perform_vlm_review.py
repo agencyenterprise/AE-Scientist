@@ -3,11 +3,12 @@ import hashlib
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional
 
 import pymupdf  # type: ignore[import-untyped]
+from pydantic import BaseModel, Field
 
-from ai_scientist.llm.vlm import extract_json_between_markers_vlm, get_response_from_vlm
+from ai_scientist.llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
 from ai_scientist.perform_llm_review import load_paper
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,57 @@ reviewer_system_prompt_base = (
     "Be critical and cautious in your decision."
 )
 
+
+class ImageCaptionRefReview(BaseModel):
+    Img_description: str = Field(
+        ...,
+        description="Describe the figure's contents, axes, and notable patterns.",
+    )
+    Img_review: str = Field(
+        ...,
+        description="Analysis of the figure quality, clarity, and potential improvements.",
+    )
+    Caption_review: str = Field(
+        ...,
+        description="Assessment of how well the caption matches and explains the figure.",
+    )
+    Figrefs_review: str = Field(
+        ...,
+        description="Evaluation of how the main text references integrate this figure.",
+    )
+
+
+class ImageSelectionReview(ImageCaptionRefReview):
+    Overall_comments: str = Field(
+        ...,
+        description="Whether the figure adds sufficient value given page limits.",
+    )
+    Containing_sub_figures: str = Field(
+        ...,
+        description="Whether the figure has subplots and if their layout is adequate.",
+    )
+    Informative_review: str = Field(
+        ...,
+        description="Whether the figure is informative or redundant.",
+    )
+
+
+class ImageReview(BaseModel):
+    Img_description: str = Field(
+        ...,
+        description="Describe the figure's contents in detail.",
+    )
+    Img_review: str = Field(
+        ...,
+        description="Critique or suggestions for improving the figure.",
+    )
+
+
+class FigureImageCaptionRefReview(BaseModel):
+    figure_name: str = Field(..., description="Normalized identifier for the figure.")
+    review: ImageCaptionRefReview
+
+
 img_cap_ref_review_prompt = """The abstract of the paper is:
 
 {abstract}
@@ -52,24 +104,8 @@ You should:
   - Critique the caption: does it accurately describe the figure? Is it too long/short? Does it include a concise takeaway?
   - Review how well the main text references (figrefs) explain the figure: are they missing? Do they adequately describe the figure's content, context, or purpose?
 
-Finally, respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-REVIEW JSON:
-```json
-<JSON>
-```
-In <JSON>, provide the review in JSON format with the following fields in the order:
-- "Img_description": "<Describe the figure's contents here>"
-- "Img_review": "<Your analysis of the figure itself, including any suggestions for improvement>"
-- "Caption_review": "<Your assessment of how well the caption matches the figure and any suggestions>"
-- "Figrefs_review": "<Your thoughts on whether the main text references adequately describe or integrate the figure>"
-
-In <THOUGHT>, first, thoroughly reason through your observations, analysis of alignment, and any suggested improvements. It is okay to be very long.
-Then provide your final structured output in <JSON>.
-Make sure the JSON is valid and properly formatted, as it will be parsed automatically."""
+Reason carefully through these observations before replying. Only after finishing your internal reasoning should you respond with a JSON object matching the ImageCaptionRefReview schema. Do not include any additional prose around the JSON; ensure it is valid and properly formatted for automatic parsing.
+Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
 
 
 img_cap_selection_prompt = """The abstract of the paper is:
@@ -102,27 +138,8 @@ After considering all of the above, you should carefully evaluate:
   - Does this figure contain subfigures?
   - Is this figure not very informative? For example, some figures may show bars with very similar heights that are difficult to distinguish, or present data in a way that does not effectively communicate meaningful differences or patterns.
 
-Finally, respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-REVIEW JSON:
-```json
-<JSON>
-```
-In <JSON>, provide the review in JSON format with the following fields in the order:
-- "Img_description": "<Describe the figure's contents here>"
-- "Img_review": "<Your analysis of the figure itself, including any suggestions for improvement>"
-- "Caption_review": "<Your assessment of how well the caption matches the figure and any suggestions>"
-- "Figrefs_review": "<Your thoughts on whether the main text references adequately describe or integrate the figure>"
-- "Overall_comments": "<Your thoughts on whether this figure adds significant value to the paper. Should it be moved to the appendix or not?>"
-- "Containing_sub_figures": "<Does this figure contain multiple sub-figures? Do you think the information in this figure is dense? If not, would you suggest combining it with other figures in the main text? If it contains subplots, are their sizes and positions nicely aligned? If not, describe the issues.>"
-- "Informative_review": "<Is this figure informative? Does it effectively communicate meaningful differences or patterns? Or does it show data in a way that makes it difficult to distinguish differences (e.g. bars with very similar heights)?>"
-
-In <THOUGHT>, first, thoroughly reason through your observations, analysis of alignment, and any suggested improvements. It is okay to be very long.
-Then provide your final structured output in <JSON>.
-Make sure the JSON is valid and properly formatted, as it will be parsed automatically."""
+Think step-by-step about these considerations, then respond with a JSON object matching the ImageSelectionReview schema. Provide strictly the JSON (no extra commentary) so it can be parsed automatically.
+Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
 
 img_review_prompt = """
 
@@ -134,22 +151,8 @@ You should:
   - Examine the figure in detail: conclude elements in figures (e.g. name of axis) and describe what information is shown (e.g. the line of loss decreases monotonically but plateaus after X epochs)
   - Suggest any potential improvements or issues in the figure itself (e.g., missing legend, unclear labeling, no meaningful conclusion, mismatch with what the caption claims).
 
-Finally, respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-REVIEW JSON:
-```json
-<JSON>
-```
-In <JSON>, provide the review in JSON format with the following fields in the order:
-- "Img_description": "<Describe the figure's contents here>"
-- "Img_review": "<Your analysis of the figure itself, including any suggestions for improvement>"
-
-In <THOUGHT>, first, thoroughly reason through your observations, analysis of alignment, and any suggested improvements. It is okay to be very long.
-Then provide your final structured output in <JSON>.
-Make sure the JSON is valid and properly formatted, as it will be parsed automatically."""
+Deliberate carefully before answering. When ready, return only a JSON object matching the ImageReview schema so it can be parsed without additional text.
+Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
 
 
 def extract_figure_screenshots(
@@ -349,21 +352,25 @@ def generate_vlm_img_cap_ref_review(
     abstract: str,
     model: str,
     temperature: float,
-) -> Dict[str, Any] | None:
+) -> ImageCaptionRefReview | None:
     prompt = img_cap_ref_review_prompt.format(
         abstract=abstract,
         caption=img["caption"],
         main_text_figrefs=img["main_text_figrefs"],
     )
-    content, _ = get_response_from_vlm(
-        msg=prompt,
-        image_paths=img["images"],
-        model=model,
-        system_message=reviewer_system_prompt_base,
-        temperature=temperature,
-    )
-    img_cap_ref_review_json = extract_json_between_markers_vlm(content)
-    return cast(Dict[str, Any] | None, img_cap_ref_review_json)
+    try:
+        parsed, _ = get_structured_response_from_vlm(
+            msg=prompt,
+            image_paths=img["images"],
+            model=model,
+            system_message=reviewer_system_prompt_base,
+            temperature=temperature,
+            schema_class=ImageCaptionRefReview,
+        )
+    except Exception:
+        logger.exception("Failed to obtain structured VLM caption/reference review.")
+        return None
+    return ImageCaptionRefReview.model_validate(parsed.model_dump())
 
 
 def generate_vlm_img_review(
@@ -372,22 +379,26 @@ def generate_vlm_img_review(
     temperature: float,
 ) -> Dict[str, Any] | None:
     prompt = img_review_prompt
-    content, _ = get_response_from_vlm(
-        msg=prompt,
-        image_paths=img["images"],
-        model=model,
-        system_message=reviewer_system_prompt_base,
-        temperature=temperature,
-    )
-    img_review_json = extract_json_between_markers_vlm(content)
-    return cast(Dict[str, Any] | None, img_review_json)
+    try:
+        parsed, _ = get_structured_response_from_vlm(
+            msg=prompt,
+            image_paths=img["images"],
+            model=model,
+            system_message=reviewer_system_prompt_base,
+            temperature=temperature,
+            schema_class=ImageReview,
+        )
+    except Exception:
+        logger.exception("Failed to obtain structured VLM image review.")
+        return None
+    return parsed.model_dump(by_alias=True)
 
 
 def perform_imgs_cap_ref_review(
     model: str,
     pdf_path: str,
     temperature: float,
-) -> Dict[str, Any]:
+) -> List[FigureImageCaptionRefReview]:
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -396,7 +407,7 @@ def perform_imgs_cap_ref_review(
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
-    img_reviews: Dict[str, Any] = {}
+    img_reviews: List[FigureImageCaptionRefReview] = []
     abstract = extract_abstract(paper_txt)
     for img in img_pairs:
         review = generate_vlm_img_cap_ref_review(
@@ -405,7 +416,10 @@ def perform_imgs_cap_ref_review(
             model=model,
             temperature=temperature,
         )
-        img_reviews[img["img_name"]] = review
+        if review is not None:
+            img_reviews.append(
+                FigureImageCaptionRefReview(figure_name=img["img_name"], review=review)
+            )
     return img_reviews
 
 
@@ -463,15 +477,19 @@ def generate_vlm_img_selection_review(
         main_text_figrefs=img["main_text_figrefs"],
         reflection_page_info=reflection_page_info,
     )
-    content, _ = get_response_from_vlm(
-        msg=prompt,
-        image_paths=img["images"],
-        model=model,
-        system_message=reviewer_system_prompt_base,
-        temperature=temperature,
-    )
-    img_cap_ref_review_json = extract_json_between_markers_vlm(content)
-    return cast(Dict[str, Any] | None, img_cap_ref_review_json)
+    try:
+        parsed, _ = get_structured_response_from_vlm(
+            msg=prompt,
+            image_paths=img["images"],
+            model=model,
+            system_message=reviewer_system_prompt_base,
+            temperature=temperature,
+            schema_class=ImageSelectionReview,
+        )
+    except Exception:
+        logger.exception("Failed to obtain structured VLM selection review.")
+        return None
+    return parsed.model_dump(by_alias=True)
 
 
 def perform_imgs_cap_ref_review_selection(

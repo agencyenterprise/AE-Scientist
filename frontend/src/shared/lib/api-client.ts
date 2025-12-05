@@ -64,7 +64,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
     ? { ...fetchOptions.headers }
     : { "Content-Type": "application/json", ...fetchOptions.headers };
 
-  const response = await fetch(`${config.apiUrl}${path}`, {
+  const response = await fetch(buildRequestUrl(path), {
     ...fetchOptions,
     credentials: "include",
     headers,
@@ -111,7 +111,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
  * ```
  */
 export async function apiStream(path: string, options?: RequestInit): Promise<Response> {
-  const response = await fetch(`${config.apiUrl}${path}`, {
+  const response = await fetch(buildRequestUrl(path), {
     ...options,
     credentials: "include",
     headers: {
@@ -129,4 +129,25 @@ export async function apiStream(path: string, options?: RequestInit): Promise<Re
   }
 
   return response;
+}
+
+function buildRequestUrl(path: string): string {
+  const url = `${config.apiUrl}${path}`;
+
+  if (typeof window === "undefined" || window.location.protocol !== "https:") {
+    return url;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.protocol === "http:" && parsedUrl.hostname.endsWith(".railway.app")) {
+      parsedUrl.protocol = "https:";
+      return parsedUrl.toString();
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
 }

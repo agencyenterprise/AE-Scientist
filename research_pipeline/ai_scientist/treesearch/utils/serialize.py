@@ -1,6 +1,5 @@
 import copy
 import json
-import re
 from pathlib import Path
 from typing import TypeVar, cast, overload
 
@@ -96,25 +95,3 @@ def load_json(path: Path, cls: type[G]) -> G:
 def load_json(path: Path, cls: type[object]) -> object:
     with open(path, "r") as f:
         return loads_json(s=f.read(), cls=cls)  # type: ignore[arg-type]
-
-
-def parse_markdown_to_dict(content: str) -> dict[str, str]:
-    """
-    Reads a file that contains lines of the form:
-
-        "Key": "Value",
-        "Another Key": "Another Value",
-        ...
-
-    including possible multi-line values, and returns a Python dictionary.
-    """
-
-    pattern = r'"([^"]+)"\s*:\s*"([^"]*?)"(?:,\s*|\s*$)'
-
-    matches = re.findall(pattern, content, flags=re.DOTALL)
-
-    data_dict = {}
-    for key, value in matches:
-        data_dict[key] = value
-
-    return data_dict

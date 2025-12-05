@@ -22,7 +22,7 @@ from typing import List, Optional
 from ai_scientist.llm import query, structured_query_with_schema
 
 from .codegen_agent import PlanAndCodeSchema
-from .events import BaseEvent, RunLogEvent
+from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
 from .stages.stage2_tuning import Stage2Tuning
@@ -72,7 +72,12 @@ class ParallelAgent:
         self.num_workers = cfg.agent.num_workers
         self.num_gpus = get_gpu_count()
         logger.info(f"num_gpus: {self.num_gpus}")
-        if self.num_gpus == 0:
+        if self.num_gpus < self.cfg.min_num_gpus:
+            self._handle_gpu_shortage(
+                available_gpus=self.num_gpus,
+                required_gpus=self.cfg.min_num_gpus,
+            )
+        elif self.num_gpus == 0:
             logger.info("No GPUs detected, falling back to CPU-only mode")
         else:
             logger.info(f"Detected {self.num_gpus} GPUs")
@@ -98,6 +103,29 @@ class ParallelAgent:
         self._hyperparam_tuning_state: dict[str, set[str]] = {  # store hyperparam tuning ideas
             "tried_hyperparams": set(),
         }
+
+    def _handle_gpu_shortage(self, *, available_gpus: int, required_gpus: int) -> None:
+        message = (
+            "Detected "
+            f"{available_gpus} GPU(s) but configuration requires at least {required_gpus}. "
+            "Aborting experiment run."
+        )
+        logger.error(message)
+        try:
+            self.event_callback(RunLogEvent(message=message, level="error"))
+        except Exception:
+            logger.exception("Failed to emit run log event for GPU shortage.")
+        try:
+            self.event_callback(
+                GpuShortageEvent(
+                    required_gpus=required_gpus,
+                    available_gpus=available_gpus,
+                    message=message,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit GPU shortage event.")
+        raise RuntimeError(message)
 
     def _define_global_metrics(self) -> str:
         """Define the run-wide evaluation metric specification via LLM."""

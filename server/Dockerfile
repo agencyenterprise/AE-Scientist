@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     ca-certificates \
+    openssh-client \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \

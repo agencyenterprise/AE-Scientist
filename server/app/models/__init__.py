@@ -62,14 +62,16 @@ from app.models.llm_prompts import (
     LLMProvidersResponse,
 )
 from app.models.research_pipeline import (
+    ArtifactPresignedUrlResponse,
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
+    ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunListItem,
     ResearchRunListResponse,
     ResearchRunLogEntry,
-    ResearchRunNodeEvent,
     ResearchRunStageProgress,
+    ResearchRunSubstageEvent,
 )
 
 __all__ = [
@@ -82,8 +84,10 @@ __all__ = [
     "ResearchRunInfo",
     "ResearchRunStageProgress",
     "ResearchRunLogEntry",
-    "ResearchRunNodeEvent",
+    "ResearchRunSubstageEvent",
+    "ResearchRunEvent",
     "ResearchRunArtifactMetadata",
+    "ArtifactPresignedUrlResponse",
     "ResearchRunDetailsResponse",
     "ResearchRunListItem",
     "ResearchRunListResponse",

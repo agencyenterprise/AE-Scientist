@@ -2,21 +2,111 @@ import json
 import logging
 import os
 from textwrap import dedent
-from typing import Any, Dict, Iterable, List, Optional, cast
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 import numpy as np
 import pymupdf  # type: ignore[import-untyped]
 import pymupdf4llm  # type: ignore[import-untyped]
 from langchain_core.messages import AIMessage, BaseMessage
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
-from ai_scientist.llm import (
-    extract_json_between_markers,
-    get_batch_responses_from_llm,
-    get_response_from_llm,
-)
+from ai_scientist.llm import get_structured_response_from_llm
 
 logger = logging.getLogger(__name__)
+
+
+class ReviewResponseModel(BaseModel):
+    Summary: str = Field(..., description="Faithful summary of the paper and its contributions.")
+    Strengths: List[str] = Field(
+        default_factory=list,
+        description="Bullet-style strengths highlighting novelty, rigor, clarity, etc.",
+    )
+    Weaknesses: List[str] = Field(
+        default_factory=list,
+        description="Specific weaknesses or missing evidence.",
+    )
+    Originality: float = Field(
+        ...,
+        description="Rating 1-4 (low to very high) for originality/novelty.",
+        ge=1,
+        le=4,
+    )
+    Quality: float = Field(
+        ...,
+        description="Rating 1-4 for technical quality and correctness.",
+        ge=1,
+        le=4,
+    )
+    Clarity: float = Field(
+        ...,
+        description="Rating 1-4 for clarity and exposition quality.",
+        ge=1,
+        le=4,
+    )
+    Significance: float = Field(
+        ...,
+        description="Rating 1-4 for potential impact/significance.",
+        ge=1,
+        le=4,
+    )
+    Questions: List[str] = Field(
+        default_factory=list,
+        description="Clarifying questions for the authors.",
+    )
+    Limitations: List[str] = Field(
+        default_factory=list,
+        description="Limitation notes or identified risks.",
+    )
+    Ethical_Concerns: bool = Field(
+        ...,
+        alias="Ethical Concerns",
+        description="True if ethical concerns exist, False otherwise.",
+    )
+    Soundness: float = Field(
+        ...,
+        description="Rating 1-4 for methodological soundness.",
+        ge=1,
+        le=4,
+    )
+    Presentation: float = Field(
+        ...,
+        description="Rating 1-4 for presentation quality.",
+        ge=1,
+        le=4,
+    )
+    Contribution: float = Field(
+        ...,
+        description="Rating 1-4 for contribution level.",
+        ge=1,
+        le=4,
+    )
+    Overall: float = Field(
+        ...,
+        description="Overall rating 1-10 (1=reject, 10=award level).",
+        ge=1,
+        le=10,
+    )
+    Confidence: float = Field(
+        ...,
+        description="Confidence rating 1-5 (1=guessing, 5=absolutely certain).",
+        ge=1,
+        le=5,
+    )
+    Decision: Literal["Accept", "Reject"] = Field(
+        ...,
+        description='Final decision string ("Accept" or "Reject").',
+    )
+    should_continue: bool = Field(
+        default=True,
+        description="For reflection loops; set false when no further updates required.",
+    )
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+REVIEW_RESPONSE_SCHEMA = ReviewResponseModel
 
 reviewer_system_prompt_base = (
     "You are an experienced ML researcher completing a NeurIPS-style review. "
@@ -31,41 +121,7 @@ reviewer_system_prompt_balanced = reviewer_system_prompt_base + (
 )
 
 template_instructions = """
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-REVIEW JSON:
-```json
-<JSON>
-```
-
-In <THOUGHT>, first briefly discuss your intuitions and reasoning for the evaluation.
-Detail your high-level arguments, necessary choices and desired outcomes of the review.
-Do not make generic comments here, but be specific to your current paper.
-Treat this as the note-taking phase of your review.
-
-In <JSON>, provide the review in JSON format with the following fields in the order:
-- "Summary": A summary of the paper content and its contributions.
-- "Strengths": A list of strengths of the paper.
-- "Weaknesses": A list of weaknesses of the paper.
-- "Originality": A rating from 1 to 4 (low, medium, high, very high).
-- "Quality": A rating from 1 to 4 (low, medium, high, very high).
-- "Clarity": A rating from 1 to 4 (low, medium, high, very high).
-- "Significance": A rating from 1 to 4 (low, medium, high, very high).
-- "Questions": A set of clarifying questions to be answered by the paper authors.
-- "Limitations": A set of limitations and potential negative societal impacts of the work.
-- "Ethical Concerns": A boolean value indicating whether there are ethical concerns.
-- "Soundness": A rating from 1 to 4 (poor, fair, good, excellent).
-- "Presentation": A rating from 1 to 4 (poor, fair, good, excellent).
-- "Contribution": A rating from 1 to 4 (poor, fair, good, excellent).
-- "Overall": A rating from 1 to 10 (very strong reject to award quality).
-- "Confidence": A rating from 1 to 5 (low, medium, high, very high, absolute).
-- "Decision": A decision that has to be one of the following: Accept, Reject.
-
-For the "Decision" field, don't use Weak Accept, Borderline Accept, Borderline Reject, or Strong Reject. Instead, only use Accept or Reject.
-This JSON will be automatically parsed, so ensure the format is precise.
+Produce a rigorous NeurIPS-style review. Your response must be valid JSON matching the ReviewResponseModel schema (fields defined via the structured output description). Use every field exactly once and respect the documented rating scales. Ground every claim in the paper or provided context.
 """
 
 neurips_form = (
@@ -169,7 +225,7 @@ def perform_review(
     reviewer_system_prompt: str = reviewer_system_prompt_balanced,
     review_instruction_form: str = neurips_form,
     calibration_notes: str = CALIBRATION_GUIDE,
-) -> tuple[dict[str, Any], list[BaseMessage]] | dict[str, Any]:
+) -> ReviewResponseModel | tuple[ReviewResponseModel, list[BaseMessage]]:
     context_block = _render_context_block(context)
     base_prompt = review_instruction_form
     if calibration_notes:
@@ -187,26 +243,34 @@ Here is the paper you are asked to review:
 {text}
 ```"""
 
-    review: Optional[Dict[str, Any]] = None
-    if num_reviews_ensemble > 1:
-        llm_reviews, msg_histories = get_batch_responses_from_llm(
-            prompt=base_prompt,
+    def _invoke_review_prompt(
+        prompt_text: str,
+        history: list[BaseMessage] | None = None,
+        *,
+        system_msg: str = reviewer_system_prompt,
+    ) -> tuple[ReviewResponseModel, list[BaseMessage]]:
+        response_dict, updated_history = get_structured_response_from_llm(
+            prompt=prompt_text,
             model=model,
-            system_message=reviewer_system_prompt,
+            system_message=system_msg,
             temperature=temperature,
-            msg_history=msg_history,
-            n_responses=num_reviews_ensemble,
+            schema_class=REVIEW_RESPONSE_SCHEMA,
+            msg_history=history,
         )
-        parsed_reviews: List[Dict[str, Any]] = []
-        for idx, rev in enumerate(llm_reviews):
-            try:
-                parsed = extract_json_between_markers(rev)
-            except Exception as exc:
-                logger.warning(f"Ensemble review {idx} failed: {exc}")
-                continue
-            if parsed:
-                parsed_reviews.append(parsed)
+        review_model = ReviewResponseModel.model_validate(response_dict)
+        return review_model, updated_history
 
+    review: Optional[ReviewResponseModel] = None
+    if num_reviews_ensemble > 1:
+        parsed_reviews: List[ReviewResponseModel] = []
+        histories: List[list[BaseMessage]] = []
+        for idx in range(num_reviews_ensemble):
+            try:
+                parsed, history = _invoke_review_prompt(base_prompt, msg_history)
+                parsed_reviews.append(parsed)
+                histories.append(history)
+            except Exception as exc:
+                logger.warning("Ensemble review %s failed: %s", idx, exc)
         if parsed_reviews:
             review = get_meta_review(model, temperature, parsed_reviews)
             if review is None:
@@ -224,77 +288,55 @@ Here is the paper you are asked to review:
             ]:
                 collected: List[float] = []
                 for parsed in parsed_reviews:
-                    value = parsed.get(score)
+                    value = getattr(parsed, score, None)
                     if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
                         collected.append(float(value))
-                if collected:
-                    review[score] = float(np.round(np.mean(collected), 2))
-            base_history: list[BaseMessage] = msg_histories[0][:-1]
-            assistant_content = (
-                "THOUGHT:\n"
-                f"I will start by aggregating the opinions of {num_reviews_ensemble} reviewers that I previously obtained.\n\n"
-                "REVIEW JSON:\n"
-                "```json\n"
-                f"{json.dumps(review)}\n"
-                "```\n"
-            )
-            msg_history = base_history + [AIMessage(content=assistant_content)]
+                if collected and review is not None:
+                    setattr(review, score, float(np.round(np.mean(collected), 2)))
+            if review is not None:
+                base_history = (
+                    histories[0][:-1] if histories and histories[0] else (msg_history or [])
+                )
+                assistant_message = AIMessage(content=json.dumps(review.model_dump(by_alias=True)))
+                msg_history = base_history + [assistant_message]
         else:
             logger.warning(
                 "Warning: Failed to parse ensemble reviews; falling back to single review run."
             )
 
     if review is None:
-        llm_review, msg_history = get_response_from_llm(
-            prompt=base_prompt,
-            model=model,
-            system_message=reviewer_system_prompt,
-            temperature=temperature,
-            msg_history=msg_history,
-        )
-        review = extract_json_between_markers(llm_review)
+        review, msg_history = _invoke_review_prompt(base_prompt, msg_history)
+    assert review is not None
 
     if num_reflections > 1 and review is not None:
-        for _ in range(num_reflections - 1):
-            reflection_text, msg_history = get_response_from_llm(
-                prompt=reviewer_reflection_prompt,
-                model=model,
-                system_message=reviewer_system_prompt,
-                msg_history=msg_history,
-                temperature=temperature,
+        for reflection_round in range(num_reflections - 1):
+            reflection_prompt = reviewer_reflection_prompt.format(
+                current_round=reflection_round + 2,
+                num_reflections=num_reflections,
             )
-            updated_review = extract_json_between_markers(reflection_text)
-            if updated_review is not None:
-                review = updated_review
-            if "I am done" in reflection_text:
+            reflection_response, msg_history = _invoke_review_prompt(
+                reflection_prompt,
+                msg_history,
+            )
+            review = reflection_response
+            if not reflection_response.should_continue:
                 break
 
-    if review is None:
-        review = {}
     if return_msg_history:
         return review, (msg_history or [])
     return review
 
 
 reviewer_reflection_prompt = """Round {current_round}/{num_reflections}.
-In your thoughts, first carefully consider the accuracy and soundness of the review you just created.
-Include any other factors that you think are important in evaluating the paper.
-Ensure the review is clear and concise, and the JSON is in the correct format.
+Carefully consider the accuracy and soundness of the review you just created.
+Include any factors that you think are important in evaluating the paper.
+Ensure the review is clear and concise, and keep the JSON schema identical.
 Do not make things overly complicated.
 In the next attempt, try and refine and improve your review.
 Stick to the spirit of the original review unless there are glaring issues.
 
-Respond in the same format as before:
-THOUGHT:
-<THOUGHT>
-
-REVIEW JSON:
-```json
-<JSON>
-```
-
-If there is nothing to improve, simply repeat the previous JSON EXACTLY after the thought and include "I am done" at the end of the thoughts but before the JSON.
-ONLY INCLUDE "I am done" IF YOU ARE MAKING NO MORE CHANGES."""
+Return an updated JSON object following the required schema.
+Add a boolean field "should_continue" and set it to false only if no further changes are needed."""
 
 
 def load_paper(pdf_path: str, num_pages: int | None = None, min_size: int = 100) -> str:
@@ -393,23 +435,27 @@ Be critical and cautious in your decision, find consensus, and respect the opini
 def get_meta_review(
     model: str,
     temperature: float,
-    reviews: list[dict[str, Any]],
-) -> dict[str, Any] | None:
+    reviews: list[ReviewResponseModel],
+) -> ReviewResponseModel | None:
     review_text = ""
     for i, r in enumerate(reviews):
         review_text += f"""
 Review {i + 1}/{len(reviews)}:
 ```
-{json.dumps(r)}
+{json.dumps(r.model_dump(by_alias=True))}
 ```
 """
     base_prompt = neurips_form + review_text
-    llm_review, _ = get_response_from_llm(
-        prompt=base_prompt,
-        model=model,
-        system_message=meta_reviewer_system_prompt.format(reviewer_count=len(reviews)),
-        temperature=temperature,
-        msg_history=None,
-    )
-    meta_review = extract_json_between_markers(llm_review)
-    return cast(dict[str, Any] | None, meta_review)
+    try:
+        response_dict, _ = get_structured_response_from_llm(
+            prompt=base_prompt,
+            model=model,
+            system_message=meta_reviewer_system_prompt.format(reviewer_count=len(reviews)),
+            temperature=temperature,
+            schema_class=REVIEW_RESPONSE_SCHEMA,
+            msg_history=None,
+        )
+    except Exception:
+        logger.exception("Failed to generate meta-review.")
+        return None
+    return ReviewResponseModel.model_validate(response_dict)

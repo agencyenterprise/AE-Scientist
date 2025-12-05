@@ -14,9 +14,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.messages import BaseMessage
 
+from ai_scientist.citations_specs import CITATION_SEARCH_SCHEMA, CITATION_SELECTION_SCHEMA
 from ai_scientist.ideation.semantic_scholar import search_for_papers
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
-from ai_scientist.llm import extract_json_between_markers, get_response_from_llm
+from ai_scientist.llm import get_response_from_llm, get_structured_response_from_llm
 from ai_scientist.perform_vlm_review import (
     detect_duplicate_figures,
     generate_vlm_img_review,
@@ -377,50 +378,24 @@ Your current list of citations is:
 
 Identify the most important citation that you still need to add, and the query to find the paper.
 
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-RESPONSE:
-```json
-<JSON>
-```
-
-In <THOUGHT>, first briefly reason and identify which citations are missing.
-If no more citations are needed, add "No more citations needed" to your thoughts.
-Do not add "No more citations needed" if you are adding citations this round.
-
-In <JSON>, respond in JSON format with the following fields:
-- "Description": The purpose of the desired citation and a brief description of what you are looking for.
-- "Query": The search query to find the paper (e.g., attention is all you need).
-This JSON will be automatically parsed, so ensure the format is precise."""
+Return a JSON object matching the CitationSearchResponse schema:
+- "needs_more_citations": whether another citation is required.
+- "description": the purpose of the desired citation and what you are looking for.
+- "query": the search query to find the paper (e.g., attention is all you need).
+If "needs_more_citations" is false, leave the other fields empty."""
 
     citation_second_prompt_template = """Search has recovered the following articles:
 
 {papers}
 
-Respond in the following format:
-
-THOUGHT:
-<THOUGHT>
-
-RESPONSE:
-```json
-<JSON>
-```
-
-In <THOUGHT>, briefly reason over the search results and identify which citation(s) best fit your paper.
-If none are appropriate or would contribute significantly to the write-up, add "Do not add any" to your thoughts.
-Do not select papers that are already in the `references.bib` file, or if the same citation exists under a different name.
-
-In <JSON>, respond in JSON format with the following fields:
-- "Selected": A list of integer indices for the selected papers, for example [0, 1]. Do not use quotes for the indices, e.g. "['0', '1']" is invalid.
-- "Description": Update the previous description of the citation(s) with the additional context. This should be a brief description of the work(s), their relevance, and where in a paper these should be cited.
-This JSON will be automatically parsed, so ensure the format is precise."""
+Return a JSON object matching the CitationSelectionResponse schema:
+- "should_add": whether any of the retrieved papers should be added.
+- "selected_indices": an array of integer indices (e.g., [0, 1]) referencing the listed papers.
+- "description": an updated description of the selected citation(s), their relevance, and where in the paper they belong.
+If "should_add" is false, keep "selected_indices" empty."""
 
     try:
-        text, msg_history = get_response_from_llm(
+        structured_response, msg_history = get_structured_response_from_llm(
             prompt=citation_first_prompt_template.format(
                 current_round=current_round + 1,
                 total_rounds=total_rounds,
@@ -431,18 +406,16 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             temperature=temperature,
+            schema_class=CITATION_SEARCH_SCHEMA,
             msg_history=msg_history,
         )
-        if "No more citations needed" in text:
+        if not structured_response.get("needs_more_citations", True):
             logger.info("No more citations needed.")
             return None, True
-
-        json_output = extract_json_between_markers(text)
-        if json_output is None:
-            logger.warning("Failed to extract JSON from LLM output (initial search). Raw response:")
-            logger.debug(text)
+        query = structured_response.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            logger.warning("Citation search response missing query.")
             return None, False
-        query = json_output["Query"]
         papers = search_for_papers(query, result_limit=5)
     except Exception:
         logger.exception("EXCEPTION in get_citation_addition (initial search):")
@@ -467,7 +440,7 @@ This JSON will be automatically parsed, so ensure the format is precise."""
     papers_str = "\n\n".join(paper_strings)
 
     try:
-        text, msg_history = get_response_from_llm(
+        selection_response, msg_history = get_structured_response_from_llm(
             prompt=citation_second_prompt_template.format(
                 papers=papers_str,
                 current_round=current_round + 1,
@@ -476,43 +449,31 @@ This JSON will be automatically parsed, so ensure the format is precise."""
             model=model,
             system_message=citation_system_msg_template.format(total_rounds=total_rounds),
             temperature=temperature,
+            schema_class=CITATION_SELECTION_SCHEMA,
             msg_history=msg_history,
         )
-        if "Do not add any" in text:
+        if not selection_response.get("should_add", False):
             logger.info("Do not add any.")
             return None, False
-
-        json_output = extract_json_between_markers(text)
-        if json_output is None:
-            logger.warning(
-                "Failed to extract JSON from LLM output (selecting papers). Raw response:"
-            )
-            logger.debug(text)
+        selected_indices = selection_response.get("selected_indices", [])
+        if not isinstance(selected_indices, list) or not selected_indices:
+            logger.warning("Citation selection returned no indices.")
             return None, False
-        desc = json_output["Description"]
-        selected_papers = str(json_output["Selected"])
-
-        if selected_papers != "[]":
-            selected_indices = []
-            for x in selected_papers.strip("[]").split(","):
-                x_str = x.strip().strip('"').strip("'")
-                if x_str:
-                    selected_indices.append(int(x_str))
-            assert all([0 <= i < len(papers) for i in selected_indices]), "Invalid paper index"
-            bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
-
-            cleaned_bibtexs = []
-            for bibtex in bibtexs:
-                newline_index = bibtex.find("\n")
-                cite_key_line = bibtex[:newline_index]
-                cite_key_line = remove_accents_and_clean(cite_key_line)
-                cleaned_bibtexs.append(cite_key_line + bibtex[newline_index:])
-            bibtexs = cleaned_bibtexs
-
-            bibtex_string = "\n".join(bibtexs)
-        else:
+        if not all(isinstance(idx, int) and 0 <= idx < len(papers) for idx in selected_indices):
+            logger.warning("Received invalid citation indices: %s", selected_indices)
             return None, False
+        bibtexs = [papers[i]["citationStyles"]["bibtex"] for i in selected_indices]
 
+        cleaned_bibtexs = []
+        for bibtex in bibtexs:
+            newline_index = bibtex.find("\n")
+            cite_key_line = bibtex[:newline_index]
+            cite_key_line = remove_accents_and_clean(cite_key_line)
+            cleaned_bibtexs.append(cite_key_line + bibtex[newline_index:])
+        bibtexs = cleaned_bibtexs
+
+        bibtex_string = "\n".join(bibtexs)
+        desc = selection_response.get("description", "")
     except Exception:
         logger.exception("EXCEPTION in get_citation_addition (selecting papers):")
         return None, False
@@ -1140,10 +1101,20 @@ def perform_writeup(
             logger.info(f"Compiling PDF for reflection {i + 1}...")
             compile_latex(latex_folder, reflection_pdf)
 
-            review_img_cap_ref = perform_imgs_cap_ref_review(
+            review_img_cap_ref_models = perform_imgs_cap_ref_review(
                 model=model,
                 pdf_path=reflection_pdf,
                 temperature=temperature,
+            )
+            review_img_cap_ref = json.dumps(
+                [
+                    {
+                        "figure_name": item.figure_name,
+                        "review": item.review.model_dump(by_alias=True),
+                    }
+                    for item in review_img_cap_ref_models
+                ],
+                indent=2,
             )
 
             # Detect duplicate figures between main text and appendix
