@@ -16,6 +16,8 @@ dependencies = [
     "langchain-anthropic>=1.2.0",
     "langchain-groq>=1.1.0",
     "langchain-openai>=1.1.0",
+    "langchain-postgres>=0.0.16",
+    "langgraph-checkpoint-postgres>=3.0.1",
     "omegaconf>=2.3.0",
     "openai==2.8.1",
     "pdfplumber==0.11.7",

@@ -33,10 +33,10 @@ A collaborative platform that transforms LLM conversations into structured resea
 2. **Environment Configuration**
    ```bash
    # Copy environment templates
-   cp backend/env.example backend/.env
+   cp server/env.example server/.env
    cp frontend/env.local.example frontend/.env.local
    
-   # IMPORTANT: Edit backend/.env with your Google OAuth credentials
+   # IMPORTANT: Edit server/.env with your Google OAuth credentials
    ```
 
 3. **Setup using Makefile (Recommended)**
@@ -45,7 +45,7 @@ A collaborative platform that transforms LLM conversations into structured resea
    make install
    
    # Start development servers
-   make dev-backend    # Starts FastAPI server using virtual environment
+   make dev-server    # Starts FastAPI server using virtual environment
    make dev-frontend   # Starts Next.js server
    ```
 
@@ -324,9 +324,6 @@ PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS="5"
 PIPELINE_MONITOR_STARTUP_GRACE_SECONDS="600"
 RUN_POD_SSH_ACCESS_KEY="-----BEGIN OPENSSH PRIVATE KEY-----\n...replace...\n-----END OPENSSH PRIVATE KEY-----"
 
-# Metacognition Service (for conversation summarization)
-METACOGNITION_API_URL="http://localhost:8888"      # External summarization service
-METACOGNITION_AUTH_TOKEN="your-auth-token-here"    # Auth token for summarization
 ```
 
 ### Frontend Configuration

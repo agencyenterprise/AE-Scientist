@@ -279,23 +279,24 @@ class LangChainLLMService(BaseLLMService, ABC):
         ):
             yield event_payload
 
+    def generate_manual_seed_idea_prompt(self, *, idea_title: str, idea_hypothesis: str) -> str:
+        """
+        Generate a user prompt for a manual seed idea.
+        """
+        return (
+            "Create a structured research idea draft using the provided manual seed.\n\n"
+            f"Title: {idea_title}\n"
+            f"Hypothesis: {idea_hypothesis}"
+        )
+
     async def generate_manual_seed_idea(
-        self,
-        *,
-        llm_model: str,
-        idea_title: str,
-        idea_hypothesis: str,
+        self, *, llm_model: str, user_prompt: str
     ) -> AsyncGenerator[str, None]:
         """
         Generate an idea from a manual title and hypothesis seed.
         """
         db = get_database()
         system_prompt = get_manual_seed_prompt(db=db)
-        user_prompt = (
-            "Create a structured research idea draft using the provided manual seed.\n\n"
-            f"Title: {idea_title}\n"
-            f"Hypothesis: {idea_hypothesis}"
-        )
         messages = [
             SystemMessage(content=self._text_content_block(text=system_prompt)),
             HumanMessage(content=self._text_content_block(text=user_prompt)),

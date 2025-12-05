@@ -397,7 +397,6 @@ UNIQUE(conversation_id, memory_source)
 ```sql
 id              SERIAL PRIMARY KEY
 conversation_id FK → conversations CASCADE
-external_id     INTEGER NOT NULL
 summary         TEXT NOT NULL
 latest_message_id INTEGER NOT NULL
 created_at      TIMESTAMPTZ
@@ -408,7 +407,6 @@ updated_at      TIMESTAMPTZ
 ```sql
 id              SERIAL PRIMARY KEY
 conversation_id FK → conversations CASCADE
-external_id     INTEGER NOT NULL
 summary         TEXT NOT NULL
 created_at      TIMESTAMPTZ
 updated_at      TIMESTAMPTZ
@@ -573,8 +571,6 @@ SESSION_EXPIRE_HOURS=24
 # External Services
 MEM0_API_URL=...
 MEM0_USER_ID=...
-METACOGNITION_API_URL=...
-METACOGNITION_AUTH_TOKEN=...
 
 # LLM Settings
 IDEA_MAX_COMPLETION_TOKENS=4096
