@@ -45,6 +45,7 @@ class WebhookClient:
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
     _HEARTBEAT_PATH = "/heartbeat"
+    _GPU_SHORTAGE_PATH = "/gpu-shortage"
 
     def __init__(self, *, base_url: str, token: str, run_id: str) -> None:
         self._base_url = base_url.rstrip("/")
@@ -89,6 +90,22 @@ class WebhookClient:
 
     def publish_heartbeat(self) -> None:
         self._post(path=self._HEARTBEAT_PATH, payload={"run_id": self._run_id})
+
+    def publish_gpu_shortage(
+        self,
+        *,
+        required_gpus: int,
+        available_gpus: int,
+        message: Optional[str] = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "run_id": self._run_id,
+            "required_gpus": required_gpus,
+            "available_gpus": available_gpus,
+        }
+        if message:
+            payload["message"] = message
+        self._post(path=self._GPU_SHORTAGE_PATH, payload=payload)
 
 
 def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:

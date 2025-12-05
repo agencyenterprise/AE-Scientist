@@ -109,3 +109,20 @@ class ExperimentNodeCompletedEvent(BaseEvent):
                 "summary": self.summary,
             },
         )
+
+
+@dataclass(frozen=True)
+class GpuShortageEvent(BaseEvent):
+    required_gpus: int
+    available_gpus: int
+    message: str
+
+    def type(self) -> str:
+        return "ai.run.gpu_shortage"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "required_gpus": self.required_gpus,
+            "available_gpus": self.available_gpus,
+            "message": self.message,
+        }

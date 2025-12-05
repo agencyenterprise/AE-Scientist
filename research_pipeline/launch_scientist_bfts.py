@@ -40,7 +40,7 @@ from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseReco
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
-from ai_scientist.treesearch.events import BaseEvent
+from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.interpreter import ExecutionResult
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
@@ -298,6 +298,42 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         return TelemetryHooks(
             event_callback=event_callback, persistence=None, webhook=webhook_client
         )
+
+
+def _augment_event_callback(
+    base_callback: Callable[[BaseEvent], None],
+    *,
+    webhook_client: WebhookClient | None,
+) -> Callable[[BaseEvent], None]:
+    def _callback(event: BaseEvent) -> None:
+        if isinstance(event, GpuShortageEvent):
+            _handle_gpu_shortage_event(event=event, webhook_client=webhook_client)
+        base_callback(event)
+
+    return _callback
+
+
+def _handle_gpu_shortage_event(
+    *,
+    event: GpuShortageEvent,
+    webhook_client: WebhookClient | None,
+) -> None:
+    logger.error(
+        "GPU shortage detected: required=%s available=%s",
+        event.required_gpus,
+        event.available_gpus,
+    )
+    if webhook_client is None:
+        logger.warning("Telemetry webhook not configured; cannot notify server about GPU shortage.")
+        return
+    try:
+        webhook_client.publish_gpu_shortage(
+            required_gpus=event.required_gpus,
+            available_gpus=event.available_gpus,
+            message=event.message,
+        )
+    except Exception:
+        logger.exception("Failed to publish GPU shortage notification.")
 
 
 def setup_artifact_publisher(
@@ -798,9 +834,12 @@ def execute_launcher(args: argparse.Namespace) -> None:
         logger.info("Review configuration provided but writeup is disabled; skipping review.")
 
     telemetry_hooks = setup_event_pipeline(telemetry_cfg=base_cfg.telemetry)
-    event_callback = telemetry_hooks.event_callback
     event_persistence = telemetry_hooks.persistence
     webhook_client = telemetry_hooks.webhook
+    event_callback = _augment_event_callback(
+        telemetry_hooks.event_callback,
+        webhook_client=webhook_client,
+    )
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
             telemetry_cfg=base_cfg.telemetry
