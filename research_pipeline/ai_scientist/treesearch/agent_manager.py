@@ -569,30 +569,18 @@ Your research idea:\n\n
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
 
+            # Check if sub-stage is complete (check this before main stage completion)
+            substage_complete, substage_feedback = self._check_substage_completion(
+                current_substage, self.journals[current_substage.name]
+            )
+
             # Check if main stage is complete
             main_stage_complete, main_stage_feedback = self._check_stage_completion(
                 current_substage
             )
             logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
-            if main_stage_complete:
-                # After main stage completion, run multi-seed eval on the best node
-                multi_seed_ok = self._perform_multi_seed_eval_if_needed(
-                    agent=agent,
-                    current_substage=current_substage,
-                    step_callback=step_callback,
-                )
-                if not multi_seed_ok:
-                    # If multi-seed eval failed, we should still try to advance to next stage
-                    # Setting current_stage = None here would prevent that
-                    # Instead, let the caller handle this case
-                    pass
-                return True, None
 
-            # Check if sub-stage is complete
-            substage_complete, substage_feedback = self._check_substage_completion(
-                current_substage, self.journals[current_substage.name]
-            )
-
+            # If substage completes, emit event (even if main stage also completes)
             if substage_complete:
                 # Emit a sub-stage completion event with a lightweight summary
                 try:
@@ -622,6 +610,23 @@ Your research idea:\n\n
                     # Best-effort telemetry; never block progression on event errors
                     logger.exception("Failed to emit SubstageCompletedEvent")
 
+            # If main stage completes, run multi-seed eval and return
+            if main_stage_complete:
+                # After main stage completion, run multi-seed eval on the best node
+                multi_seed_ok = self._perform_multi_seed_eval_if_needed(
+                    agent=agent,
+                    current_substage=current_substage,
+                    step_callback=step_callback,
+                )
+                if not multi_seed_ok:
+                    # If multi-seed eval failed, we should still try to advance to next stage
+                    # Setting current_stage = None here would prevent that
+                    # Instead, let the caller handle this case
+                    pass
+                return True, None
+
+            # If substage completes but main stage doesn't, create next substage
+            if substage_complete:
                 # Create next sub-stage
                 next_substage = self._create_next_substage(
                     current_substage=current_substage,
