@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -11,9 +10,10 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.messages import BaseMessage
+from pydantic import BaseModel, Field
 
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
-from ai_scientist.llm import get_response_from_llm
+from ai_scientist.llm import get_structured_response_from_llm
 from ai_scientist.perform_icbinb_writeup import (
     filter_experiment_summaries,
     load_exp_summaries,
@@ -34,8 +34,7 @@ Key points:
 2) Create a complete set of final scientific plots, stored in 'figures/' only (since only those are used in the final paper).
 3) Make sure to use existing .npy data for analysis; do NOT hallucinate data. If single numeric results are needed, these may be copied from the JSON summaries.
 4) Only create plots where the data is best presented as a figure and not as a table. E.g. don't use bar plots if the data is hard to visually compare.
-5) The final aggregator script must be in triple backticks and stand alone so it can be dropped into a codebase and run.
-6) If there are plots based on synthetic data, include them in the appendix.
+5) If there are plots based on synthetic data, include them in the appendix.
 
 Implement best practices:
 - Do not produce extraneous or irrelevant plots.
@@ -51,7 +50,7 @@ Implement best practices:
 - Do not use labels with underscores, e.g. "loss_vs_epoch" should be "loss vs epoch".
 - For image examples, select a few categories/classes to showcase the diversity of results instead of showing a single category/class. Some can be included in the main paper, while the rest can go in the appendix.
 
-Your output should be the entire Python aggregator script in triple backticks.
+Return your response using the structured schema, filling the `script` field with the final Python aggregator code.
 """
 
 
@@ -88,18 +87,16 @@ Below are the summaries in JSON:
 
 {combined_summaries_str}
 
-Respond with a Python script in triple backticks.
+Provide your answer using the structured response schema (field: script). Do not include commentary outside the schema.
 """
 
 
-def extract_code_snippet(text: str) -> str:
-    """
-    Look for a Python code block in triple backticks in the LLM response.
-    Return only that code. If no code block is found, return the entire text.
-    """
-    pattern = r"```(?:python)?(.*?)```"
-    matches = re.findall(pattern, text, flags=re.DOTALL)
-    return str(matches[0]).strip() if matches else text.strip()
+class AggregatorScriptResponse(BaseModel):
+    script: str = Field(..., description="Complete Python script for plot aggregation.")
+    should_stop: bool = Field(
+        default=False,
+        description="Set to true when no further updates to the script are needed.",
+    )
 
 
 def run_aggregator_script(
@@ -224,25 +221,31 @@ def aggregate_plots(
     # Build aggregator prompt
     aggregator_prompt = build_aggregator_prompt(combined_summaries_str, idea_text)
 
-    response: str | None = None
     msg_history: list[BaseMessage] = []
     try:
-        response, msg_history = get_response_from_llm(
+        response_dict, msg_history = get_structured_response_from_llm(
             prompt=aggregator_prompt,
             model=model,
             system_message=AGGREGATOR_SYSTEM_MSG,
             temperature=temperature,
             msg_history=msg_history,
+            schema_class=AggregatorScriptResponse,
         )
     except Exception:
         traceback.print_exc()
         logger.exception("Failed to get aggregator script from LLM.")
         return
 
-    aggregator_code = extract_code_snippet(response or "")
+    try:
+        aggregator_response = AggregatorScriptResponse.model_validate(response_dict)
+    except Exception:
+        logger.error("Structured aggregator response validation failed: %s", response_dict)
+        return
+
+    aggregator_code = aggregator_response.script.strip()
     if not aggregator_code.strip():
         logger.warning("No Python code block was found in LLM response. Full response:")
-        logger.debug(response)
+        logger.debug(response_dict)
         return
 
     # First run of aggregator script
@@ -273,16 +276,17 @@ Please criticize the current script for any flaws including but not limited to:
 - Do the labels have underscores? If so, replace them with spaces.
 - Make sure that every plot is unique and not duplicated from the original plots.
 
-If you believe you are done, simply say: "I am done". Otherwise, please provide an updated aggregator script in triple backticks."""
+Respond using the structured schema: set `should_stop` to true if no further changes are required; otherwise update the `script` field with the revised Python code."""
 
         logger.debug(f"Reflection prompt: {reflection_prompt}")
         try:
-            reflection_response, msg_history = get_response_from_llm(
+            reflection_dict, msg_history = get_structured_response_from_llm(
                 prompt=reflection_prompt,
                 model=model,
                 system_message=AGGREGATOR_SYSTEM_MSG,
                 temperature=temperature,
                 msg_history=msg_history,
+                schema_class=AggregatorScriptResponse,
             )
 
         except Exception:
@@ -290,12 +294,18 @@ If you believe you are done, simply say: "I am done". Otherwise, please provide 
             logger.exception("Failed to get reflection from LLM.")
             return
 
+        try:
+            reflection_data = AggregatorScriptResponse.model_validate(reflection_dict)
+        except Exception:
+            logger.error("Structured reflection response validation failed: %s", reflection_dict)
+            break
+
         # Early-exit check
-        if figure_count > 0 and "I am done" in reflection_response:
+        if figure_count > 0 and reflection_data.should_stop:
             logger.info("LLM indicated it is done with reflections. Exiting reflection loop.")
             break
 
-        aggregator_new_code = extract_code_snippet(reflection_response)
+        aggregator_new_code = reflection_data.script.strip()
 
         # If new code is provided and differs, run again
         if aggregator_new_code.strip() and aggregator_new_code.strip() != aggregator_code.strip():

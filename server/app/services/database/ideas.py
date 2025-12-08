@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class IdeaVersionData(NamedTuple):
     """Idea version data."""
 
+    idea_id: int
     version_id: int
     title: str
     short_hypothesis: str
@@ -53,7 +54,7 @@ class IdeaData(NamedTuple):
     updated_at: datetime
 
 
-class IdeasMixin(ConnectionProvider):
+class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Database operations for ideas."""
 
     def create_idea(
@@ -285,6 +286,7 @@ class IdeasMixin(ConnectionProvider):
                 cursor.execute(
                     """
                     SELECT
+                        idea_id,
                         id as version_id,
                         title,
                         short_hypothesis,
@@ -305,6 +307,7 @@ class IdeasMixin(ConnectionProvider):
                 results = cursor.fetchall()
                 return [
                     IdeaVersionData(
+                        idea_id=row["idea_id"],
                         version_id=row["version_id"],
                         title=row["title"],
                         short_hypothesis=row["short_hypothesis"],
@@ -319,6 +322,48 @@ class IdeasMixin(ConnectionProvider):
                     )
                     for row in results
                 ]
+
+    def get_idea_version_by_id(self, version_id: int) -> Optional[IdeaVersionData]:
+        """Get a single idea version by id."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        idea_id,
+                        id as version_id,
+                        title,
+                        short_hypothesis,
+                        related_work,
+                        abstract,
+                        experiments,
+                        expected_outcome,
+                        risk_factors_and_limitations,
+                        is_manual_edit,
+                        version_number,
+                        created_at
+                    FROM idea_versions
+                    WHERE id = %s
+                    """,
+                    (version_id,),
+                )
+                row = cursor.fetchone()
+        if not row:
+            return None
+        return IdeaVersionData(
+            idea_id=row["idea_id"],
+            version_id=row["version_id"],
+            title=row["title"],
+            short_hypothesis=row["short_hypothesis"],
+            related_work=row["related_work"],
+            abstract=row["abstract"],
+            experiments=row["experiments"],
+            expected_outcome=row["expected_outcome"],
+            risk_factors_and_limitations=row["risk_factors_and_limitations"],
+            is_manual_edit=row["is_manual_edit"],
+            version_number=row["version_number"],
+            created_at=row["created_at"],
+        )
 
     def get_idea_by_id(self, idea_id: int) -> Optional[IdeaData]:
         """Get an idea with its active version by idea id."""

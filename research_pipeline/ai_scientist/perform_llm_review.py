@@ -225,7 +225,7 @@ def perform_review(
     reviewer_system_prompt: str = reviewer_system_prompt_balanced,
     review_instruction_form: str = neurips_form,
     calibration_notes: str = CALIBRATION_GUIDE,
-) -> tuple[dict[str, Any], list[BaseMessage]] | dict[str, Any]:
+) -> ReviewResponseModel | tuple[ReviewResponseModel, list[BaseMessage]]:
     context_block = _render_context_block(context)
     base_prompt = review_instruction_form
     if calibration_notes:
@@ -248,8 +248,8 @@ Here is the paper you are asked to review:
         history: list[BaseMessage] | None = None,
         *,
         system_msg: str = reviewer_system_prompt,
-    ) -> tuple[Dict[str, Any], list[BaseMessage]]:
-        response, updated_history = get_structured_response_from_llm(
+    ) -> tuple[ReviewResponseModel, list[BaseMessage]]:
+        response_dict, updated_history = get_structured_response_from_llm(
             prompt=prompt_text,
             model=model,
             system_message=system_msg,
@@ -257,13 +257,12 @@ Here is the paper you are asked to review:
             schema_class=REVIEW_RESPONSE_SCHEMA,
             msg_history=history,
         )
-        cleaned = dict(response)
-        cleaned.pop("should_continue", None)
-        return cleaned, updated_history
+        review_model = ReviewResponseModel.model_validate(response_dict)
+        return review_model, updated_history
 
-    review: Optional[Dict[str, Any]] = None
+    review: Optional[ReviewResponseModel] = None
     if num_reviews_ensemble > 1:
-        parsed_reviews: List[Dict[str, Any]] = []
+        parsed_reviews: List[ReviewResponseModel] = []
         histories: List[list[BaseMessage]] = []
         for idx in range(num_reviews_ensemble):
             try:
@@ -289,14 +288,17 @@ Here is the paper you are asked to review:
             ]:
                 collected: List[float] = []
                 for parsed in parsed_reviews:
-                    value = parsed.get(score)
+                    value = getattr(parsed, score, None)
                     if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
                         collected.append(float(value))
-                if collected:
-                    review[score] = float(np.round(np.mean(collected), 2))
-            base_history = histories[0][:-1] if histories and histories[0] else (msg_history or [])
-            assistant_message = AIMessage(content=json.dumps(review))
-            msg_history = base_history + [assistant_message]
+                if collected and review is not None:
+                    setattr(review, score, float(np.round(np.mean(collected), 2)))
+            if review is not None:
+                base_history = (
+                    histories[0][:-1] if histories and histories[0] else (msg_history or [])
+                )
+                assistant_message = AIMessage(content=json.dumps(review.model_dump(by_alias=True)))
+                msg_history = base_history + [assistant_message]
         else:
             logger.warning(
                 "Warning: Failed to parse ensemble reviews; falling back to single review run."
@@ -316,9 +318,8 @@ Here is the paper you are asked to review:
                 reflection_prompt,
                 msg_history,
             )
-            should_continue = reflection_response.pop("should_continue", True)
             review = reflection_response
-            if not should_continue:
+            if not reflection_response.should_continue:
                 break
 
     if return_msg_history:
@@ -434,19 +435,19 @@ Be critical and cautious in your decision, find consensus, and respect the opini
 def get_meta_review(
     model: str,
     temperature: float,
-    reviews: list[dict[str, Any]],
-) -> dict[str, Any] | None:
+    reviews: list[ReviewResponseModel],
+) -> ReviewResponseModel | None:
     review_text = ""
     for i, r in enumerate(reviews):
         review_text += f"""
 Review {i + 1}/{len(reviews)}:
 ```
-{json.dumps(r)}
+{json.dumps(r.model_dump(by_alias=True))}
 ```
 """
     base_prompt = neurips_form + review_text
     try:
-        response, _ = get_structured_response_from_llm(
+        response_dict, _ = get_structured_response_from_llm(
             prompt=base_prompt,
             model=model,
             system_message=meta_reviewer_system_prompt.format(reviewer_count=len(reviews)),
@@ -457,5 +458,4 @@ Review {i + 1}/{len(reviews)}:
     except Exception:
         logger.exception("Failed to generate meta-review.")
         return None
-    response.pop("should_continue", None)
-    return response
+    return ReviewResponseModel.model_validate(response_dict)

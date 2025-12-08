@@ -581,7 +581,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/experiment-node-completed": {
+    "/api/research-pipeline/events/substage-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -590,8 +590,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ingest Experiment Node Completed */
-        post: operations["ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post"];
+        /** Ingest Substage Completed */
+        post: operations["ingest_substage_completed_api_research_pipeline_events_substage_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -643,6 +643,23 @@ export interface paths {
         put?: never;
         /** Ingest Heartbeat */
         post: operations["ingest_heartbeat_api_research_pipeline_events_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/gpu-shortage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Gpu Shortage */
+        post: operations["ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -709,6 +726,26 @@ export interface paths {
         };
         /** Download Research Run Artifact */
         get: operations["download_research_run_artifact_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact Presigned Url
+         * @description Generate presigned S3 URL for artifact download.
+         */
+        get: operations["get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -870,6 +907,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ArtifactPresignedUrlResponse
+         * @description Response containing presigned S3 download URL.
+         */
+        ArtifactPresignedUrlResponse: {
+            /**
+             * Url
+             * @description Presigned S3 download URL (valid for 1 hour)
+             */
+            url: string;
+            /**
+             * Expires In
+             * @description URL expiration time in seconds
+             */
+            expires_in: number;
+            /**
+             * Artifact Id
+             * @description Artifact identifier
+             */
+            artifact_id: number;
+            /**
+             * Filename
+             * @description Original filename
+             */
+            filename: string;
+        };
         /**
          * AuthStatus
          * @description Authentication status response.
@@ -1162,23 +1225,6 @@ export interface components {
              */
             detail?: string | null;
         };
-        /** ExperimentNodeCompletedEvent */
-        ExperimentNodeCompletedEvent: {
-            /** Stage */
-            stage: string;
-            /** Node Id */
-            node_id?: string | null;
-            /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
-        };
-        /** ExperimentNodeCompletedPayload */
-        ExperimentNodeCompletedPayload: {
-            /** Run Id */
-            run_id: string;
-            event: components["schemas"]["ExperimentNodeCompletedEvent"];
-        };
         /**
          * FileAttachment
          * @description File attachment model for chat messages.
@@ -1279,6 +1325,17 @@ export interface components {
              * @description Success message
              */
             message: string;
+        };
+        /** GPUShortagePayload */
+        GPUShortagePayload: {
+            /** Run Id */
+            run_id: string;
+            /** Required Gpus */
+            required_gpus: number;
+            /** Available Gpus */
+            available_gpus: number;
+            /** Message */
+            message?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1808,10 +1865,10 @@ export interface components {
              */
             logs?: components["schemas"]["ResearchRunLogEntry"][];
             /**
-             * Experiment Nodes
-             * @description Experiment node completion events
+             * Substage Events
+             * @description Sub-stage completion events
              */
-            experiment_nodes?: components["schemas"]["ResearchRunNodeEvent"][];
+            substage_events?: components["schemas"]["ResearchRunSubstageEvent"][];
             /**
              * Events
              * @description Audit events describing run-level lifecycle transitions
@@ -2063,36 +2120,6 @@ export interface components {
              */
             created_at: string;
         };
-        /** ResearchRunNodeEvent */
-        ResearchRunNodeEvent: {
-            /**
-             * Id
-             * @description Unique identifier of the node event
-             */
-            id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
-            /**
-             * Node Id
-             * @description Identifier of the node
-             */
-            node_id?: string | null;
-            /**
-             * Summary
-             * @description Summary payload stored in telemetry
-             */
-            summary: {
-                [key: string]: unknown;
-            };
-            /**
-             * Created At
-             * @description ISO timestamp of the event
-             */
-            created_at: string;
-        };
         /** ResearchRunStageProgress */
         ResearchRunStageProgress: {
             /**
@@ -2159,6 +2186,36 @@ export interface components {
             status: string;
             /** Message */
             message: string;
+        };
+        /** ResearchRunSubstageEvent */
+        ResearchRunSubstageEvent: {
+            /**
+             * Id
+             * @description Unique identifier of the sub-stage completion event
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Optional identifier associated with the sub-stage (reserved for future use)
+             */
+            node_id?: string | null;
+            /**
+             * Summary
+             * @description Summary payload stored for this sub-stage
+             */
+            summary: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * @description ISO timestamp of the event
+             */
+            created_at: string;
         };
         /**
          * ResearchRunSummary
@@ -2289,6 +2346,29 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["StageProgressEvent"];
+        };
+        /** SubstageCompletedEvent */
+        SubstageCompletedEvent: {
+            /** Stage */
+            stage: string;
+            /** Main Stage Number */
+            main_stage_number: number;
+            /** Substage Number */
+            substage_number: number;
+            /** Substage Name */
+            substage_name: string;
+            /** Reason */
+            reason: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** SubstageCompletedPayload */
+        SubstageCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["SubstageCompletedEvent"];
         };
         /**
          * SummaryResponse
@@ -3318,7 +3398,7 @@ export interface operations {
             };
         };
     };
-    ingest_experiment_node_completed_api_research_pipeline_events_experiment_node_completed_post: {
+    ingest_substage_completed_api_research_pipeline_events_substage_completed_post: {
         parameters: {
             query?: never;
             header: {
@@ -3329,7 +3409,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExperimentNodeCompletedPayload"];
+                "application/json": components["schemas"]["SubstageCompletedPayload"];
             };
         };
         responses: {
@@ -3429,6 +3509,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["HeartbeatPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GPUShortagePayload"];
             };
         };
         responses: {
@@ -3565,6 +3678,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_presigned_url_api_conversations__conversation_id__idea_research_run__run_id__artifacts__artifact_id__presign_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+                artifact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactPresignedUrlResponse"];
                 };
             };
             /** @description Validation Error */

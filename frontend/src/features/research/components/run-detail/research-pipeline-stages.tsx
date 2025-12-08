@@ -1,12 +1,12 @@
 "use client";
 
-import type { NodeEvent, StageProgress } from "@/types/research";
+import type { SubstageEvent, StageProgress } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
-  experimentNodes: NodeEvent[];
+  substageEvents: SubstageEvent[];
 }
 
 // Define pipeline stages with their metadata
@@ -78,7 +78,6 @@ interface StageInfo {
 interface SegmentData {
   status: "good" | "buggy";
   nodeNumber: number;
-  nodeId?: string | null;
   isSynthetic: boolean;
 }
 
@@ -146,11 +145,11 @@ function SegmentedProgressBar({ segments }: SegmentedProgressBarProps) {
  */
 const getSegmentsByStage = (
   stageKey: string,
-  experimentNodes: NodeEvent[],
+  substageEvents: SubstageEvent[],
   stageProgress: StageProgress[]
 ): SegmentData[] => {
   // Filter nodes for this stage
-  const stageNodes = experimentNodes.filter(node => {
+  const stageNodes = substageEvents.filter(node => {
     const slug = extractStageSlug(node.stage);
     return slug === stageKey;
   });
@@ -171,7 +170,6 @@ const getSegmentsByStage = (
             : "good"
           : "good",
       nodeNumber: index + 1,
-      nodeId: node.node_id,
       isSynthetic: false,
     }));
   }
@@ -223,7 +221,7 @@ const getSegmentsByStage = (
  */
 export function ResearchPipelineStages({
   stageProgress,
-  experimentNodes,
+  substageEvents,
 }: ResearchPipelineStagesProps) {
   /**
    * Get aggregated stage information for a given main stage
@@ -283,7 +281,7 @@ export function ResearchPipelineStages({
       <div className="flex flex-col gap-6">
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
-          const segments = getSegmentsByStage(stage.key, experimentNodes, stageProgress);
+          const segments = getSegmentsByStage(stage.key, substageEvents, stageProgress);
 
           return (
             <div key={stage.id} className="flex flex-col gap-3">

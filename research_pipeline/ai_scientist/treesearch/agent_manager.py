@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 from pydantic import BaseModel
 
 from ai_scientist.llm import structured_query_with_schema
-from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, RunStageProgressEvent
+from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, SubstageCompletedEvent
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
@@ -547,7 +547,7 @@ Your research idea:\n\n
         - If False and next_substage is provided, the caller should continue with that sub-stage.
         """
         while True:
-            # Emit iteration progress before each step
+            # Emit iteration log before each step; progress events are handled in step_callback.
             journal = self.journals[current_substage.name]
             max_iters = current_substage.max_iterations
             current_iter = len(journal.nodes) + 1
@@ -561,17 +561,6 @@ Your research idea:\n\n
                         level="info",
                     )
                 )
-                self.event_callback(
-                    RunStageProgressEvent(
-                        stage=current_substage.name,
-                        iteration=current_iter,
-                        max_iterations=max_iters,
-                        progress=min(len(journal.nodes) / max_iters, 1.0),
-                        total_nodes=len(journal.nodes),
-                        buggy_nodes=len(journal.buggy_nodes),
-                        good_nodes=len(journal.good_nodes),
-                    )
-                )
             except Exception:
                 # Best-effort logging; never block iteration on event errors
                 pass
@@ -580,11 +569,48 @@ Your research idea:\n\n
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
 
+            # Check if sub-stage is complete (check this before main stage completion)
+            substage_complete, substage_feedback = self._check_substage_completion(
+                current_substage, self.journals[current_substage.name]
+            )
+
             # Check if main stage is complete
             main_stage_complete, main_stage_feedback = self._check_stage_completion(
                 current_substage
             )
             logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
+
+            # If substage completes, emit event (even if main stage also completes)
+            if substage_complete:
+                # Emit a sub-stage completion event with a lightweight summary
+                try:
+                    journal = self.journals[current_substage.name]
+                    best_node = journal.get_best_node()
+                    summary: Dict[str, Any] = {
+                        "goals": current_substage.goals,
+                        "total_nodes": len(journal.nodes),
+                        "buggy_nodes": len(journal.buggy_nodes),
+                        "good_nodes": len(journal.good_nodes),
+                        "best_metric": (
+                            str(best_node.metric) if best_node and best_node.metric else None
+                        ),
+                        "feedback": substage_feedback,
+                    }
+                    self.event_callback(
+                        SubstageCompletedEvent(
+                            stage=current_substage.name,
+                            main_stage_number=current_substage.number,
+                            substage_number=current_substage.substage_number,
+                            substage_name=current_substage.substage_name,
+                            reason=substage_feedback,
+                            summary=summary,
+                        )
+                    )
+                except Exception:
+                    # Best-effort telemetry; never block progression on event errors
+                    logger.exception("Failed to emit SubstageCompletedEvent")
+
+            # If main stage completes, run multi-seed eval and return
             if main_stage_complete:
                 # After main stage completion, run multi-seed eval on the best node
                 multi_seed_ok = self._perform_multi_seed_eval_if_needed(
@@ -599,11 +625,7 @@ Your research idea:\n\n
                     pass
                 return True, None
 
-            # Check if sub-stage is complete
-            substage_complete, substage_feedback = self._check_substage_completion(
-                current_substage, self.journals[current_substage.name]
-            )
-
+            # If substage completes but main stage doesn't, create next substage
             if substage_complete:
                 # Create next sub-stage
                 next_substage = self._create_next_substage(

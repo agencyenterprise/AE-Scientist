@@ -21,6 +21,7 @@ import shutil
 import sys
 import threading
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, cast
 
@@ -31,15 +32,16 @@ from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.llm import token_tracker
 from ai_scientist.perform_icbinb_writeup import gather_citations
 from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
-from ai_scientist.perform_llm_review import load_paper, perform_review
+from ai_scientist.perform_llm_review import ReviewResponseModel, load_paper, perform_review
 from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
+from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
-from ai_scientist.treesearch.events import BaseEvent
+from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.interpreter import ExecutionResult
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
@@ -297,6 +299,48 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         return TelemetryHooks(
             event_callback=event_callback, persistence=None, webhook=webhook_client
         )
+
+
+@dataclass
+class _EventCallbackWrapper:
+    base_callback: Callable[[BaseEvent], None]
+    webhook_client: WebhookClient | None
+
+    def __call__(self, event: BaseEvent) -> None:
+        if isinstance(event, GpuShortageEvent):
+            _handle_gpu_shortage_event(event=event, webhook_client=self.webhook_client)
+        self.base_callback(event)
+
+
+def _augment_event_callback(
+    base_callback: Callable[[BaseEvent], None],
+    *,
+    webhook_client: WebhookClient | None,
+) -> Callable[[BaseEvent], None]:
+    return _EventCallbackWrapper(base_callback=base_callback, webhook_client=webhook_client)
+
+
+def _handle_gpu_shortage_event(
+    *,
+    event: GpuShortageEvent,
+    webhook_client: WebhookClient | None,
+) -> None:
+    logger.error(
+        "GPU shortage detected: required=%s available=%s",
+        event.required_gpus,
+        event.available_gpus,
+    )
+    if webhook_client is None:
+        logger.warning("Telemetry webhook not configured; cannot notify server about GPU shortage.")
+        return
+    try:
+        webhook_client.publish_gpu_shortage(
+            required_gpus=event.required_gpus,
+            available_gpus=event.available_gpus,
+            message=event.message,
+        )
+    except Exception:
+        logger.exception("Failed to publish GPU shortage notification.")
 
 
 def setup_artifact_publisher(
@@ -567,14 +611,17 @@ def run_plot_aggregation(
             figures_dir = Path(reports_base) / "figures" / run_dir_path.name
             if not figures_dir.exists():
                 raise FileNotFoundError(f"figures directory missing: {figures_dir}")
-            artifact_callback(
-                ArtifactSpec(
-                    artifact_type="plots_archive",
-                    path=figures_dir,
-                    packaging="zip",
-                    archive_name=f"{run_dir_path.name}-plots.zip",
+            plot_paths = sorted(p for p in figures_dir.glob("*.png") if p.is_file())
+            if not plot_paths:
+                logger.warning("No plot files found to upload in %s", figures_dir)
+            for plot_path in plot_paths:
+                artifact_callback(
+                    ArtifactSpec(
+                        artifact_type="plot",
+                        path=plot_path,
+                        packaging="file",
+                    )
                 )
-            )
         except Exception:
             logger.exception("Failed to record plots archive artifact for %s", run_dir_path)
         return True
@@ -679,6 +726,8 @@ def run_review_stage(
     writeup_success: bool,
     should_run_reports: bool,
     agg_ok: bool,
+    artifact_callback: ArtifactCallback,
+    telemetry_cfg: TelemetryConfig | None,
 ) -> None:
     if (
         review_cfg is None
@@ -701,7 +750,7 @@ def run_review_stage(
     paper_content = load_paper(pdf_path)
     review_model = review_cfg.model
     review_context = build_auto_review_context(reports_base, None, paper_content or "")
-    review_text = perform_review(
+    review_result = perform_review(
         text=paper_content,
         model=review_model,
         temperature=review_cfg.temperature,
@@ -709,21 +758,65 @@ def run_review_stage(
         num_reviews_ensemble=3,
         num_reflections=2,
     )
+    if isinstance(review_result, tuple):
+        review: ReviewResponseModel = review_result[0]
+    else:
+        review = review_result
+    if not isinstance(review, ReviewResponseModel):
+        raise TypeError("perform_review must return ReviewResponseModel")
     review_img_cap_ref = perform_imgs_cap_ref_review(
         model=review_model,
         pdf_path=pdf_path,
         temperature=review_cfg.temperature,
     )
+    serialized_img_reviews = [
+        {
+            "figure_name": item.figure_name,
+            "review": item.review.model_dump(by_alias=True),
+        }
+        for item in review_img_cap_ref
+    ]
     review_out_dir = (
         osp.join(reports_base, "logs", run_dir_path.name)
         if run_dir_path is not None
         else reports_base
     )
     os.makedirs(review_out_dir, exist_ok=True)
-    with open(osp.join(review_out_dir, "review_text.txt"), "w") as f:
-        f.write(json.dumps(review_text, indent=4))
-    with open(osp.join(review_out_dir, "review_img_cap_ref.json"), "w") as f:
-        json.dump(review_img_cap_ref, f, indent=4)
+    review_json_path = Path(review_out_dir) / "review_text.json"
+    review_json_path.write_text(
+        json.dumps(review.model_dump(by_alias=True), indent=4),
+        encoding="utf-8",
+    )
+    review_img_path = Path(review_out_dir) / "review_img_cap_ref.json"
+    review_img_path.write_text(json.dumps(serialized_img_reviews, indent=4), encoding="utf-8")
+    try:
+        artifact_callback(
+            ArtifactSpec(
+                artifact_type="llm_review",
+                path=review_json_path,
+                packaging="file",
+            )
+        )
+    except Exception:
+        logger.exception("Failed to upload review JSON artifact: %s", review_json_path)
+
+    if telemetry_cfg and telemetry_cfg.database_url:
+        try:
+            recorder = ReviewResponseRecorder.from_database_url(
+                database_url=telemetry_cfg.database_url,
+                run_id=telemetry_cfg.run_id,
+            )
+            recorder.insert_review(review=review, source_path=review_json_path)
+            figure_recorder = FigureReviewRecorder.from_database_url(
+                database_url=telemetry_cfg.database_url,
+                run_id=telemetry_cfg.run_id,
+            )
+            figure_recorder.insert_reviews(
+                reviews=review_img_cap_ref,
+                source_path=review_img_path,
+            )
+        except Exception:
+            logger.exception("Failed to persist review data to database.")
     logger.info("Paper review completed.")
 
 
@@ -733,6 +826,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
     apply_log_level(level_name=str(base_cfg.log_level))
     top_log_dir = base_cfg.log_dir
     top_log_dir.mkdir(parents=True, exist_ok=True)
+
     existing_runs_before = {p.name for p in top_log_dir.iterdir() if p.is_dir()}
     reports_base = str(top_log_dir.parent.resolve())
 
@@ -747,9 +841,12 @@ def execute_launcher(args: argparse.Namespace) -> None:
         logger.info("Review configuration provided but writeup is disabled; skipping review.")
 
     telemetry_hooks = setup_event_pipeline(telemetry_cfg=base_cfg.telemetry)
-    event_callback = telemetry_hooks.event_callback
     event_persistence = telemetry_hooks.persistence
     webhook_client = telemetry_hooks.webhook
+    event_callback = _augment_event_callback(
+        telemetry_hooks.event_callback,
+        webhook_client=webhook_client,
+    )
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
             telemetry_cfg=base_cfg.telemetry
@@ -836,6 +933,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
             writeup_success=writeup_success,
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
+            artifact_callback=artifact_callback,
+            telemetry_cfg=base_cfg.telemetry,
         )
 
         if artifact_callback is not None and run_dir_path is not None:

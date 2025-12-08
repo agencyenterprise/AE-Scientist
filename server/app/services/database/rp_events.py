@@ -35,11 +35,10 @@ class RunLogEvent(NamedTuple):
     created_at: datetime
 
 
-class ExperimentNodeEvent(NamedTuple):
+class SubstageCompletedEvent(NamedTuple):
     id: int
     run_id: str
     stage: str
-    node_id: Optional[str]
     summary: dict
     created_at: datetime
 
@@ -79,10 +78,10 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 rows = cursor.fetchall() or []
         return [RunLogEvent(**row) for row in rows]
 
-    def list_experiment_node_events(self, run_id: str) -> List[ExperimentNodeEvent]:
+    def list_substage_completed_events(self, run_id: str) -> List[SubstageCompletedEvent]:
         query = """
-            SELECT id, run_id, stage, node_id, summary, created_at
-            FROM rp_experiment_node_completed_events
+            SELECT id, run_id, stage, summary, created_at
+            FROM rp_substage_completed_events
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
@@ -90,7 +89,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
-        return [ExperimentNodeEvent(**row) for row in rows]
+        return [SubstageCompletedEvent(**row) for row in rows]
 
     def list_run_log_events_since(
         self, run_id: str, since: datetime, limit: int = 100

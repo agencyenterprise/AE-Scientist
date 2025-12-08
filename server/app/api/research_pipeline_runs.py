@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional, Protocol, Sequence, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
@@ -19,18 +19,17 @@ from app.models import (
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
-    ResearchRunNodeEvent,
     ResearchRunStageProgress,
+    ResearchRunSubstageEvent,
 )
 from app.services import get_database
 from app.services.database import DatabaseManager
-from app.services.database.ideas import IdeaData
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRun,
     ResearchPipelineRunEvent,
 )
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
-from app.services.database.rp_events import ExperimentNodeEvent, RunLogEvent, StageProgressEvent
+from app.services.database.rp_events import RunLogEvent, StageProgressEvent, SubstageCompletedEvent
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -94,7 +93,20 @@ def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
         logger.warning("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
 
 
-def _idea_version_to_payload(idea_data: IdeaData) -> Dict[str, object]:
+class IdeaPayloadSource(Protocol):
+    idea_id: int
+    version_id: int
+    version_number: int
+    title: str
+    short_hypothesis: str
+    related_work: str
+    abstract: str
+    experiments: Sequence[Any]
+    expected_outcome: str
+    risk_factors_and_limitations: Sequence[Any]
+
+
+def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
     experiments = idea_data.experiments or []
     risks = idea_data.risk_factors_and_limitations or []
     return {
@@ -107,6 +119,47 @@ def _idea_version_to_payload(idea_data: IdeaData) -> Dict[str, object]:
         "Expected Outcome": idea_data.expected_outcome or "",
         "Risk Factors and Limitations": risks if isinstance(risks, list) else [],
     }
+
+
+def _create_and_launch_research_run(
+    *,
+    idea_data: IdeaPayloadSource,
+    background_tasks: BackgroundTasks | None = None,
+) -> str:
+    db = get_database()
+    run_id = f"rp-{uuid4().hex[:10]}"
+    db.create_research_pipeline_run(
+        run_id=run_id,
+        idea_id=idea_data.idea_id,
+        idea_version_id=idea_data.version_id,
+        status="pending",
+        start_deadline_at=None,
+        cost=0.0,
+    )
+    idea_payload = _idea_version_to_payload(idea_data)
+    cancel_event = threading.Event()
+    with _launch_cancel_lock:
+        _launch_cancel_events[run_id] = cancel_event
+
+    if background_tasks is not None:
+        background_tasks.add_task(
+            _launch_research_pipeline_job,
+            run_id=run_id,
+            idea_payload=idea_payload,
+            cancel_event=cancel_event,
+        )
+    else:
+        thread = threading.Thread(
+            target=_launch_research_pipeline_job,
+            kwargs={
+                "run_id": run_id,
+                "idea_payload": idea_payload,
+                "cancel_event": cancel_event,
+            },
+            daemon=True,
+        )
+        thread.start()
+    return run_id
 
 
 def _extract_cost_per_hour(pod_info: Dict[str, Any], run_id: str) -> float:
@@ -277,11 +330,11 @@ def _run_event_to_model(event: ResearchPipelineRunEvent) -> ResearchRunEvent:
     )
 
 
-def _node_event_to_model(event: ExperimentNodeEvent) -> ResearchRunNodeEvent:
-    return ResearchRunNodeEvent(
+def _node_event_to_model(event: SubstageCompletedEvent) -> ResearchRunSubstageEvent:
+    return ResearchRunSubstageEvent(
         id=event.id,
         stage=event.stage,
-        node_id=event.node_id,
+        node_id=None,
         summary=event.summary,
         created_at=event.created_at.isoformat(),
     )
@@ -329,27 +382,10 @@ def submit_idea_for_research(
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
 
-    run_id = f"rp-{uuid4().hex[:10]}"
-    db.create_research_pipeline_run(
-        run_id=run_id,
-        idea_id=idea_data.idea_id,
-        idea_version_id=idea_data.version_id,
-        status="pending",
-        start_deadline_at=None,
-        cost=0.0,
+    run_id = _create_and_launch_research_run(
+        idea_data=cast(IdeaPayloadSource, idea_data),
+        background_tasks=background_tasks,
     )
-
-    idea_payload = _idea_version_to_payload(idea_data)
-    cancel_event = threading.Event()
-    with _launch_cancel_lock:
-        _launch_cancel_events[run_id] = cancel_event
-    background_tasks.add_task(
-        _launch_research_pipeline_job,
-        run_id=run_id,
-        idea_payload=idea_payload,
-        cancel_event=cancel_event,
-    )
-
     return ResearchRunAcceptedResponse(run_id=run_id)
 
 
@@ -380,8 +416,8 @@ def get_research_run_details(
         _stage_event_to_model(event) for event in db.list_stage_progress_events(run_id=run_id)
     ]
     log_events = [_log_event_to_model(event) for event in db.list_run_log_events(run_id=run_id)]
-    node_events = [
-        _node_event_to_model(event) for event in db.list_experiment_node_events(run_id=run_id)
+    substage_events = [
+        _node_event_to_model(event) for event in db.list_substage_completed_events(run_id=run_id)
     ]
     artifacts = [
         _artifact_to_model(
@@ -399,7 +435,7 @@ def get_research_run_details(
         run=_run_to_info(run),
         stage_progress=stage_events,
         logs=log_events,
-        experiment_nodes=node_events,
+        substage_events=substage_events,
         events=run_events,
         artifacts=artifacts,
     )
@@ -636,7 +672,7 @@ async def stream_research_run_events(
 
         stage_events = db.list_stage_progress_events(run_id)
         log_events = db.list_run_log_events(run_id)
-        node_events = db.list_experiment_node_events(run_id)
+        substage_events = db.list_substage_completed_events(run_id)
 
         initial_data = {
             "type": "initial",
@@ -644,7 +680,7 @@ async def stream_research_run_events(
                 "run": _run_to_info(run).model_dump(),
                 "stage_progress": [_stage_event_to_model(e).model_dump() for e in stage_events],
                 "logs": [_log_event_to_model(e).model_dump() for e in log_events],
-                "experiment_nodes": [_node_event_to_model(e).model_dump() for e in node_events],
+                "substage_events": [_node_event_to_model(e).model_dump() for e in substage_events],
                 "artifacts": [
                     _artifact_to_model(a, conversation_id, run_id).model_dump() for a in artifacts
                 ],
