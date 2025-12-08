@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-08T21:00:00Z",
+  "lastUpdated": "2025-12-08T23:45:00.000000",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -74,8 +74,22 @@
         "reason": "shadcn Button component - use variant='ghost' for Edit button",
         "usedIn": [],
         "patterns": {
-          "variants": ["default", "destructive", "outline", "secondary", "ghost", "link"],
-          "sizes": ["default", "sm", "lg", "icon", "icon-sm", "icon-lg"],
+          "variants": [
+            "default",
+            "destructive",
+            "outline",
+            "secondary",
+            "ghost",
+            "link"
+          ],
+          "sizes": [
+            "default",
+            "sm",
+            "lg",
+            "icon",
+            "icon-sm",
+            "icon-lg"
+          ],
           "recommended": "variant='ghost' size='sm' for Edit button in card footer"
         }
       },
@@ -188,7 +202,13 @@
     "extract": []
   },
   "files": {
-    "created": [],
+    "created": [
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks/conversation-status-tracking/02c-fastapi-guidance.md",
+        "by": "fastapi-expert",
+        "at": "2025-12-08T23:45:00.000000"
+      }
+    ],
     "modified": [],
     "pending": [
       "server/database_migrations/versions/0013_add_conversation_status.py",
@@ -241,8 +261,9 @@
       "subtasks": [
         {
           "agent": "fastapi-expert",
-          "status": "pending",
-          "description": "Guide database migration and API endpoint updates"
+          "status": "completed",
+          "completedAt": "2025-12-08T23:45:00Z",
+          "description": "FastAPI/Pydantic guidance provided: Pydantic v2 patterns, migration templates, transaction patterns, NamedTuple additions, service methods. REVISED: Updated database column type from TEXT to VARCHAR(255) for better indexing"
         },
         {
           "agent": "nextjs-expert",
@@ -320,8 +341,10 @@
     {
       "phase": "planning",
       "key": "status-column-type",
-      "value": "TEXT with server_default",
-      "reason": "PostgreSQL TEXT with server_default follows existing pattern (research_pipeline_runs.status). Python-level validation via CONVERSATION_STATUSES tuple."
+      "value": "VARCHAR(255) with server_default",
+      "reason": "REVISED: Changed from TEXT to VARCHAR(255) per user request for better indexing support. Allows future database optimization and composite index creation. Python-level validation via CONVERSATION_STATUSES tuple.",
+      "revision": "2025-12-08T23:45:00Z",
+      "revisionReason": "User feedback: VARCHAR(255) is more appropriate for indexing than TEXT, maintains flexibility for future optimization"
     },
     {
       "phase": "planning",
@@ -406,6 +429,38 @@
       "key": "implementation-order",
       "value": "migration-first",
       "reason": "1. Migration (schema), 2. ConversationsMixin (status method + NamedTuples), 3. Models (Pydantic), 4. API (response conversion), 5. ResearchPipelineRunsMixin (auto-update), 6. Frontend (Edit buttons)"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "pydantic-version",
+      "value": "v2.x",
+      "reason": "FastAPI 0.116.1 uses Pydantic v2 patterns: Field(), field_validator, no Config classes"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "database-type",
+      "value": "VARCHAR(255) not TEXT",
+      "reason": "REVISED: Changed from TEXT to VARCHAR(255) for better indexing. Allows B-tree indexes and composite index creation. Maintains flexibility for future database optimization. Validated via Python CONVERSATION_STATUSES tuple.",
+      "revision": "2025-12-08T23:45:00Z"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "migration-backfill-strategy",
+      "value": "sql-case-expression",
+      "reason": "Use SQL CASE expression to join with research_pipeline_runs and set status based on existence of runs"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "transaction-pattern",
+      "value": "cursor-helper-method",
+      "reason": "Create _update_conversation_status_with_cursor() helper to reuse in multi-step transactions without committing"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "indexing-benefits",
+      "value": "varchar-ready-for-optimization",
+      "reason": "VARCHAR(255) column allows for future database performance optimization. Text columns cannot be fully indexed; VARCHAR with length constraints support B-tree and composite indexes. Ready for scaling.",
+      "revision": "2025-12-08T23:45:00Z"
     }
   ],
   "searches": [
@@ -451,6 +506,12 @@
       "results": 1,
       "at": "2025-12-08T21:00:00Z",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-tracking/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T16:26:23.500825"
     }
   ],
   "reviews": {
@@ -462,7 +523,7 @@
       "id": "AC1",
       "description": "Create a status column for conversations: Draft | With Research (when we have launched research)",
       "technicalRequirements": [
-        "Add 'status' TEXT column to conversations table with server_default='draft'",
+        "Add 'status' VARCHAR(255) column to conversations table with server_default='draft'",
         "Allowed values: 'draft', 'with_research' (validated in Python via CONVERSATION_STATUSES tuple)",
         "Migration backfills existing conversations: set to 'with_research' if has research runs, else 'draft'",
         "Update conversation_dashboard_view to include status column",
@@ -512,39 +573,59 @@
         "type": "create",
         "reason": "Schema must exist before code references it",
         "dependencies": [],
-        "solidPrinciples": ["SRP: Migration only handles schema changes"]
+        "solidPrinciples": [
+          "SRP: Migration only handles schema changes"
+        ]
       },
       {
         "order": 2,
         "file": "server/app/services/database/conversations.py",
         "type": "modify",
         "reason": "Add CONVERSATION_STATUSES constant, update_conversation_status method, and update NamedTuples",
-        "dependencies": ["0013_add_conversation_status.py"],
-        "solidPrinciples": ["SRP: ConversationsMixin manages conversation state", "OCP: Status values extensible via tuple constant"]
+        "dependencies": [
+          "0013_add_conversation_status.py"
+        ],
+        "solidPrinciples": [
+          "SRP: ConversationsMixin manages conversation state",
+          "OCP: Status values extensible via tuple constant"
+        ]
       },
       {
         "order": 3,
         "file": "server/app/models/conversations.py",
         "type": "modify",
         "reason": "Add status field to ConversationResponse Pydantic model",
-        "dependencies": ["conversations.py service"],
-        "solidPrinciples": ["SRP: Models define API contracts only"]
+        "dependencies": [
+          "conversations.py service"
+        ],
+        "solidPrinciples": [
+          "SRP: Models define API contracts only"
+        ]
       },
       {
         "order": 4,
         "file": "server/app/api/conversations.py",
         "type": "modify",
         "reason": "Update convert_db_to_api_response to include status field",
-        "dependencies": ["ConversationResponse model"],
-        "solidPrinciples": ["SRP: API layer handles HTTP concerns only"]
+        "dependencies": [
+          "ConversationResponse model"
+        ],
+        "solidPrinciples": [
+          "SRP: API layer handles HTTP concerns only"
+        ]
       },
       {
         "order": 5,
         "file": "server/app/services/database/research_pipeline_runs.py",
         "type": "modify",
         "reason": "Add status update call in create_research_pipeline_run",
-        "dependencies": ["update_conversation_status method"],
-        "solidPrinciples": ["SRP: Run creation + side effect (status update)", "DIP: Calls abstraction via self"]
+        "dependencies": [
+          "update_conversation_status method"
+        ],
+        "solidPrinciples": [
+          "SRP: Run creation + side effect (status update)",
+          "DIP: Calls abstraction via self"
+        ]
       },
       {
         "order": 6,
@@ -552,7 +633,9 @@
         "type": "modify",
         "reason": "Add Edit button with navigation",
         "dependencies": [],
-        "solidPrinciples": ["SRP: Component handles display + user interaction"]
+        "solidPrinciples": [
+          "SRP: Component handles display + user interaction"
+        ]
       },
       {
         "order": 7,
@@ -560,7 +643,9 @@
         "type": "modify",
         "reason": "Add Edit button with navigation",
         "dependencies": [],
-        "solidPrinciples": ["SRP: Component handles display + user interaction"]
+        "solidPrinciples": [
+          "SRP: Component handles display + user interaction"
+        ]
       }
     ],
     "interfaces": {
@@ -611,6 +696,6 @@
     }
   },
   "currentPhase": "implementation",
-  "nextAgent": "fastapi-expert",
+  "nextAgent": "nextjs-expert",
   "blockedBy": null
 }
