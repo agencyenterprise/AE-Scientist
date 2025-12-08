@@ -4,10 +4,10 @@ export function ChatGeneratingState() {
       <div className="px-4 py-2">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-          <p className="text-sm font-medium text-foreground">Hypothesis Generating</p>
+          <p className="text-sm font-medium text-foreground">Research Generating</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Please wait while the research hypothesis is being generated. Chat will be available
-            once complete.
+            Please wait while the research idea is being generated. Chat will be available once
+            complete.
           </p>
         </div>
       </div>

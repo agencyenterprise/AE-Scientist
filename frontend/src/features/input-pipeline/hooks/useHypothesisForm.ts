@@ -54,7 +54,7 @@ export function useHypothesisForm({
 
       if (!response.ok) {
         const message = (data && (data.message || data.error)) || (await response.text());
-        setError(message || "Failed to create hypothesis");
+        setError(message || "Failed to create research idea");
         return;
       }
 

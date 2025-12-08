@@ -35,11 +35,11 @@ export function HypothesisConfirmationModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
       <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-6 shadow-xl">
-        <h2 className="text-xl font-semibold text-slate-200 mb-4">Review & Edit Hypothesis</h2>
+        <h2 className="text-xl font-semibold text-slate-200 mb-4">Review & Edit Research Idea</h2>
 
         <p className="text-sm text-slate-400 mb-6">
-          The AI has extracted and structured your hypothesis. You can edit the title and
-          description before creating the hypothesis.
+          The AI has extracted and structured your research idea. You can edit the title and
+          description before launching the research.
         </p>
 
         <div className="space-y-4">
@@ -52,7 +52,7 @@ export function HypothesisConfirmationModal({
               className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="Enter a title for your hypothesis"
+              placeholder="Enter a title for your research idea"
             />
           </div>
 
@@ -83,7 +83,7 @@ export function HypothesisConfirmationModal({
             onClick={handleConfirm}
             className="rounded border border-sky-600/60 bg-sky-900/40 px-4 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-900/60"
           >
-            Create Hypothesis
+            Launch Research
           </button>
         </div>
       </div>

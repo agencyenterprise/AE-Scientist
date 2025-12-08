@@ -42,7 +42,7 @@ export function CreateProjectModal({
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-foreground">Create Hypothesis</h3>
+            <h3 className="text-lg font-medium text-foreground">Launch Research</h3>
             <button
               type="button"
               onClick={handleClose}
@@ -56,7 +56,7 @@ export function CreateProjectModal({
           {/* Content */}
           <div className="mb-6">
             <p className="text-sm text-muted-foreground mb-4">
-              This will create a new research hypothesis based on your current work.
+              This will launch a new research run based on your current work.
             </p>
 
             {/* Warning */}
@@ -69,8 +69,8 @@ export function CreateProjectModal({
                   <h3 className="text-sm font-medium text-foreground">Important</h3>
                   <div className="mt-1 text-sm text-muted-foreground">
                     <p>
-                      Once created, this conversation will be locked and you won&apos;t be able to
-                      modify the research hypothesis or continue the AI chat. This action cannot be
+                      Once launched, this conversation will be locked and you won&apos;t be able to
+                      modify the research idea or continue the AI chat. This action cannot be
                       undone.
                     </p>
                   </div>
@@ -97,12 +97,12 @@ export function CreateProjectModal({
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating Hypothesis...
+                Launching Research...
               </>
             ) : (
               <>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Hypothesis
+                Launch Research
               </>
             )}
           </button>

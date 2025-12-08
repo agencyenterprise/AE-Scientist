@@ -8,14 +8,14 @@ interface HypothesisSectionProps {
 }
 
 /**
- * Section component for displaying the hypothesis.
+ * Section component for displaying the research hypothesis.
  *
  * Uses the primary-border variant for visual emphasis.
  */
 export function HypothesisSection({ content, diffContent, onEdit }: HypothesisSectionProps) {
   return (
     <StringSection
-      title="Hypothesis"
+      title="Research Hypothesis"
       content={content}
       diffContent={diffContent}
       onEdit={onEdit}
