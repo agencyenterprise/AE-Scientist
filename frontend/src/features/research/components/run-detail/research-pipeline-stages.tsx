@@ -1,7 +1,6 @@
 "use client";
 
 import type { SubstageEvent, StageProgress } from "@/types/research";
-import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 
 interface ResearchPipelineStagesProps {
@@ -82,25 +81,6 @@ interface SegmentData {
 }
 
 /**
- * Legend explaining segment colors
- */
-function SegmentLegend() {
-  return (
-    <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
-      <span className="font-medium">Legend:</span>
-      <div className="flex items-center gap-2">
-        <div className="h-3 w-3 rounded-sm bg-blue-500" />
-        <span>Good Node</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="h-3 w-3 rounded-sm bg-red-500" />
-        <span>Buggy Node</span>
-      </div>
-    </div>
-  );
-}
-
-/**
  * Segmented progress bar showing one segment per node
  */
 interface SegmentedProgressBarProps {
@@ -115,19 +95,12 @@ function SegmentedProgressBar({ segments }: SegmentedProgressBarProps) {
   return (
     <div className="flex gap-1 w-full">
       {segments.map((segment, index) => {
-        const statusLabel = segment.status === "good" ? "Good" : "Buggy";
-        const tooltipText = `Node ${segment.nodeNumber}: ${statusLabel}`;
+        const tooltipText = `Node ${segment.nodeNumber}`;
 
         return (
           <Tooltip key={index}>
             <TooltipTrigger asChild>
-              <div
-                className={cn(
-                  "h-2 flex-1 rounded-sm transition-all duration-300 cursor-help",
-                  segment.status === "good" && "bg-blue-500",
-                  segment.status === "buggy" && "bg-red-500"
-                )}
-              />
+              <div className="h-2 flex-1 rounded-sm transition-all duration-300 cursor-help bg-blue-500" />
             </TooltipTrigger>
             <TooltipContent>
               <p className="text-xs">{tooltipText}</p>
@@ -275,9 +248,6 @@ export function ResearchPipelineStages({
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 w-full">
       <h2 className="mb-6 text-xl font-semibold text-white">Pipeline Stages</h2>
 
-      {/* Legend */}
-      <SegmentLegend />
-
       <div className="flex flex-col gap-6">
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
@@ -290,6 +260,9 @@ export function ResearchPipelineStages({
                 <div className="flex flex-col gap-1">
                   <h3 className="text-base font-semibold text-white">
                     Stage {stage.id}: {stage.title}
+                    {info.status !== "pending" && (
+                      <span className="ml-2 text-slate-400">({info.progressPercent}%)</span>
+                    )}
                   </h3>
                 </div>
                 {/* Status Badge */}
