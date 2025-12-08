@@ -21,7 +21,6 @@ from typing import Callable
 
 from .agent_manager import AgentManager
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
-from .interpreter import ExecutionResult
 from .journal import Journal
 from .log_summarization import overall_summarize
 from .stages.base import StageMeta
@@ -62,13 +61,6 @@ def perform_experiments_bfts(
         workspace_dir=Path(cfg.workspace_dir),
         event_callback=event_callback,
     )
-
-    def create_exec_callback() -> Callable[[str, bool], ExecutionResult]:
-        def exec_callback(_code: str, _is_exec: bool) -> ExecutionResult:
-            # Not used by ParallelAgent; return a placeholder result
-            return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
-
-        return exec_callback
 
     # Track iteration timing for smart ETA calculation
     iteration_start_times: list[float] = []
@@ -223,7 +215,7 @@ def perform_experiments_bfts(
             f"Step {min(len(journal), stage.max_iterations)}/{stage.max_iterations} at stage_{stage.name}"
         )
 
-    manager.run(exec_callback=create_exec_callback(), step_callback=step_callback)
+    manager.run(step_callback=step_callback)
 
     if cfg.generate_report:
         logger.info("Generating final report from all stages...")

@@ -27,7 +27,7 @@ from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage4_ablation import Stage4Ablation
-from .types import ExecCallbackType, PromptType
+from .types import PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
 from .worker_process import process_node
@@ -402,7 +402,7 @@ class ParallelAgent:
 
         return nodes_to_process
 
-    def step(self, _exec_callback: ExecCallbackType) -> None:
+    def step(self) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()

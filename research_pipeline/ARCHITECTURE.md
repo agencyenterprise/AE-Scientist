@@ -94,7 +94,6 @@ This document describes the runtime architecture of the AI Scientist BFTS experi
 4. For each substage:
    - Curates the task description based on stage type.
    - Creates a `ParallelAgent` with carryover best nodes from prior completed stages.
-   - Calls `agent.step(exec_callback)` repeatedly until substage completes.
    - Delegates completion checks to the concrete `Stage` implementation.
 5. When a main stage completes:
    - Optionally runs multi-seed evaluation and plot aggregation for the best node.
