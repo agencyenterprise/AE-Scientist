@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-08T17:17:50.308520",
+  "lastUpdated": "2025-12-08T17:26:52.017537",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -313,6 +313,13 @@
       "description": "Execute database migration, backend changes, and frontend updates"
     },
     {
+      "id": "copy-review",
+      "agent": "copy-reviewer",
+      "status": "completed",
+      "completedAt": "2025-12-08T18:35:00Z",
+      "description": "Applied copy fixes: aria-label accessibility and device-agnostic language"
+    },
+    {
       "id": "documentation",
       "agent": "documentation-reviewer",
       "status": "pending",
@@ -596,10 +603,72 @@
       "results": 0,
       "at": "2025-12-08T17:17:50.308513",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database/conversations.py"
+    },
+    {
+      "pattern": "**/*copy-guidelines*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:26:34.835873",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent"
+    },
+    {
+      "pattern": "aria-label",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:34.843001",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features"
+    },
+    {
+      "pattern": "Edit.*button|edit.*aria-label|>Edit<",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:40.115869",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:26:46.878004",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks/conversation-status-tracking"
+    },
+    {
+      "pattern": "variant=\"outline\".*Edit|Edit.*variant=\"outline\"",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:52.012977",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "variant=\"ghost\".*Edit|Edit.*variant=\"ghost\"",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:52.017530",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
     }
   ],
   "reviews": {
-    "copy": [],
+    "copy": [
+      {
+        "type": "copy-review",
+        "status": "completed",
+        "completedAt": "2025-12-08T18:35:00Z",
+        "appliedFixes": [
+          {
+            "file": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+            "category": "must-fix",
+            "change": "Added aria-label=\"Edit research idea\" to Edit button",
+            "line": 113
+          },
+          {
+            "file": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+            "category": "should-fix",
+            "change": "Changed 'Click on an idea above to preview its details' to 'Choose an idea above to preview its details' for device-agnostic language",
+            "line": 36
+          }
+        ]
+      }
+    ],
     "queries": []
   },
   "acceptanceCriteria": [
