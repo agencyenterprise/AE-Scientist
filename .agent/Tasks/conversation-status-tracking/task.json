@@ -1,9 +1,9 @@
 {
   "id": "conversation-status-tracking",
   "name": "Conversation Status Tracking",
-  "description": "Add status field to conversations (Draft | With Research) and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
+  "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-08T00:00:00Z",
+  "lastUpdated": "2025-12-08T18:00:00Z",
 
   "classification": {
     "type": "fullstack",
@@ -21,11 +21,11 @@
       "documentation-reviewer"
     ],
     "reasoning": {
-      "type": "User story describes both backend (status field + database migration) and frontend (UI updates to 2 components)",
-      "scope": "Changes limited to conversation feature - backend schema + 2 frontend components",
-      "complexity": "Moderate - requires database migration, backend API changes, and coordinated frontend updates",
-      "requiresUserStories": "False - file-driven approach is sufficient. While fullstack and user-facing, the scope is contained to a single feature with clear technical requirements (status enum + edit buttons). The 3 acceptance criteria map directly to implementation tasks without needing user journey decomposition.",
-      "workflow": "Full workflow needed due to fullstack nature: database schema changes (migration), backend API updates (FastAPI), frontend component modifications (Next.js), and documentation for the new status field pattern"
+      "type": "User story describes both backend (status column + database migration + auto-update) and frontend (UI updates to 2 components)",
+      "scope": "Changes limited to conversation feature - backend schema, service updates, API changes, and 2 frontend components",
+      "complexity": "Moderate - requires database migration, backend status update logic, API changes, and coordinated frontend updates",
+      "requiresUserStories": "False - file-driven approach is sufficient. While fullstack and user-facing, the scope is contained to a single feature with clear technical requirements (status enum + edit buttons).",
+      "workflow": "Full workflow needed due to fullstack nature: database schema changes (migration), backend API updates (FastAPI), frontend component modifications (Next.js), and documentation"
     }
   },
 
@@ -47,20 +47,48 @@
   },
 
   "docsConsulted": {
-    "project": [],
+    "project": [
+      ".agent/README.md",
+      ".agent/System/project_architecture.md",
+      ".agent/System/server_architecture.md",
+      ".agent/System/frontend_architecture.md",
+      ".agent/SOP/server_database_migrations.md"
+    ],
     "external": [],
-    "existingFeatures": []
+    "existingFeatures": [
+      "server/app/models/conversations.py",
+      "server/app/api/conversations.py",
+      "server/app/services/database/conversations.py",
+      "server/app/services/database/research_pipeline_runs.py",
+      "server/database_migrations/versions/0003_manual_seed_columns.py",
+      "server/database_migrations/versions/0012_substage_completed_events.py",
+      "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
+      "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+      "frontend/src/features/conversation/types/ideation-queue.types.ts"
+    ]
   },
 
   "assets": {
     "reuse": [
       {
         "path": "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
-        "reason": "Needs Edit button added"
+        "reason": "Existing card component - needs Edit button added"
       },
       {
         "path": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
-        "reason": "Needs Edit button added"
+        "reason": "Existing inline view - needs Edit button added"
+      },
+      {
+        "path": "frontend/src/shared/lib/utils.ts",
+        "reason": "cn() utility for conditional classes"
+      },
+      {
+        "path": "frontend/src/shared/components/ui/button.tsx",
+        "reason": "shadcn Button component for Edit button"
+      },
+      {
+        "path": "server/database_migrations/versions/0003_manual_seed_columns.py",
+        "reason": "Pattern for adding column and refreshing dashboard view"
       }
     ],
     "create": [],
@@ -75,11 +103,9 @@
       "server/app/models/conversations.py",
       "server/app/api/conversations.py",
       "server/app/services/database/conversations.py",
+      "server/app/services/database/research_pipeline_runs.py",
       "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
-      "frontend/src/features/conversation/components/InlineIdeaView.tsx",
-      "frontend/src/features/conversation/types/ideation-queue.types.ts",
-      ".agent/SOP/server_database_migrations.md",
-      ".agent/System/server_architecture.md"
+      "frontend/src/features/conversation/components/InlineIdeaView.tsx"
     ]
   },
 
@@ -93,8 +119,16 @@
     {
       "id": "planning",
       "agent": "feature-planner",
-      "status": "pending",
-      "description": "Break down into backend (status field) and frontend (Edit buttons) tasks"
+      "status": "completed",
+      "completedAt": "2025-12-08T18:00:00Z",
+      "docsRead": [
+        ".agent/README.md",
+        ".agent/System/project_architecture.md",
+        ".agent/System/server_architecture.md",
+        ".agent/System/frontend_architecture.md",
+        ".agent/SOP/server_database_migrations.md"
+      ],
+      "notes": "REVISED: Changed from computed status to stored ENUM column per user request"
     },
     {
       "id": "analysis",
@@ -168,10 +202,69 @@
       "key": "include-nextjs-expert",
       "value": true,
       "reason": "Component modifications and routing to /conversation/[id] require Next.js expertise"
+    },
+    {
+      "phase": "planning",
+      "key": "architectural-approach",
+      "value": "stored-enum-column",
+      "reason": "REVISED per user request. User wants a dedicated status column for better status handling. Enables direct queries, explicit state management, and flexibility for future status values.",
+      "alternatives": [
+        {
+          "name": "computed-status-pattern",
+          "rejectedWhy": "User explicitly requested stored column for better status control"
+        },
+        {
+          "name": "hybrid-cached-status",
+          "rejectedWhy": "Over-engineered for current requirements"
+        }
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "status-values",
+      "value": "draft|with_research",
+      "reason": "Two-state ENUM matching user story. 'draft' = initial state, 'with_research' = has launched research"
+    },
+    {
+      "phase": "planning",
+      "key": "status-column-type",
+      "value": "TEXT with CHECK constraint",
+      "reason": "PostgreSQL TEXT with CHECK constraint is more flexible than ENUM type for future additions. Pattern consistent with existing status columns (e.g., research_pipeline_runs.status)"
+    },
+    {
+      "phase": "planning",
+      "key": "status-default",
+      "value": "draft",
+      "reason": "All new conversations start as 'draft'. Existing conversations without status should default to 'draft' during migration."
+    },
+    {
+      "phase": "planning",
+      "key": "status-transition-trigger",
+      "value": "application-level",
+      "reason": "Update status to 'with_research' in create_research_pipeline_run() method. Application-level logic is easier to maintain than database triggers and matches existing patterns."
+    },
+    {
+      "phase": "planning",
+      "key": "edit-button-placement",
+      "value": "footer-row",
+      "reason": "Place Edit button in footer area next to existing expand/collapse toggle for consistency. Use stopPropagation to prevent card click."
+    },
+    {
+      "phase": "planning",
+      "key": "edit-button-icon",
+      "value": "Pencil",
+      "reason": "Lucide Pencil icon is standard for edit actions, already imported in codebase"
     }
   ],
 
-  "searches": [],
+  "searches": [
+    {
+      "pattern": "server/database_migrations/versions/*.py",
+      "tool": "glob",
+      "results": 12,
+      "at": "2025-12-08T18:00:00Z"
+    }
+  ],
 
   "reviews": {
     "copy": [],
@@ -181,41 +274,52 @@
   "acceptanceCriteria": [
     {
       "id": "AC1",
-      "description": "Create a status for conversations: Draft | With Research (when we have launched research)",
+      "description": "Create a status column for conversations: Draft | With Research (when we have launched research)",
       "technicalRequirements": [
-        "Add status ENUM column to conversations table",
-        "Create Alembic migration 0013_add_conversation_status.py",
-        "Default status to 'draft'",
-        "Update status to 'with_research' when research run is created",
-        "Update API models to include status field",
-        "Update database service methods"
+        "Add 'status' TEXT column to conversations table with CHECK constraint",
+        "Default value: 'draft'",
+        "Allowed values: 'draft', 'with_research'",
+        "Migration backfills existing conversations: set to 'with_research' if has research runs, else 'draft'",
+        "Update conversation_dashboard_view to include status column",
+        "Add status field to ConversationResponse model",
+        "Add status field to FullConversation and DashboardConversation NamedTuples"
       ]
     },
     {
       "id": "AC2",
-      "description": "Have an 'Edit' button in the IdeationQueueCard so I can go to the /conversation/[id] page",
+      "description": "Auto-update status when research run is created",
       "technicalRequirements": [
-        "Add Edit button to IdeationQueueCard component",
-        "Button should use router.push to navigate to /conversation/[id]",
-        "Stop event propagation to prevent card click from firing",
-        "Use consistent styling with existing buttons",
-        "Include appropriate icon (e.g., Edit, Pencil)"
+        "In create_research_pipeline_run(), update parent conversation status to 'with_research'",
+        "Add update_conversation_status() method to ConversationsMixin",
+        "Lookup conversation_id via idea_id when creating run",
+        "Transaction safety: status update should be in same transaction as run creation"
       ]
     },
     {
       "id": "AC3",
+      "description": "Have an 'Edit' button in the IdeationQueueCard so I can go to the /conversation/[id] page",
+      "technicalRequirements": [
+        "Add Edit button with Pencil icon to IdeationQueueCard footer",
+        "Button uses router.push to navigate to /conversations/{id}",
+        "onClick handler calls e.stopPropagation() to prevent card click",
+        "Use consistent styling: text-slate-400 hover:text-slate-300",
+        "Button text: 'Edit' with Pencil icon"
+      ]
+    },
+    {
+      "id": "AC4",
       "description": "Have an 'Edit' button in the InlineIdeaView so I can go to the /conversation/[id] page",
       "technicalRequirements": [
-        "Add Edit button to InlineIdeaView component header",
-        "Button should use router.push to navigate to /conversation/[id]",
-        "Position near metadata header",
-        "Use consistent styling with IdeationQueueCard Edit button",
-        "Include appropriate icon (e.g., Edit, Pencil)"
+        "Add Edit button in InlineIdeaView header area",
+        "Position in the flex row with metadata (after badges)",
+        "Button uses router.push to navigate to /conversations/{id}",
+        "Use shadcn Button component with variant='outline' or ghost",
+        "Include Pencil icon and 'Edit' text"
       ]
     }
   ],
 
-  "currentPhase": "planning",
-  "nextAgent": "feature-planner",
+  "currentPhase": "analysis",
+  "nextAgent": "codebase-analyzer",
   "blockedBy": null
 }
