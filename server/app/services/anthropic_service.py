@@ -8,7 +8,6 @@ from langchain_anthropic import ChatAnthropic
 
 from app.config import settings
 from app.models import LLMModel
-from app.services import SummarizerService
 from app.services.base_llm_service import FileAttachmentData as LLMFileAttachmentData
 from app.services.langchain_llm_service import LangChainLLMService
 
@@ -77,9 +76,8 @@ SUPPORTED_MODELS = [
 class AnthropicService(LangChainLLMService):
     """LangChain service for Anthropic Claude models."""
 
-    def __init__(self, *, summarizer_service: SummarizerService) -> None:
+    def __init__(self) -> None:
         super().__init__(
-            summarizer_service=summarizer_service,
             supported_models=SUPPORTED_MODELS,
             provider_name="anthropic",
         )

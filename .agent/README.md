@@ -23,6 +23,7 @@ Key capabilities:
 | [Frontend Architecture](System/frontend_architecture.md) | Next.js frontend: feature-based architecture, conventions, migration guide |
 | [Server Architecture](System/server_architecture.md) | FastAPI server: API routes, services, database schema, LLM integrations |
 | [Orchestrator Architecture](System/orchestrator_architecture.md) | Next.js orchestrator: event processing, RunPod, MongoDB, state machine |
+| [Design Guidelines](System/design-guidelines.md) | Visual design system: typography, colors, motion, backgrounds, component patterns |
 
 ### Root-Level Documentation
 | Document | Description |
@@ -64,7 +65,8 @@ Key capabilities:
 │   ├── project_architecture.md      # Overall project
 │   ├── frontend_architecture.md     # Frontend details
 │   ├── server_architecture.md       # Server details
-│   └── orchestrator_architecture.md # Orchestrator details
+│   ├── orchestrator_architecture.md # Orchestrator details
+│   └── design-guidelines.md         # Visual design system
 ├── SOP/                # Standard operating procedures
 │   ├── server_database_migrations.md
 │   ├── server_api_routes.md
@@ -75,7 +77,7 @@ Key capabilities:
 │   ├── orchestrator_api_routes.md
 │   ├── orchestrator_event_types.md
 │   └── orchestrator_mongodb.md
-└── Tasks/              # PRD & implementation plans (future)
+└── Tasks/              # PRD & implementation plans
 ```
 
 ---

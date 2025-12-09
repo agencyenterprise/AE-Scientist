@@ -25,7 +25,6 @@ from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
 from app.services.openai_service import OpenAIService
 from app.services.pdf_service import PDFService
 from app.services.s3_service import S3Service
-from app.services.summarizer_service import SummarizerService
 
 router = APIRouter(prefix="/conversations")
 
@@ -65,10 +64,9 @@ class FileListResponse(BaseModel):
     file_count: int = Field(..., description="Number of files")
 
 
-summarizer_service = SummarizerService()
-anthropic_service = AnthropicService(summarizer_service=summarizer_service)
-grok_service = GrokService(summarizer_service=summarizer_service)
-openai_service = OpenAIService(summarizer_service=summarizer_service)
+anthropic_service = AnthropicService()
+grok_service = GrokService()
+openai_service = OpenAIService()
 pdf_service = PDFService()
 s3_service = S3Service()
 

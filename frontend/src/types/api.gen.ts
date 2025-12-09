@@ -1671,11 +1671,6 @@ export interface components {
              */
             llm_provider: string;
             /**
-             * Accept Summarization
-             * @description Whether to proceed by summarizing when the imported chat exceeds the selected model's context window
-             */
-            accept_summarization: boolean;
-            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1699,11 +1694,6 @@ export interface components {
              */
             llm_provider: string;
             /**
-             * Accept Summarization
-             * @description Whether to proceed by summarizing when the imported chat exceeds the selected model's context window
-             */
-            accept_summarization: boolean;
-            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1726,11 +1716,6 @@ export interface components {
              * @description LLM provider to use
              */
             llm_provider: string;
-            /**
-             * Accept Summarization
-             * @description Whether to proceed by summarizing when the imported chat exceeds the selected model's context window
-             */
-            accept_summarization: boolean;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}

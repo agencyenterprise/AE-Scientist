@@ -156,6 +156,49 @@ def downgrade() -> None:
     op.execute("ALTER TABLE my_table DROP COLUMN IF EXISTS status")
 ```
 
+### Adding a Status Column (Best Practice)
+
+> Added from: conversation-status-tracking implementation (2025-12-08)
+
+For status/enum columns, use `VARCHAR(255)` instead of `TEXT` for better indexing support:
+
+```python
+def upgrade() -> None:
+    # Step 1: Add column with server default
+    op.add_column(
+        "conversations",
+        sa.Column(
+            "status",
+            sa.String(255),  # VARCHAR(255) - better for indexing than TEXT
+            server_default="draft",
+            nullable=False,
+        ),
+    )
+
+    # Step 2: Backfill existing rows based on related data
+    conn = op.get_bind()
+    conn.execute(
+        sa.text("""
+            UPDATE conversations c
+            SET status = CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM research_pipeline_runs rpr
+                    JOIN ideas i ON rpr.idea_id = i.id
+                    WHERE i.conversation_id = c.id
+                    LIMIT 1
+                ) THEN 'with_research'
+                ELSE 'draft'
+            END
+            WHERE status = 'draft'
+        """)
+    )
+    conn.commit()
+
+
+def downgrade() -> None:
+    op.drop_column("conversations", "status")
+```
+
 ### Adding Full-Text Search Index (pg_trgm)
 
 ```python
@@ -188,6 +231,50 @@ def upgrade() -> None:
 - **Test locally first**: Run migrations on local database before deploying
 - **Don't modify applied migrations**: Create new migrations for changes
 - **Foreign key order**: Create parent tables before child tables with FK references
+
+---
+
+## Migration Strategy: Inline Queries vs Views
+
+> Added from: conversation-status-tracking implementation (2025-12-08)
+
+When adding columns to tables that may have associated database views, prefer **inline queries** in the service layer over updating views.
+
+### Why Inline Queries?
+
+| Aspect | Inline Queries | Database Views |
+|--------|---------------|----------------|
+| Migration complexity | Low (ADD COLUMN + backfill only) | Higher (must update view definition) |
+| Maintenance | Simpler (no view sync needed) | More complex (view must match schema) |
+| Flexibility | Queries can be customized per use case | Fixed view definition |
+| Testing | Easier to test individual queries | Must test view + queries |
+
+### When to Use Each
+
+**Inline Queries (Preferred)**:
+- Adding columns to existing tables
+- Simple SELECT queries with standard joins
+- Feature-specific data needs
+
+**Database Views**:
+- Complex aggregations used by multiple features
+- Performance-critical queries that benefit from view materialization
+- Reporting/analytics dashboards
+
+### Implementation Pattern
+
+1. Migration: Only add the column + backfill
+2. Service layer: Update inline SQL queries to SELECT the new column
+3. No view updates needed
+
+```python
+# In service layer - inline query naturally includes new column
+cursor.execute("""
+    SELECT c.id, c.title, c.status, ...  -- status from table, not view
+    FROM conversations c
+    JOIN users u ON c.imported_by_user_id = u.id
+    WHERE c.id = %s
+""", (conversation_id,))
 
 ---
 

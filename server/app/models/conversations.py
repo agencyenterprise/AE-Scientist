@@ -33,12 +33,6 @@ class ImportChatBase(BaseModel):
     url: str = Field(..., description="Share URL to import (ChatGPT or BranchPrompt)")
     llm_model: str = Field(..., description="LLM model to use", min_length=1)
     llm_provider: str = Field(..., description="LLM provider to use", min_length=1)
-    accept_summarization: bool = Field(
-        ...,  # required (no defaults)
-        description=(
-            "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
-        ),
-    )
 
 
 class ImportChatPrompt(ImportChatBase):
@@ -105,6 +99,10 @@ class ConversationResponse(BaseModel):
     user_id: int = Field(..., description="ID of the user who imported the conversation")
     user_name: str = Field(..., description="Name of the user who imported the conversation")
     user_email: str = Field(..., description="Email of the user who imported the conversation")
+    status: str = Field(
+        ...,
+        description="Conversation status: 'draft' (initial) or 'with_research' (has research runs)",
+    )
     imported_chat: Optional[List[ImportedChatMessage]] = Field(
         None, description="Conversation messages (optional)"
     )

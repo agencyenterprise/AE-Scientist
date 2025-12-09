@@ -1,6 +1,8 @@
 "use client";
 
-import { Eye, FlaskConical } from "lucide-react";
+import { Eye, FlaskConical, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/shared/components/ui/button";
 import { ProjectDraftContent } from "@/features/project-draft/components/ProjectDraftContent";
 import { ProjectDraftSkeleton } from "@/features/project-draft/components/ProjectDraftSkeleton";
 import { useSelectedIdeaData } from "../hooks/useSelectedIdeaData";
@@ -15,8 +17,15 @@ import type { InlineIdeaViewProps } from "../types/ideation-queue.types";
  * modifying the ProjectDraftContent component.
  */
 export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
+  const router = useRouter();
   const { idea, isLoading, error, refetch } = useSelectedIdeaData(conversationId);
   const { runs } = useConversationResearchRuns(conversationId ?? 0);
+
+  const handleEditClick = () => {
+    if (conversationId) {
+      router.push(`/conversations/${conversationId}`);
+    }
+  };
 
   // Empty state - no selection
   if (conversationId === null) {
@@ -24,7 +33,7 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <Eye className="mb-4 h-12 w-12 text-slate-600" />
         <h3 className="mb-1 text-sm font-medium text-slate-300">Select an idea</h3>
-        <p className="text-xs text-slate-500">Click on an idea above to preview its details</p>
+        <p className="text-xs text-slate-500">Choose an idea above to preview its details</p>
       </div>
     );
   }
@@ -94,6 +103,18 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
               </span>
             </div>
           )}
+
+          {/* Edit button */}
+          <Button
+            onClick={handleEditClick}
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            aria-label="Edit research idea"
+          >
+            <Pencil className="h-3 w-3 mr-1.5" />
+            Edit
+          </Button>
         </div>
       </div>
 

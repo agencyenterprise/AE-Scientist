@@ -85,7 +85,22 @@ def check_file(file_path: Path) -> list[dict[str, Union[str, int]]]:
         checker = InlineImportChecker()
         checker.visit(tree)
 
-        return checker.errors
+        # Filter out errors that have a '# no-inline-import' comment
+        lines = content.splitlines()
+        final_errors = []
+        for error in checker.errors:
+            # AST gives 1-based line numbers, so we convert to 0-based index
+            line_index = int(str(error["line"])) - 1
+
+            # Check if the line content has our ignore comment
+            if line_index < len(lines):
+                line_content = lines[line_index]
+                if "# no-inline-import" in line_content:
+                    continue  # Skip this error if the comment is present
+
+            final_errors.append(error)
+
+        return final_errors
     except SyntaxError as e:
         return [
             {
