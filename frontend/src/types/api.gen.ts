@@ -1170,6 +1170,11 @@ export interface components {
              */
             user_email: string;
             /**
+             * Status
+             * @description Conversation status: 'draft' (initial) or 'with_research' (has research runs)
+             */
+            status: string;
+            /**
              * Imported Chat
              * @description Conversation messages (optional)
              */

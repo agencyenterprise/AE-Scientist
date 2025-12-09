@@ -1,7 +1,6 @@
 export enum ImportState {
   Importing = "importing",
-  ExtractingChatKeywords = "extracting_chat_keywords",
-  RetrievingMemories = "retrieving_memories",
+  CreatingManualSeed = "creating_manual_seed",
   Summarizing = "summarizing",
   Generating = "generating",
 }

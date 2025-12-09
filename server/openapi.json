@@ -2622,6 +2622,11 @@
             "title": "User Email",
             "description": "Email of the user who imported the conversation"
           },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Conversation status: 'draft' (initial) or 'with_research' (has research runs)"
+          },
           "imported_chat": {
             "anyOf": [
               {
@@ -2680,7 +2685,8 @@
           "updated_at",
           "user_id",
           "user_name",
-          "user_email"
+          "user_email",
+          "status"
         ],
         "title": "ConversationResponse",
         "description": "Response model for conversation API endpoints."

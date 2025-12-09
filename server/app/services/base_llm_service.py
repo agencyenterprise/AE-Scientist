@@ -64,7 +64,7 @@ class BaseLLMService(ABC):
 
     @abstractmethod
     def generate_idea(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self, llm_model: str, conversation_text: str, user_id: int
     ) -> AsyncGenerator[str, None]:
         """
         Generate a research idea by streaming structured events.

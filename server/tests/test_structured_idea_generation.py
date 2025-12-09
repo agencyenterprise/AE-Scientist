@@ -247,9 +247,7 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
     service = config.service_factory(summarizer_service=MagicMock())  # type: ignore[call-arg]
 
     fake_db = MagicMock()
-    fake_db.get_memories_block.return_value = SimpleNamespace(
-        memories=[{"memory": "Connect ideas."}]
-    )
+    fake_db.get_active_prompt.return_value = None
 
     with patch("app.services.langchain_llm_service.get_database", return_value=fake_db):
         final_payload: str | None = None
@@ -259,7 +257,6 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
                 llm_model=config.model.id,
                 conversation_text=SMOKE_CONVERSATION,
                 _user_id=123,
-                conversation_id=456,
             ):
                 if not content_chunk:
                     continue

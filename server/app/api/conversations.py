@@ -35,7 +35,6 @@ from app.models import (
 from app.services import (
     AnthropicService,
     GrokService,
-    Mem0Service,
     OpenAIService,
     SummarizerService,
     get_database,
@@ -60,7 +59,6 @@ parser_service = ParserRouterService()
 openai_service = OpenAIService()
 anthropic_service = AnthropicService()
 grok_service = GrokService()
-mem0_service = Mem0Service()
 
 logger = logging.getLogger(__name__)
 
@@ -119,9 +117,6 @@ class PreparedImportContext:
     """Holds derived context used while creating a conversation."""
 
     imported_conversation_text: str
-    raw_memory_results: List[dict]
-    formatted_memories_context: str
-    memories_retrieved: bool
 
 
 # Import URL validation regexes
@@ -395,26 +390,6 @@ async def _stream_structured_idea(
         ) + "\n"
 
 
-async def _generate_imported_chat_keywords(
-    llm_provider: str, llm_model: str, imported_conversation_text: str
-) -> str:
-    """Generate imported chat keywords."""
-    if llm_provider == "openai":
-        return await openai_service.generate_imported_chat_keywords(
-            llm_model, imported_conversation_text
-        )
-    elif llm_provider == "grok":
-        return await grok_service.generate_imported_chat_keywords(
-            llm_model, imported_conversation_text
-        )
-    elif llm_provider == "anthropic":
-        return await anthropic_service.generate_imported_chat_keywords(
-            llm_model, imported_conversation_text
-        )
-    else:
-        raise ValueError(f"Unsupported LLM provider: {llm_provider}")
-
-
 async def _generate_idea(
     db: DatabaseManager,
     llm_provider: str,
@@ -430,7 +405,6 @@ async def _generate_idea(
         llm_model=llm_model,
         conversation_text=imported_conversation,
         _user_id=user_id,
-        conversation_id=conversation_id,
     )
     async for chunk in _stream_structured_idea(
         db=db,
@@ -611,46 +585,18 @@ async def _parse_conversation_or_raise(url: str) -> ParseSuccessResult:
     return parse_result
 
 
-async def _prepare_import_context(
-    parse_result: ParseSuccessResult,
-    llm_provider: str,
-    llm_model: str,
-) -> PreparedImportContext:
-    """Prepare text and memory context for a newly imported conversation."""
+async def _prepare_import_context(parse_result: ParseSuccessResult) -> PreparedImportContext:
+    """Prepare text context for a newly imported conversation."""
     imported_conversation_text = _imported_chat_messages_to_text(parse_result.data.content)
-    imported_chat_keywords = await _generate_imported_chat_keywords(
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        imported_conversation_text=imported_conversation_text,
-    )
-    memories_retrieved = False
-    if not imported_chat_keywords:
-        logger.warning("No imported chat keywords generated, skipping memories generation")
-        raw_memory_results: List[dict] = []
-        formatted_memories_context = ""
-    else:
-        raw_memory_results, formatted_memories_context = (
-            await mem0_service.generate_project_creation_memories(
-                imported_chat_keywords=imported_chat_keywords
-            )
-        )
-        memories_retrieved = True
-
-    return PreparedImportContext(
-        imported_conversation_text=imported_conversation_text,
-        raw_memory_results=raw_memory_results,
-        formatted_memories_context=formatted_memories_context,
-        memories_retrieved=memories_retrieved,
-    )
+    return PreparedImportContext(imported_conversation_text=imported_conversation_text)
 
 
-def _create_conversation_with_memories(
+def _create_conversation(
     db: DatabaseManager,
     parse_result: ParseSuccessResult,
     user_id: int,
-    raw_memory_results: List[dict],
 ) -> DBFullConversation:
-    """Persist the imported conversation and attach generated memories."""
+    """Persist the imported conversation."""
     conversation_id = db.create_conversation(
         conversation=DBConversation(
             url=parse_result.data.url,
@@ -668,12 +614,6 @@ def _create_conversation_with_memories(
     )
     conversation = db.get_conversation_by_id(conversation_id)
     assert conversation is not None
-
-    db.store_memories_block(
-        conversation_id=conversation_id,
-        source="imported_chat",
-        memories_block=raw_memory_results,
-    )
     return conversation
 
 
@@ -843,20 +783,12 @@ async def _stream_import_pipeline(
                 yield chunk
             return
 
-        yield json.dumps({"type": "state", "data": "extracting_chat_keywords"}) + "\n"
-        prepared_context = await _prepare_import_context(
-            parse_result=parse_result,
-            llm_provider=llm_provider,
-            llm_model=llm_model,
-        )
-        if prepared_context.memories_retrieved:
-            yield json.dumps({"type": "state", "data": "retrieving_memories"}) + "\n"
+        prepared_context = await _prepare_import_context(parse_result=parse_result)
 
-        conversation = _create_conversation_with_memories(
+        conversation = _create_conversation(
             db=db,
             parse_result=parse_result,
             user_id=user.id,
-            raw_memory_results=prepared_context.raw_memory_results,
         )
 
         async for chunk in _stream_generation_flow(
@@ -903,11 +835,6 @@ async def _stream_manual_seed_pipeline(
             manual_title=manual_title,
             manual_hypothesis=manual_hypothesis,
             imported_by_user_id=user.id,
-        )
-        db.store_memories_block(
-            conversation_id=conversation_id,
-            source="imported_chat",
-            memories_block=[],
         )
         conversation = db.get_conversation_by_id(conversation_id)
         assert conversation is not None

@@ -30,15 +30,13 @@ def get_default_idea_generation_prompt() -> str:
         "You are an AI research assistant specialized in transforming conversational ideas into structured research proposals for AGI research teams. "
         "Analyze the conversation and extract actionable research ideas that could be investigated by AGI researchers. "
         "Focus on novel hypotheses, experimental designs, theoretical frameworks, or innovative approaches discussed. "
-        "\n\nAdditional context from prior conversations (memories):\n"
-        "{{context}}\n"
-        "\nAlways return a single JSON object that captures the complete research idea. "
+        "Always return a single JSON object that captures the complete research idea. "
         "Do not include XML tags, Markdown, or commentary outside the JSON object. "
         "Every string must use double quotes and arrays must be valid JSON arrays."
     )
 
 
-def get_idea_generation_prompt(db: DatabaseManager, context: str) -> str:
+def get_idea_generation_prompt(db: DatabaseManager) -> str:
     """
     Get the system prompt for research idea generation.
 
@@ -46,7 +44,6 @@ def get_idea_generation_prompt(db: DatabaseManager, context: str) -> str:
 
     Args:
         db: Database manager instance
-        context: Pre-formatted context string to inject (e.g., memories)
 
     Returns:
         str: The system prompt to use for idea generation
@@ -61,7 +58,8 @@ def get_idea_generation_prompt(db: DatabaseManager, context: str) -> str:
         logger.warning(f"Failed to get custom idea generation prompt: {e}")
         base_prompt = get_default_idea_generation_prompt()
 
-    return base_prompt.replace("{{context}}", context or "")
+    base_prompt = base_prompt.replace("{{context}}", "")
+    return base_prompt
 
 
 def get_default_manual_seed_prompt() -> str:
@@ -128,8 +126,6 @@ def get_default_chat_system_prompt() -> str:
         "\n\nOriginal imported conversation that inspired this idea:\n"
         "---\n{{original_conversation_summary}}\n---\n\n"
         "Use this original conversation as context when discussing and improving the research idea."
-        "\n\nAdditional context from prior conversations (memories):\n"
-        "{{memories_context}}\n"
     )
 
 
@@ -224,16 +220,6 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
         logger.warning(f"Failed to get idea for conversation ID {conversation_id}: {e}")
         current_idea_text = "Error retrieving research idea."
 
-    # Retrieve memories
-    stored_memories = db.get_memories_block(conversation_id=conversation_id, source="imported_chat")
-    memories = []
-    for idx, m in enumerate(stored_memories.memories, start=1):
-        try:
-            memories.append(f"{idx}. {m['memory']}")
-        except KeyError:
-            continue
-    memories_context = "\n".join(memories)
-
     # Retrieve the original conversation summary
     generated_summary = db.get_imported_conversation_summary_by_conversation_id(conversation_id)
     if generated_summary is None:
@@ -248,6 +234,6 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
     # Replace placeholders
     result = base_prompt.replace("{{current_idea}}", current_idea_text)
     result = result.replace("{{original_conversation_summary}}", summary)
-    result = result.replace("{{memories_context}}", memories_context)
+    result = result.replace("{{memories_context}}", "")
 
     return result

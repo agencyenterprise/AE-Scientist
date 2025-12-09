@@ -50,10 +50,8 @@ export function getStateMessage(
     switch (state) {
       case ImportState.Importing:
         return "Downloading shared conversation...";
-      case ImportState.ExtractingChatKeywords:
-        return "Extracting chat keywords...";
-      case ImportState.RetrievingMemories:
-        return "Retrieving memories...";
+      case ImportState.CreatingManualSeed:
+        return "Creating manual seed...";
       case ImportState.Summarizing:
         return summaryProgress !== null
           ? `Summarizing conversation (${summaryProgress}%)...`

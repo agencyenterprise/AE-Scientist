@@ -255,19 +255,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         llm_model: str,
         conversation_text: str,
         _user_id: int,
-        conversation_id: int,
     ) -> AsyncGenerator[str, None]:
         db = get_database()
-        stored_memories = db.get_memories_block(
-            conversation_id=conversation_id, source="imported_chat"
-        )
-        memories: List[str] = []
-        for idx, memory in enumerate(stored_memories.memories, start=1):
-            try:
-                memories.append(f"{idx}. {memory['memory']}")
-            except KeyError:
-                continue
-        system_prompt = get_idea_generation_prompt(db=db, context="\n".join(memories))
+        system_prompt = get_idea_generation_prompt(db=db)
         user_prompt = (
             "Analyze this conversation and generate a research idea based on the discussion below.\n\n"
             f"{conversation_text}"

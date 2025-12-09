@@ -14,7 +14,6 @@ from app.services.scraper.errors import ChatNotFound
 from app.services.database import DatabaseManager, get_database
 from app.services.grok_service import GrokService
 from app.services.openai_service import OpenAIService
-from app.services.mem0_service import Mem0Service
 from app.services.summarizer_service import SummarizerService
 
 __all__ = [
@@ -28,5 +27,4 @@ __all__ = [
     "get_database",
     "GrokService",
     "OpenAIService",
-    "Mem0Service",
 ]

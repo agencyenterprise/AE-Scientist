@@ -13,7 +13,6 @@ from .file_attachments import FileAttachmentsMixin
 from .ideas import IdeasMixin
 from .imported_conversation_summaries import ImportedConversationSummariesMixin
 from .llm_defaults import LLMDefaultsMixin
-from .memories import ConversationMemoriesMixin
 from .prompts import PromptsMixin
 from .research_pipeline_runs import ResearchPipelineRunsMixin
 from .rp_artifacts import ResearchPipelineArtifactsMixin
@@ -32,7 +31,6 @@ class DatabaseManager(
     UsersDatabaseMixin,
     ImportedConversationSummariesMixin,
     ChatSummariesMixin,
-    ConversationMemoriesMixin,
     ResearchPipelineRunsMixin,
     ResearchPipelineArtifactsMixin,
     ResearchPipelineEventsMixin,

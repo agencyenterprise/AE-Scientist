@@ -44,10 +44,6 @@ class Settings:
     # xAI/Grok settings
     XAI_API_KEY: str = os.getenv("XAI_API_KEY", "")
 
-    # Mem0 Memory Search settings
-    MEM0_API_URL: str = os.getenv("MEM0_API_URL", "")
-    MEM0_USER_ID: str = os.getenv("MEM0_USER_ID", "")
-
     # Logging settings
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 

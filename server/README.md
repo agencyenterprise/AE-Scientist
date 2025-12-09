@@ -228,27 +228,6 @@ AWS_REGION="us-east-1"  # or your preferred region
 AWS_S3_BUCKET_NAME="your_s3_bucket_name_here"
 ```
 
-### Mem0 Memory Search Setup
-
-This application integrates with the Mem0 Memory Search API to provide semantic storage and retrieval of user memories. The service allows searching through stored memories using natural language queries with AI-powered semantic matching.
-
-#### Configuration
-
-Add the following to your `backend/.env` file:
-
-```bash
-# Mem0 Memory Search Configuration
-MEM0_API_URL="https://branchprompt-mem0-production.up.railway.app"
-MEM0_USER_ID="your-mem0-user-id-here"
-# Toggle whether project generation includes memories context (default: true)
-USE_MEMORIES="true"
-```
-
-#### Where it's used
-
-- To give context to the LLM when creating the very first idea when the chat is imported
-- To give context to the LLM when chatting with it to refine the idea
-
 ## Running Tests
 ```bash
 # Create/recreate test database manually
@@ -304,10 +283,6 @@ FRONTEND_URL="http://localhost:3000"
 OPENAI_API_KEY="your-openai-api-key-here"          # For LLM services
 ANTHROPIC_API_KEY="your-anthropic-api-key-here"    # For Claude models
 XAI_API_KEY="your-xai-api-key-here"                # For Grok models
-MEM0_API_URL="https://branchprompt-mem0-production.up.railway.app"    # For memory search
-MEM0_USER_ID="your-mem0-user-id-here"              # For memory search
-# Feature flags
-USE_MEMORIES="true"                                 # Include memories in prompts
 AWS_ACCESS_KEY_ID="your-aws-access-key"             # For file uploads
 AWS_SECRET_ACCESS_KEY="your-aws-secret"             # For file uploads
 AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
