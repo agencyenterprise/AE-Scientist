@@ -6,56 +6,24 @@ This module contains FastAPI routes for streaming chat functionality with SSE.
 
 import json
 import logging
-from typing import AsyncGenerator, Dict, NamedTuple, Optional, Union
+from typing import AsyncGenerator, Optional, Union
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.api.llm_providers import LLM_PROVIDER_REGISTRY
 from app.middleware.auth import get_current_user
-from app.models import ChatMessageData, ChatRequest, LLMModel
-from app.services import (
-    AnthropicService,
-    GrokService,
-    OpenAIService,
-    SummarizerService,
-    get_database,
-)
-from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
-from app.services.base_llm_service import BaseLLMService, FileAttachmentData
+from app.models import ChatMessageData, ChatRequest
+from app.services import SummarizerService, get_database
+from app.services.base_llm_service import FileAttachmentData
 from app.services.chat_models import StreamDoneEvent
-from app.services.grok_service import SUPPORTED_MODELS as GROK_MODELS
-from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
 
 router = APIRouter(prefix="/conversations")
 
 # Initialize services
-summarizer_service = SummarizerService()
-openai_service = OpenAIService(summarizer_service=summarizer_service)
-anthropic_service = AnthropicService(summarizer_service=summarizer_service)
-grok_service = GrokService(summarizer_service=summarizer_service)
+
 logger = logging.getLogger(__name__)
-
-
-class LLMProviderConfig(NamedTuple):
-    service: BaseLLMService
-    models_by_id: Dict[str, LLMModel]
-
-
-LLM_PROVIDER_REGISTRY: Dict[str, LLMProviderConfig] = {
-    "openai": LLMProviderConfig(
-        service=openai_service,
-        models_by_id={model.id: model for model in OPENAI_MODELS},
-    ),
-    "anthropic": LLMProviderConfig(
-        service=anthropic_service,
-        models_by_id={model.id: model for model in ANTHROPIC_MODELS},
-    ),
-    "grok": LLMProviderConfig(
-        service=grok_service,
-        models_by_id={model.id: model for model in GROK_MODELS},
-    ),
-}
 
 
 # API Response Models
@@ -81,6 +49,10 @@ async def stream_chat_with_idea(
 
     db = get_database()
 
+    summarizer_service = SummarizerService.for_model(
+        request_data.llm_provider, request_data.llm_model
+    )
+    
     try:
         # Validate conversation exists
         existing_conversation = db.get_conversation_by_id(conversation_id)

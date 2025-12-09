@@ -3183,11 +3183,6 @@
             "title": "Llm Provider",
             "description": "LLM provider to use"
           },
-          "accept_summarization": {
-            "type": "boolean",
-            "title": "Accept Summarization",
-            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
-          },
           "duplicate_resolution": {
             "type": "string",
             "const": "create_new",
@@ -3199,7 +3194,6 @@
           "url",
           "llm_model",
           "llm_provider",
-          "accept_summarization",
           "duplicate_resolution"
         ],
         "title": "ImportChatCreateNew"
@@ -3223,11 +3217,6 @@
             "title": "Llm Provider",
             "description": "LLM provider to use"
           },
-          "accept_summarization": {
-            "type": "boolean",
-            "title": "Accept Summarization",
-            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
-          },
           "duplicate_resolution": {
             "type": "string",
             "const": "prompt",
@@ -3239,7 +3228,6 @@
           "url",
           "llm_model",
           "llm_provider",
-          "accept_summarization",
           "duplicate_resolution"
         ],
         "title": "ImportChatPrompt"
@@ -3263,11 +3251,6 @@
             "title": "Llm Provider",
             "description": "LLM provider to use"
           },
-          "accept_summarization": {
-            "type": "boolean",
-            "title": "Accept Summarization",
-            "description": "Whether to proceed by summarizing when the imported chat exceeds the selected model's context window"
-          },
           "duplicate_resolution": {
             "type": "string",
             "const": "update_existing",
@@ -3284,7 +3267,6 @@
           "url",
           "llm_model",
           "llm_provider",
-          "accept_summarization",
           "duplicate_resolution",
           "target_conversation_id"
         ],

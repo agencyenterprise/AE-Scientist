@@ -10,13 +10,12 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
+from typing import AsyncGenerator, Dict, List, Optional, Union
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ConversationResponse,
@@ -52,17 +51,15 @@ from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
-from app.services.prompts import get_idea_generation_prompt
 from app.services.scraper.errors import ChatNotFound
 
 router = APIRouter(prefix="/conversations")
 
 # Initialize services
 parser_service = ParserRouterService()
-summarizer_service = SummarizerService()
-openai_service = OpenAIService(summarizer_service=summarizer_service)
-anthropic_service = AnthropicService(summarizer_service=summarizer_service)
-grok_service = GrokService(summarizer_service=summarizer_service)
+openai_service = OpenAIService()
+anthropic_service = AnthropicService()
+grok_service = GrokService()
 mem0_service = Mem0Service()
 
 logger = logging.getLogger(__name__)
@@ -124,7 +121,6 @@ class PreparedImportContext:
     imported_conversation_text: str
     raw_memory_results: List[dict]
     formatted_memories_context: str
-    must_summarize: bool
     memories_retrieved: bool
 
 
@@ -458,10 +454,19 @@ async def _generate_manual_seed_idea(
     """Generate an idea from manual seed data."""
     yield json.dumps({"type": "state", "data": "generating"}) + "\n"
     service = _resolve_llm_service(llm_provider=llm_provider)
+    user_prompt = service.generate_manual_seed_idea_prompt(
+        idea_title=manual_title, idea_hypothesis=manual_hypothesis
+    )
+    summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
+    asyncio.create_task(
+        summarizer_service.init_chat_summary(
+            conversation_id,
+            [ImportedChatMessage(role="user", content=user_prompt)],
+        )
+    )
     idea_stream = service.generate_manual_seed_idea(
         llm_model=llm_model,
-        idea_title=manual_title,
-        idea_hypothesis=manual_hypothesis,
+        user_prompt=user_prompt,
     )
     async for chunk in _stream_structured_idea(
         db=db,
@@ -471,62 +476,6 @@ async def _generate_manual_seed_idea(
         user_id=user_id,
     ):
         yield chunk
-
-
-async def _generate_idea_consuming_yields(
-    db: DatabaseManager,
-    llm_provider: str,
-    llm_model: str,
-    conversation_id: int,
-    imported_conversation: str,
-    user_id: int,
-) -> None:
-    """Generate idea, consuming yields."""
-    async for _ in _generate_idea(
-        db, llm_provider, llm_model, conversation_id, imported_conversation, user_id
-    ):
-        pass
-    return None
-
-
-def _must_summarize(
-    db: DatabaseManager,
-    llm_provider: str,
-    llm_model: str,
-    messages: List[ImportedChatMessage],
-    memories_block: str,
-) -> bool:
-    """Determine if summarization is required for a given conversation, accounting for memories context size."""
-
-    def _estimate_tokens_from_messages() -> int:
-        """Rough token estimate using character count/4 heuristic."""
-        total_chars = 0
-        for msg in messages:
-            total_chars += len(msg.content)
-        # 1 token ~ 4 chars heuristic
-        return max(total_chars // 4, 0)
-
-    def _get_context_window_tokens() -> int:
-        """Get context window tokens for a given provider/model."""
-        if llm_provider == "openai":
-            return openai_service.get_context_window_tokens(llm_model)
-        if llm_provider == "grok":
-            return grok_service.get_context_window_tokens(llm_model)
-        if llm_provider == "anthropic":
-            return anthropic_service.get_context_window_tokens(llm_model)
-        raise ValueError(f"Unsupported LLM provider: {llm_provider}")
-
-    ctx_tokens = _get_context_window_tokens()
-    system_prompt = get_idea_generation_prompt(db, memories_block)
-    system_prompt_tokens = max(len(system_prompt) // 4, 0)
-    message_tokens = _estimate_tokens_from_messages()
-    overhead_tokens = 256
-    planned_completion_tokens = settings.IDEA_MAX_COMPLETION_TOKENS
-    total_planned = (
-        message_tokens + system_prompt_tokens + overhead_tokens + planned_completion_tokens
-    )
-    must_summarize = total_planned > ctx_tokens
-    return must_summarize
 
 
 async def _generate_response_for_conversation(
@@ -565,7 +514,11 @@ async def _generate_response_for_conversation(
 
 
 async def _handle_existing_conversation(
-    db: DatabaseManager, existing_conversation_id: int, messages: List[ImportedChatMessage]
+    db: DatabaseManager,
+    existing_conversation_id: int,
+    messages: List[ImportedChatMessage],
+    llm_provider: str,
+    llm_model: str,
 ) -> None:
     """Handle existing conversation, update conversation with new content, delete imported chat summary, and generate a new summarization in the background"""
     # Update existing conversation with new content
@@ -580,12 +533,12 @@ async def _handle_existing_conversation(
     logger.info(
         f"Deleting imported conversation summary for conversation {existing_conversation_id}"
     )
-    await summarizer_service.drop_imported_chat_summary_job(existing_conversation_id)
     db.delete_imported_conversation_summary(existing_conversation_id)
 
     # Will generate a new summarization in the background
+    summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
     await asyncio.create_task(
-        summarizer_service.create_imported_chat_summary(existing_conversation_id, messages)
+        summarizer_service.init_chat_summary(existing_conversation_id, messages)
     )
 
 
@@ -659,7 +612,6 @@ async def _parse_conversation_or_raise(url: str) -> ParseSuccessResult:
 
 
 async def _prepare_import_context(
-    db: DatabaseManager,
     parse_result: ParseSuccessResult,
     llm_provider: str,
     llm_model: str,
@@ -684,19 +636,10 @@ async def _prepare_import_context(
         )
         memories_retrieved = True
 
-    must_summarize = _must_summarize(
-        db=db,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        messages=parse_result.data.content,
-        memories_block=formatted_memories_context,
-    )
-
     return PreparedImportContext(
         imported_conversation_text=imported_conversation_text,
         raw_memory_results=raw_memory_results,
         formatted_memories_context=formatted_memories_context,
-        must_summarize=must_summarize,
         memories_retrieved=memories_retrieved,
     )
 
@@ -735,103 +678,23 @@ def _create_conversation_with_memories(
 
 
 async def _stream_existing_conversation_update(
-    db: DatabaseManager, target_id: int, messages: List[ImportedChatMessage]
+    db: DatabaseManager,
+    target_id: int,
+    messages: List[ImportedChatMessage],
+    llm_provider: str,
+    llm_model: str,
 ) -> AsyncGenerator[str, None]:
     """Handle the update flow for an already imported conversation."""
     await _handle_existing_conversation(
         db=db,
         existing_conversation_id=target_id,
         messages=messages,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
     async for chunk in _generate_response_for_conversation(
         db=db,
         conversation_id=target_id,
-    ):
-        yield chunk
-
-
-def _create_placeholder_idea(db: DatabaseManager, conversation_id: int, user_id: int) -> None:
-    """Create a placeholder idea while summarization completes."""
-    db.create_idea(
-        conversation_id=conversation_id,
-        title="Generating...",
-        short_hypothesis="Generating idea...",
-        related_work="",
-        abstract="Generating idea...",
-        experiments=[],
-        expected_outcome="",
-        risk_factors_and_limitations=[],
-        created_by_user_id=user_id,
-    )
-
-
-def _build_summary_callback(
-    db: DatabaseManager,
-    llm_provider: str,
-    llm_model: str,
-    conversation_id: int,
-    user_id: int,
-) -> Callable[[str], Awaitable[None]]:
-    """Build the callback invoked after summarization finishes."""
-
-    async def callback_function(summary_text: str) -> None:
-        logger.info(
-            "Summarization callback function called for conversation %s",
-            conversation_id,
-        )
-        try:
-            await _generate_idea_consuming_yields(
-                db=db,
-                llm_provider=llm_provider,
-                llm_model=llm_model,
-                conversation_id=conversation_id,
-                imported_conversation=summary_text,
-                user_id=user_id,
-            )
-        except Exception as exc:
-            logger.exception("Failed to generate idea: %s", exc)
-            _create_failure_idea(
-                db=db,
-                conversation_id=conversation_id,
-                user_id=user_id,
-                error_message=str(exc),
-            )
-
-    return callback_function
-
-
-async def _stream_summarization_flow(
-    db: DatabaseManager,
-    conversation: DBFullConversation,
-    messages: List[ImportedChatMessage],
-    llm_provider: str,
-    llm_model: str,
-    user_id: int,
-) -> AsyncGenerator[str, None]:
-    """Stream responses when summarization is required."""
-    yield json.dumps({"type": "state", "data": "summarizing"}) + "\n"
-    _create_placeholder_idea(
-        db=db,
-        conversation_id=conversation.id,
-        user_id=user_id,
-    )
-    callback_function = _build_summary_callback(
-        db=db,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        conversation_id=conversation.id,
-        user_id=user_id,
-    )
-    asyncio.create_task(
-        summarizer_service.create_imported_chat_summary(
-            conversation.id,
-            messages,
-            callback_function=callback_function,
-        )
-    )
-    async for chunk in _generate_response_for_conversation(
-        db=db,
-        conversation_id=conversation.id,
     ):
         yield chunk
 
@@ -845,23 +708,31 @@ async def _stream_generation_flow(
     messages: List[ImportedChatMessage],
     user_id: int,
 ) -> AsyncGenerator[str, None]:
-    """Stream responses when the conversation fits in the model context."""
+    """
+    Stream responses when the conversation fits in the model context or not.
+
+    It uses the summarizer service to generate a summary of the conversation IF needed.
+    If the conversation fits in the model context, we will use the imported conversation text.
+    If the conversation does not fit in the model context, we will use the generated summary.
+    """
+
+    yield json.dumps({"type": "state", "data": "generating"}) + "\n"
+    summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
+    _, latest_summary = await summarizer_service.init_chat_summary(
+        conversation.id,
+        messages,
+    )
+
+    imported_conversation = latest_summary or imported_conversation_text
     async for chunk in _generate_idea(
         db=db,
         llm_provider=llm_provider,
         llm_model=llm_model,
         conversation_id=conversation.id,
-        imported_conversation=imported_conversation_text,
+        imported_conversation=imported_conversation,
         user_id=user_id,
     ):
         yield chunk
-    asyncio.create_task(
-        summarizer_service.create_imported_chat_summary(
-            conversation.id,
-            messages,
-            callback_function=None,
-        )
-    )
     async for chunk in _generate_response_for_conversation(
         db=db,
         conversation_id=conversation.id,
@@ -939,7 +810,6 @@ async def _stream_import_pipeline(
     url: str,
     llm_model: str,
     llm_provider: str,
-    accept_summarization: bool,
 ) -> AsyncGenerator[str, None]:
     """Main workflow for importing conversations, factored for readability."""
     db = get_database()
@@ -967,29 +837,20 @@ async def _stream_import_pipeline(
                 db=db,
                 target_id=decision.target_conversation_id,
                 messages=parse_result.data.content,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
             ):
                 yield chunk
             return
 
         yield json.dumps({"type": "state", "data": "extracting_chat_keywords"}) + "\n"
         prepared_context = await _prepare_import_context(
-            db=db,
             parse_result=parse_result,
             llm_provider=llm_provider,
             llm_model=llm_model,
         )
         if prepared_context.memories_retrieved:
             yield json.dumps({"type": "state", "data": "retrieving_memories"}) + "\n"
-        if prepared_context.must_summarize and not accept_summarization:
-            raise ImportConversationStreamError(
-                payload={
-                    "type": "model_limit_conflict",
-                    "data": {
-                        "message": "Imported chat is too long for the selected model context. Summarization is required and can take several minutes.",
-                        "suggestion": "Consider choosing a model with a larger context window, or proceed to summarize.",
-                    },
-                }
-            )
 
         conversation = _create_conversation_with_memories(
             db=db,
@@ -997,18 +858,6 @@ async def _stream_import_pipeline(
             user_id=user.id,
             raw_memory_results=prepared_context.raw_memory_results,
         )
-
-        if prepared_context.must_summarize:
-            async for chunk in _stream_summarization_flow(
-                db=db,
-                conversation=conversation,
-                messages=parse_result.data.content,
-                llm_provider=llm_provider,
-                llm_model=llm_model,
-                user_id=user.id,
-            ):
-                yield chunk
-            return
 
         async for chunk in _stream_generation_flow(
             db=db,
@@ -1099,7 +948,6 @@ async def import_conversation(
     url = import_data.url.strip()
     llm_model = import_data.llm_model
     llm_provider = import_data.llm_provider
-    accept_summarization = import_data.accept_summarization
 
     user = get_current_user(request)
     logger.debug("User authenticated for import: %s", user.email)
@@ -1111,7 +959,6 @@ async def import_conversation(
             url=url,
             llm_model=llm_model,
             llm_provider=llm_provider,
-            accept_summarization=accept_summarization,
         ):
             yield chunk
 

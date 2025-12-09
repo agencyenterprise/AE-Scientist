@@ -71,7 +71,7 @@ def test_idea_sections_for_stream_formats_lists() -> None:
 
 def test_parse_idea_response_with_trailing_text() -> None:
     """Test that JSON extraction works when LLM appends commentary after JSON."""
-    service = OpenAIService(summarizer_service=MagicMock())
+    service = OpenAIService()
     payload = _sample_payload()
     json_with_trailing = (
         json.dumps(payload)
@@ -88,7 +88,7 @@ def test_parse_idea_response_with_trailing_text() -> None:
 
 def test_parse_idea_response_with_leading_text() -> None:
     """Test that JSON extraction works when there's leading text."""
-    service = OpenAIService(summarizer_service=MagicMock())
+    service = OpenAIService()
     payload = _sample_payload()
     json_with_leading = "Here is the JSON: " + json.dumps(payload)
 
@@ -100,7 +100,7 @@ def test_parse_idea_response_with_leading_text() -> None:
 
 def test_parse_idea_response_clean_json() -> None:
     """Test that clean JSON still parses correctly."""
-    service = OpenAIService(summarizer_service=MagicMock())
+    service = OpenAIService()
     payload = _sample_payload()
 
     result = service._parse_idea_response(content=json.dumps(payload))
@@ -111,7 +111,7 @@ def test_parse_idea_response_clean_json() -> None:
 
 def test_parse_idea_response_missing_fields_raises() -> None:
     """Test that missing required fields raises ValueError with helpful message."""
-    service = OpenAIService(summarizer_service=MagicMock())
+    service = OpenAIService()
     incomplete_payload = {
         "title": "Test",
         "short_hypothesis": "Test hypothesis",

@@ -1,87 +1,139 @@
 """
 Summarizer service.
 
-This module integrates with the external metacognition API to create and
+This module uses LangChain with SummarizationMiddleware to create and
 maintain conversation summaries for imported conversations and live chats.
 """
 
-import asyncio
 import logging
-import os
-import re
-from typing import Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-import httpx
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import SummarizationMiddleware, after_model
+from langchain.chat_models import BaseChatModel
+from langchain_core.messages import HumanMessage, RemoveMessage
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.graph.state import CompiledStateGraph, RunnableConfig
+from langgraph.runtime import Runtime
 
+from app.api.llm_providers import LLM_PROVIDER_REGISTRY, get_llm_service_by_provider
+from app.config import settings
 from app.models import ChatMessageData, ImportedChatMessage
 from app.services.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
+EMPTY_MESSAGE_ID = "__empty_message__"
+
+
+class CustomSummarizationMiddleware(SummarizationMiddleware):
+    """Custom summarization middleware that mark the summary message with the summary flag."""
+
+    def _build_new_messages(self, summary: str) -> list[HumanMessage]:
+        return [
+            HumanMessage(
+                content=f"Here is a summary of the conversation to date:\n\n{summary}", summary=True
+            )
+        ]
+
+
+@after_model  # type: ignore[arg-type]
+def remove_after_empty_message(state: AgentState, _runtime: Runtime) -> dict | None:  # noqa: ARG001
+    """
+    Remove all the messages after the empty message.
+
+    This is used to keep only the original conversation history and summary.
+    If the CustomSummarizationMiddleware has been configured to keep only one message, this will keep only the summary message.
+    If it keeps more, it will keep the summary and the other messages as original.
+    """
+    messages = state["messages"]
+    remove_messages = []
+    remove_started = False
+    for message in messages:
+        if message.id == EMPTY_MESSAGE_ID:
+            remove_started = True
+        if remove_started and message.id:
+            remove_messages.append(RemoveMessage(id=message.id))
+    if remove_messages:
+        return {"messages": remove_messages}
+    return None
+
 
 class SummarizerService:
-    """Summarizer service for managing conversation summaries via external API."""
+    """Summarizer service for managing conversation summaries using LangChain."""
 
-    # Background polling cadence (seconds)
-    POLL_INTERVAL_SECONDS: int = 5
-    MAX_WAIT_SECONDS: int = 6000  # 100 minutes
-    # Summarization thresholds
-    MIN_MESSAGES_FOR_SUMMARY: int = 20
-    MIN_BACKLOG_TO_SEND: int = 10
-
-    def __init__(self) -> None:
+    def __init__(self, model: BaseChatModel) -> None:
         """Initialize the Summarizer service."""
-        # External API configuration (align with playground script)
-        base_url = os.getenv("METACOGNITION_API_URL")
-        auth_token = os.getenv("METACOGNITION_AUTH_TOKEN")
-
-        if not base_url or not auth_token:
-            raise ValueError(
-                "METACOGNITION_API_URL and METACOGNITION_AUTH_TOKEN environment variables are required"
-            )
-
-        self.base_url: str = base_url
-        self.auth_token: str = auth_token
         self.db = DatabaseManager()
-        logger.debug(
-            f"SummarizerService initialized with base_url={self.base_url} and polling interval={self.POLL_INTERVAL_SECONDS}s"
+        self.model = model
+
+    @staticmethod
+    def for_model(provider: str, model_id: str) -> "SummarizerService":
+        """Get the summarizer LLM model."""
+        provider_config = LLM_PROVIDER_REGISTRY.get(provider)
+        if not provider_config:
+            error_msg = f"Unsupported LLM provider: {provider}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        target_model = provider_config.models_by_id.get(model_id)
+        if not target_model:
+            error_msg = f"Unsupported model '{model_id}' for provider '{provider}'"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        service = get_llm_service_by_provider(target_model.provider)
+        chat_model = service.get_or_create_model(target_model.id)
+
+        return SummarizerService(chat_model)
+
+    def get_summarizer(self) -> CustomSummarizationMiddleware:
+        """
+        Get the summarizer middleware.
+
+        With trigger=("fraction", 0.9), it will trigger summarization only when reaching 90% of the context window.
+        With keep=("messages", 1), it will keep only the summary message.
+        """
+        summarizer_middleware = CustomSummarizationMiddleware(
+            model=self.model,
+            trigger=("fraction", 0.9),
+            keep=("messages", 1),
         )
+        return summarizer_middleware
 
-        # Track background polling tasks per conversation
-        self._imported_chat_polling_tasks: Dict[int, asyncio.Task] = {}
-        self._chat_polling_tasks: Dict[int, asyncio.Task] = {}
-        # Live chat coordination state per conversation
-        self._chat_poll_targets: Dict[int, int] = {}
-        self._chat_num_messages_sent: Dict[int, int] = {}
-        self._chat_index_to_message_id: Dict[int, List[int]] = {}
+    def _conversation_id_to_thread_id(self, conversation_id: int) -> str:
+        """Convert a conversation ID to a thread ID."""
+        return f"summary_for_conversation_{str(conversation_id)}"
 
-    async def create_imported_chat_summary(
+    def _thread_id_to_conversation_id(self, thread_id: str) -> int:
+        """Convert a thread ID to a conversation ID."""
+        return int(thread_id.split("summary_for_conversation_")[-1])
+
+    def _get_agent_config_for_conversation(self, conversation_id: int) -> RunnableConfig:
+        """Get the agent config for a conversation."""
+        return {"configurable": {"thread_id": self._conversation_id_to_thread_id(conversation_id)}}
+
+    async def init_chat_summary(
         self,
         conversation_id: int,
-        imported_chat_messages: list[ImportedChatMessage],
-        callback_function: Optional[Callable[[str], Awaitable[None]]] = None,
-    ) -> int:
-        """Create an imported conversation summary and start background polling.
+        chat_messages: list[ImportedChatMessage],
+    ) -> tuple[int | None, str | None]:
+        """Initialize a chat summary for a conversation with the provided chat history.
 
-        - Creates a new external conversation (summary_id is None initially)
-        - Enqueues all imported messages
-        - Starts a polling task to update DB until processing completes and beyond
-
-        Returns the local imported_conversation_summary ID (DB primary key).
+        Returns the local imported_conversation_summary ID (DB primary key) and the latest summary, if any.
         """
         try:
             # Initial request to create conversation and enqueue all messages
-            payload_messages = [
-                {"role": m.role, "content": m.content} for m in imported_chat_messages
-            ]
+            payload_messages = [{"role": m.role, "content": m.content} for m in chat_messages]
 
             logger.debug(
-                f"create_imported_chat_summary(conversation_id={conversation_id}) sending {len(payload_messages)} messages"
+                "init_chat_summary(conversation_id=%s) sending %s messages",
+                conversation_id,
+                len(payload_messages),
             )
 
             success, response = await self._manage_conversation(
-                summary_id=None,
-                index_of_first_new_message=0,
+                conversation_id=conversation_id,
                 new_messages=payload_messages,
             )
 
@@ -89,84 +141,52 @@ class SummarizerService:
                 error_text = "unknown error"
                 if "message" in response and isinstance(response["message"], str):
                     error_text = response["message"]
-                logger.error(f"Failed to create external conversation: {error_text}")
-                return 0
-
-            if "summary_id" not in response:
-                logger.error("Missing 'summary_id' in metacognition response")
-                return 0
-            external_id_raw = response["summary_id"]
-            assert isinstance(
-                external_id_raw, int
-            ), f"Expected int summary_id from metacognition service, got {type(external_id_raw)}"
-            external_id = external_id_raw
+                logger.error("Failed to create conversation: %s", error_text)
+                return None, None
 
             latest_summary = ""
             if "latest_summary" in response and isinstance(response["latest_summary"], str):
                 latest_summary = response["latest_summary"]
 
-            logger.info(
-                f"Creating imported chat summary for conversation {conversation_id} with external ID {external_id}"
-            )
-            # Persist record immediately
-            imported_summary_id = self.db.create_imported_conversation_summary(
-                conversation_id=conversation_id,
-                external_id=external_id,
-                summary=latest_summary,
-            )
+            logger.info("Creating imported chat summary for conversation %s", conversation_id)
 
-            # Launch or replace polling task to keep DB in sync
-            await self.drop_imported_chat_summary_job(conversation_id=conversation_id)
-            task = asyncio.create_task(
-                self._poll_imported_conversation(
+            if latest_summary:
+                # Persist record immediately
+                imported_summary_id = self.db.create_imported_conversation_summary(
                     conversation_id=conversation_id,
-                    external_id=external_id,
-                    index_of_first_new_message=0,
-                    callback_function=callback_function,
+                    summary=latest_summary,
                 )
-            )
-            self._imported_chat_polling_tasks[conversation_id] = task
 
-            return imported_summary_id
+                return imported_summary_id, latest_summary
+            return None, None
         except Exception:
             logger.exception("Failed to create imported chat summary")
-        return 0
-
-    async def drop_imported_chat_summary_job(self, conversation_id: int) -> None:
-        """Cancel any background polling task for a conversation."""
-        task = self._imported_chat_polling_tasks.pop(conversation_id, None)
-        if task is not None and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                # Expected on cancellation
-                return
-            except Exception:
-                logger.exception("Error while cancelling summarization polling task")
+        return None, None
 
     async def _create_chat_summary(
         self, conversation_id: int, chat_messages: list[ChatMessageData]
     ) -> int:
-        """Create a live chat summary conversation and start polling.
+        """Create a chat summary conversation.
 
-        Initializes an external conversation with the provided chat history,
-        persists an initial row in chat_summaries, and starts a polling task that
-        runs until the external service has processed up to the current target index.
+        Initializes a chat summary conversation with the provided chat history,
+        persists an initial row in chat_summaries.
         """
         try:
-            # Filter and order messages for the external API
+            # Filter and order messages
             allowed_roles = {"user", "assistant", "system"}
             ordered_messages = sorted(chat_messages, key=lambda m: m.sequence_number)
             filtered_messages = [m for m in ordered_messages if m.role in allowed_roles]
             logger.debug(
-                f"create_chat_summary(conversation_id={conversation_id}) prepared {len(filtered_messages)} messages"
+                "create_chat_summary(conversation_id=%s) prepared %s messages",
+                conversation_id,
+                len(filtered_messages),
             )
-            api_messages = [{"role": m.role, "content": m.content} for m in filtered_messages]
+            api_messages = [
+                {"role": m.role, "content": m.content, "id": str(m.id)} for m in filtered_messages
+            ]
 
             success, response = await self._manage_conversation(
-                summary_id=None,
-                index_of_first_new_message=0,
+                conversation_id=conversation_id,
                 new_messages=api_messages,
             )
 
@@ -174,66 +194,9 @@ class SummarizerService:
                 error_text = "unknown error"
                 if "message" in response and isinstance(response["message"], str):
                     error_text = response["message"]
-                logger.error(f"Failed to create chat summary external conversation: {error_text}")
+                logger.error("Failed to create chat summary conversation: %s", error_text)
                 return 0
 
-            if "summary_id" not in response:
-                logger.error("Missing 'summary_id' in metacognition response for chat summary")
-                return 0
-
-            external_id_raw = response["summary_id"]
-            assert isinstance(
-                external_id_raw, int
-            ), f"Expected int summary_id from metacognition service, got {type(external_id_raw)}"
-            external_id = external_id_raw
-
-            latest_summary = ""
-            if "latest_summary" in response and isinstance(response["latest_summary"], str):
-                latest_summary = response["latest_summary"]
-
-            # Determine latest_message_id based on processed index if present
-            latest_message_id = 0
-            processed_idx_obj = (
-                response["latest_processed_message_idx"]
-                if "latest_processed_message_idx" in response
-                else None
-            )
-            if isinstance(processed_idx_obj, int) and 0 <= processed_idx_obj < len(
-                filtered_messages
-            ):
-                latest_message_id = filtered_messages[processed_idx_obj].id
-
-            chat_summary_id = self.db.create_chat_summary(
-                conversation_id=conversation_id,
-                external_id=external_id,
-                summary=latest_summary,
-                latest_message_id=latest_message_id,
-            )
-
-            logger.debug(
-                f"create_chat_summary: external_id={external_id}, latest_message_id={latest_message_id}, row_id={chat_summary_id}"
-            )
-
-            # Initialize local state for indexing and targets
-            self._chat_num_messages_sent[conversation_id] = len(api_messages)
-            self._chat_index_to_message_id[conversation_id] = [m.id for m in filtered_messages]
-            # Target is last index of messages we just sent
-            self._chat_poll_targets[conversation_id] = max(len(api_messages) - 1, -1)
-
-            # Ensure a single polling task per conversation
-            if (
-                conversation_id not in self._chat_polling_tasks
-                or self._chat_polling_tasks[conversation_id].done()
-            ):
-                task = asyncio.create_task(
-                    self._poll_chat_conversation(
-                        conversation_id=conversation_id,
-                        external_id=external_id,
-                    )
-                )
-                self._chat_polling_tasks[conversation_id] = task
-
-            return chat_summary_id
         except Exception:
             logger.exception("Failed to create chat summary")
         return 0
@@ -241,11 +204,7 @@ class SummarizerService:
     async def get_chat_summary(
         self, conversation_id: int, chat_history: list[ChatMessageData]
     ) -> tuple[Optional[str], list[ChatMessageData]]:
-        """Return rolling summary and recent messages not covered by it.
-
-        If no summary exists yet, kick off asynchronous creation and return
-        empty summary with full chat history as recent.
-        """
+        """Return rolling summary and recent messages not covered by it."""
         summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
 
         if summary_row is None or summary_row.summary is None:
@@ -257,17 +216,11 @@ class SummarizerService:
         return summary_row.summary, recent_messages
 
     async def add_messages_to_chat_summary(self, conversation_id: int, idea_id: int) -> None:
-        """Add new chat messages to external conversation and update the polling target.
+        """Add new chat messages to chat summary conversation.
 
-        Loads authoritative chat history from the database, determines which messages
-        have not yet been sent to the external summarizer, and appends them using the
-        correct starting index. Maintains a single polling task per conversation and
-        advances the moving target so the poller keeps running until the newest batch
-        is processed.
-
-        Applies two gates:
-        - Skip summarization entirely until there are at least MIN_MESSAGES_FOR_SUMMARY messages.
-        - Only enqueue messages when there are at least MIN_BACKLOG_TO_SEND unsent messages.
+        Loads operational chat history from the database, determines which messages
+        have not yet been sent to the summarizer, and appends them using the
+        correct starting index.
         """
         try:
             all_messages = self.db.get_chat_messages(idea_id)
@@ -275,15 +228,6 @@ class SummarizerService:
             # Filter messages to allowed roles and produce index mapping by ID
             allowed_roles = {"user", "assistant", "system"}
             filtered_messages = [m for m in all_messages if m.role in allowed_roles]
-            index_map = [m.id for m in filtered_messages]
-
-            # Gate 1: Do not create or update summaries for very short conversations
-            if len(filtered_messages) < self.MIN_MESSAGES_FOR_SUMMARY:
-                logger.debug(
-                    f"Skipping summarization for conversation {conversation_id}: "
-                    f"only {len(filtered_messages)} messages (< {self.MIN_MESSAGES_FOR_SUMMARY})."
-                )
-                return
 
             # If no summary row yet, create one with full history
             summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
@@ -304,215 +248,117 @@ class SummarizerService:
                 )
                 return
 
-            external_id = summary_row.external_id
-
-            # Initialize local state if missing
-            if conversation_id not in self._chat_index_to_message_id:
-                self._chat_index_to_message_id[conversation_id] = index_map
-
-            if conversation_id not in self._chat_num_messages_sent:
-                # Derive baseline from DB summary's latest_message_id
-                processed_idx_guess = -1
-                if summary_row.latest_message_id in index_map:
-                    processed_idx_guess = index_map.index(summary_row.latest_message_id)
-                self._chat_num_messages_sent[conversation_id] = max(processed_idx_guess + 1, 0)
-                logger.debug(
-                    f"Initialized _chat_num_messages_sent[{conversation_id}]={self._chat_num_messages_sent[conversation_id]} from DB latest_message_id={summary_row.latest_message_id}"
-                )
-
-            current_sent = self._chat_num_messages_sent[conversation_id]
-
-            # Nothing new to send
-            if current_sent >= len(filtered_messages):
-                logger.debug(
-                    f"No new messages to send for conversation {conversation_id} (sent={current_sent}, total={len(filtered_messages)})"
-                )
-                return
-
             # Compute messages not yet sent to external conversation by index
-            new_messages = filtered_messages[current_sent:]
-            api_new_messages = [{"role": m.role, "content": m.content} for m in new_messages]
+            last_message_send_to_summarizer = summary_row.latest_message_id
+            api_new_messages = [
+                {"role": message.role, "content": message.content, "id": str(message.id)}
+                for message in filtered_messages
+                if message.id > last_message_send_to_summarizer
+            ]
 
-            # Gate 2: Only send when backlog reaches threshold
-            backlog_count = len(api_new_messages)
-            if backlog_count < self.MIN_BACKLOG_TO_SEND:
-                logger.debug(
-                    f"Deferring summarizer update for conversation {conversation_id}: "
-                    f"backlog {backlog_count} (< {self.MIN_BACKLOG_TO_SEND})."
-                )
-                return
-
-            # Send new messages starting at the expected index
+            # Send new messages not already on summarizer conversation
             success, response = await self._manage_conversation(
-                summary_id=external_id,
-                index_of_first_new_message=current_sent,
+                conversation_id=conversation_id,
                 new_messages=api_new_messages,
             )
             logger.debug(
-                f"Sent {len(api_new_messages)} messages to external_id={external_id} starting at index {current_sent}; success={success}"
+                "Sent %s messages to conversation %s; success=%s",
+                len(api_new_messages),
+                conversation_id,
+                success,
             )
-
-            # If index mismatch, parse expected index and retry once
-            if not success and "message" in response and isinstance(response["message"], str):
-                match = re.search(r"Expected index (\d+).+got (\d+)", response["message"])
-                if match:
-                    expected_index = int(match.group(1))
-                    if expected_index <= len(filtered_messages):
-                        current_sent = expected_index
-                        new_messages = filtered_messages[current_sent:]
-                        api_new_messages = [
-                            {"role": m.role, "content": m.content} for m in new_messages
-                        ]
-                        success, response = await self._manage_conversation(
-                            summary_id=external_id,
-                            index_of_first_new_message=current_sent,
-                            new_messages=api_new_messages,
-                        )
 
             if not success:
                 error_text = "unknown error"
                 if "message" in response and isinstance(response["message"], str):
                     error_text = response["message"]
-                logger.error(f"Failed to add messages to chat summary: {error_text}")
+                logger.error("Failed to add messages to chat summary: %s", error_text)
                 return
 
-            # Update local indexing state
-            self._chat_num_messages_sent[conversation_id] = current_sent + len(api_new_messages)
-            self._chat_index_to_message_id[conversation_id] = index_map
-            logger.debug(
-                f"Updated sent count for conversation {conversation_id} to {self._chat_num_messages_sent[conversation_id]}"
-            )
-
-            # Advance target to include the newly enqueued messages
-            self._chat_poll_targets[conversation_id] = (
-                self._chat_num_messages_sent[conversation_id] - 1
-            )
-
-            # Ensure a single polling task per conversation
-            if (
-                conversation_id not in self._chat_polling_tasks
-                or self._chat_polling_tasks[conversation_id].done()
-            ):
-                task = asyncio.create_task(
-                    self._poll_chat_conversation(
-                        conversation_id=conversation_id,
-                        external_id=external_id,
-                    )
-                )
-                self._chat_polling_tasks[conversation_id] = task
         except Exception:
             logger.exception("Failed to add messages to chat summary")
             return
 
     async def _manage_conversation(
         self,
-        summary_id: Optional[int],
-        index_of_first_new_message: int,
+        conversation_id: int,
         new_messages: list[Dict[str, str]],
     ) -> Tuple[bool, Dict[str, object]]:
-        """Call the metacognition /manage_conversation endpoint."""
-        url = f"{self.base_url}/manage_conversation"
-        headers = {
-            "Authorization": f"Bearer {self.auth_token}",
-            "Content-Type": "application/json",
-        }
-        payload: Dict[str, object] = {
-            "summary_id": summary_id,
-            "index_of_first_new_message": index_of_first_new_message,
-            "new_messages": new_messages,
-        }
-        logger.debug(
-            f"Sending manage_conversation request to {url} (summary_id={summary_id}, index={index_of_first_new_message}, messages={len(new_messages)})"
-        )
+        """Use LangChain with Summarizer Middleware to manage a chat summary conversation."""
+        summary = ""
+        last_message_id = None
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                data = response.json()
+            if not conversation_id:
+                raise ValueError("Conversation ID is required")
+            if new_messages:
+                async with AsyncPostgresSaver.from_conn_string(
+                    settings.DATABASE_URL
+                ) as checkpointer:
+                    await checkpointer.setup()  # auto create tables in PostgresSql
 
-            if "status" not in data or not isinstance(data["status"], str):
-                logger.error("Response missing 'status' field")
-                return False, data
+                    # we don't need the answer, so we set a small max tokens
+                    temp_max_tokens = self.model.max_tokens  # type: ignore[attr-defined]
+                    self.model.max_tokens = 10  # type: ignore[attr-defined]
+                    agent: CompiledStateGraph = create_agent(
+                        model=self.model,
+                        middleware=[self.get_summarizer(), remove_after_empty_message],
+                        checkpointer=checkpointer,
+                    )
+                    # Add a blank human message to trigger summarization of the entire conversation history
+                    result = await agent.ainvoke(
+                        {
+                            "messages": [
+                                *new_messages,
+                                HumanMessage(content="", id=EMPTY_MESSAGE_ID),
+                            ],
+                        },
+                        config=self._get_agent_config_for_conversation(conversation_id),
+                    )
+                    self.model.max_tokens = temp_max_tokens  # type: ignore[attr-defined]
+                    # Get the first message with summary flag from the result
+                    summary_message = next(
+                        (
+                            message
+                            for message in result["messages"]
+                            if hasattr(message, "summary") and message.summary
+                        ),
+                        None,
+                    )
+                    if summary_message:
+                        summary = summary_message.content
+                    last_message_id = None
+                    if new_messages:
+                        try:
+                            last_message_id = int(new_messages[-1].get("id", ""))
+                        except Exception:
+                            pass
+                    if summary:
+                        # Upsert the chat summary
+                        self._upsert_chat_summary(
+                            conversation_id=conversation_id,
+                            summary=summary,
+                            latest_message_id=last_message_id,
+                        )
+            return True, {
+                "latest_summary": summary,
+            }
+        except Exception as exc:
+            logger.exception("Failed to manage conversation")
+            return False, {
+                "message": str(exc),
+            }
 
-            status = data["status"]
-            success = response.status_code == 200 and status == "success"
-            if not success:
-                logger.error(
-                    f"manage_conversation failed with status_code={response.status_code}, payload_status={status}"
-                )
-            logger.debug(
-                f"manage_conversation response keys: {list(data.keys()) if isinstance(data, dict) else type(data)}"
-            )
-            return success, data
-        except Exception:
-            logger.exception("manage_conversation request failed")
-            return False, {}
-
-    async def _upload_document(
+    async def _document_to_message(
         self,
         content: str,
         description: str,
         document_type: str,
-    ) -> int:
-        """Upload a document's raw text to the external service and return its document_id."""
-        url = f"{self.base_url}/upload_document"
-        headers = {
-            "Authorization": f"Bearer {self.auth_token}",
-            "Content-Type": "application/json",
+    ) -> Dict[str, str]:
+        """Convert a document's raw text to a message."""
+        return {
+            "role": "user",
+            "content": f"""Here's a {document_type} file {description}: {content}""",
         }
-        payload: Dict[str, object] = {
-            "content": content,
-            "description": description,
-            "document_type": document_type,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                data = response.json()
-            logger.debug(
-                f"upload_document(description={description}, type={document_type}, size_chars={len(content)}) status={response.status_code}"
-            )
-            if response.status_code != 200:
-                logger.error(f"upload_document failed with status_code={response.status_code}")
-                return 0
-            doc_id_obj = data.get("document_id") if isinstance(data, dict) else None
-            if isinstance(doc_id_obj, int):
-                return int(doc_id_obj)
-            logger.error("upload_document response missing 'document_id'")
-            return 0
-        except Exception:
-            logger.exception("upload_document request failed")
-            return 0
-
-    async def _add_document_to_conversation(
-        self,
-        external_conversation_id: int,
-        external_document_id: int,
-    ) -> bool:
-        """Link an uploaded document to an external conversation."""
-        url = f"{self.base_url}/add_document_to_conversation"
-        headers = {
-            "Authorization": f"Bearer {self.auth_token}",
-            "Content-Type": "application/json",
-        }
-        payload: Dict[str, object] = {
-            "conversation_id": external_conversation_id,
-            "document_id": external_document_id,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-                logger.debug(
-                    f"add_document_to_conversation(conversation_id={external_conversation_id}, document_id={external_document_id}) status={response.status_code}"
-                )
-                if response.status_code == 200:
-                    return True
-                logger.error(
-                    f"add_document_to_conversation failed with status_code={response.status_code}"
-                )
-                return False
-        except Exception:
-            logger.exception("add_document_to_conversation request failed")
-            return False
 
     async def add_document_to_chat_summary(
         self,
@@ -525,218 +371,46 @@ class SummarizerService:
 
         Ensures an external conversation exists; does not read S3 or DB attachments.
         """
-        try:
-            if not content.strip():
-                logger.debug(
-                    f"add_text_document_to_chat_summary skipped empty content (conversation_id={conversation_id}, description={description})"
-                )
-                return
+        document_message = await self._document_to_message(
+            content=content, description=description, document_type=document_type
+        )
 
+        try:
+            success, response = await self._manage_conversation(
+                conversation_id=conversation_id,
+                new_messages=[document_message],
+            )
+
+            if not success:
+                error_text = "unknown error"
+                if "message" in response and isinstance(response["message"], str):
+                    error_text = response["message"]
+                logger.error("Failed to add document to chat summary conversation: %s", error_text)
+
+        except Exception:
+            logger.exception("Failed to add messages to chat summary")
+            return
+
+    def _upsert_chat_summary(
+        self, conversation_id: int, summary: str, latest_message_id: int | None = None
+    ) -> None:
+        """Upsert the chat summary in the database."""
+        try:
+            # get the latest chat summary
             summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
-            external_id = 0
             if summary_row is not None:
-                external_id = summary_row.external_id
-                logger.debug(
-                    f"Using existing external conversation_id={external_id} for conversation {conversation_id}"
+                # update the summary
+                self.db.update_chat_summary(
+                    conversation_id=conversation_id,
+                    new_summary=summary,
+                    latest_message_id=latest_message_id or summary_row.latest_message_id,
                 )
             else:
-                # Create a bare external conversation
-                success, response = await self._manage_conversation(
-                    summary_id=None,
-                    index_of_first_new_message=0,
-                    new_messages=[],
+                # create a new chat summary
+                self.db.create_chat_summary(
+                    conversation_id=conversation_id,
+                    summary=summary,
+                    latest_message_id=latest_message_id or -1,
                 )
-                if (
-                    not success
-                    or "summary_id" not in response
-                    or not isinstance(response["summary_id"], int)
-                ):
-                    logger.error(
-                        "Failed to create external conversation before uploading text document"
-                    )
-                    return
-                external_id = int(response["summary_id"])
-                logger.debug(
-                    f"Created new external conversation_id={external_id} for conversation {conversation_id}"
-                )
-                try:
-                    self.db.create_chat_summary(
-                        conversation_id=conversation_id,
-                        external_id=external_id,
-                        summary="",
-                        latest_message_id=0,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to persist chat summary row after creating external conversation"
-                    )
-
-            doc_id = await self._upload_document(
-                content=content,
-                description=description,
-                document_type=document_type,
-            )
-            if doc_id <= 0:
-                logger.error(
-                    f"add_text_document_to_chat_summary upload failed (conversation_id={conversation_id}, description={description})"
-                )
-                return
-            await self._add_document_to_conversation(
-                external_conversation_id=external_id, external_document_id=doc_id
-            )
-            logger.debug(
-                f"add_text_document_to_chat_summary linked doc_id={doc_id} to external conversation_id={external_id}"
-            )
         except Exception:
-            logger.exception("Failed to add text document to chat summary")
-            return
-
-    async def _poll_imported_conversation(
-        self,
-        conversation_id: int,
-        external_id: int,
-        index_of_first_new_message: int,
-        callback_function: Optional[Callable[[str], Awaitable[None]]] = None,
-    ) -> None:
-        """Poll external service and stop after first successful DB summary update."""
-        try:
-            elapsed = 0
-            latest_processed_idx: Optional[int] = None
-
-            while True:
-                success, response = await self._manage_conversation(
-                    summary_id=external_id,
-                    index_of_first_new_message=index_of_first_new_message,
-                    new_messages=[],
-                )
-
-                if success:
-                    latest_summary = ""
-                    if "latest_summary" in response and isinstance(response["latest_summary"], str):
-                        latest_summary = response["latest_summary"]
-
-                    processed_idx_obj = (
-                        response["latest_processed_message_idx"]
-                        if "latest_processed_message_idx" in response
-                        else None
-                    )
-                    processed_idx = (
-                        int(processed_idx_obj) if isinstance(processed_idx_obj, int) else None
-                    )
-
-                    # Update DB once we observe a new processed index AND a non-empty summary, then stop polling
-                    if (
-                        processed_idx is not None
-                        and processed_idx != latest_processed_idx
-                        and latest_summary
-                    ):
-                        latest_processed_idx = processed_idx
-                        self.db.update_imported_conversation_summary(
-                            conversation_id=conversation_id, new_summary=latest_summary
-                        )
-                        if callback_function:
-                            logger.info(
-                                f"Calling callback function for conversation {conversation_id}"
-                            )
-                            await callback_function(latest_summary)
-
-                        logger.info(
-                            f"Imported conversation {conversation_id} summary updated at idx {processed_idx}; stopping poll"
-                        )
-                        return
-
-                    # Reset timeout progress when receiving any processed index
-                    if processed_idx is not None:
-                        elapsed = 0
-
-                # Exit due to timeout (but keep DB with latest recorded state)
-                if elapsed >= self.MAX_WAIT_SECONDS:
-                    logger.warning(
-                        f"Polling timeout for conversation {conversation_id} (external {external_id})"
-                    )
-                    # After initial completion, continue light polling but with same cadence
-                    elapsed = 0
-
-                await asyncio.sleep(self.POLL_INTERVAL_SECONDS)
-                elapsed += self.POLL_INTERVAL_SECONDS
-        except asyncio.CancelledError:
-            # Graceful shutdown of polling
-            return
-        except Exception:
-            logger.exception(
-                f"Polling task crashed for conversation {conversation_id} (external {external_id})"
-            )
-
-    async def _poll_chat_conversation(
-        self,
-        conversation_id: int,
-        external_id: int,
-    ) -> None:
-        """Poll until processed index reaches the moving target for this conversation.
-
-        The target index is stored in self._chat_poll_targets[conversation_id] and may
-        advance while this task runs as new messages are added. We update the DB with
-        any improved summary along the way and only return when processed index >= target.
-        """
-        try:
-            last_processed_idx: Optional[int] = None
-            while True:
-                success, response = await self._manage_conversation(
-                    summary_id=external_id,
-                    index_of_first_new_message=0,
-                    new_messages=[],
-                )
-
-                if success:
-                    latest_summary = ""
-                    if "latest_summary" in response and isinstance(response["latest_summary"], str):
-                        latest_summary = response["latest_summary"]
-
-                    processed_idx_obj = (
-                        response["latest_processed_message_idx"]
-                        if "latest_processed_message_idx" in response
-                        else None
-                    )
-                    processed_idx = (
-                        int(processed_idx_obj) if isinstance(processed_idx_obj, int) else None
-                    )
-
-                    if (
-                        processed_idx is not None
-                        and processed_idx != last_processed_idx
-                        and latest_summary
-                    ):
-                        last_processed_idx = processed_idx
-                        # Map processed index to latest message id using our local index mapping
-                        latest_message_id = 0
-                        index_map = self._chat_index_to_message_id.get(conversation_id, [])
-                        if 0 <= processed_idx < len(index_map):
-                            latest_message_id = index_map[processed_idx]
-                        try:
-                            self.db.update_chat_summary(
-                                conversation_id=conversation_id,
-                                new_summary=latest_summary,
-                                latest_message_id=latest_message_id,
-                            )
-                        except Exception:
-                            logger.exception("Failed to update chat summary row")
-
-                    # Check against current target (may have advanced)
-                    target_idx = self._chat_poll_targets.get(conversation_id, -1)
-                    if (
-                        processed_idx is not None
-                        and target_idx >= 0
-                        and processed_idx >= target_idx
-                    ):
-                        logger.info(
-                            f"Chat summary for conversation {conversation_id} reached target idx {target_idx}; stopping poll"
-                        )
-                        return
-
-                await asyncio.sleep(self.POLL_INTERVAL_SECONDS)
-        except asyncio.CancelledError:
-            return
-        except Exception:
-            logger.exception(
-                f"Chat polling task crashed for conversation {conversation_id} (external {external_id})"
-            )
+            logger.exception("Failed to upsert chat summary")
