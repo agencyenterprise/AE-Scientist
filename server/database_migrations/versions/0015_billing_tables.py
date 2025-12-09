@@ -1,7 +1,7 @@
 """Create billing tables for user wallets and Stripe sessions.
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0015
+Revises: 0014
 Create Date: 2025-12-09
 """
 
@@ -12,8 +12,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "0014"
-down_revision: Union[str, None] = "0013"
+revision: str = "0015"
+down_revision: Union[str, None] = "0014"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
