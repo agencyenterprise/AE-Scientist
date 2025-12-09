@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { apiStream } from "@/shared/lib/api-client";
+import { apiStream, ApiError } from "@/shared/lib/api-client";
 import type {
   ImportState,
   SSEEvent,
@@ -9,6 +9,7 @@ import type {
   SSEProgress,
   SSESectionUpdate,
 } from "@/features/conversation-import/types/types";
+import { parseInsufficientCreditsError } from "@/shared/utils/credits";
 
 // Order of sections as streamed from the backend
 const SECTION_ORDER = [
@@ -103,6 +104,11 @@ export interface StreamImportResult {
   modelLimitMessage?: string;
   /** Model limit suggestion */
   modelLimitSuggestion?: string;
+  /** Whether the request failed due to insufficient credits */
+  insufficientCredits?: boolean;
+  required?: number;
+  available?: number;
+  action?: string;
 }
 
 /**
@@ -378,6 +384,21 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
           error: "Stream ended unexpectedly",
         };
       } catch (error) {
+        if (error instanceof ApiError && error.status === 402) {
+          const info = parseInsufficientCreditsError(error.data);
+          const message = info?.message || "You need more credits before running this action.";
+          setIsStreaming(false);
+          onEnd?.();
+          onError?.(message);
+          return {
+            success: false,
+            error: message,
+            insufficientCredits: true,
+            required: info?.required,
+            available: info?.available,
+            action: info?.action,
+          };
+        }
         // AbortError is expected on cleanup
         if ((error as Error).name === "AbortError") {
           return {

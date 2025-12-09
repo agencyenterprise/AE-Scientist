@@ -14,7 +14,8 @@ import { config } from "./config";
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public data?: unknown
   ) {
     super(message);
     this.name = "ApiError";
@@ -79,7 +80,8 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
     if (response.status === 401) {
       window.location.href = "/login";
     }
-    throw new ApiError(response.status, `HTTP ${response.status}`);
+    const errorData = await parseErrorResponse(response);
+    throw new ApiError(response.status, `HTTP ${response.status}`, errorData);
   }
 
   if (skipJson) {
@@ -125,7 +127,8 @@ export async function apiStream(path: string, options?: RequestInit): Promise<Re
     if (response.status === 401) {
       window.location.href = "/login";
     }
-    throw new ApiError(response.status, `HTTP ${response.status}`);
+    const errorData = await parseErrorResponse(response);
+    throw new ApiError(response.status, `HTTP ${response.status}`, errorData);
   }
 
   return response;
@@ -149,5 +152,21 @@ function buildRequestUrl(path: string): string {
     return parsedUrl.toString();
   } catch {
     return url;
+  }
+}
+
+async function parseErrorResponse(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch {
+      return undefined;
+    }
+  }
+  try {
+    return await response.text();
+  } catch {
+    return undefined;
   }
 }

@@ -2,8 +2,6 @@
 Collect and publish research pipeline artifacts.
 """
 
-from __future__ import annotations
-
 import logging
 import shutil
 import tempfile

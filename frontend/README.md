@@ -46,7 +46,17 @@ The frontend provides an intuitive interface for:
    
    # Development Settings  
    NEXT_PUBLIC_ENVIRONMENT="development"
+
+   # Stripe Checkout
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_xxx"
+
+   # Credit gates (mirror backend thresholds)
+   NEXT_PUBLIC_MIN_USER_CREDITS_FOR_CONVERSATION="10"
+   NEXT_PUBLIC_MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE="25"
    ```
+
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is required for redirecting users to Stripe Checkout.
+   - `NEXT_PUBLIC_MIN_USER_CREDITS_FOR_*` keep the UI in sync with backend credit thresholds so buttons can disable before the API gate fires.
 
 ### Development
 

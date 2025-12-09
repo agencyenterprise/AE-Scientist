@@ -12,6 +12,7 @@ from typing import List, NamedTuple, Optional
 import psycopg2.extras
 
 from .base import ConnectionProvider
+from .billing import BillingDatabaseMixin
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,18 @@ class UsersDatabaseMixin(ConnectionProvider):
                     )
                     result = cursor.fetchone()
                     conn.commit()
-                    return UserData(**result) if result else None
+                    if result:
+                        try:
+                            if isinstance(self, BillingDatabaseMixin):
+                                self.ensure_user_wallet(int(result["id"]))
+                        except Exception as wallet_error:  # noqa: BLE001
+                            logger.exception(
+                                "Failed to initialize wallet for user %s: %s",
+                                result["id"],
+                                wallet_error,
+                            )
+                        return UserData(**result)
+                    return None
         except Exception as e:
             logger.exception(f"Error creating user: {e}")
             return None

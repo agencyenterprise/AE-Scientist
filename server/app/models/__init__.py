@@ -15,6 +15,14 @@ from app.models.auth import (
 )
 
 # Chat models
+from app.models.billing import (
+    BillingWalletResponse,
+    CheckoutSessionCreateRequest,
+    CheckoutSessionCreateResponse,
+    CreditPackListResponse,
+    CreditPackModel,
+    CreditTransactionModel,
+)
 from app.models.chat import ChatMessage, ChatRequest, ChatResponse
 
 # Conversation models
@@ -133,4 +141,11 @@ __all__ = [
     "GoogleOAuthCallbackRequest",
     # Imported conversation summary models
     "ImportedConversationSummaryUpdate",
+    # Billing models
+    "BillingWalletResponse",
+    "CreditTransactionModel",
+    "CreditPackModel",
+    "CreditPackListResponse",
+    "CheckoutSessionCreateRequest",
+    "CheckoutSessionCreateResponse",
 ]

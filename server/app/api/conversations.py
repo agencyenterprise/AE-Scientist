@@ -42,6 +42,7 @@ from app.services import (
     get_database,
 )
 from app.services.base_llm_service import LLMIdeaGeneration
+from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.conversations import Conversation as DBConversation
 from app.services.database.conversations import DashboardConversation as DBDashboardConversation
@@ -943,6 +944,7 @@ async def _stream_import_pipeline(
     """Main workflow for importing conversations, factored for readability."""
     db = get_database()
     conversation: Optional[DBFullConversation] = None
+
     try:
         _validate_import_url_or_raise(url=url)
         matching = db.list_conversations_by_url(url)
@@ -1045,6 +1047,7 @@ async def _stream_manual_seed_pipeline(
     """Workflow for generating ideas directly from manual seed data."""
     db = get_database()
     conversation: Optional[DBFullConversation] = None
+
     manual_title = manual_data.idea_title.strip()
     manual_hypothesis = manual_data.idea_hypothesis.strip()
     try:
@@ -1102,6 +1105,11 @@ async def import_conversation(
 
     user = get_current_user(request)
     logger.debug("User authenticated for import: %s", user.email)
+    enforce_minimum_credits(
+        user_id=user.id,
+        required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
+        action="input_pipeline",
+    )
 
     async def generate_import_stream() -> AsyncGenerator[str, None]:
         async for chunk in _stream_import_pipeline(
@@ -1134,6 +1142,11 @@ async def import_manual_seed(
     """
     user = get_current_user(request)
     logger.debug("User authenticated for manual import: %s", user.email)
+    enforce_minimum_credits(
+        user_id=user.id,
+        required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
+        action="input_pipeline",
+    )
 
     async def generate_manual_stream() -> AsyncGenerator[str, None]:
         async for chunk in _stream_manual_seed_pipeline(manual_data=manual_data, user=user):

@@ -186,11 +186,27 @@ export function useConversationImport(
           result.modelLimitMessage || "",
           result.modelLimitSuggestion || ""
         );
+      } else if (result.insufficientCredits) {
+        const creditMessage =
+          result.error ||
+          (result.required
+            ? `You need at least ${result.required} credits to refine ideas.`
+            : "Insufficient credits to refine ideas.");
+        formState.actions.setError(creditMessage);
+        onError?.(creditMessage);
       } else if (!result.success && result.error) {
         formState.actions.setError(result.error);
+        onError?.(result.error);
       }
     },
-    [currentModel, currentProvider, streaming.actions, conflictState.actions, formState.actions]
+    [
+      currentModel,
+      currentProvider,
+      streaming.actions,
+      conflictState.actions,
+      formState.actions,
+      onError,
+    ]
   );
 
   // Start import action

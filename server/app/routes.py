@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter
 
 from app.api.auth import router as auth_router
+from app.api.billing import router as billing_router
 from app.api.chat import router as chat_router
 from app.api.chat_stream import router as chat_stream_router
 from app.api.conversations import router as conversations_router
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api")
 
 # Include sub-routers
 router.include_router(auth_router)
+router.include_router(billing_router)
 router.include_router(chat_router)
 router.include_router(chat_stream_router)
 router.include_router(conversations_router)
