@@ -18,6 +18,7 @@ export { IdeationQueueSkeleton } from "./components/IdeationQueueSkeleton";
 export { IdeationQueueRunsList } from "./components/IdeationQueueRunsList";
 export { IdeationQueueRunItem } from "./components/IdeationQueueRunItem";
 export { InlineIdeaView } from "./components/InlineIdeaView";
+export { ConversationStatusBadge } from "./components/ConversationStatusBadge";
 
 // Ideation Queue hooks
 export { useConversationResearchRuns } from "./hooks/useConversationResearchRuns";
@@ -34,6 +35,7 @@ export {
 
 // Ideation Queue types
 export type {
+  ConversationStatus,
   IdeaStatus,
   StatusFilterOption,
   IdeaStatusConfig,

@@ -2,6 +2,13 @@ import type { ComponentType } from "react";
 import type { Conversation } from "@/shared/lib/api-adapters";
 
 /**
+ * Conversation status type
+ * - "draft": Conversation without research
+ * - "with_research": Conversation with research runs
+ */
+export type ConversationStatus = "draft" | "with_research";
+
+/**
  * Status types for ideation queue items
  * Ordered by workflow progression for sorting
  */
@@ -42,12 +49,14 @@ export type IdeationSortKey = "newest" | "oldest" | "title_asc" | "title_desc" |
 /**
  * Props for IdeationQueueCard component (ISP-compliant: focused interface)
  * MODIFIED: Added optional selection props for inline view support
+ * MODIFIED: Added conversationStatus prop for status badge display
  */
 export interface IdeationQueueCardProps {
   id: number;
   title: string;
   abstract: string | null;
   status: IdeaStatus;
+  conversationStatus?: ConversationStatus;
   createdAt: string;
   updatedAt: string;
   /** Whether this card is currently selected for inline view */

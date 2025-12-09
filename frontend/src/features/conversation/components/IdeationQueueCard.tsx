@@ -7,6 +7,7 @@ import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/components/ui/button";
 import type { IdeationQueueCardProps } from "@/features/conversation";
+import { ConversationStatusBadge } from "./ConversationStatusBadge";
 import { IdeationQueueRunsList } from "./IdeationQueueRunsList";
 
 /**
@@ -21,6 +22,7 @@ function IdeationQueueCardComponent({
   abstract,
   createdAt,
   updatedAt,
+  conversationStatus = "draft",
   isSelected,
   onSelect,
 }: IdeationQueueCardProps) {
@@ -55,9 +57,19 @@ function IdeationQueueCardComponent({
         isSelected && "ring-2 ring-sky-500 border-sky-500/50 bg-slate-900/80"
       )}
     >
-      {/* Header: Title */}
-      <div className="mb-3 flex flex-col gap-2">
-        <h3 className="line-clamp-2 text-sm font-semibold text-slate-100">{title}</h3>
+      {/* Header: Title + Edit Button */}
+      <div className="mb-3 flex flex-row items-start justify-between gap-2">
+        <h3 className="line-clamp-2 text-sm font-semibold text-slate-100 flex-1">{title}</h3>
+        <Button
+          onClick={handleEditClick}
+          variant="ghost"
+          size="sm"
+          className="text-slate-400 hover:text-slate-300 shrink-0"
+          aria-label="Edit conversation"
+        >
+          <Pencil className="h-3 w-3" />
+          Edit
+        </Button>
       </div>
 
       {/* Body: Abstract preview */}
@@ -65,9 +77,10 @@ function IdeationQueueCardComponent({
         <p className="mb-3 line-clamp-3 text-xs leading-relaxed text-slate-400">{abstract}</p>
       )}
 
-      {/* Footer: Dates + Buttons */}
+      {/* Footer: Status + Dates + Toggle Button */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wide text-slate-500">
+          <ConversationStatusBadge status={conversationStatus} />
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3 w-3" />
             Created {formatRelativeTime(createdAt)}
@@ -75,33 +88,20 @@ function IdeationQueueCardComponent({
           <span>Updated {formatRelativeTime(updatedAt)}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleEditClick}
-            variant="ghost"
-            size="sm"
-            className="text-slate-400 hover:text-slate-300"
-            aria-label="Edit conversation"
-          >
-            <Pencil className="h-3 w-3" />
-            Edit
-          </Button>
-
-          <button
-            onClick={handleExpandToggle}
-            type="button"
-            aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
-            aria-expanded={isExpanded}
-            className={cn(
-              "inline-flex items-center gap-1 rounded px-2 py-1",
-              "text-[10px] uppercase tracking-wide text-slate-400",
-              "transition-colors hover:bg-slate-800 hover:text-slate-300"
-            )}
-          >
-            {isExpanded ? "Hide Runs" : "Show Runs"}
-            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-        </div>
+        <button
+          onClick={handleExpandToggle}
+          type="button"
+          aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
+          aria-expanded={isExpanded}
+          className={cn(
+            "inline-flex items-center gap-1 rounded px-2 py-1",
+            "text-[10px] uppercase tracking-wide text-slate-400",
+            "transition-colors hover:bg-slate-800 hover:text-slate-300"
+          )}
+        >
+          {isExpanded ? "Hide Runs" : "Show Runs"}
+          {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
       </div>
 
       {/* Expandable Runs Section */}

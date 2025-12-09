@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-08T17:44:55.270091",
+  "lastUpdated": "2025-12-09T11:39:27.157061",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -660,6 +660,324 @@
       "results": 0,
       "at": "2025-12-08T17:44:55.270085",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/System"
+    },
+    {
+      "pattern": "conversation.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:09:12.328020"
+    },
+    {
+      "pattern": "**/IdeationQueueCard*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:12.736335"
+    },
+    {
+      "pattern": "**/design-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:31.136614"
+    },
+    {
+      "pattern": "**/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:39:06.681714"
+    },
+    {
+      "pattern": "**/globals.css",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:59.937591"
+    },
+    {
+      "pattern": "frontend/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:39:27.157053"
+    },
+    {
+      "pattern": "**/.agent/Tasks/**/task.json",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:12.433028"
+    },
+    {
+      "pattern": "interface.*Props.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.115672",
+      "glob": "**/*IdeationQueue*.tsx"
+    },
+    {
+      "pattern": "badge|Badge|pill|status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.121037",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "**/*.tsx"
+    },
+    {
+      "pattern": "frontend/tailwind.config.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.356310"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:17.602865",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend"
+    },
+    {
+      "pattern": "frontend/src/**/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:17.828508"
+    },
+    {
+      "pattern": "draft|with_research",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:25.285470",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend"
+    },
+    {
+      "pattern": "ConversationResponse.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:32.521180",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/Tasks/**/",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:32.983443"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:37.967942",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-*/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:38.135705"
+    },
+    {
+      "pattern": "status.*description",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:50.695833",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/System/design-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:50.887758"
+    },
+    {
+      "pattern": "**/conversation/types.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:13.840277",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "interface IdeationQueueCardProps|type IdeationQueueCardProps|export.*IdeationQueueCardProps",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:13.843387",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/conversation"
+    },
+    {
+      "pattern": "**/features/conversation/index.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:17.871807",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "export.*ConversationResponse|interface ConversationResponse|type ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:22.644387",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "ConversationResponse.*\\{|status.*:",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:29.974423",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "conversation_status|status.*draft|status.*with_research",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:39.655202",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "draft.*with_research|ConversationStatus",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:39.666721",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:45.110110",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "**/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:57.347513",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks"
+    },
+    {
+      "pattern": "class ConversationResponse|status.*str",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:02.104301",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "**/schemas/**/*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:15:08.862734",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:12.803388",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server",
+      "glob": "**/*.py"
+    },
+    {
+      "pattern": "class ConversationResponse|ConversationResponse.*BaseModel",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:16.653075",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/models/conversations.py"
+    },
+    {
+      "pattern": "**/research-utils.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:15:21.944184",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/.agent/Tasks/*/conversation-status-badge/task.json",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:08.750217"
+    },
+    {
+      "pattern": "**/.agent/Tasks/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:15.574765"
+    },
+    {
+      "pattern": ".agent/Tasks/**/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:22:36.871151"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-badge/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:22:42.528230"
+    },
+    {
+      "pattern": "slate-400|slate-600|slate-700|slate-900|sky-400|sky-500",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:22:48.378518",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend",
+      "glob": "tailwind.config.*"
+    },
+    {
+      "pattern": "**/*badge*.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.905580",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/*status*.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.910783",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "badge|status|label",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.925910",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": ".agent/System/brand-voice.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:41.454392",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/System/copy-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:41.457130",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "Draft|Research|status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:25:54.570314",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": ".agent/Tasks/**/conversation-status-badge/**/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.773178",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/Tasks/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.776643",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/Tasks/**/*status*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.781933",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
     }
   ],
   "reviews": {
