@@ -577,6 +577,9 @@ Your research idea:\n\n
                     # Best-effort logging; never block iteration on event errors
                     pass
 
+            # Drive one iteration of the agent to make forward progress.
+            agent.step()
+
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
 

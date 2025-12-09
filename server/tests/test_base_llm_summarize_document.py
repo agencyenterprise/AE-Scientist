@@ -22,7 +22,7 @@ class _StubService(BaseLLMService):
 
     # Abstracts not used in these tests
     def generate_idea(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self, llm_model: str, conversation_text: str, user_id: int
     ) -> AsyncGenerator[str, None]:
         raise NotImplementedError
 

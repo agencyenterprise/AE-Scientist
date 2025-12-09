@@ -311,11 +311,6 @@ async def test_import_summarization_required_placeholder(
         patch("app.api.conversations.get_database") as mock_get_db,
         patch("app.api.conversations.get_current_user") as mock_get_user,
         patch("app.services.auth_service.AuthService.get_user_by_session") as mock_get_by_session,
-        patch("app.api.conversations._generate_imported_chat_keywords", return_value="k1, k2"),
-        patch(
-            "app.api.conversations.mem0_service.generate_project_creation_memories",
-            return_value=([], ""),
-        ),
     ):
         db = MagicMock()
         db.get_conversation_id_by_url.return_value = 0
