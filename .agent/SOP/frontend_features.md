@@ -919,6 +919,100 @@ See `frontend/src/features/conversation/components/IdeationQueueCard.tsx` and re
 
 ---
 
+## Accessibility Best Practices
+
+> Added from: conversation-status-tracking implementation (2025-12-08)
+
+### aria-labels for Interactive Elements
+
+Always add `aria-label` to buttons that:
+- Have only icon content
+- Navigate to different pages
+- Perform actions that aren't obvious from visible text
+
+```typescript
+// Icon-only button
+<Button
+  onClick={handleEdit}
+  variant="ghost"
+  size="sm"
+  aria-label="Edit conversation"
+>
+  <Pencil className="h-3 w-3" />
+</Button>
+
+// Button with text + icon that navigates
+<Button
+  onClick={handleEditClick}
+  variant="outline"
+  size="sm"
+  aria-label="Edit research idea"
+>
+  <Pencil className="h-3 w-3 mr-1.5" />
+  Edit
+</Button>
+```
+
+### Device-Agnostic Language
+
+Use language that works for all input methods (mouse, touch, keyboard):
+
+| Avoid | Prefer |
+|-------|--------|
+| "Click on an idea" | "Choose an idea" |
+| "Click here to continue" | "Select to continue" |
+| "Click the button" | "Use the button" |
+| "Tap to expand" | "Expand" |
+
+```typescript
+// Bad
+<p className="text-xs text-slate-500">
+  Click on an idea above to preview its details
+</p>
+
+// Good
+<p className="text-xs text-slate-500">
+  Choose an idea above to preview its details
+</p>
+```
+
+### Expand/Collapse Accessibility
+
+For expandable sections, include both `aria-label` and `aria-expanded`:
+
+```typescript
+<button
+  onClick={handleExpandToggle}
+  type="button"
+  aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
+  aria-expanded={isExpanded}
+  className="..."
+>
+  {isExpanded ? "Hide Runs" : "Show Runs"}
+  {isExpanded ? <ChevronUp /> : <ChevronDown />}
+</button>
+```
+
+### Button Groups
+
+Use `role="group"` and `aria-label` for related buttons:
+
+```typescript
+<div className="flex items-center gap-1" role="group" aria-label="Log level filter">
+  {options.map(option => (
+    <button
+      key={option}
+      aria-pressed={activeFilter === option}
+      // ...
+    >
+      {option}
+    </button>
+  ))}
+</div>
+```
+
+---
+
 ## Verification
 
 1. Import the component in a page:

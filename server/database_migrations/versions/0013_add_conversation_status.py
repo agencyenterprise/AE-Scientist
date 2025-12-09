@@ -19,7 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add status column to conversations table with backfill logic."""
-    # Step 1: Add column with server default
+    # Step 1: Drop the conversation_dashboard_view if it exists
+    conn = op.get_bind()
+    conn.execute(sa.text("DROP VIEW IF EXISTS conversation_dashboard_view"))
+    conn.commit()
+
+    # Step 2: Add column with server default
     op.add_column(
         "conversations",
         sa.Column(
@@ -30,9 +35,8 @@ def upgrade() -> None:
         ),
     )
 
-    # Step 2: Backfill existing conversations based on research pipeline runs
+    # Step 3: Backfill existing conversations based on research pipeline runs
     # Conversations with research runs get 'with_research', others get 'draft'
-    conn = op.get_bind()
     conn.execute(
         sa.text(
             """

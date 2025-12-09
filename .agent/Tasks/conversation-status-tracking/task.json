@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-08T17:26:52.017537",
+  "lastUpdated": "2025-12-08T17:44:55.270091",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -322,8 +322,9 @@
     {
       "id": "documentation",
       "agent": "documentation-reviewer",
-      "status": "pending",
-      "description": "Update architecture docs with new status field pattern"
+      "status": "completed",
+      "completedAt": "2025-12-08T19:00:00Z",
+      "description": "Updated SOPs with learnings: VARCHAR(255) for status columns, transaction-safe cursor helpers, inline query strategy, accessibility best practices"
     }
   ],
   "decisions": [
@@ -645,6 +646,20 @@
       "results": 0,
       "at": "2025-12-08T17:26:52.017530",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/*.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:44:55.268468",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/SOP"
+    },
+    {
+      "pattern": "**/*.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:44:55.270085",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/System"
     }
   ],
   "reviews": {

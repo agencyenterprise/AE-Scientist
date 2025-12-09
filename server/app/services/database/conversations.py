@@ -255,22 +255,49 @@ class ConversationsMixin(ConnectionProvider):
     def list_conversations(
         self, limit: int = 100, offset: int = 0, user_id: int | None = None
     ) -> List[DashboardConversation]:
-        """List conversations for dashboard (from view), with pagination."""
+        """List conversations for dashboard with inline query and pagination."""
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 query = """
-                    SELECT id, url, title, import_date, created_at, updated_at,
-                           user_id, user_name, user_email,
-                           idea_title, idea_abstract,
-                           last_user_message_content, last_assistant_message_content,
-                           manual_title, manual_hypothesis, status
-                    FROM conversation_dashboard_view
+                    SELECT
+                        c.id,
+                        c.url,
+                        c.title,
+                        c.import_date,
+                        c.created_at,
+                        c.updated_at,
+                        c.imported_by_user_id AS user_id,
+                        u.name AS user_name,
+                        u.email AS user_email,
+                        iv.title AS idea_title,
+                        iv.abstract AS idea_abstract,
+                        (
+                            SELECT cm.content
+                            FROM chat_messages cm
+                            WHERE cm.idea_id = i.id AND cm.role = 'user'
+                            ORDER BY cm.sequence_number DESC
+                            LIMIT 1
+                        ) AS last_user_message_content,
+                        (
+                            SELECT cm.content
+                            FROM chat_messages cm
+                            WHERE cm.idea_id = i.id AND cm.role = 'assistant'
+                            ORDER BY cm.sequence_number DESC
+                            LIMIT 1
+                        ) AS last_assistant_message_content,
+                        c.manual_title,
+                        c.manual_hypothesis,
+                        c.status
+                    FROM conversations c
+                    LEFT JOIN users u ON c.imported_by_user_id = u.id
+                    LEFT JOIN ideas i ON i.conversation_id = c.id
+                    LEFT JOIN idea_versions iv ON i.active_idea_version_id = iv.id
                 """
                 params: list = []
                 if user_id is not None:
-                    query += " WHERE user_id = %s"
+                    query += " WHERE c.imported_by_user_id = %s"
                     params.append(user_id)
-                query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
+                query += " ORDER BY c.updated_at DESC LIMIT %s OFFSET %s"
                 params.extend([limit, offset])
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
