@@ -31,7 +31,7 @@ export function Header() {
                 }`}
               >
                 <MessageSquare className="h-4 w-4" />
-                Conversations
+                Ideation Queue
               </Link>
               <Link
                 href="/research"

@@ -22,7 +22,7 @@ export function HypothesisForm({
           className="text-sm font-semibold uppercase tracking-wide text-slate-300"
           htmlFor="title"
         >
-          Hypothesis title
+          Research idea title
         </label>
         <input
           id="title"
@@ -39,7 +39,7 @@ export function HypothesisForm({
           className="text-sm font-semibold uppercase tracking-wide text-slate-300"
           htmlFor="idea"
         >
-          Hypothesis details
+          Research idea details
         </label>
         <textarea
           id="idea"

@@ -116,7 +116,7 @@ export function CreateHypothesisForm() {
     }
 
     // Nothing filled
-    setFormError("Please fill in the hypothesis details or paste a ChatGPT URL");
+    setFormError("Please fill in the research idea details or paste a ChatGPT URL");
   };
 
   // Clear the other input when one is being used
@@ -259,7 +259,7 @@ export function CreateHypothesisForm() {
           >
             {importState.status.isImporting || manualImportState.status.isImporting
               ? "Generating..."
-              : "Create hypothesis"}
+              : "Create research idea"}
           </button>
           <ModelSelector
             promptType={PromptTypes.IDEA_GENERATION}

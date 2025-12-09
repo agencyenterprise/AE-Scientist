@@ -221,6 +221,7 @@ def convert_db_to_api_response(
         user_id=db_conversation.user_id,
         user_name=db_conversation.user_name,
         user_email=db_conversation.user_email,
+        status=db_conversation.status,
         imported_chat=(
             [
                 ImportedChatMessage(

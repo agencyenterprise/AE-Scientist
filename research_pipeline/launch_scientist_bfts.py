@@ -42,7 +42,6 @@ from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, W
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
-from ai_scientist.treesearch.interpreter import ExecutionResult
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
@@ -524,12 +523,8 @@ def resume_run(
             except Exception:
                 traceback.print_exc()
 
-        def exec_callback(_code: str, _is_exec: bool) -> ExecutionResult:
-            return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
-
         manager.run_stage(
             initial_substage=next_meta,
-            exec_callback=exec_callback,
             step_callback=step_callback,
         )
         return run_dir

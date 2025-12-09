@@ -113,12 +113,34 @@ frontend/
 | `project-draft` | `src/features/project-draft/` | Project drafting with chat, diff viewer, sections (30+ components) |
 | `input-pipeline` | `src/features/input-pipeline/` | Hypothesis creation form with model selection |
 | `model-selector` | `src/features/model-selector/` | Model selection dropdown UI |
-| `research` | `src/features/research/` | Research run management, history display, status utilities |
+| `research` | `src/features/research/` | Research run management, history display, **reusable utilities** (see below) |
 | `search` | `src/features/search/` | Vector-based semantic search |
 | `dashboard` | `src/features/dashboard/` | Dashboard-specific components |
 | `layout` | `src/features/layout/` | Sidebar navigation |
 | `imported-chat` | `src/features/imported-chat/` | Imported chat tab display |
 | `user-profile` | `src/features/user-profile/` | User profile dropdown |
+
+### Reusable Utilities from Research Feature
+
+> Added from: ideation-queue-research-runs implementation (2025-12-08)
+
+The `research` feature contains utilities that should be reused across features when displaying research run information:
+
+| Utility | File | Purpose |
+|---------|------|---------|
+| `getStatusBadge()` | `features/research/utils/research-utils.tsx` | Returns styled badge JSX for run status (pending/running/completed/failed) |
+| `truncateRunId()` | `features/research/utils/research-utils.tsx` | Truncates run IDs (e.g., "rp-abc123..." with ellipsis) |
+
+**Usage Example:**
+```typescript
+import { getStatusBadge, truncateRunId } from "@/features/research/utils/research-utils";
+
+// In component
+{getStatusBadge(run.status, "sm")} // Returns styled badge with icon
+<span>{truncateRunId(run.run_id)}</span> // "rp-abc123..."
+```
+
+These utilities ensure consistent status badge styling across the Ideation Queue and Research pages.
 
 ### Feature Structure Template
 

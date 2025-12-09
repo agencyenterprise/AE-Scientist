@@ -361,6 +361,110 @@ class MyLLMService(LangChainLLMService):
 
 ---
 
+## Transaction-Safe Helper Pattern
+
+> Added from: conversation-status-tracking implementation (2025-12-08)
+
+When an operation needs to participate in an existing transaction (e.g., update conversation status when creating a research run), create a helper method that accepts a cursor parameter.
+
+### When to Use
+
+- Multi-step operations that must be atomic (all-or-nothing)
+- One operation triggers a side effect in another table
+- Status updates tied to record creation
+
+### Implementation
+
+Create a pair of methods: public method + cursor helper:
+
+```python
+# server/app/services/database/my_table.py
+
+# Validation constant at module level
+ALLOWED_STATUSES = ('draft', 'active', 'completed')
+
+
+class MyTableMixin:
+    """Database operations for my_table."""
+
+    def update_status(self, item_id: int, status: str) -> bool:
+        """
+        Public method - manages its own transaction.
+
+        Returns True if updated, False if not found.
+        """
+        if status not in ALLOWED_STATUSES:
+            raise ValueError(f"Invalid status '{status}'")
+
+        now = datetime.now()
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE my_table SET status = %s, updated_at = %s WHERE id = %s",
+                    (status, now, item_id),
+                )
+                conn.commit()
+                return bool(cursor.rowcount > 0)
+
+    def _update_status_with_cursor(
+        self, cursor, item_id: int, status: str
+    ) -> None:
+        """
+        Transaction helper - uses existing cursor, NO commit.
+
+        Called by other mixins that need atomic multi-step operations.
+        The caller is responsible for committing.
+        """
+        if status not in ALLOWED_STATUSES:
+            raise ValueError(f"Invalid status '{status}'")
+
+        now = datetime.now()
+        cursor.execute(
+            "UPDATE my_table SET status = %s, updated_at = %s WHERE id = %s",
+            (status, now, item_id),
+        )
+        # NOTE: No conn.commit() - caller handles transaction
+```
+
+### Usage in Multi-Step Operations
+
+```python
+# server/app/services/database/related_table.py
+
+class RelatedTableMixin:
+    def create_related_item(self, *, item_id: int, data: dict) -> int:
+        """Create related item and update parent status atomically."""
+        now = datetime.now()
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Step 1: Insert new record
+                cursor.execute(
+                    "INSERT INTO related_table (...) VALUES (...) RETURNING id",
+                    (...)
+                )
+                new_id = cursor.fetchone()[0]
+
+                # Step 2: Update parent status (atomic with insert)
+                self._update_status_with_cursor(
+                    cursor=cursor,
+                    item_id=item_id,
+                    status='active',
+                )
+
+                # Step 3: Commit entire transaction
+                conn.commit()
+                return new_id
+```
+
+### Key Points
+
+1. **Helper method naming**: Prefix with underscore and suffix with `_with_cursor`
+2. **No commit in helpers**: The calling method handles the transaction boundary
+3. **Validation in both methods**: Always validate input even in helper methods
+4. **Cross-mixin calls**: Works because all mixins are composed into DatabaseManager via `self`
+
+---
+
 ## Verification
 
 1. Import the service in Python REPL:

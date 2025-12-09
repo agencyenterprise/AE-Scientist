@@ -62,10 +62,10 @@ export function ConversationView({
         <div className="text-center max-w-md">
           <MessageCircle className="mx-auto h-24 w-24 text-muted-foreground mb-4" strokeWidth={1} />
           <h2 className="text-xl font-medium text-foreground mb-2">
-            AE Scientist - AI Research Hypothesis Generator
+            AE Scientist - AI Research Generator
           </h2>
           <p className="text-muted-foreground mb-4">
-            Transform imported conversations into Data Science experiments
+            Transform imported conversations into Data Science research
           </p>
           <p className="text-sm text-muted-foreground">
             Select a conversation from the sidebar or import a new one to get started.

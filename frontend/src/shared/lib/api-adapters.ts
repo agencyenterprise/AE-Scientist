@@ -39,6 +39,7 @@ export interface Conversation {
   ideaAbstract?: string | null;
   lastUserMessageContent?: string | null;
   lastAssistantMessageContent?: string | null;
+  conversationStatus?: "draft" | "with_research";
 }
 
 // ConversationDetail is imported from main types
@@ -62,6 +63,10 @@ export function convertApiConversation(apiConversation: ConversationListItem): C
     ideaAbstract: apiConversation.idea_abstract ?? null,
     lastUserMessageContent: apiConversation.last_user_message_content ?? null,
     lastAssistantMessageContent: apiConversation.last_assistant_message_content ?? null,
+    conversationStatus:
+      "status" in apiConversation && apiConversation.status
+        ? (apiConversation.status as "draft" | "with_research")
+        : "draft",
   };
 }
 

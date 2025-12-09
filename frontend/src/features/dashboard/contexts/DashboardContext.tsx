@@ -8,6 +8,7 @@ export type SortDir = "asc" | "desc";
 
 interface DashboardContextType {
   conversations: Conversation[];
+  isLoading: boolean;
   selectConversation: (conversation: Conversation) => void;
   refreshConversations: () => Promise<void>;
   sortKey: SortKey;

@@ -99,6 +99,10 @@ class ConversationResponse(BaseModel):
     user_id: int = Field(..., description="ID of the user who imported the conversation")
     user_name: str = Field(..., description="Name of the user who imported the conversation")
     user_email: str = Field(..., description="Email of the user who imported the conversation")
+    status: str = Field(
+        ...,
+        description="Conversation status: 'draft' (initial) or 'with_research' (has research runs)",
+    )
     imported_chat: Optional[List[ImportedChatMessage]] = Field(
         None, description="Conversation messages (optional)"
     )

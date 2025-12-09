@@ -727,6 +727,292 @@ See `frontend/src/features/research/components/run-detail/research-logs-list.tsx
 
 ---
 
+## Expandable Card Pattern
+
+> Added from: ideation-queue-research-runs implementation (2025-12-08)
+
+When you need to show nested/related data within a card that should load on-demand (not with the initial list), use this pattern.
+
+### When to Use
+
+- Card lists where each card may have related sub-items (e.g., ideas with research runs, projects with tasks)
+- When loading all sub-items initially would be expensive
+- When users typically only care about sub-items for specific cards
+- When the related data has its own detail page for navigation
+
+### Component Structure
+
+```typescript
+// Parent card component with expand/collapse
+"use client";
+
+import { memo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
+import { MyItemRunsList } from "./MyItemRunsList";
+
+interface MyItemCardProps {
+  id: number;
+  title: string;
+  // ... other props
+}
+
+function MyItemCardComponent({ id, title }: MyItemCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
+
+  // Card body navigation
+  const handleCardClick = () => {
+    router.push(`/items/${id}`);
+  };
+
+  // Expand toggle (separate click zone)
+  const handleExpandToggle = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card navigation
+    setIsExpanded((prev) => !prev);
+  };
+
+  return (
+    <article
+      onClick={handleCardClick}
+      className="cursor-pointer rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+    >
+      {/* Card content */}
+      <h3>{title}</h3>
+
+      {/* Expand toggle button */}
+      <button
+        onClick={handleExpandToggle}
+        type="button"
+        aria-label={isExpanded ? "Hide runs" : "Show runs"}
+        aria-expanded={isExpanded}
+        className="..."
+      >
+        {isExpanded ? "Hide" : "Show"} runs
+        {isExpanded ? <ChevronUp /> : <ChevronDown />}
+      </button>
+
+      {/* Conditionally render nested list */}
+      {isExpanded && <MyItemRunsList itemId={id} />}
+    </article>
+  );
+}
+
+export const MyItemCard = memo(MyItemCardComponent);
+```
+
+### Nested List Component
+
+```typescript
+// Child list component - fetches data when mounted
+import { useMyItemRuns } from "../hooks/useMyItemRuns";
+import { MyItemRunRow } from "./MyItemRunRow";
+
+interface MyItemRunsListProps {
+  itemId: number;
+}
+
+export function MyItemRunsList({ itemId }: MyItemRunsListProps) {
+  const { runs, isLoading, error, refetch } = useMyItemRuns(itemId);
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="animate-pulse rounded-lg bg-slate-900/30 h-10" />
+        ))}
+      </div>
+    );
+  }
+
+  // Error state with retry
+  if (error) {
+    return (
+      <div className="mt-3 border-t border-slate-800 pt-3">
+        <div className="flex items-center justify-between bg-red-500/10 px-3 py-2 rounded">
+          <span className="text-red-400 text-sm">{error}</span>
+          <button onClick={refetch} className="text-xs text-red-300">Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (!runs || runs.length === 0) {
+    return (
+      <div className="mt-3 flex h-16 items-center justify-center border-t border-slate-800 pt-3">
+        <p className="text-sm text-slate-500">No runs yet</p>
+      </div>
+    );
+  }
+
+  // Limit display, show "more" indicator
+  const displayRuns = runs.slice(0, 5);
+  const hasMore = runs.length > 5;
+
+  return (
+    <div className="mt-3 border-t border-slate-800 pt-3 space-y-2">
+      {displayRuns.map((run) => (
+        <MyItemRunRow key={run.id} run={run} />
+      ))}
+      {hasMore && (
+        <p className="text-xs text-slate-500 text-center">
+          {runs.length - 5} more runs
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+### Nested Row Component (Clickable)
+
+```typescript
+// Row component with separate navigation
+import { memo } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
+
+interface MyItemRunRowProps {
+  run: { id: string; status: string; createdAt: string };
+}
+
+function MyItemRunRowComponent({ run }: MyItemRunRowProps) {
+  const router = useRouter();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent parent card navigation
+    router.push(`/runs/${run.id}`);
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      type="button"
+      aria-label={`View run ${run.id}, status: ${run.status}`}
+      className="flex w-full items-center justify-between rounded-lg border border-slate-800/50 bg-slate-900/30 px-3 py-2 text-left hover:bg-slate-800/50"
+    >
+      <span>{run.id}</span>
+      <ArrowRight className="h-3 w-3" />
+    </button>
+  );
+}
+
+export const MyItemRunRow = memo(MyItemRunRowComponent);
+```
+
+### Key Implementation Points
+
+1. **Use button + router.push for nested navigation** - Don't use `<Link>` inside clickable cards
+2. **Always call stopPropagation()** - On all nested clickable elements
+3. **Conditional render for lazy loading** - Use `{isExpanded && <Component />}` not React Query `enabled` flag
+4. **Memoize list item components** - Use `React.memo()` for performance
+5. **Add aria-labels** - For accessibility on expand buttons and clickable rows
+6. **Show loading skeleton** - Match the dimensions of actual content
+7. **Limit displayed items** - Show 5 items with "more" indicator for performance
+
+### Reference Implementation
+
+See `frontend/src/features/conversation/components/IdeationQueueCard.tsx` and related components.
+
+---
+
+## Accessibility Best Practices
+
+> Added from: conversation-status-tracking implementation (2025-12-08)
+
+### aria-labels for Interactive Elements
+
+Always add `aria-label` to buttons that:
+- Have only icon content
+- Navigate to different pages
+- Perform actions that aren't obvious from visible text
+
+```typescript
+// Icon-only button
+<Button
+  onClick={handleEdit}
+  variant="ghost"
+  size="sm"
+  aria-label="Edit conversation"
+>
+  <Pencil className="h-3 w-3" />
+</Button>
+
+// Button with text + icon that navigates
+<Button
+  onClick={handleEditClick}
+  variant="outline"
+  size="sm"
+  aria-label="Edit research idea"
+>
+  <Pencil className="h-3 w-3 mr-1.5" />
+  Edit
+</Button>
+```
+
+### Device-Agnostic Language
+
+Use language that works for all input methods (mouse, touch, keyboard):
+
+| Avoid | Prefer |
+|-------|--------|
+| "Click on an idea" | "Choose an idea" |
+| "Click here to continue" | "Select to continue" |
+| "Click the button" | "Use the button" |
+| "Tap to expand" | "Expand" |
+
+```typescript
+// Bad
+<p className="text-xs text-slate-500">
+  Click on an idea above to preview its details
+</p>
+
+// Good
+<p className="text-xs text-slate-500">
+  Choose an idea above to preview its details
+</p>
+```
+
+### Expand/Collapse Accessibility
+
+For expandable sections, include both `aria-label` and `aria-expanded`:
+
+```typescript
+<button
+  onClick={handleExpandToggle}
+  type="button"
+  aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
+  aria-expanded={isExpanded}
+  className="..."
+>
+  {isExpanded ? "Hide Runs" : "Show Runs"}
+  {isExpanded ? <ChevronUp /> : <ChevronDown />}
+</button>
+```
+
+### Button Groups
+
+Use `role="group"` and `aria-label` for related buttons:
+
+```typescript
+<div className="flex items-center gap-1" role="group" aria-label="Log level filter">
+  {options.map(option => (
+    <button
+      key={option}
+      aria-pressed={activeFilter === option}
+      // ...
+    >
+      {option}
+    </button>
+  ))}
+</div>
+```
+
+---
+
 ## Verification
 
 1. Import the component in a page:

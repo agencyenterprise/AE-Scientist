@@ -26,7 +26,7 @@ const SECTION_TO_FIELD: Record<SectionType, string> = {
 // Map section names to display titles
 export const SECTION_TITLES: Record<SectionType, string> = {
   title: "Title",
-  hypothesis: "Hypothesis",
+  hypothesis: "Research Hypothesis",
   related_work: "Related Work",
   abstract: "Abstract",
   expected_outcome: "Expected Outcome",

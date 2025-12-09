@@ -1,0 +1,1222 @@
+{
+  "id": "conversation-status-tracking",
+  "name": "Conversation Status Tracking",
+  "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
+  "created": "2025-12-08T00:00:00Z",
+  "lastUpdated": "2025-12-09T11:50:45.483981",
+  "classification": {
+    "type": "fullstack",
+    "scope": "single-feature",
+    "complexity": "moderate",
+    "confidence": "high",
+    "requiresUserStories": false,
+    "workflow": [
+      "feature-planner",
+      "codebase-analyzer",
+      "feature-architecture-expert",
+      "fastapi-expert",
+      "nextjs-expert",
+      "feature-executor",
+      "documentation-reviewer"
+    ],
+    "reasoning": {
+      "type": "User story describes both backend (status column + database migration + auto-update) and frontend (UI updates to 2 components)",
+      "scope": "Changes limited to conversation feature - backend schema, service updates, API changes, and 2 frontend components",
+      "complexity": "Moderate - requires database migration, backend status update logic, API changes, and coordinated frontend updates",
+      "requiresUserStories": "False - file-driven approach is sufficient. While fullstack and user-facing, the scope is contained to a single feature with clear technical requirements (status enum + edit buttons).",
+      "workflow": "Full workflow needed due to fullstack nature: database schema changes (migration), backend API updates (FastAPI), frontend component modifications (Next.js), and documentation"
+    }
+  },
+  "techStack": {
+    "detected": [
+      "nextjs-15",
+      "typescript",
+      "react-19",
+      "fastapi",
+      "postgresql",
+      "alembic"
+    ],
+    "versions": {
+      "next": "15.4.8",
+      "react": "19.1.2",
+      "fastapi": "0.115.0",
+      "typescript": "5.x"
+    }
+  },
+  "docsConsulted": {
+    "project": [
+      ".agent/README.md",
+      ".agent/System/project_architecture.md",
+      ".agent/System/server_architecture.md",
+      ".agent/System/frontend_architecture.md",
+      ".agent/SOP/server_database_migrations.md"
+    ],
+    "external": [],
+    "existingFeatures": [
+      "server/app/models/conversations.py",
+      "server/app/api/conversations.py",
+      "server/app/services/database/conversations.py",
+      "server/app/services/database/research_pipeline_runs.py",
+      "server/app/services/database/ideas.py",
+      "server/app/services/database/__init__.py",
+      "server/database_migrations/versions/0003_manual_seed_columns.py",
+      "server/database_migrations/versions/0012_substage_completed_events.py",
+      "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
+      "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+      "frontend/src/features/conversation/types/ideation-queue.types.ts"
+    ]
+  },
+  "assets": {
+    "reuse": [
+      {
+        "name": "Button",
+        "path": "@/shared/components/ui/button",
+        "reason": "shadcn Button component - use variant='ghost' for Edit button",
+        "usedIn": [],
+        "patterns": {
+          "variants": [
+            "default",
+            "destructive",
+            "outline",
+            "secondary",
+            "ghost",
+            "link"
+          ],
+          "sizes": [
+            "default",
+            "sm",
+            "lg",
+            "icon",
+            "icon-sm",
+            "icon-lg"
+          ],
+          "recommended": "variant='ghost' size='sm' for Edit button in card footer"
+        }
+      },
+      {
+        "name": "cn",
+        "path": "@/shared/lib/utils",
+        "reason": "Utility for conditional className merging (twMerge + clsx)",
+        "usedIn": []
+      },
+      {
+        "name": "Pencil (lucide-react)",
+        "path": "lucide-react",
+        "reason": "Standard edit icon - already used in 7+ components for edit actions",
+        "usedIn": [],
+        "examples": [
+          "frontend/src/features/conversation/components/TitleEditor.tsx",
+          "frontend/src/features/project-draft/components/ProjectDraftHeader.tsx",
+          "frontend/src/features/project-draft/components/ExperimentsSection.tsx"
+        ]
+      },
+      {
+        "name": "useRouter",
+        "path": "next/navigation",
+        "reason": "Next.js 15 App Router navigation hook",
+        "usedIn": [],
+        "pattern": "const router = useRouter(); router.push('/conversations/{id}')"
+      },
+      {
+        "name": "stopPropagation pattern",
+        "path": "n/a",
+        "reason": "Prevent card click when clicking button inside card",
+        "usedIn": [],
+        "pattern": "onClick={(e) => { e.stopPropagation(); ... }}",
+        "examples": [
+          "frontend/src/features/conversation/components/IdeationQueueCard.tsx:39",
+          "frontend/src/features/conversation/components/IdeationQueueRunItem.tsx:23"
+        ]
+      },
+      {
+        "name": "formatRelativeTime",
+        "path": "@/shared/lib/date-utils",
+        "reason": "Date formatting utility (uses date-fns)",
+        "usedIn": []
+      },
+      {
+        "name": "Migration pattern: Simple add column",
+        "path": "server/database_migrations/versions/0003_manual_seed_columns.py",
+        "reason": "Pattern for adding column to conversations - no view maintenance needed",
+        "usedIn": [],
+        "pattern": "op.add_column() + backfill with CASE expression"
+      },
+      {
+        "name": "CONVERSATION_STATUSES tuple",
+        "path": "server/app/services/database/conversations.py",
+        "reason": "New constant following PIPELINE_RUN_STATUSES pattern for validation",
+        "usedIn": [],
+        "pattern": "CONVERSATION_STATUSES = ('draft', 'with_research')"
+      },
+      {
+        "name": "ConversationsMixin update methods",
+        "path": "server/app/services/database/conversations.py",
+        "reason": "Patterns for update_conversation_title and other update methods",
+        "usedIn": [],
+        "methods": [
+          "update_conversation_title(conversation_id, new_title) -> bool",
+          "update_conversation_messages(conversation_id, messages) -> bool"
+        ]
+      },
+      {
+        "name": "IdeasMixin.get_idea_by_id",
+        "path": "server/app/services/database/ideas.py:368",
+        "reason": "Used to lookup conversation_id from idea_id for status update",
+        "usedIn": []
+      },
+      {
+        "name": "Transaction pattern with cursor",
+        "path": "server/app/services/database/research_pipeline_runs.py:75-112",
+        "reason": "Pattern for multi-step operations in same transaction",
+        "usedIn": [],
+        "pattern": "with self._get_connection() as conn:\n    with conn.cursor() as cursor:\n        cursor.execute(...)\n        conn.commit()"
+      }
+    ],
+    "create": [
+      {
+        "name": "0013_add_conversation_status.py",
+        "path": "server/database_migrations/versions/0013_add_conversation_status.py",
+        "reason": "Migration to add status column with default and backfill (simplified - no view updates)",
+        "status": "pending"
+      },
+      {
+        "name": "update_conversation_status method",
+        "path": "server/app/services/database/conversations.py",
+        "reason": "New method in ConversationsMixin to update status",
+        "status": "pending",
+        "signature": "update_conversation_status(self, conversation_id: int, status: str) -> bool"
+      },
+      {
+        "name": "Edit button in IdeationQueueCard footer",
+        "path": "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
+        "reason": "Add Edit button next to expand/collapse toggle (AC3)",
+        "status": "pending"
+      },
+      {
+        "name": "Edit button in InlineIdeaView header",
+        "path": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+        "reason": "Add Edit button in metadata header area (AC4)",
+        "status": "pending"
+      }
+    ],
+    "extract": []
+  },
+  "files": {
+    "created": [
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks/conversation-status-tracking/02c-fastapi-guidance.md",
+        "by": "fastapi-expert",
+        "at": "2025-12-09T09:15:00.000000"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/database_migrations/versions/0013_add_conversation_status.py",
+        "by": "executor",
+        "at": "2025-12-08T17:02:43.843879"
+      }
+    ],
+    "modified": [
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database/conversations.py",
+        "by": "executor",
+        "at": "2025-12-08T17:02:58.038451"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/models/conversations.py",
+        "by": "executor",
+        "at": "2025-12-08T17:04:00.150102"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/api/conversations.py",
+        "by": "executor",
+        "at": "2025-12-08T17:04:13.113540"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database/research_pipeline_runs.py",
+        "by": "executor",
+        "at": "2025-12-08T17:04:27.082250"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/conversation/components/IdeationQueueCard.tsx",
+        "by": "executor",
+        "at": "2025-12-08T17:04:36.623993"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/conversation/components/InlineIdeaView.tsx",
+        "by": "executor",
+        "at": "2025-12-08T17:05:04.545852"
+      },
+      {
+        "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/database_migrations/versions/0013_add_conversation_status.py",
+        "by": "executor",
+        "at": "2025-12-08T17:17:38.466126"
+      }
+    ],
+    "pending": []
+  },
+  "phases": [
+    {
+      "id": "classification",
+      "agent": "task-classifier",
+      "status": "completed",
+      "completedAt": "2025-12-08T00:00:00Z"
+    },
+    {
+      "id": "planning",
+      "agent": "feature-planner",
+      "status": "completed",
+      "completedAt": "2025-12-08T18:00:00Z",
+      "docsRead": [
+        ".agent/README.md",
+        ".agent/System/project_architecture.md",
+        ".agent/System/server_architecture.md",
+        ".agent/System/frontend_architecture.md",
+        ".agent/SOP/server_database_migrations.md"
+      ],
+      "notes": "REVISED: Changed from computed status to stored ENUM column per user request"
+    },
+    {
+      "id": "analysis",
+      "agent": "codebase-analyzer",
+      "status": "completed",
+      "completedAt": "2025-12-08T20:30:00Z",
+      "description": "Analyzed existing conversation schema, API patterns, and component structure"
+    },
+    {
+      "id": "architecture",
+      "agent": "feature-architecture-expert",
+      "status": "completed",
+      "completedAt": "2025-12-08T21:00:00Z",
+      "description": "SOLID architecture design completed with implementation order and file specifications"
+    },
+    {
+      "id": "tech-guidance",
+      "parallel": true,
+      "subtasks": [
+        {
+          "agent": "fastapi-expert",
+          "status": "completed",
+          "completedAt": "2025-12-09T09:15:00Z",
+          "description": "FastAPI/Pydantic guidance REVISED: Simplified migration (no view updates) + inline queries. Status column added to conversations table, naturally available in all queries via inline SQL."
+        },
+        {
+          "agent": "nextjs-expert",
+          "status": "pending",
+          "description": "Guide component modifications and routing patterns"
+        }
+      ]
+    },
+    {
+      "id": "implementation",
+      "agent": "feature-executor",
+      "status": "completed",
+      "completedAt": "2025-12-09T10:15:00Z",
+      "description": "Execute database migration, backend changes, and frontend updates"
+    },
+    {
+      "id": "copy-review",
+      "agent": "copy-reviewer",
+      "status": "completed",
+      "completedAt": "2025-12-08T18:35:00Z",
+      "description": "Applied copy fixes: aria-label accessibility and device-agnostic language"
+    },
+    {
+      "id": "documentation",
+      "agent": "documentation-reviewer",
+      "status": "completed",
+      "completedAt": "2025-12-08T19:00:00Z",
+      "description": "Updated SOPs with learnings: VARCHAR(255) for status columns, transaction-safe cursor helpers, inline query strategy, accessibility best practices"
+    }
+  ],
+  "decisions": [
+    {
+      "phase": "classification",
+      "key": "workflow",
+      "value": "fullstack-workflow",
+      "reason": "Requires database migration, backend API changes, and frontend component updates. Full coordination needed across tech stack."
+    },
+    {
+      "phase": "classification",
+      "key": "requiresUserStories",
+      "value": false,
+      "reason": "Despite being fullstack and user-facing, the scope is well-defined with 3 clear acceptance criteria that map directly to technical tasks. No user journey decomposition needed - file-driven approach is more efficient."
+    },
+    {
+      "phase": "classification",
+      "key": "skip-design-expert",
+      "value": true,
+      "reason": "Edit button is a simple standard UI pattern (button with text). No visual design or animation complexity."
+    },
+    {
+      "phase": "classification",
+      "key": "include-fastapi-expert",
+      "value": true,
+      "reason": "Database schema changes and migration patterns require FastAPI expertise"
+    },
+    {
+      "phase": "classification",
+      "key": "include-nextjs-expert",
+      "value": true,
+      "reason": "Component modifications and routing to /conversation/[id] require Next.js expertise"
+    },
+    {
+      "phase": "planning",
+      "key": "architectural-approach",
+      "value": "stored-enum-column",
+      "reason": "REVISED per user request. User wants a dedicated status column for better status handling. Enables direct queries, explicit state management, and flexibility for future status values.",
+      "alternatives": [
+        {
+          "name": "computed-status-pattern",
+          "rejectedWhy": "User explicitly requested stored column for better status control"
+        },
+        {
+          "name": "hybrid-cached-status",
+          "rejectedWhy": "Over-engineered for current requirements"
+        }
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "status-values",
+      "value": "draft|with_research",
+      "reason": "Two-state ENUM matching user story. 'draft' = initial state, 'with_research' = has launched research"
+    },
+    {
+      "phase": "planning",
+      "key": "status-column-type",
+      "value": "VARCHAR(255) with server_default",
+      "reason": "REVISED: Changed from TEXT to VARCHAR(255) per user request for better indexing support. Allows future database optimization and composite index creation. Python-level validation via CONVERSATION_STATUSES tuple.",
+      "revision": "2025-12-08T23:45:00Z",
+      "revisionReason": "User feedback: VARCHAR(255) is more appropriate for indexing than TEXT, maintains flexibility for future optimization"
+    },
+    {
+      "phase": "planning",
+      "key": "status-default",
+      "value": "draft",
+      "reason": "All new conversations start as 'draft'. Existing conversations without status should default to 'draft' during migration."
+    },
+    {
+      "phase": "planning",
+      "key": "status-transition-trigger",
+      "value": "application-level",
+      "reason": "Update status to 'with_research' in create_research_pipeline_run() method. Application-level logic is easier to maintain than database triggers and matches existing patterns."
+    },
+    {
+      "phase": "planning",
+      "key": "query-strategy",
+      "value": "inline-queries-no-view",
+      "reason": "REVISED: Use inline queries instead of database view. Simpler migration (just ADD COLUMN + backfill), no view maintenance, status naturally included in all table queries.",
+      "revision": "2025-12-09T09:15:00Z",
+      "revisionReason": "User feedback: Prefers inline queries over database view for simplicity and maintainability"
+    },
+    {
+      "phase": "planning",
+      "key": "edit-button-placement",
+      "value": "footer-row",
+      "reason": "Place Edit button in footer area next to existing expand/collapse toggle for consistency. Use stopPropagation to prevent card click."
+    },
+    {
+      "phase": "planning",
+      "key": "edit-button-icon",
+      "value": "Pencil",
+      "reason": "Lucide Pencil icon is standard for edit actions, already imported in codebase"
+    },
+    {
+      "phase": "analysis",
+      "key": "status-validation-pattern",
+      "value": "python-tuple-validation",
+      "reason": "Codebase uses Python tuple constants (PIPELINE_RUN_STATUSES) for validation rather than database CHECK constraints. Should follow this pattern for consistency."
+    },
+    {
+      "phase": "analysis",
+      "key": "button-styling",
+      "value": "ghost-variant-small-size",
+      "reason": "Existing card buttons use ghost variant for subtle appearance. Footer buttons should match: variant='ghost' size='sm'"
+    },
+    {
+      "phase": "analysis",
+      "key": "migration-numbering",
+      "value": "0013",
+      "reason": "Latest migration is 0012_substage_completed_events.py, next should be 0013_add_conversation_status.py"
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-srp",
+      "value": "status-update-in-conversations-mixin",
+      "reason": "Status update method belongs in ConversationsMixin (SRP: manages conversation state). ResearchPipelineRunsMixin calls it after creating run."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-ocp",
+      "value": "status-values-as-constant",
+      "reason": "CONVERSATION_STATUSES tuple allows adding new statuses without modifying validation logic. Open for extension (new values), closed for modification."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-dip",
+      "value": "mixin-composition",
+      "reason": "DatabaseManager composes mixins. ResearchPipelineRunsMixin can call ConversationsMixin methods via self since both are mixed into DatabaseManager."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-analysis-namedtuple",
+      "value": "acceptable-pattern",
+      "reason": "NamedTuples are immutable data containers (value objects). Adding a field is data extension, not a SOLID violation. They follow SRP as pure data transfer objects."
+    },
+    {
+      "phase": "architecture",
+      "key": "cross-mixin-call-pattern",
+      "value": "self-method-call",
+      "reason": "ResearchPipelineRunsMixin can call update_conversation_status via self because both mixins are composed into DatabaseManager. No need for StatusManager class."
+    },
+    {
+      "phase": "architecture",
+      "key": "transaction-boundary",
+      "value": "single-transaction",
+      "reason": "Status update and run creation should be in same transaction for atomicity. Use cursor from existing transaction context."
+    },
+    {
+      "phase": "architecture",
+      "key": "implementation-order",
+      "value": "migration-first",
+      "reason": "1. Migration (schema), 2. ConversationsMixin (status method + NamedTuples), 3. Models (Pydantic), 4. API (response conversion), 5. ResearchPipelineRunsMixin (auto-update), 6. Frontend (Edit buttons)"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "pydantic-version",
+      "value": "v2.x",
+      "reason": "FastAPI 0.116.1 uses Pydantic v2 patterns: Field(), field_validator, no Config classes"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "database-type",
+      "value": "VARCHAR(255) not TEXT",
+      "reason": "REVISED: Changed from TEXT to VARCHAR(255) for better indexing. Allows B-tree indexes and composite index creation. Maintains flexibility for future database optimization. Validated via Python CONVERSATION_STATUSES tuple.",
+      "revision": "2025-12-08T23:45:00Z"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "migration-backfill-strategy",
+      "value": "sql-case-expression",
+      "reason": "Use SQL CASE expression to join with research_pipeline_runs and set status based on existence of runs"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "migration-view-updates",
+      "value": "no-view-updates-use-inline-queries",
+      "reason": "REVISED: Simplified migration - just ADD COLUMN + backfill. No view maintenance. Use inline queries in service layer which naturally SELECT all columns from conversations table.",
+      "revision": "2025-12-09T09:15:00Z",
+      "revisionReason": "User preference for simpler migration approach without database view management"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "transaction-pattern",
+      "value": "cursor-helper-method",
+      "reason": "Create _update_conversation_status_with_cursor() helper to reuse in multi-step transactions without committing"
+    },
+    {
+      "phase": "tech-guidance",
+      "key": "indexing-benefits",
+      "value": "varchar-ready-for-optimization",
+      "reason": "VARCHAR(255) column allows for future database performance optimization. Text columns cannot be fully indexed; VARCHAR with length constraints support B-tree and composite indexes. Ready for scaling.",
+      "revision": "2025-12-08T23:45:00Z"
+    },
+    {
+      "phase": "implementation",
+      "key": "migration-simplified",
+      "value": "no-view-updates-applied",
+      "reason": "Executor removed database view updates from migration. Migration now only handles schema changes (ADD COLUMN + backfill). Service layer uses inline queries which naturally include status field from conversations table."
+    }
+  ],
+  "searches": [
+    {
+      "pattern": "server/database_migrations/versions/*.py",
+      "tool": "glob",
+      "results": 12,
+      "at": "2025-12-08T18:00:00Z"
+    },
+    {
+      "pattern": "lucide-react",
+      "tool": "grep",
+      "results": 30,
+      "at": "2025-12-08T20:30:00Z"
+    },
+    {
+      "pattern": "useRouter",
+      "tool": "grep",
+      "results": 19,
+      "at": "2025-12-08T20:30:00Z"
+    },
+    {
+      "pattern": "Pencil",
+      "tool": "grep",
+      "results": 13,
+      "at": "2025-12-08T20:30:00Z"
+    },
+    {
+      "pattern": "stopPropagation",
+      "tool": "grep",
+      "results": 9,
+      "at": "2025-12-08T20:30:00Z"
+    },
+    {
+      "pattern": "sa.CheckConstraint",
+      "tool": "grep",
+      "results": 1,
+      "at": "2025-12-08T20:30:00Z"
+    },
+    {
+      "pattern": "class DatabaseManager|def get_conversation_id_by_idea",
+      "tool": "grep",
+      "results": 1,
+      "at": "2025-12-08T21:00:00Z",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-tracking/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T16:26:23.500825"
+    },
+    {
+      "pattern": "def convert_db_to_api_response",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:04:01.992206",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/api"
+    },
+    {
+      "pattern": "def convert_db_to_api_response",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:17:19.406419",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/api/conversations.py"
+    },
+    {
+      "pattern": "ConversationResponse\\(|return ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:17:23.965678",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/api/conversations.py"
+    },
+    {
+      "pattern": "def update_conversation_status|def _update_conversation_status_with_cursor",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:17:50.308513",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/services/database/conversations.py"
+    },
+    {
+      "pattern": "**/*copy-guidelines*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:26:34.835873",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent"
+    },
+    {
+      "pattern": "aria-label",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:34.843001",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features"
+    },
+    {
+      "pattern": "Edit.*button|edit.*aria-label|>Edit<",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:40.115869",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:26:46.878004",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks/conversation-status-tracking"
+    },
+    {
+      "pattern": "variant=\"outline\".*Edit|Edit.*variant=\"outline\"",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:52.012977",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "variant=\"ghost\".*Edit|Edit.*variant=\"ghost\"",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-08T17:26:52.017530",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/*.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:44:55.268468",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/SOP"
+    },
+    {
+      "pattern": "**/*.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-08T17:44:55.270085",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/System"
+    },
+    {
+      "pattern": "conversation.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:09:12.328020"
+    },
+    {
+      "pattern": "**/IdeationQueueCard*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:12.736335"
+    },
+    {
+      "pattern": "**/design-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:31.136614"
+    },
+    {
+      "pattern": "**/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:39:06.681714"
+    },
+    {
+      "pattern": "**/globals.css",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:09:59.937591"
+    },
+    {
+      "pattern": "frontend/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:39:27.157053"
+    },
+    {
+      "pattern": "**/.agent/Tasks/**/task.json",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:12.433028"
+    },
+    {
+      "pattern": "interface.*Props.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.115672",
+      "glob": "**/*IdeationQueue*.tsx"
+    },
+    {
+      "pattern": "badge|Badge|pill|status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.121037",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "**/*.tsx"
+    },
+    {
+      "pattern": "frontend/tailwind.config.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:12.356310"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:17.602865",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend"
+    },
+    {
+      "pattern": "frontend/src/**/tailwind.config.*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:17.828508"
+    },
+    {
+      "pattern": "draft|with_research",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:25.285470",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend"
+    },
+    {
+      "pattern": "ConversationResponse.*status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:32.521180",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/Tasks/**/",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:32.983443"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:37.967942",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-*/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:38.135705"
+    },
+    {
+      "pattern": "status.*description",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:10:50.695833",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": ".agent/System/design-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:10:50.887758"
+    },
+    {
+      "pattern": "**/conversation/types.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:13.840277",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "interface IdeationQueueCardProps|type IdeationQueueCardProps|export.*IdeationQueueCardProps",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:13.843387",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/conversation"
+    },
+    {
+      "pattern": "**/features/conversation/index.ts",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:17.871807",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "export.*ConversationResponse|interface ConversationResponse|type ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:22.644387",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "ConversationResponse.*\\{|status.*:",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:29.974423",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "conversation_status|status.*draft|status.*with_research",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:39.655202",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "draft.*with_research|ConversationStatus",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:39.666721",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:14:45.110110",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/types/api.gen.ts"
+    },
+    {
+      "pattern": "**/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:14:57.347513",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks"
+    },
+    {
+      "pattern": "class ConversationResponse|status.*str",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:02.104301",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "**/schemas/**/*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:15:08.862734",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "ConversationResponse",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:12.803388",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server",
+      "glob": "**/*.py"
+    },
+    {
+      "pattern": "class ConversationResponse|ConversationResponse.*BaseModel",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:15:16.653075",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/models/conversations.py"
+    },
+    {
+      "pattern": "**/research-utils.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:15:21.944184",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/.agent/Tasks/*/conversation-status-badge/task.json",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:08.750217"
+    },
+    {
+      "pattern": "**/.agent/Tasks/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:20:15.574765"
+    },
+    {
+      "pattern": ".agent/Tasks/**/conversation-status-badge/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:22:36.871151"
+    },
+    {
+      "pattern": ".agent/Tasks/conversation-status-badge/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:22:42.528230"
+    },
+    {
+      "pattern": "slate-400|slate-600|slate-700|slate-900|sky-400|sky-500",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:22:48.378518",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend",
+      "glob": "tailwind.config.*"
+    },
+    {
+      "pattern": "**/*badge*.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.905580",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "**/*status*.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.910783",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src"
+    },
+    {
+      "pattern": "badge|status|label",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:25:40.925910",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": ".agent/System/brand-voice.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:41.454392",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/System/copy-guidelines.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:25:41.457130",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "Draft|Research|status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:25:54.570314",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": ".agent/Tasks/**/conversation-status-badge/**/*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.773178",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/Tasks/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.776643",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": ".agent/Tasks/**/*status*",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:26:00.781933",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "ResearchPipelineRunsMixin",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:50:37.326642",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "**/*mixin*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-09T11:50:37.375969",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "class.*Mixin.*ConnectionProvider",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:50:40.240400",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "_update_conversation_status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:50:40.242734",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "class ConversationsMixin",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-09T11:50:45.483973",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    }
+  ],
+  "reviews": {
+    "copy": [
+      {
+        "type": "copy-review",
+        "status": "completed",
+        "completedAt": "2025-12-08T18:35:00Z",
+        "appliedFixes": [
+          {
+            "file": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+            "category": "must-fix",
+            "change": "Added aria-label=\"Edit research idea\" to Edit button",
+            "line": 113
+          },
+          {
+            "file": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+            "category": "should-fix",
+            "change": "Changed 'Click on an idea above to preview its details' to 'Choose an idea above to preview its details' for device-agnostic language",
+            "line": 36
+          }
+        ]
+      }
+    ],
+    "queries": []
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "AC1",
+      "description": "Create a status column for conversations: Draft | With Research (when we have launched research)",
+      "technicalRequirements": [
+        "Add 'status' VARCHAR(255) column to conversations table with server_default='draft'",
+        "Allowed values: 'draft', 'with_research' (validated in Python via CONVERSATION_STATUSES tuple)",
+        "Migration backfills existing conversations: set to 'with_research' if has research runs, else 'draft'",
+        "Add status field to ConversationResponse model",
+        "Add status field to FullConversation and DashboardConversation NamedTuples",
+        "Service queries naturally include status via inline SQL (no view needed)"
+      ]
+    },
+    {
+      "id": "AC2",
+      "description": "Auto-update status when research run is created",
+      "technicalRequirements": [
+        "Add update_conversation_status() method to ConversationsMixin",
+        "Add _update_conversation_status_with_cursor() for transaction-safe updates",
+        "In create_research_pipeline_run(), lookup conversation_id via idea_id",
+        "Call status update within existing transaction (before conn.commit())",
+        "Use IdeasMixin.get_idea_by_id() or direct SQL to get conversation_id"
+      ]
+    },
+    {
+      "id": "AC3",
+      "description": "Have an 'Edit' button in the IdeationQueueCard so I can go to the /conversation/[id] page",
+      "technicalRequirements": [
+        "Add Edit button with Pencil icon to IdeationQueueCard footer",
+        "Button uses router.push to navigate to /conversations/{id}",
+        "onClick handler calls e.stopPropagation() to prevent card click",
+        "Use Button component with variant='ghost' size='sm'",
+        "Style: text-slate-400 hover:text-slate-300"
+      ]
+    },
+    {
+      "id": "AC4",
+      "description": "Have an 'Edit' button in the InlineIdeaView so I can go to the /conversation/[id] page",
+      "technicalRequirements": [
+        "Add Edit button in InlineIdeaView header area",
+        "Position in the flex row with metadata (after badges)",
+        "Button uses router.push to navigate to /conversations/{id}",
+        "Use Button component with variant='outline' size='sm'",
+        "Include Pencil icon and 'Edit' text"
+      ]
+    }
+  ],
+  "architecture": {
+    "implementationOrder": [
+      {
+        "order": 1,
+        "file": "server/database_migrations/versions/0013_add_conversation_status.py",
+        "type": "create",
+        "reason": "Schema must exist before code references it",
+        "dependencies": [],
+        "solidPrinciples": [
+          "SRP: Migration only handles schema changes"
+        ]
+      },
+      {
+        "order": 2,
+        "file": "server/app/services/database/conversations.py",
+        "type": "modify",
+        "reason": "Add CONVERSATION_STATUSES constant, update_conversation_status method, and update NamedTuples",
+        "dependencies": [
+          "0013_add_conversation_status.py"
+        ],
+        "solidPrinciples": [
+          "SRP: ConversationsMixin manages conversation state",
+          "OCP: Status values extensible via tuple constant"
+        ]
+      },
+      {
+        "order": 3,
+        "file": "server/app/models/conversations.py",
+        "type": "modify",
+        "reason": "Add status field to ConversationResponse Pydantic model",
+        "dependencies": [
+          "conversations.py service"
+        ],
+        "solidPrinciples": [
+          "SRP: Models define API contracts only"
+        ]
+      },
+      {
+        "order": 4,
+        "file": "server/app/api/conversations.py",
+        "type": "modify",
+        "reason": "Update convert_db_to_api_response to include status field",
+        "dependencies": [
+          "ConversationResponse model"
+        ],
+        "solidPrinciples": [
+          "SRP: API layer handles HTTP concerns only"
+        ]
+      },
+      {
+        "order": 5,
+        "file": "server/app/services/database/research_pipeline_runs.py",
+        "type": "modify",
+        "reason": "Add status update call in create_research_pipeline_run",
+        "dependencies": [
+          "update_conversation_status method"
+        ],
+        "solidPrinciples": [
+          "SRP: Run creation + side effect (status update)",
+          "DIP: Calls abstraction via self"
+        ]
+      },
+      {
+        "order": 6,
+        "file": "frontend/src/features/conversation/components/IdeationQueueCard.tsx",
+        "type": "modify",
+        "reason": "Add Edit button with navigation",
+        "dependencies": [],
+        "solidPrinciples": [
+          "SRP: Component handles display + user interaction"
+        ]
+      },
+      {
+        "order": 7,
+        "file": "frontend/src/features/conversation/components/InlineIdeaView.tsx",
+        "type": "modify",
+        "reason": "Add Edit button with navigation",
+        "dependencies": [],
+        "solidPrinciples": [
+          "SRP: Component handles display + user interaction"
+        ]
+      }
+    ],
+    "interfaces": {
+      "CONVERSATION_STATUSES": {
+        "type": "tuple",
+        "location": "server/app/services/database/conversations.py",
+        "definition": "CONVERSATION_STATUSES = ('draft', 'with_research')",
+        "purpose": "Validation constant for status values"
+      },
+      "update_conversation_status": {
+        "type": "method",
+        "location": "server/app/services/database/conversations.py",
+        "signature": "def update_conversation_status(self, conversation_id: int, status: str) -> bool",
+        "purpose": "Public method for updating conversation status",
+        "validation": "Raises ValueError if status not in CONVERSATION_STATUSES"
+      },
+      "_update_conversation_status_with_cursor": {
+        "type": "method",
+        "location": "server/app/services/database/conversations.py",
+        "signature": "def _update_conversation_status_with_cursor(self, cursor, conversation_id: int, status: str) -> None",
+        "purpose": "Transaction-safe status update for use within existing transactions",
+        "validation": "Raises ValueError if status not in CONVERSATION_STATUSES"
+      }
+    },
+    "solidAnalysis": {
+      "violations": [],
+      "recommendations": [
+        {
+          "file": "server/app/services/database/research_pipeline_runs.py",
+          "observation": "create_research_pipeline_run will have two responsibilities: creating run + updating status",
+          "verdict": "ACCEPTABLE",
+          "reason": "Status update is a side effect of run creation, not a separate responsibility. They are causally linked. Extracting to StatusManager would over-engineer."
+        },
+        {
+          "file": "server/app/services/database/conversations.py",
+          "observation": "NamedTuples (FullConversation, DashboardConversation) are data containers",
+          "verdict": "NOT A VIOLATION",
+          "reason": "NamedTuples are value objects / DTOs. Adding a field is data structure extension, not responsibility bloat. They have single responsibility: carry data."
+        },
+        {
+          "file": "server/app/api/conversations.py",
+          "observation": "convert_db_to_api_response function handles mapping",
+          "verdict": "GOOD SRP",
+          "reason": "Single responsibility: convert DB NamedTuple to API Pydantic model. Adding status field is natural extension."
+        }
+      ],
+      "refactoringRequired": false
+    }
+  },
+  "currentPhase": "documentation",
+  "nextAgent": "documentation-reviewer",
+  "blockedBy": null
+}

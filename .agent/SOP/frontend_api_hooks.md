@@ -609,6 +609,86 @@ export function useRecentItems() {
 | Configuration/settings | 5 minutes | Rarely changes during session |
 | User profile | 1 minute | Moderate update frequency |
 | Search results | 0 (default) | Always fresh for new searches |
+| Nested/expandable data (runs, sub-items) | 30 seconds | User expects updates when re-expanding |
+
+### On-Demand Nested Data Fetching
+
+> Added from: ideation-queue-research-runs implementation (2025-12-08)
+
+When fetching data for nested/expandable UI elements, use conditional rendering instead of React Query's `enabled` flag. This pattern is cleaner and aligns with React's mental model.
+
+**Pattern: Conditional Render (Recommended)**
+
+```typescript
+// In parent component
+const [isExpanded, setIsExpanded] = useState(false);
+
+return (
+  <div>
+    <button onClick={() => setIsExpanded(prev => !prev)}>Toggle</button>
+    {/* Component only mounts when expanded, triggering the fetch */}
+    {isExpanded && <NestedDataList itemId={id} />}
+  </div>
+);
+
+// In NestedDataList component
+export function NestedDataList({ itemId }: { itemId: number }) {
+  // Hook runs unconditionally when component is mounted
+  const { data, isLoading, error, refetch } = useNestedData(itemId);
+
+  if (isLoading) return <Skeleton />;
+  if (error) return <ErrorWithRetry onRetry={refetch} />;
+  return <DataList items={data} />;
+}
+
+// In hook - no enabled flag needed
+export function useNestedData(itemId: number) {
+  return useQuery({
+    queryKey: ["nested-data", itemId],
+    queryFn: () => fetchNestedData(itemId),
+    staleTime: 30 * 1000,  // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache after unmount
+  });
+}
+```
+
+**Why this is better than `enabled` flag:**
+
+1. Hook is only instantiated when needed (no wasted query subscriptions)
+2. Matches React's mental model (mount = fetch, unmount = cleanup)
+3. React Query cache persists data between mount/unmount cycles
+4. No need to track expanded state in the hook
+
+**When to use `enabled` flag instead:**
+
+- When the hook is called unconditionally but you want to skip the fetch
+- When you need to access the query client before data is needed
+- When the hook is part of a larger composition that can't be conditionally rendered
+
+**Type Derivation for Nested API Data**
+
+When extracting types from nested API response fields:
+
+```typescript
+import type { ConversationResponse } from "@/types";
+
+// Derive the array item type from the response
+type ResearchRunSummary = NonNullable<ConversationResponse["research_runs"]>[number];
+
+async function fetchNestedData(id: number): Promise<ResearchRunSummary[]> {
+  const data = await apiFetch<ConversationResponse>(`/conversations/${id}`);
+  // Sort by created_at descending (newest first)
+  return (data.research_runs ?? []).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+```
+
+This approach:
+- Derives types directly from auto-generated API schema
+- Ensures type safety aligned with backend
+- Automatically updates when API schema changes
+- Avoids manual type duplication
 
 ### QueryProvider Configuration
 

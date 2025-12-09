@@ -21,7 +21,6 @@ from typing import Callable
 
 from .agent_manager import AgentManager
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
-from .interpreter import ExecutionResult
 from .journal import Journal
 from .log_summarization import overall_summarize
 from .stages.base import StageMeta
@@ -62,13 +61,6 @@ def perform_experiments_bfts(
         workspace_dir=Path(cfg.workspace_dir),
         event_callback=event_callback,
     )
-
-    def create_exec_callback() -> Callable[[str, bool], ExecutionResult]:
-        def exec_callback(_code: str, _is_exec: bool) -> ExecutionResult:
-            # Not used by ParallelAgent; return a placeholder result
-            return ExecutionResult(term_out=[], exec_time=0.0, exc_type=None)
-
-        return exec_callback
 
     # Track iteration timing for smart ETA calculation
     iteration_start_times: list[float] = []
@@ -162,17 +154,34 @@ def perform_experiments_bfts(
             # To avoid duplicate events (for example, during multi-seed evaluation where
             # additional nodes do not advance the effective iteration), only emit when
             # the iteration for this stage actually increases.
+            # Also emit when stage completes (reaches max_iterations) to ensure final progress=1.0 is recorded.
             previous_iteration = last_reported_iteration_by_stage.get(stage.name)
-            if iteration_display > 0 and (
+            stage_complete = stage.max_iterations > 0 and len(journal.nodes) >= stage.max_iterations
+            # Emit if iteration increased, or if stage completed and we haven't emitted the final event yet
+            iteration_increased = (
                 previous_iteration is None or iteration_display > previous_iteration
-            ):
+            )
+            needs_final_event = (
+                stage_complete
+                and previous_iteration is not None
+                and previous_iteration < stage.max_iterations
+            )
+            should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
+            if should_emit:
                 last_reported_iteration_by_stage[stage.name] = iteration_display
+                # When stage completes, ensure progress is exactly 1.0 and iteration equals max_iterations
+                if stage_complete and stage.max_iterations > 0:
+                    final_progress = 1.0
+                    final_iteration = stage.max_iterations
+                else:
+                    final_progress = progress
+                    final_iteration = iteration_display
                 event_callback(
                     RunStageProgressEvent(
                         stage=stage.name,
-                        iteration=iteration_display,
+                        iteration=final_iteration,
                         max_iterations=stage.max_iterations,
-                        progress=progress,
+                        progress=final_progress,
                         total_nodes=len(journal.nodes),
                         buggy_nodes=len(journal.buggy_nodes),
                         good_nodes=good_nodes_count,
@@ -206,7 +215,7 @@ def perform_experiments_bfts(
             f"Step {min(len(journal), stage.max_iterations)}/{stage.max_iterations} at stage_{stage.name}"
         )
 
-    manager.run(exec_callback=create_exec_callback(), step_callback=step_callback)
+    manager.run(step_callback=step_callback)
 
     if cfg.generate_report:
         logger.info("Generating final report from all stages...")

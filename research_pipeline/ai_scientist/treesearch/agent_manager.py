@@ -26,7 +26,7 @@ from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, SubstageCompl
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
-from .parallel_agent import ExecCallbackType, ParallelAgent
+from .parallel_agent import ParallelAgent
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -536,7 +536,6 @@ Your research idea:\n\n
         self,
         current_substage: StageMeta,
         agent: ParallelAgent,
-        exec_callback: ExecCallbackType,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
     ) -> Tuple[bool, Optional[StageMeta]]:
         """Execute iterations for a sub-stage until it completes or the main stage finishes.
@@ -565,34 +564,21 @@ Your research idea:\n\n
                 # Best-effort logging; never block iteration on event errors
                 pass
 
-            agent.step(exec_callback)
             if step_callback:
                 step_callback(current_substage, self.journals[current_substage.name])
+
+            # Check if sub-stage is complete (check this before main stage completion)
+            substage_complete, substage_feedback = self._check_substage_completion(
+                current_substage, self.journals[current_substage.name]
+            )
 
             # Check if main stage is complete
             main_stage_complete, main_stage_feedback = self._check_stage_completion(
                 current_substage
             )
             logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
-            if main_stage_complete:
-                # After main stage completion, run multi-seed eval on the best node
-                multi_seed_ok = self._perform_multi_seed_eval_if_needed(
-                    agent=agent,
-                    current_substage=current_substage,
-                    step_callback=step_callback,
-                )
-                if not multi_seed_ok:
-                    # If multi-seed eval failed, we should still try to advance to next stage
-                    # Setting current_stage = None here would prevent that
-                    # Instead, let the caller handle this case
-                    pass
-                return True, None
 
-            # Check if sub-stage is complete
-            substage_complete, substage_feedback = self._check_substage_completion(
-                current_substage, self.journals[current_substage.name]
-            )
-
+            # If substage completes, emit event (even if main stage also completes)
             if substage_complete:
                 # Emit a sub-stage completion event with a lightweight summary
                 try:
@@ -622,6 +608,23 @@ Your research idea:\n\n
                     # Best-effort telemetry; never block progression on event errors
                     logger.exception("Failed to emit SubstageCompletedEvent")
 
+            # If main stage completes, run multi-seed eval and return
+            if main_stage_complete:
+                # After main stage completion, run multi-seed eval on the best node
+                multi_seed_ok = self._perform_multi_seed_eval_if_needed(
+                    agent=agent,
+                    current_substage=current_substage,
+                    step_callback=step_callback,
+                )
+                if not multi_seed_ok:
+                    # If multi-seed eval failed, we should still try to advance to next stage
+                    # Setting current_stage = None here would prevent that
+                    # Instead, let the caller handle this case
+                    pass
+                return True, None
+
+            # If substage completes but main stage doesn't, create next substage
+            if substage_complete:
                 # Create next sub-stage
                 next_substage = self._create_next_substage(
                     current_substage=current_substage,
@@ -688,7 +691,6 @@ Your research idea:\n\n
 
     def run(
         self,
-        exec_callback: ExecCallbackType,
         step_callback: Optional[Callable[[StageMeta, Journal], None]] = None,
     ) -> None:
         """Run the experiment through generated stages"""
@@ -699,7 +701,6 @@ Your research idea:\n\n
             # Run only the current main stage
             self.run_stage(
                 initial_substage=self.current_stage,
-                exec_callback=exec_callback,
                 step_callback=step_callback,
             )
             # Main stage complete - create next main stage
@@ -708,7 +709,6 @@ Your research idea:\n\n
     def run_stage(
         self,
         initial_substage: StageMeta,
-        exec_callback: ExecCallbackType,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
     ) -> None:
         """Run a single main stage starting from the given sub-stage.
@@ -746,7 +746,6 @@ Your research idea:\n\n
                 main_done, maybe_next_substage = self._run_substage(
                     current_substage=current_substage,
                     agent=agent,
-                    exec_callback=exec_callback,
                     step_callback=step_callback,
                 )
                 if main_done:
