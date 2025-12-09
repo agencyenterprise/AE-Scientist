@@ -52,7 +52,7 @@ async def stream_chat_with_idea(
     summarizer_service = SummarizerService.for_model(
         request_data.llm_provider, request_data.llm_model
     )
-    
+
     try:
         # Validate conversation exists
         existing_conversation = db.get_conversation_by_id(conversation_id)
