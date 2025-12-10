@@ -43,11 +43,13 @@ from app.services import (
 from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
+from app.services.database.conversations import CONVERSATION_STATUSES
 from app.services.database.conversations import Conversation as DBConversation
 from app.services.database.conversations import DashboardConversation as DBDashboardConversation
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
+from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
@@ -168,6 +170,7 @@ class ConversationListItem(BaseModel):
     last_assistant_message_content: Optional[str] = None
     manual_title: Optional[str] = None
     manual_hypothesis: Optional[str] = None
+    status: str = "draft"  # Conversation status: 'draft' or 'with_research'
 
 
 class ConversationListResponse(BaseModel):
@@ -941,10 +944,19 @@ async def import_manual_seed(
 
 @router.get("")
 async def list_conversations(
-    request: Request, response: Response, limit: int = 100, offset: int = 0
+    request: Request,
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    conversation_status: str | None = None,
+    run_status: str | None = None,
 ) -> Union[ConversationListResponse, ErrorResponse]:
     """
     Get a paginated list of conversations for the current user.
+
+    Query Parameters:
+    - conversation_status: Filter by "draft" or "with_research" (optional)
+    - run_status: Filter by "pending", "running", "completed", or "failed" (optional)
     """
     user = get_current_user(request)
 
@@ -956,9 +968,29 @@ async def list_conversations(
         response.status_code = 400
         return ErrorResponse(error="Invalid offset", detail="Offset must be non-negative")
 
+    # Validate conversation_status
+    if conversation_status is not None and conversation_status not in CONVERSATION_STATUSES:
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid conversation_status",
+            detail=f"Must be one of: {', '.join(CONVERSATION_STATUSES)}"
+        )
+
+    # Validate run_status
+    if run_status is not None and run_status not in PIPELINE_RUN_STATUSES:
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid run_status",
+            detail=f"Must be one of: {', '.join(PIPELINE_RUN_STATUSES)}"
+        )
+
     db = get_database()
     conversations: List[DBDashboardConversation] = db.list_conversations(
-        limit=limit, offset=offset, user_id=user.id
+        limit=limit,
+        offset=offset,
+        user_id=user.id,
+        conversation_status=conversation_status,
+        run_status=run_status,
     )
     return ConversationListResponse(
         conversations=[
@@ -978,6 +1010,7 @@ async def list_conversations(
                 last_assistant_message_content=conv.last_assistant_message_content,
                 manual_title=conv.manual_title,
                 manual_hypothesis=conv.manual_hypothesis,
+                status=conv.status,
             )
             for conv in conversations
         ]

@@ -1,0 +1,683 @@
+{
+  "id": "conversations-filter-feature",
+  "name": "Add Conversation and Run Status Filters",
+  "description": "As a user I, in the page /conversations I want to filter conversations by conversation status and run status, so I can easily find what I want. Use toggle buttons to allow the user to filter. Use server side filters.",
+  "created": "2025-12-10T00:00:00Z",
+  "lastUpdated": "2025-12-10T14:30:00Z",
+
+  "classification": {
+    "type": "fullstack",
+    "scope": "single-feature",
+    "complexity": "moderate",
+    "confidence": "high",
+    "requiresUserStories": true,
+    "workflow": [
+      "feature-planner",
+      "codebase-analyzer",
+      "feature-architecture-expert",
+      "nextjs-expert",
+      "fastapi-expert",
+      "feature-executor",
+      "copy-reviewer",
+      "documentation-reviewer"
+    ]
+  },
+
+  "techStack": {
+    "detected": ["nextjs-15", "react-19", "typescript", "fastapi", "postgresql"],
+    "versions": {
+      "next": "15.x",
+      "react": "19.x",
+      "fastapi": "0.115.0"
+    }
+  },
+
+  "context": {
+    "existingFeatures": [
+      "Client-side filtering exists via useConversationsFilter hook",
+      "Conversations page at frontend/src/app/(dashboard)/conversations/page.tsx",
+      "Backend API at server/app/api/conversations.py",
+      "GET /conversations endpoint supports limit/offset but no status filters",
+      "ConversationListItem model has status field (draft/with_research)",
+      "Database query in list_conversations() returns status field"
+    ],
+    "relatedFiles": [
+      "frontend/src/app/(dashboard)/conversations/page.tsx",
+      "frontend/src/features/conversation/hooks/useConversationsFilter.ts",
+      "frontend/src/features/dashboard/contexts/DashboardContext.tsx",
+      "server/app/api/conversations.py",
+      "server/app/services/database/conversations.py"
+    ]
+  },
+
+  "docsConsulted": {
+    "project": [
+      ".agent/README.md",
+      ".agent/System/project_architecture.md",
+      ".agent/System/design-guidelines.md"
+    ],
+    "external": [],
+    "existingFeatures": [
+      "frontend/src/features/conversation/hooks/useConversationsFilter.ts",
+      "frontend/src/features/conversation/components/IdeationQueueHeader.tsx",
+      "frontend/src/features/conversation/components/IdeationQueueFilters.tsx",
+      "frontend/src/features/conversation/utils/ideation-queue-utils.tsx",
+      "frontend/src/features/conversation/types/ideation-queue.types.ts",
+      "server/app/services/database/research_pipeline_runs.py",
+      "frontend/src/app/(dashboard)/conversations/layout.tsx"
+    ]
+  },
+
+  "assets": {
+    "reuse": [
+      {
+        "name": "Button component",
+        "path": "frontend/src/shared/components/ui/button.tsx",
+        "type": "component",
+        "description": "Base button component with variants (outline, ghost, etc). Uses CVA for variant management.",
+        "usedIn": [],
+        "note": "Can be used for filter toggle buttons, but custom styling needed for toggle state"
+      },
+      {
+        "name": "IdeationQueueFilters pattern",
+        "path": "frontend/src/features/conversation/components/IdeationQueueFilters.tsx",
+        "type": "pattern",
+        "description": "Existing toggle button filter component using role='group', aria-pressed, and STATUS_FILTER_CONFIG pattern",
+        "usedIn": [],
+        "note": "EXACT pattern to follow for conversation/run status filters - uses same CSS approach with activeClass config"
+      },
+      {
+        "name": "ResearchLogsList filter pattern",
+        "path": "frontend/src/features/research/components/run-detail/research-logs-list.tsx",
+        "type": "pattern",
+        "description": "Another toggle button filter example with LOG_FILTER_CONFIG pattern, shows count display",
+        "usedIn": [],
+        "note": "Same toggle button pattern with type Record<FilterType, {label, activeClass}>"
+      },
+      {
+        "name": "STATUS_FILTER_CONFIG pattern",
+        "path": "frontend/src/features/conversation/utils/ideation-queue-utils.tsx",
+        "type": "pattern",
+        "description": "Configuration object pattern for filters: Record<FilterOption, {label: string, activeClass: string}>",
+        "usedIn": [],
+        "note": "Use this exact pattern for CONVERSATION_STATUS_FILTER_CONFIG and RUN_STATUS_FILTER_CONFIG"
+      },
+      {
+        "name": "cn() utility",
+        "path": "frontend/src/shared/lib/utils.ts",
+        "type": "utility",
+        "description": "Tailwind class merge utility for conditional styling",
+        "usedIn": [],
+        "note": "Used in all filter buttons for combining base classes with active state classes"
+      },
+      {
+        "name": "list_conversations query pattern",
+        "path": "server/app/services/database/conversations.py",
+        "type": "pattern",
+        "description": "Existing SQL query with LEFT JOINs, WHERE clause building with params list, and pagination",
+        "usedIn": [],
+        "note": "Lines 255-325 show query structure. Add WHERE conditions for conversation_status and JOIN for run_status"
+      },
+      {
+        "name": "FastAPI query parameter pattern",
+        "path": "server/app/api/conversations.py",
+        "type": "pattern",
+        "description": "Endpoint at line 943-986 shows limit/offset pattern with validation",
+        "usedIn": [],
+        "note": "Add conversation_status: Optional[str] = None and run_status: Optional[str] = None params"
+      },
+      {
+        "name": "CONVERSATION_STATUSES constant",
+        "path": "server/app/services/database/conversations.py",
+        "type": "constant",
+        "description": "Tuple at line 21: ('draft', 'with_research') - valid conversation status values",
+        "usedIn": [],
+        "note": "Use for validation of conversation_status filter parameter"
+      },
+      {
+        "name": "PIPELINE_RUN_STATUSES constant",
+        "path": "server/app/services/database/research_pipeline_runs.py",
+        "type": "constant",
+        "description": "Tuple at line 14: ('pending', 'running', 'failed', 'completed') - valid run status values",
+        "usedIn": [],
+        "note": "Use for validation of run_status filter parameter"
+      },
+      {
+        "name": "ConversationListItem model",
+        "path": "server/app/api/conversations.py",
+        "type": "model",
+        "description": "Lines 153-172 - Response model with status field already included",
+        "usedIn": [],
+        "note": "No changes needed to response model - status field already present"
+      },
+      {
+        "name": "DashboardContext loadConversations",
+        "path": "frontend/src/app/(dashboard)/conversations/layout.tsx",
+        "type": "function",
+        "description": "Lines 33-46 - Fetches conversations from API. Currently hardcoded query string.",
+        "usedIn": [],
+        "note": "MUST EXTEND to accept filter parameters and build dynamic query string"
+      },
+      {
+        "name": "apiFetch utility",
+        "path": "frontend/src/shared/lib/api-client.ts",
+        "type": "utility",
+        "description": "Used in layout.tsx line 36-38 for API calls",
+        "usedIn": [],
+        "note": "Already handles query strings properly"
+      },
+      {
+        "name": "convertApiConversationList adapter",
+        "path": "frontend/src/shared/lib/api-adapters.ts",
+        "type": "function",
+        "description": "Lines 81-83 - Converts API response to frontend format, includes conversationStatus mapping",
+        "usedIn": [],
+        "note": "Already handles status field - no changes needed"
+      }
+    ],
+    "extend": [
+      {
+        "name": "IdeationQueueHeader",
+        "path": "frontend/src/features/conversation/components/IdeationQueueHeader.tsx",
+        "reason": "Add filter toggle buttons between title/count and search input",
+        "changes": [
+          "Add new props: conversationStatusFilter, onConversationStatusChange, runStatusFilter, onRunStatusChange",
+          "Add filter buttons row after title/count, before search input",
+          "Follow exact pattern from IdeationQueueFilters.tsx"
+        ],
+        "status": "pending"
+      },
+      {
+        "name": "DashboardContext",
+        "path": "frontend/src/features/dashboard/contexts/DashboardContext.tsx",
+        "reason": "Add filter state management and pass filters to API call",
+        "changes": [
+          "Add conversationStatusFilter and runStatusFilter to context interface",
+          "Add setConversationStatusFilter and setRunStatusFilter methods",
+          "Update loadConversations to build query string with filters"
+        ],
+        "status": "pending"
+      },
+      {
+        "name": "ConversationsLayout",
+        "path": "frontend/src/app/(dashboard)/conversations/layout.tsx",
+        "reason": "Manage filter state and pass to DashboardContext",
+        "changes": [
+          "Add useState for conversationStatusFilter and runStatusFilter",
+          "Update loadConversations callback to accept filter params and build query string",
+          "Pass filter state and setters to DashboardContext"
+        ],
+        "status": "pending"
+      },
+      {
+        "name": "list_conversations endpoint",
+        "path": "server/app/api/conversations.py",
+        "reason": "Add query parameters for filtering",
+        "changes": [
+          "Add conversation_status: Optional[str] = None parameter",
+          "Add run_status: Optional[str] = None parameter",
+          "Add validation for status values against CONVERSATION_STATUSES and PIPELINE_RUN_STATUSES",
+          "Pass filters to db.list_conversations()"
+        ],
+        "status": "pending"
+      },
+      {
+        "name": "list_conversations database method",
+        "path": "server/app/services/database/conversations.py",
+        "reason": "Add WHERE clause filtering for conversation status and JOIN for run status",
+        "changes": [
+          "Add conversation_status: Optional[str] = None parameter",
+          "Add run_status: Optional[str] = None parameter",
+          "Add WHERE clause: c.status = %s if conversation_status provided",
+          "Add LEFT JOIN research_pipeline_runs if run_status provided",
+          "Add WHERE clause: rpr.status = %s if run_status provided",
+          "Add DISTINCT to SELECT if joining runs table"
+        ],
+        "status": "pending"
+      },
+      {
+        "name": "ConversationsPage",
+        "path": "frontend/src/app/(dashboard)/conversations/page.tsx",
+        "reason": "Pass filter props to IdeationQueueHeader",
+        "changes": [
+          "Get filter state and setters from useDashboard()",
+          "Pass conversationStatusFilter, onConversationStatusChange, runStatusFilter, onRunStatusChange to IdeationQueueHeader"
+        ],
+        "status": "pending"
+      }
+    ],
+    "create": [
+      {
+        "name": "CONVERSATION_STATUS_FILTER_CONFIG",
+        "path": "frontend/src/features/conversation/utils/conversation-filter-utils.ts",
+        "description": "Filter config object for conversation status: Record<ConversationStatusFilter, {label, activeClass}>",
+        "reason": "New config needed for conversation status filters (All, Draft, With Research)",
+        "status": "pending"
+      },
+      {
+        "name": "RUN_STATUS_FILTER_CONFIG",
+        "path": "frontend/src/features/conversation/utils/conversation-filter-utils.ts",
+        "description": "Filter config object for run status: Record<RunStatusFilter, {label, activeClass}>",
+        "reason": "New config needed for run status filters (All, Pending, Running, Completed, Failed)",
+        "status": "pending"
+      },
+      {
+        "name": "ConversationStatusFilter type",
+        "path": "frontend/src/features/conversation/types/conversation-filter.types.ts",
+        "description": "Type: 'all' | 'draft' | 'with_research'",
+        "reason": "Type definition for conversation status filter options",
+        "status": "pending"
+      },
+      {
+        "name": "RunStatusFilter type",
+        "path": "frontend/src/features/conversation/types/conversation-filter.types.ts",
+        "description": "Type: 'all' | 'pending' | 'running' | 'completed' | 'failed'",
+        "reason": "Type definition for run status filter options",
+        "status": "pending"
+      }
+    ],
+    "extract": []
+  },
+
+  "userStories": [
+    {
+      "id": "US001",
+      "asA": "logged-in user",
+      "iWant": "to filter conversations by their status (draft or with research)",
+      "soThat": "I can quickly find conversations that are ready for research runs versus those still in draft",
+      "acceptanceCriteria": [
+        "Toggle buttons displayed for conversation status: All, Draft, With Research",
+        "Only one status can be selected at a time (single-select toggle group)",
+        "Default selection is All (no filter applied)",
+        "Filter is applied server-side via API query parameter",
+        "Results update immediately when a filter is selected",
+        "Loading state shown while fetching filtered results"
+      ],
+      "priority": "high",
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "US002",
+      "asA": "logged-in user",
+      "iWant": "to filter conversations by their research run status (pending, running, completed, failed)",
+      "soThat": "I can find conversations with specific run outcomes (e.g., see all completed research, or find failed runs to retry)",
+      "acceptanceCriteria": [
+        "Toggle buttons displayed for run status: All, Pending, Running, Completed, Failed",
+        "Only one run status can be selected at a time",
+        "Default selection is All (no filter applied)",
+        "Filter is applied server-side via API query parameter",
+        "Only shows conversations that have at least one run matching the status",
+        "Conversations with no runs are hidden when any run status filter (except All) is selected",
+        "Results update immediately when a filter is selected"
+      ],
+      "priority": "high",
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "US003",
+      "asA": "logged-in user",
+      "iWant": "to combine conversation status and run status filters",
+      "soThat": "I can narrow down results precisely (e.g., show only conversations with completed research runs)",
+      "acceptanceCriteria": [
+        "Both filter toggles visible and usable simultaneously",
+        "Filters are combined with AND logic on the server",
+        "Count display updates to show filtered count vs total count",
+        "Clear visual indication of active filters",
+        "Empty state shown when no conversations match the combined filters"
+      ],
+      "priority": "medium",
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    }
+  ],
+
+  "tasks": [
+    {
+      "id": "T001",
+      "description": "Add conversation_status and run_status query parameters to GET /conversations endpoint",
+      "storyId": "US001",
+      "files": ["server/app/api/conversations.py"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T002",
+      "description": "Update list_conversations database method to support status filtering with JOIN for run status",
+      "storyId": "US001",
+      "files": ["server/app/services/database/conversations.py"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T003",
+      "description": "Create filter config constants and types for conversation and run status filters",
+      "storyId": "US001",
+      "files": [
+        "frontend/src/features/conversation/utils/conversation-filter-utils.ts",
+        "frontend/src/features/conversation/types/conversation-filter.types.ts"
+      ],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T004",
+      "description": "Update IdeationQueueHeader to include filter toggle buttons",
+      "storyId": "US001",
+      "files": ["frontend/src/features/conversation/components/IdeationQueueHeader.tsx"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T005",
+      "description": "Update DashboardContext to manage filter state",
+      "storyId": "US001",
+      "files": ["frontend/src/features/dashboard/contexts/DashboardContext.tsx"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T006",
+      "description": "Update ConversationsLayout to manage filter state and build query strings",
+      "storyId": "US001",
+      "files": ["frontend/src/app/(dashboard)/conversations/layout.tsx"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "T007",
+      "description": "Update ConversationsPage to pass filter props to header",
+      "storyId": "US003",
+      "files": ["frontend/src/app/(dashboard)/conversations/page.tsx"],
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    }
+  ],
+
+  "files": {
+    "created": [
+      {"path": "frontend/src/features/conversation/types/conversation-filter.types.ts", "by": "executor", "at": "2025-12-10T11:13:00Z"},
+      {"path": "frontend/src/features/conversation/utils/conversation-filter-utils.ts", "by": "executor", "at": "2025-12-10T11:13:00Z"}
+    ],
+    "modified": [
+      {"path": "server/app/api/conversations.py", "by": "executor", "reason": "Added conversation_status and run_status query parameters with validation", "at": "2025-12-10T11:13:00Z"},
+      {"path": "server/app/services/database/conversations.py", "by": "executor", "reason": "Updated list_conversations method to support optional conversation_status and run_status filters with dynamic WHERE clauses and conditional JOIN", "at": "2025-12-10T11:13:00Z"},
+      {"path": "frontend/src/features/dashboard/contexts/DashboardContext.tsx", "by": "executor", "reason": "Added conversationStatusFilter, setConversationStatusFilter, runStatusFilter, setRunStatusFilter to context interface", "at": "2025-12-10T11:13:00Z"},
+      {"path": "frontend/src/app/(dashboard)/conversations/layout.tsx", "by": "executor", "reason": "Added useState for filters and updated loadConversations to build query string with optional filter parameters", "at": "2025-12-10T11:13:00Z"},
+      {"path": "frontend/src/features/conversation/components/IdeationQueueHeader.tsx", "by": "executor", "reason": "Added toggle button filter UI for conversation status and run status using the IdeationQueueFilters pattern", "at": "2025-12-10T11:13:00Z"},
+      {"path": "frontend/src/app/(dashboard)/conversations/page.tsx", "by": "executor", "reason": "Extended to get filter state from context and pass filter props to IdeationQueueHeader", "at": "2025-12-10T11:13:00Z"}
+    ],
+    "pending": []
+  },
+
+  "phases": [
+    {
+      "id": "classification",
+      "agent": "task-classifier",
+      "status": "completed",
+      "completedAt": "2025-12-10T00:00:00Z"
+    },
+    {
+      "id": "planning",
+      "agent": "feature-planner",
+      "status": "completed",
+      "completedAt": "2025-12-10T00:00:00Z",
+      "docsRead": [
+        ".agent/README.md",
+        ".agent/System/project_architecture.md",
+        ".agent/System/design-guidelines.md"
+      ]
+    },
+    {
+      "id": "analysis",
+      "agent": "codebase-analyzer",
+      "status": "completed",
+      "completedAt": "2025-12-10T12:00:00Z"
+    },
+    {
+      "id": "architecture",
+      "agent": "feature-architecture-expert",
+      "status": "completed",
+      "completedAt": "2025-12-10T14:30:00Z"
+    },
+    {
+      "id": "tech-guidance",
+      "parallel": true,
+      "subtasks": [
+        {
+          "agent": "nextjs-expert",
+          "status": "pending"
+        },
+        {
+          "agent": "fastapi-expert",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "implementation",
+      "agent": "feature-executor",
+      "status": "completed",
+      "completedAt": "2025-12-10T11:13:00Z"
+    },
+    {
+      "id": "copy-review",
+      "agent": "copy-reviewer",
+      "status": "pending"
+    },
+    {
+      "id": "doc-review",
+      "agent": "documentation-reviewer",
+      "status": "pending"
+    }
+  ],
+
+  "decisions": [
+    {
+      "phase": "classification",
+      "key": "task-type",
+      "value": "fullstack",
+      "reason": "Requires both frontend UI changes (toggle buttons) and backend API changes (server-side filtering parameters)"
+    },
+    {
+      "phase": "classification",
+      "key": "scope",
+      "value": "single-feature",
+      "reason": "Changes are contained within the conversations feature module, affecting conversations page, API endpoint, and related hooks"
+    },
+    {
+      "phase": "classification",
+      "key": "complexity",
+      "value": "moderate",
+      "reason": "Involves multiple files across frontend and backend, requires API parameter design, query optimization, and UI component integration"
+    },
+    {
+      "phase": "classification",
+      "key": "requiresUserStories",
+      "value": true,
+      "reason": "Fullstack feature with cross-feature scope (frontend + backend), moderate complexity, and significant user-facing impact. User stories will help break down the work into: (1) Backend filter implementation, (2) Frontend toggle UI, (3) Integration and testing"
+    },
+    {
+      "phase": "classification",
+      "key": "workflow",
+      "value": "optimized-fullstack",
+      "reason": "Full workflow needed for cross-stack feature: planner for decomposition, codebase-analyzer for understanding existing patterns, architecture-expert for API design, tech experts (Next.js + FastAPI) for best practices, executor for implementation, and reviewers for quality"
+    },
+    {
+      "phase": "planning",
+      "key": "filter-location",
+      "value": "server-side",
+      "reason": "Per acceptance criteria. Better performance for large datasets, reduces client memory usage, and enables pagination with filters"
+    },
+    {
+      "phase": "planning",
+      "key": "ui-component",
+      "value": "toggle-buttons",
+      "reason": "Per acceptance criteria. Provides clear visual feedback of active state, more intuitive than dropdowns for binary/small option sets"
+    },
+    {
+      "phase": "planning",
+      "key": "filter-logic",
+      "value": "AND-combination",
+      "reason": "Most intuitive for users narrowing results. When both filters active, shows conversations matching BOTH criteria"
+    },
+    {
+      "phase": "planning",
+      "key": "architectural-approach",
+      "value": "extend-existing-patterns",
+      "reason": "Chosen from 3 options. Extends existing useConversationsFilter hook and IdeationQueueHeader component rather than creating new architecture. Maximizes code reuse and maintains consistency.",
+      "alternatives": [
+        {"name": "new-filter-context", "rejectedWhy": "Overhead of new context not justified for single filter feature"},
+        {"name": "url-state-management", "rejectedWhy": "Can be added later; MVP uses React state for simplicity"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "button-styling",
+      "value": "existing-toggle-pattern",
+      "reason": "Reuse exact pattern from IdeationQueueFilters.tsx and research-logs-list.tsx: role='group', aria-pressed, Record<FilterOption, {label, activeClass}> config"
+    },
+    {
+      "phase": "planning",
+      "key": "run-status-filter-behavior",
+      "value": "hide-no-runs-on-filter",
+      "reason": "When run status filter is active (not 'All'), conversations with no research runs are hidden. This is more intuitive than showing empty results for 'Pending' on draft conversations."
+    },
+    {
+      "phase": "analysis",
+      "key": "toggle-button-pattern",
+      "value": "reuse-existing",
+      "reason": "Found 2 exact examples: IdeationQueueFilters.tsx and research-logs-list.tsx. Both use same pattern: role='group', aria-pressed, config object with label/activeClass. NO need to create new component."
+    },
+    {
+      "phase": "analysis",
+      "key": "filter-config-pattern",
+      "value": "Record<FilterOption, {label, activeClass}>",
+      "reason": "Consistent pattern across codebase. STATUS_FILTER_CONFIG in ideation-queue-utils.tsx and LOG_FILTER_CONFIG in research-logs-list.tsx use same structure."
+    },
+    {
+      "phase": "analysis",
+      "key": "backend-filter-pattern",
+      "value": "optional-query-params",
+      "reason": "Existing pattern in conversations.py line 945: limit/offset as optional params with defaults. Add conversation_status and run_status following same pattern."
+    },
+    {
+      "phase": "analysis",
+      "key": "database-query-pattern",
+      "value": "dynamic-where-clause",
+      "reason": "list_conversations() at line 255-325 builds WHERE clause dynamically with params list. Add conditions: WHERE c.status = %s and LEFT JOIN + WHERE rpr.status = %s"
+    },
+    {
+      "phase": "analysis",
+      "key": "status-validation",
+      "value": "use-existing-constants",
+      "reason": "CONVERSATION_STATUSES tuple (line 21 conversations.py) and PIPELINE_RUN_STATUSES tuple (line 14 research_pipeline_runs.py) already defined. Use for validation."
+    },
+    {
+      "phase": "analysis",
+      "key": "context-extension",
+      "value": "extend-dashboard-context",
+      "reason": "DashboardContext already manages conversations state and loadConversations. Extend with filter state rather than creating new context."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-srp",
+      "value": "responsibilities-separated",
+      "reason": "Types file = only types; Utils file = only configs; Context = only interface; Layout = state + API; Page = composition; Header = UI rendering"
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-ocp",
+      "value": "config-based-extension",
+      "reason": "Filter configs use Record<FilterOption, FilterConfig> pattern. New filters added by extending config objects, not modifying component code."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-isp",
+      "value": "minimal-props-extension",
+      "reason": "IdeationQueueHeaderProps extended with only necessary filter props. Filter props are optional for backward compatibility."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-dip",
+      "value": "interface-based-types",
+      "reason": "Components depend on types/interfaces (FilterConfig), not concrete implementations. Configs injected via props."
+    },
+    {
+      "phase": "architecture",
+      "key": "api-contract",
+      "value": "optional-query-params-omit-for-all",
+      "reason": "conversation_status and run_status are optional. When 'all' selected, param is omitted from request (not sent as 'all')."
+    },
+    {
+      "phase": "architecture",
+      "key": "database-join-strategy",
+      "value": "conditional-join-with-distinct",
+      "reason": "LEFT JOIN research_pipeline_runs only when run_status provided. DISTINCT added when joining to handle multiple runs per conversation."
+    },
+    {
+      "phase": "architecture",
+      "key": "implementation-order",
+      "value": "backend-first",
+      "reason": "Backend (T001, T002) first for API contract. Then types/config (T003). Then state management (T005, T006). Finally UI (T004, T007)."
+    }
+  ],
+
+  "searches": [
+    {
+      "pattern": "role=\"group\"",
+      "tool": "grep",
+      "results": 2,
+      "files": [
+        "frontend/src/features/conversation/components/IdeationQueueFilters.tsx",
+        "frontend/src/features/research/components/run-detail/research-logs-list.tsx"
+      ],
+      "at": "2025-12-10T12:00:00Z"
+    },
+    {
+      "pattern": "aria-pressed",
+      "tool": "grep",
+      "results": 2,
+      "files": [
+        "frontend/src/features/conversation/components/IdeationQueueFilters.tsx",
+        "frontend/src/features/research/components/run-detail/research-logs-list.tsx"
+      ],
+      "at": "2025-12-10T12:00:00Z"
+    },
+    {
+      "pattern": "CONVERSATION_STATUSES",
+      "tool": "grep",
+      "results": 1,
+      "files": ["server/app/services/database/conversations.py"],
+      "at": "2025-12-10T12:00:00Z"
+    },
+    {
+      "pattern": "PIPELINE_RUN_STATUSES",
+      "tool": "grep",
+      "results": 1,
+      "files": ["server/app/services/database/research_pipeline_runs.py"],
+      "at": "2025-12-10T12:00:00Z"
+    }
+  ],
+
+  "reviews": {
+    "copy": [
+      {
+        "element": "conversation-status-filter-labels",
+        "context": "Filter toggle button labels: All, Draft, With Research",
+        "status": "pending"
+      },
+      {
+        "element": "run-status-filter-labels",
+        "context": "Filter toggle button labels: All, Pending, Running, Completed, Failed",
+        "status": "pending"
+      }
+    ],
+    "queries": []
+  },
+
+  "currentPhase": "implementation",
+  "nextAgent": "copy-reviewer",
+  "blockedBy": null
+}

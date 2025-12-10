@@ -1,3 +1,4 @@
+export { AutoEvaluationCard } from "./AutoEvaluationCard";
 export { FinalPdfBanner } from "./final-pdf-banner";
 export { ResearchArtifactsList } from "./research-artifacts-list";
 export { ResearchLogsList } from "./research-logs-list";
@@ -8,3 +9,8 @@ export { ResearchRunHeader } from "./research-run-header";
 export { ResearchRunStats } from "./research-run-stats";
 export { ResearchStageProgress } from "./research-stage-progress";
 export { StatCard } from "./stat-card";
+export { ReviewModal } from "./review/ReviewModal";
+export { ReviewHeader } from "./review/ReviewHeader";
+export { ReviewTabs } from "./review/ReviewTabs";
+export { ReviewScores } from "./review/ReviewScores";
+export { ReviewAnalysis } from "./review/ReviewAnalysis";

@@ -201,3 +201,45 @@ export interface ResearchRunDetails {
   substage_events: SubstageEvent[];
   artifacts: ArtifactMetadata[];
 }
+
+// ==========================================
+// LLM Review Types (for auto-evaluation)
+// ==========================================
+
+export interface LlmReviewResponse {
+  id: number;
+  run_id: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  originality: number;
+  quality: number;
+  clarity: number;
+  significance: number;
+  soundness: number;
+  presentation: number;
+  contribution: number;
+  overall: number;
+  confidence: number;
+  decision: "Accept" | "Reject";
+  questions: string[];
+  limitations: string[];
+  ethical_concerns: boolean;
+  source_path: string | null;
+  created_at: string;
+}
+
+export interface LlmReviewNotFoundResponse {
+  run_id: string;
+  exists: false;
+  message: string;
+}
+
+/**
+ * Type guard to discriminate between LlmReviewResponse and LlmReviewNotFoundResponse
+ */
+export function isReview(
+  response: LlmReviewResponse | LlmReviewNotFoundResponse
+): response is LlmReviewResponse {
+  return "exists" in response ? response.exists !== false : true;
+}

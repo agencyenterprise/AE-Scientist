@@ -134,3 +134,41 @@ class ResearchRunDetailsResponse(BaseModel):
     artifacts: List[ResearchRunArtifactMetadata] = Field(
         default_factory=list, description="Artifacts uploaded for the run"
     )
+
+
+# ============================================================================
+# LLM Review Models
+# ============================================================================
+
+
+class LlmReviewResponse(BaseModel):
+    """Response model for LLM review data."""
+
+    id: int = Field(..., description="Unique identifier of the review")
+    run_id: str = Field(..., description="Research run identifier")
+    summary: str = Field(..., description="Executive summary of the review")
+    strengths: List[str] = Field(..., description="List of identified strengths")
+    weaknesses: List[str] = Field(..., description="List of identified weaknesses")
+    originality: float = Field(..., description="Originality score (1-4)")
+    quality: float = Field(..., description="Quality score (1-4)")
+    clarity: float = Field(..., description="Clarity score (1-4)")
+    significance: float = Field(..., description="Significance score (1-4)")
+    questions: List[str] = Field(..., description="List of reviewer questions")
+    limitations: List[str] = Field(..., description="List of identified limitations")
+    ethical_concerns: bool = Field(..., description="Whether ethical concerns were raised")
+    soundness: float = Field(..., description="Soundness score (1-4)")
+    presentation: float = Field(..., description="Presentation score (1-4)")
+    contribution: float = Field(..., description="Contribution score (1-4)")
+    overall: float = Field(..., description="Overall quality score (1-10)")
+    confidence: float = Field(..., description="Reviewer confidence score (1-5)")
+    decision: str = Field(..., description="Final decision ('Accept' or 'Reject')")
+    source_path: Optional[str] = Field(None, description="Source path or reference for the review")
+    created_at: str = Field(..., description="ISO timestamp when the review was created")
+
+
+class LlmReviewNotFoundResponse(BaseModel):
+    """Response model when no review exists for a run."""
+
+    run_id: str = Field(..., description="Research run identifier")
+    exists: bool = Field(False, description="Indicates no review exists")
+    message: str = Field(..., description="Explanation that no review was found")

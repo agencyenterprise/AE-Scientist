@@ -1013,6 +1013,220 @@ Use `role="group"` and `aria-label` for related buttons:
 
 ---
 
+## Portal Modal Pattern
+
+> Added from: auto-evaluation-details-ui implementation (2025-12-09)
+
+When creating modals that need to render at the document root (for proper z-index layering), use `createPortal` with SSR safety guards.
+
+### When to Use
+
+- Modal dialogs that should overlay the entire page
+- Content that needs to escape parent container overflow/positioning
+- Full-screen overlays with backdrop
+
+### Implementation
+
+```typescript
+// features/my-feature/components/MyModal.tsx
+"use client";
+
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
+
+interface MyModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}
+
+export function MyModal({ isOpen, onClose, title, children }: MyModalProps) {
+  // SSR safety: portal needs document.body which doesn't exist during SSR
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Keyboard handler for escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Don't render during SSR or when closed
+  if (!isOpen || !isClient) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}  // Click backdrop to close
+    >
+      <div
+        className="relative max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg bg-card p-6"
+        onClick={(e) => e.stopPropagation()}  // Prevent closing when clicking content
+      >
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            className="rounded p-1 hover:bg-muted"
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        {children}
+      </div>
+    </div>,
+    document.body
+  );
+}
+```
+
+### Key Points
+
+1. **SSR Safety**: `isClient` state ensures portal only renders client-side
+2. **Backdrop Click**: Outer div with `onClick={onClose}` closes on backdrop click
+3. **Content Click**: Inner div with `stopPropagation()` prevents closing when clicking modal content
+4. **Escape Key**: `useEffect` with keyboard listener for accessibility
+5. **Z-Index**: Use `z-50` or higher to ensure modal appears above other content
+6. **Accessibility**: Include `aria-label` on close button
+
+### Reference Implementation
+
+See `frontend/src/features/research/components/run-detail/review/ReviewModal.tsx` and `frontend/src/features/project-draft/components/PromptEditModal.tsx`.
+
+---
+
+## Lazy-Loading Data Hook Pattern
+
+> Added from: auto-evaluation-details-ui implementation (2025-12-09)
+
+When data should only be fetched on-demand (not on component mount), use an explicit fetch function instead of auto-fetching.
+
+### When to Use
+
+- Data only needed when modal opens
+- Expensive operations that shouldn't run on page load
+- Optional data that users may never view
+- Resources that only exist for certain states (e.g., review only after completion)
+
+### Implementation
+
+```typescript
+// features/my-feature/hooks/useMyData.ts
+"use client";
+
+import { useCallback, useState } from "react";
+import { apiFetch } from "@/shared/lib/api-client";
+
+interface UseMyDataOptions {
+  resourceId: string;
+  parentId: number | null;
+}
+
+interface UseMyDataReturn {
+  data: MyDataType | null;
+  loading: boolean;
+  error: string | null;
+  notFound: boolean;
+  fetchData: () => Promise<void>;
+}
+
+export function useMyData({ resourceId, parentId }: UseMyDataOptions): UseMyDataReturn {
+  const [data, setData] = useState<MyDataType | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  const fetchData = useCallback(async (): Promise<void> => {
+    // Skip if already loaded, loading, or in error/notFound state
+    if (data || loading || notFound || error) {
+      return;
+    }
+
+    // Validate required params
+    if (!parentId || !resourceId) {
+      setError("Required parameters missing");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setNotFound(false);
+
+    try {
+      const response = await apiFetch<MyDataType | MyDataNotFoundType>(
+        `/resources/${parentId}/items/${resourceId}`
+      );
+
+      // Use type guard to handle union response
+      if (isMyData(response)) {
+        setData(response);
+      } else {
+        setNotFound(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }, [data, loading, notFound, error, resourceId, parentId]);
+
+  return {
+    data,
+    loading,
+    error,
+    notFound,
+    fetchData,
+  };
+}
+```
+
+### Usage in Modal Component
+
+```typescript
+export function MyDataModal({ isOpen, onClose, resourceId, parentId }: Props) {
+  const { data, loading, error, notFound, fetchData } = useMyData({ resourceId, parentId });
+
+  // Fetch data when modal opens
+  useEffect(() => {
+    if (isOpen && !data && !loading && !error && !notFound) {
+      fetchData();
+    }
+  }, [isOpen, data, loading, error, notFound, fetchData]);
+
+  // ... render loading/error/notFound/success states
+}
+```
+
+### Key Points
+
+1. **Explicit Fetch**: Hook exposes `fetchData()` instead of auto-fetching
+2. **Guard Conditions**: Skip fetch if already loaded, loading, or in terminal state
+3. **Clear State**: Reset error/notFound before fetching
+4. **Type Guards**: Use type guards for union response handling (see server_api_routes.md)
+
+### Reference Implementation
+
+See `frontend/src/features/research/hooks/useReviewData.ts`.
+
+---
+
 ## Verification
 
 1. Import the component in a page:

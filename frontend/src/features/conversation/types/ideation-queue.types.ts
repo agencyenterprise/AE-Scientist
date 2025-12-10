@@ -49,7 +49,7 @@ export type IdeationSortKey = "newest" | "oldest" | "title_asc" | "title_desc" |
 /**
  * Props for IdeationQueueCard component (ISP-compliant: focused interface)
  * MODIFIED: Added optional selection props for inline view support
- * MODIFIED: Added conversationStatus prop for status badge display
+ * MODIFIED: Added conversationStatus prop for status badge display (from database)
  */
 export interface IdeationQueueCardProps {
   id: number;

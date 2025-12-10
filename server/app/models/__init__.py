@@ -71,6 +71,8 @@ from app.models.llm_prompts import (
 )
 from app.models.research_pipeline import (
     ArtifactPresignedUrlResponse,
+    LlmReviewNotFoundResponse,
+    LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
     ResearchRunEvent,
@@ -99,6 +101,8 @@ __all__ = [
     "ResearchRunDetailsResponse",
     "ResearchRunListItem",
     "ResearchRunListResponse",
+    "LlmReviewResponse",
+    "LlmReviewNotFoundResponse",
     "ImportChatGPTConversation",
     "ImportChatPrompt",
     "ImportChatCreateNew",

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
+  AutoEvaluationCard,
   FinalPdfBanner,
   ResearchArtifactsList,
   ResearchLogsList,
@@ -9,8 +11,10 @@ import {
   ResearchRunError,
   ResearchRunHeader,
   ResearchRunStats,
+  ReviewModal,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
+import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { PageCard } from "@/shared/components/PageCard";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -19,6 +23,8 @@ export default function ResearchRunDetailPage() {
   const params = useParams();
   const router = useRouter();
   const runId = params.runId as string;
+
+  const [showReview, setShowReview] = useState(false);
 
   const {
     details,
@@ -32,6 +38,24 @@ export default function ResearchRunDetailPage() {
     handleStopRun,
     reconnect,
   } = useResearchRunDetails({ runId });
+
+  const {
+    review,
+    loading: reviewLoading,
+    error: reviewError,
+    notFound,
+    fetchReview,
+  } = useReviewData({
+    runId,
+    conversationId,
+  });
+
+  // Auto-fetch evaluation data when conversationId is available
+  useEffect(() => {
+    if (conversationId !== null && !review && !notFound && !reviewError && !reviewLoading) {
+      fetchReview();
+    }
+  }, [conversationId, review, notFound, reviewError, reviewLoading, fetchReview]);
 
   if (loading) {
     return (
@@ -96,10 +120,20 @@ export default function ResearchRunDetailPage() {
               substageEvents={substage_events}
             />
           </div>
-          <div className="flex w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
+          <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
             <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
 
-            {/*Validation Summary*/}
+            {/* Auto Evaluation Card */}
+            <div className="mt-4">
+              <AutoEvaluationCard
+                review={review}
+                loading={reviewLoading}
+                notFound={notFound}
+                error={reviewError}
+                disabled={conversationId === null}
+                onViewDetails={() => setShowReview(true)}
+              />
+            </div>
           </div>
         </div>
 
@@ -118,6 +152,16 @@ export default function ResearchRunDetailPage() {
           </div>
         </div>
       </div>
+
+      {showReview && (
+        <ReviewModal
+          review={review}
+          notFound={notFound}
+          error={reviewError}
+          onClose={() => setShowReview(false)}
+          loading={reviewLoading}
+        />
+      )}
     </PageCard>
   );
 }

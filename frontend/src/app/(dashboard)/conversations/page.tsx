@@ -11,7 +11,14 @@ import { useSelectedIdeaData } from "@/features/conversation/hooks/useSelectedId
 import { PageCard } from "@/shared/components/PageCard";
 
 export default function ConversationsPage() {
-  const { conversations, isLoading } = useDashboard();
+  const {
+    conversations,
+    isLoading,
+    conversationStatusFilter,
+    setConversationStatusFilter,
+    runStatusFilter,
+    setRunStatusFilter,
+  } = useDashboard();
   const { searchTerm, setSearchTerm, filteredConversations } =
     useConversationsFilter(conversations);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -52,6 +59,10 @@ export default function ConversationsPage() {
             onSearchChange={setSearchTerm}
             totalCount={conversations.length}
             filteredCount={filteredConversations.length}
+            conversationStatusFilter={conversationStatusFilter}
+            onConversationStatusChange={setConversationStatusFilter}
+            runStatusFilter={runStatusFilter}
+            onRunStatusChange={setRunStatusFilter}
           />
 
           {isLoading ? (
