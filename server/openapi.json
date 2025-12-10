@@ -559,7 +559,7 @@
     "/api/conversations": {
       "get": {
         "summary": "List Conversations",
-        "description": "Get a paginated list of conversations for the current user.",
+        "description": "Get a paginated list of conversations for the current user.\n\nQuery Parameters:\n- conversation_status: Filter by \"draft\" or \"with_research\" (optional)\n- run_status: Filter by \"pending\", \"running\", \"completed\", or \"failed\" (optional)",
         "operationId": "list_conversations_api_conversations_get",
         "parameters": [
           {
@@ -580,6 +580,38 @@
               "type": "integer",
               "default": 0,
               "title": "Offset"
+            }
+          },
+          {
+            "name": "conversation_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Status"
+            }
+          },
+          {
+            "name": "run_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Status"
             }
           }
         ],
@@ -748,6 +780,54 @@
                     }
                   ],
                   "title": "Response Update Conversation Api Conversations  Conversation Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/costs": {
+      "get": {
+        "summary": "Get Conversation Costs",
+        "description": "Get the cost breakdown for a specific conversation.",
+        "operationId": "get_conversation_costs_api_conversations__conversation_id__costs_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConversationCostResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response Get Conversation Costs Api Conversations  Conversation Id  Costs Get"
                 }
               }
             }
@@ -1914,6 +1994,66 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/review": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Research Run Review",
+        "description": "Fetch LLM review data for a research run.",
+        "operationId": "get_research_run_review_api_conversations__conversation_id__idea_research_run__run_id__review_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/LlmReviewResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LlmReviewNotFoundResponse"
+                    }
+                  ],
+                  "title": "Response Get Research Run Review Api Conversations  Conversation Id  Idea Research Run  Run Id  Review Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
       "post": {
         "tags": [
@@ -2084,14 +2224,14 @@
         }
       }
     },
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stream": {
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
       "get": {
         "tags": [
           "research-pipeline"
         ],
         "summary": "Stream Research Run Events",
-        "description": "Stream research run events via Server-Sent Events.\n\nEvent types:\n- initial: Full snapshot on connection\n- log: New log entries\n- stage_progress: Meaningful progress changes only\n- artifact: New artifacts\n- run_update: Run status/info changes\n- complete: Run finished (completed/failed)\n- heartbeat: Keep-alive every 30s\n- error: Error occurred",
-        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get",
+        "description": "Stream server-sent events for research run progress.",
+        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get",
         "parameters": [
           {
             "name": "conversation_id",
@@ -2114,7 +2254,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response"
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -2238,6 +2383,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResearchRunListItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-runs/{run_id}/costs": {
+      "get": {
+        "tags": [
+          "research-runs"
+        ],
+        "summary": "Get Research Run Costs",
+        "description": "Get the cost breakdown for a specific research run.",
+        "operationId": "get_research_run_costs_api_research_runs__run_id__costs_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunCostResponse"
                 }
               }
             }
@@ -2617,6 +2805,35 @@
         ],
         "title": "CheckoutSessionCreateResponse"
       },
+      "ConversationCostResponse": {
+        "properties": {
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost"
+          },
+          "cost_by_model": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCost"
+            },
+            "type": "array",
+            "title": "Cost By Model"
+          },
+          "cost_by_research": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchCost"
+            },
+            "type": "array",
+            "title": "Cost By Research"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_cost",
+          "cost_by_model",
+          "cost_by_research"
+        ],
+        "title": "ConversationCostResponse"
+      },
       "ConversationListItem": {
         "properties": {
           "id": {
@@ -2720,6 +2937,11 @@
               }
             ],
             "title": "Manual Hypothesis"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "draft"
           }
         },
         "type": "object",
@@ -3833,6 +4055,180 @@
         "title": "LLMProvidersResponse",
         "description": "Response model for getting available LLM providers."
       },
+      "LlmReviewNotFoundResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "description": "Indicates no review exists",
+            "default": false
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Explanation that no review was found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "message"
+        ],
+        "title": "LlmReviewNotFoundResponse",
+        "description": "Response model when no review exists for a run."
+      },
+      "LlmReviewResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the review"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Executive summary of the review"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths",
+            "description": "List of identified strengths"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weaknesses",
+            "description": "List of identified weaknesses"
+          },
+          "originality": {
+            "type": "number",
+            "title": "Originality",
+            "description": "Originality score (1-4)"
+          },
+          "quality": {
+            "type": "number",
+            "title": "Quality",
+            "description": "Quality score (1-4)"
+          },
+          "clarity": {
+            "type": "number",
+            "title": "Clarity",
+            "description": "Clarity score (1-4)"
+          },
+          "significance": {
+            "type": "number",
+            "title": "Significance",
+            "description": "Significance score (1-4)"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions",
+            "description": "List of reviewer questions"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations",
+            "description": "List of identified limitations"
+          },
+          "ethical_concerns": {
+            "type": "boolean",
+            "title": "Ethical Concerns",
+            "description": "Whether ethical concerns were raised"
+          },
+          "soundness": {
+            "type": "number",
+            "title": "Soundness",
+            "description": "Soundness score (1-4)"
+          },
+          "presentation": {
+            "type": "number",
+            "title": "Presentation",
+            "description": "Presentation score (1-4)"
+          },
+          "contribution": {
+            "type": "number",
+            "title": "Contribution",
+            "description": "Contribution score (1-4)"
+          },
+          "overall": {
+            "type": "number",
+            "title": "Overall",
+            "description": "Overall quality score (1-10)"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Reviewer confidence score (1-5)"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision",
+            "description": "Final decision ('Accept' or 'Reject')"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path",
+            "description": "Source path or reference for the review"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the review was created"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "summary",
+          "strengths",
+          "weaknesses",
+          "originality",
+          "quality",
+          "clarity",
+          "significance",
+          "questions",
+          "limitations",
+          "ethical_concerns",
+          "soundness",
+          "presentation",
+          "contribution",
+          "overall",
+          "confidence",
+          "decision",
+          "created_at"
+        ],
+        "title": "LlmReviewResponse",
+        "description": "Response model for LLM review data."
+      },
       "ManualIdeaSeedRequest": {
         "properties": {
           "idea_title": {
@@ -3884,6 +4280,42 @@
         ],
         "title": "MessageResponse",
         "description": "Simple message response."
+      },
+      "ModelCost": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "cost"
+        ],
+        "title": "ModelCost"
+      },
+      "ResearchCost": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "cost"
+        ],
+        "title": "ResearchCost"
       },
       "ResearchRunAcceptedResponse": {
         "properties": {
@@ -3952,6 +4384,27 @@
           "download_path"
         ],
         "title": "ResearchRunArtifactMetadata"
+      },
+      "ResearchRunCostResponse": {
+        "properties": {
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost"
+          },
+          "cost_by_model": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCost"
+            },
+            "type": "array",
+            "title": "Cost By Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_cost",
+          "cost_by_model"
+        ],
+        "title": "ResearchRunCostResponse"
       },
       "ResearchRunDetailsResponse": {
         "properties": {

@@ -3,15 +3,24 @@ API endpoints for listing all research pipeline runs.
 """
 
 import logging
+from typing import Dict
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user
 from app.models import ResearchRunListItem, ResearchRunListResponse
+from app.models.conversations import ModelCost
 from app.services import get_database
+from app.services.cost_calculator import calculate_llm_token_usage_cost
 
 router = APIRouter(prefix="/research-runs", tags=["research-runs"])
 logger = logging.getLogger(__name__)
+
+
+class ResearchRunCostResponse(BaseModel):
+    total_cost: float
+    cost_by_model: list[ModelCost]
 
 
 def _row_to_list_item(row: dict) -> ResearchRunListItem:
@@ -93,3 +102,31 @@ def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
         raise HTTPException(status_code=404, detail="Research run not found")
 
     return _row_to_list_item(row)
+
+
+@router.get("/{run_id}/costs", response_model=ResearchRunCostResponse)
+def get_research_run_costs(request: Request, run_id: str) -> ResearchRunCostResponse:
+    """
+    Get the cost breakdown for a specific research run.
+    """
+    get_current_user(request)
+
+    db = get_database()
+    token_usages = db.get_llm_token_usages_by_run_aggregated_by_model(run_id)
+    token_usage_costs = calculate_llm_token_usage_cost(token_usages)
+
+    total_cost = sum([cost.input_cost + cost.output_cost for cost in token_usage_costs])
+
+    cost_by_model: Dict[str, ModelCost] = {}
+    for cost in token_usage_costs:
+        if cost.model not in cost_by_model:
+            cost_by_model[cost.model] = ModelCost(
+                model=cost.model, cost=cost.input_cost + cost.output_cost
+            )
+        else:
+            cost_by_model[cost.model].cost += cost.input_cost + cost.output_cost
+
+    return ResearchRunCostResponse(
+        total_cost=total_cost,
+        cost_by_model=list(cost_by_model.values()),
+    )

@@ -19,6 +19,7 @@ interface UseChatStreamingOptions {
   consumePendingFiles: () => FileMetadata[];
   restorePendingFiles: (files: FileMetadata[]) => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+  onStreamEnd?: () => void;
 }
 
 interface UseChatStreamingReturn {
@@ -42,6 +43,7 @@ export function useChatStreaming({
   consumePendingFiles,
   restorePendingFiles,
   inputRef,
+  onStreamEnd,
 }: UseChatStreamingOptions): UseChatStreamingReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
@@ -260,6 +262,10 @@ export function useChatStreaming({
         setIsStreaming(false);
         setStreamingContent("");
         setStatusMessage("");
+
+        if (onStreamEnd) {
+          onStreamEnd();
+        }
 
         // Focus input field when response is complete and reset height
         // Use setTimeout to ensure state updates are applied first

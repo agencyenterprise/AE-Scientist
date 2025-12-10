@@ -165,3 +165,13 @@ class ChatMessageData(NamedTuple):
     content: str
     sequence_number: int
     created_at: datetime
+
+
+class ModelCost(BaseModel):
+    model: str
+    cost: float
+
+
+class ResearchCost(BaseModel):
+    run_id: str
+    cost: float

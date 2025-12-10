@@ -14,3 +14,4 @@ export { ReviewHeader } from "./review/ReviewHeader";
 export { ReviewTabs } from "./review/ReviewTabs";
 export { ReviewScores } from "./review/ReviewScores";
 export { ReviewAnalysis } from "./review/ReviewAnalysis";
+export { CostDetailsCard } from "./CostDetailsCard";

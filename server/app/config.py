@@ -24,6 +24,58 @@ def _parse_price_map(raw_value: str) -> Dict[str, int]:
     return sanitized
 
 
+class LLMPricing:
+    """Provides access to LLM pricing information."""
+
+    _pricing_data: Dict[str, Dict[str, int]]
+
+    def __init__(self, raw_value: str):
+        if not raw_value:
+            raise ValueError(
+                "JSON_MODEL_PRICE_PER_MILLION_IN_CENTS environment variable is not set."
+            )
+
+        try:
+            pricing_data = json.loads(raw_value)
+        except json.JSONDecodeError:
+            raise ValueError("JSON_MODEL_PRICE_PER_MILLION_IN_CENTS is not a valid JSON string.")
+
+        self._pricing_data = {}
+        for models in pricing_data.values():
+            for model_id, prices in models.items():
+                self._pricing_data[model_id] = prices
+
+    def get_input_price(self, model_id: str) -> int:
+        """
+        Get the input price for a specific model.
+
+        Args:
+            model_id: The ID of the model to get the price for.
+
+        Returns:
+            The price for the model in cents, for 1 million tokens, for input.
+        """
+        try:
+            return self._pricing_data[model_id]["input"]
+        except KeyError:
+            raise ValueError(f"Input price not found for model '{model_id}'.")
+
+    def get_output_price(self, model_id: str) -> int:
+        """
+        Get the output price for a specific model.
+
+        Args:
+            model_id: The ID of the model to get the price for.
+
+        Returns:
+            The price for the model in cents, for 1 million tokens, for output.
+        """
+        try:
+            return self._pricing_data[model_id]["output"]
+        except KeyError:
+            raise ValueError(f"Output price not found for model '{model_id}'.")
+
+
 class Settings:
     # Project info
     PROJECT_NAME: str = os.getenv("PROJECT_NAME", "AE Scientist")
@@ -103,6 +155,9 @@ class Settings:
         os.getenv("STRIPE_PRICE_TO_CREDITS", "{}")
     )
     RESEARCH_RUN_CREDITS_PER_MINUTE: int = int(os.getenv("RESEARCH_RUN_CREDITS_PER_MINUTE", "1"))
+
+    # LLM pricing configuration
+    LLM_PRICING: LLMPricing = LLMPricing(os.getenv("JSON_MODEL_PRICE_PER_MILLION_IN_CENTS", ""))
 
     @property
     def is_production(self) -> bool:

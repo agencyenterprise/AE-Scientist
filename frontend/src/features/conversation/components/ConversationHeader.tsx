@@ -2,13 +2,14 @@
 
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
-import type { ConversationDetail } from "@/types";
+import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import React, { useEffect, useState } from "react";
-import { Settings } from "lucide-react";
+import { DollarSign, Settings } from "lucide-react";
 
 import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { CostDetailModal } from "./CostDetailModal";
 import { TitleEditor } from "./TitleEditor";
 import { type ViewMode } from "./ViewModeTabs";
 
@@ -18,6 +19,7 @@ interface ConversationHeaderProps {
   onTitleUpdated?: (updatedConversation: ConversationDetail) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  costDetails: ConversationCostResponse | null;
 }
 
 export function ConversationHeader({
@@ -25,11 +27,13 @@ export function ConversationHeader({
   onConversationDeleted,
   onTitleUpdated,
   viewMode,
+  costDetails,
 }: ConversationHeaderProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [pendingView, setPendingView] = useState<ViewMode | null>(null);
+  const [showCostModal, setShowCostModal] = useState(false);
 
   const { isDeleting, isUpdatingTitle, deleteConversation, updateTitle } = useConversationActions();
 
@@ -87,6 +91,10 @@ export function ConversationHeader({
     }
   };
 
+  const handleShowCost = (): void => {
+    setShowCostModal(true);
+  };
+
   return (
     <div className="flex flex-row items-center justify-between gap-4 mb-4 md:mb-6">
       <TitleEditor
@@ -114,6 +122,16 @@ export function ConversationHeader({
             <span>AI Config</span>
           </button>
         )}
+        {costDetails && (
+          <button
+            onClick={handleShowCost}
+            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
+            title="View conversation costs"
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Cost</span>
+          </button>
+        )}
         <ModelSelector
           promptType={PromptTypes.IDEA_CHAT}
           onModelChange={handleModelChange}
@@ -133,6 +151,13 @@ export function ConversationHeader({
         isDeleting={isDeleting}
         onConfirm={handleDeleteConversation}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <CostDetailModal
+        isOpen={showCostModal}
+        onClose={() => setShowCostModal(false)}
+        cost={costDetails}
+        isLoading={costDetails === null}
       />
     </div>
   );

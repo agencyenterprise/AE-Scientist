@@ -14,12 +14,14 @@ interface ProjectDraftTabProps {
   onConversationLocked?: () => void;
   mobileView: "chat" | "draft";
   onMobileViewChange: (view: "chat" | "draft") => void;
+  onAnswerFinish: () => void;
 }
 
 export function ProjectDraftTab({
   conversation,
   onConversationLocked,
   mobileView,
+  onAnswerFinish,
 }: ProjectDraftTabProps) {
   const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [updatedProjectDraft, setUpdatedProjectDraft] = useState<IdeaType | null>(null);
@@ -55,6 +57,7 @@ export function ProjectDraftTab({
             onProjectDraftUpdate={handleProjectDraftUpdate}
             onOpenPromptModal={handleOpenPromptModal}
             onConversationLocked={onConversationLocked}
+            onAnswerFinish={onAnswerFinish}
             conversationCapabilities={{
               hasImages: Boolean(conversation.has_images ?? false),
               hasPdfs: Boolean(conversation.has_pdfs ?? false),

@@ -15,8 +15,8 @@
     "check-tailwind": "node check-tailwind.js",
     "fix-tailwind": "node check-tailwind.js && pkill -f 'next dev' || true && npm run dev",
     "gen:api-types": "openapi-typescript http://localhost:8000/openapi.json --output src/types/api.gen.ts",
-    "gen:api-types:from-file": "openapi-typescript ../backend/openapi.json --output src/types/api.gen.ts",
-    "prebuild": "sh -c 'if [ -f ../backend/openapi.json ]; then npx openapi-typescript ../backend/openapi.json --output src/types/api.gen.ts; else echo \"Skipping API type generation (no ../backend/openapi.json)\"; fi'",
+    "gen:api-types:from-file": "openapi-typescript ../server/openapi.json --output src/types/api.gen.ts",
+    "prebuild": "sh -c 'if [ -f ../server/openapi.json ]; then npx openapi-typescript ../server/openapi.json --output src/types/api.gen.ts; else echo \"Skipping API type generation (no ../server/openapi.json)\"; fi'",
     "prepare": ":"
   },
   "dependencies": {

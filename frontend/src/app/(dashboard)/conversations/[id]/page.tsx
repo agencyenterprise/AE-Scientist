@@ -3,7 +3,7 @@
 import { ConversationView } from "@/features/conversation/components/ConversationView";
 import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
 import { apiFetch } from "@/shared/lib/api-client";
-import type { ConversationDetail } from "@/types";
+import type { ConversationDetail, ConversationCostResponse } from "@/types";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -21,6 +21,7 @@ export default function ConversationPage({ params }: ConversationPageProps) {
     ConversationDetail | undefined
   >();
   const [isLoading, setIsLoading] = useState(false);
+  const [costDetails, setCostDetails] = useState<ConversationCostResponse | null>(null);
 
   // Check URL parameters for initial panel state
   const expandImportedChat = searchParams.get("expand") === "imported";
@@ -30,8 +31,13 @@ export default function ConversationPage({ params }: ConversationPageProps) {
       setIsLoading(true);
 
       try {
-        const conversationDetail = await apiFetch<ConversationDetail>(`/conversations/${id}`);
+        const [conversationDetail, costs] = await Promise.all([
+          apiFetch<ConversationDetail>(`/conversations/${id}`),
+          apiFetch<ConversationCostResponse>(`/conversations/${id}/costs`),
+        ]);
+
         setSelectedConversation(conversationDetail);
+        setCostDetails(costs);
         return conversationDetail;
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -61,6 +67,19 @@ export default function ConversationPage({ params }: ConversationPageProps) {
       loadConversationDetail(conversationId);
     }
   }, [conversationId, loadConversationDetail]);
+
+  const refreshCostDetails = useCallback(async () => {
+    if (conversationId === null) return;
+    try {
+      const costs = await apiFetch<ConversationCostResponse>(
+        `/conversations/${conversationId}/costs`
+      );
+      setCostDetails(costs);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to refresh cost details:", error);
+    }
+  }, [conversationId]);
 
   const handleConversationDeleted = async (): Promise<void> => {
     // Navigate back to home - this will be handled by the layout's conversation select
@@ -105,6 +124,8 @@ export default function ConversationPage({ params }: ConversationPageProps) {
         onSummaryGenerated={handleSummaryGenerated}
         onConversationLocked={handleConversationLocked}
         expandImportedChat={expandImportedChat}
+        costDetails={costDetails}
+        onRefreshCostDetails={refreshCostDetails}
       />
     </div>
   );

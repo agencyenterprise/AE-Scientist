@@ -3,7 +3,7 @@
 import { ConversationHeader } from "@/features/conversation/components/ConversationHeader";
 import { ConversationProvider } from "@/features/conversation/context/ConversationContext";
 import { ProjectDraftTab } from "@/features/project-draft/components/ProjectDraftTab";
-import type { ConversationDetail } from "@/types";
+import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import React, { useState } from "react";
 import { MessageCircle } from "lucide-react";
 
@@ -15,6 +15,8 @@ interface ConversationViewProps {
   onSummaryGenerated?: (summary: string) => void;
   onConversationLocked?: () => void;
   expandImportedChat?: boolean;
+  costDetails: ConversationCostResponse | null;
+  onRefreshCostDetails: () => void;
 }
 
 export function ConversationView({
@@ -24,6 +26,8 @@ export function ConversationView({
   onTitleUpdated,
   onConversationLocked,
   expandImportedChat = false,
+  costDetails,
+  onRefreshCostDetails,
 }: ConversationViewProps) {
   const [showConversation, setShowConversation] = useState(expandImportedChat);
   const [showProjectDraft, setShowProjectDraft] = useState(true);
@@ -84,6 +88,7 @@ export function ConversationView({
           onTitleUpdated={onTitleUpdated}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          costDetails={costDetails}
         />
 
         {/* Dynamic Content Area - Flexbox layout for smart space allocation */}
@@ -93,6 +98,7 @@ export function ConversationView({
             mobileView={mobileProjectView}
             onMobileViewChange={setMobileProjectView}
             onConversationLocked={onConversationLocked}
+            onAnswerFinish={onRefreshCostDetails}
           />
         </div>
       </div>

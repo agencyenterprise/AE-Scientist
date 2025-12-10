@@ -27,6 +27,7 @@ interface ProjectDraftConversationProps {
     hasPdfs?: boolean;
   };
   isVisible: boolean;
+  onAnswerFinish?: () => void;
 }
 
 export function ProjectDraftConversation({
@@ -38,6 +39,7 @@ export function ProjectDraftConversation({
   onConversationLocked,
   conversationCapabilities,
   isVisible,
+  onAnswerFinish,
 }: ProjectDraftConversationProps) {
   const { user } = useAuth();
 
@@ -112,6 +114,7 @@ export function ProjectDraftConversation({
     consumePendingFiles,
     restorePendingFiles,
     inputRef,
+    onStreamEnd: onAnswerFinish,
   });
 
   // Sync isStreaming to context

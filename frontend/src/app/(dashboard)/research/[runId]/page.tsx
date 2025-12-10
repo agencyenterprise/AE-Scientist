@@ -12,12 +12,16 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
+  CostDetailsCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { PageCard } from "@/shared/components/PageCard";
+import { apiFetch } from "@/shared/lib/api-client";
+import type { ResearchRunCostResponse } from "@/types";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 
 export default function ResearchRunDetailPage() {
   const params = useParams();
@@ -48,6 +52,13 @@ export default function ResearchRunDetailPage() {
   } = useReviewData({
     runId,
     conversationId,
+  });
+
+  const { data: costDetails, isLoading: isLoadingCost } = useQuery<ResearchRunCostResponse>({
+    queryKey: ["researchRunCost", runId],
+    queryFn: () => apiFetch(`/research-runs/${runId}/costs`),
+    enabled: !!runId,
+    refetchInterval: 10000,
   });
 
   // Auto-fetch evaluation data when conversationId is available
@@ -122,6 +133,10 @@ export default function ResearchRunDetailPage() {
           </div>
           <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
             <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
+
+            <div className="mt-4">
+              <CostDetailsCard cost={costDetails ?? null} isLoading={isLoadingCost} />
+            </div>
 
             {/* Auto Evaluation Card */}
             <div className="mt-4">

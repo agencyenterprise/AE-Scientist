@@ -33,6 +33,7 @@ from app.models import (
     ParseSuccessResult,
     ResearchRunSummary,
 )
+from app.models.conversations import ModelCost, ResearchCost
 from app.services import (
     AnthropicService,
     GrokService,
@@ -42,6 +43,7 @@ from app.services import (
 )
 from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.billing_guard import enforce_minimum_credits
+from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
 from app.services.database.conversations import CONVERSATION_STATUSES
 from app.services.database.conversations import Conversation as DBConversation
@@ -49,8 +51,7 @@ from app.services.database.conversations import DashboardConversation as DBDashb
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
-from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
@@ -183,6 +184,12 @@ class ConversationUpdateResponse(BaseModel):
     """Response for conversation updates."""
 
     conversation: ConversationResponse = Field(..., description="Updated conversation")
+
+
+class ConversationCostResponse(BaseModel):
+    total_cost: float
+    cost_by_model: list[ModelCost]
+    cost_by_research: list[ResearchCost]
 
 
 class MessageResponse(BaseModel):
@@ -973,15 +980,14 @@ async def list_conversations(
         response.status_code = 400
         return ErrorResponse(
             error="Invalid conversation_status",
-            detail=f"Must be one of: {', '.join(CONVERSATION_STATUSES)}"
+            detail=f"Must be one of: {', '.join(CONVERSATION_STATUSES)}",
         )
 
     # Validate run_status
     if run_status is not None and run_status not in PIPELINE_RUN_STATUSES:
         response.status_code = 400
         return ErrorResponse(
-            error="Invalid run_status",
-            detail=f"Must be one of: {', '.join(PIPELINE_RUN_STATUSES)}"
+            error="Invalid run_status", detail=f"Must be one of: {', '.join(PIPELINE_RUN_STATUSES)}"
         )
 
     db = get_database()
@@ -1117,6 +1123,69 @@ async def update_conversation(
         )
 
     return ConversationUpdateResponse(conversation=convert_db_to_api_response(updated_conversation))
+
+
+@router.get("/{conversation_id}/costs")
+async def get_conversation_costs(
+    conversation_id: int, response: Response
+) -> Union[ConversationCostResponse, ErrorResponse]:
+    """
+    Get the cost breakdown for a specific conversation.
+    """
+    if conversation_id <= 0:
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid conversation ID", detail="Conversation ID must be positive"
+        )
+
+    db = get_database()
+    try:
+        researches_token_usage = (
+            db.get_llm_token_usages_by_conversation_aggregated_by_run_and_model(conversation_id)
+        )
+        conversation_token_usage = db.get_llm_token_usages_by_conversation_aggregated_by_model(
+            conversation_id
+        )
+
+        researches_token_usage_cost = calculate_llm_token_usage_cost(researches_token_usage)
+        conversation_token_usage_cost = calculate_llm_token_usage_cost(conversation_token_usage)
+
+        total_cost = sum(
+            [
+                cost.input_cost + cost.output_cost
+                for cost in researches_token_usage_cost + conversation_token_usage_cost
+            ]
+        )
+
+        conversation_cost_by_model: Dict[str, ModelCost] = {}
+        for cost in conversation_token_usage_cost:
+            if cost.model not in conversation_cost_by_model:
+                conversation_cost_by_model[cost.model] = ModelCost(
+                    model=cost.model, cost=cost.input_cost + cost.output_cost
+                )
+            else:
+                conversation_cost_by_model[cost.model].cost += cost.input_cost + cost.output_cost
+
+        researches_cost_by_run_id: Dict[str, ResearchCost] = {}
+        for cost in researches_token_usage_cost:
+            if not cost.run_id:
+                continue
+            if cost.run_id not in researches_cost_by_run_id:
+                researches_cost_by_run_id[cost.run_id] = ResearchCost(
+                    run_id=cost.run_id, cost=cost.input_cost + cost.output_cost
+                )
+            else:
+                researches_cost_by_run_id[cost.run_id].cost += cost.input_cost + cost.output_cost
+
+        return ConversationCostResponse(
+            total_cost=total_cost,
+            cost_by_model=list(conversation_cost_by_model.values()),
+            cost_by_research=list(researches_cost_by_run_id.values()),
+        )
+    except Exception as e:
+        logger.exception(f"Error getting conversation costs: {e}")
+        response.status_code = 500
+        return ErrorResponse(error="Database error", detail=str(e))
 
 
 @router.get("/{conversation_id}/imported_chat_summary")

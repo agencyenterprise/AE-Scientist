@@ -9,6 +9,7 @@ from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.research_pipeline.monitor import pipeline_monitor
+from app.validation import validate_configuration
 
 
 def configure_logging() -> None:
@@ -46,6 +47,9 @@ def configure_logging() -> None:
 
 # Configure logging before creating the app
 configure_logging()
+
+# Validate application configuration
+validate_configuration()
 
 
 @asynccontextmanager

@@ -16,3 +16,10 @@ class LlmTokenUsage(BaseModel):
     model: str = Field(..., description="LLM model name")
     input_tokens: int = Field(..., description="Number of input tokens")
     output_tokens: int = Field(..., description="Number of output tokens")
+
+
+class LLMTokenUsageCost(LlmTokenUsage):
+    """Represents a record of LLM token usage cost."""
+
+    input_cost: float = Field(..., description="Cost of the LLM token usage for input tokens")
+    output_cost: float = Field(..., description="Cost of the LLM token usage for output tokens")
