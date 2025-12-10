@@ -52,6 +52,7 @@ class BillingService:
     # ------------------------------------------------------------------
     def list_credit_packs(self) -> List[Dict[str, Any]]:
         price_map = settings.STRIPE_PRICE_TO_CREDITS
+        logger.info("Price map: %s", price_map)
         if not price_map:
             return []
 
