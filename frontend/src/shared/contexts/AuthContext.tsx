@@ -98,6 +98,9 @@ function AuthProviderInner({ children }: AuthProviderProps) {
       let errorMessage = "Authentication failed";
 
       switch (error) {
+        case "oauth_cancelled":
+          errorMessage = "Login was cancelled. Please try again if you want to sign in.";
+          break;
         case "oauth_error":
           errorMessage = "OAuth authentication failed";
           break;

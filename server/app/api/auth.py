@@ -50,7 +50,7 @@ async def login(_request: Request) -> RedirectResponse:
 @router.get("/callback")
 async def auth_callback(
     response: Response,
-    code: str = Query(..., description="Authorization code from Google"),
+    code: str = Query(None, description="Authorization code from Google"),
     state: str = Query(None, description="State parameter for security"),
     error: str = Query(None, description="Error from OAuth provider"),
 ) -> RedirectResponse:
@@ -70,7 +70,13 @@ async def auth_callback(
         # Check for OAuth errors
         if error:
             logger.warning(f"OAuth error: {error}")
-            error_url = f"{settings.FRONTEND_URL}/login?error=oauth_error"
+            error_url = f"{settings.FRONTEND_URL}/login?error=oauth_cancelled"
+            return RedirectResponse(url=error_url, status_code=302)
+
+        # Check if code is missing
+        if not code:
+            logger.warning("OAuth callback missing authorization code")
+            error_url = f"{settings.FRONTEND_URL}/login?error=auth_failed"
             return RedirectResponse(url=error_url, status_code=302)
 
         # Authenticate with Google
