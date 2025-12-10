@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
+import { useRouter } from "next/navigation";
 
 function getInitials(name: string): string {
   return name
@@ -15,6 +16,7 @@ function getInitials(name: string): string {
 
 export function UserProfileDropdown() {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [coords, setCoords] = useState({ top: 0, right: 0 });
@@ -56,6 +58,15 @@ export function UserProfileDropdown() {
                 <p className="text-xs text-slate-400">{user.email}</p>
               </div>
               <div className="p-2">
+                <button
+                  onClick={() => {
+                    router.push("/billing");
+                    setIsOpen(false);
+                  }}
+                  className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+                >
+                  Billing &amp; Credits
+                </button>
                 <button
                   onClick={() => {
                     logout();

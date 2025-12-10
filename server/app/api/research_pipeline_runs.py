@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ArtifactPresignedUrlResponse,
@@ -23,6 +24,7 @@ from app.models import (
     ResearchRunSubstageEvent,
 )
 from app.services import get_database
+from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRun,
@@ -381,6 +383,12 @@ def submit_idea_for_research(
     idea_data = db.get_idea_by_conversation_id(conversation_id)
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
+
+    enforce_minimum_credits(
+        user_id=user.id,
+        required=settings.MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE,
+        action="research_pipeline",
+    )
 
     run_id = _create_and_launch_research_run(
         idea_data=cast(IdeaPayloadSource, idea_data),

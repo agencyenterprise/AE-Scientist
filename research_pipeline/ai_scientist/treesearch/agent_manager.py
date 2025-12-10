@@ -92,6 +92,9 @@ class AgentManager:
         # Create initial stage
         # Initialize the experiment with the first stage
         self._create_initial_stage()
+        # Track last iteration logs per stage to avoid duplicate spam when a stage stalls
+        self._last_logged_iteration_by_stage: Dict[str, int] = {}
+        self._last_logged_node_count_by_stage: Dict[str, int] = {}
 
     def get_max_iterations(self, stage_number: int) -> int:
         """Get max iterations for a stage from config or default"""
@@ -620,22 +623,32 @@ Your research idea:\n\n
         """
         while True:
             # Emit iteration log before each step; progress events are handled in step_callback.
-            journal = self.journals[current_substage.name]
+            stage_name = current_substage.name
+            journal = self.journals[stage_name]
             max_iters = current_substage.max_iterations
-            current_iter = len(journal.nodes) + 1
-            logger.debug(f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}")
-            try:
-                self.event_callback(
-                    RunLogEvent(
-                        message=(
-                            f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}"
-                        ),
-                        level="info",
+            node_count = len(journal.nodes)
+            current_iter = node_count + 1
+            logger.debug(f"Stage {stage_name}: Iteration {current_iter}/{max_iters}")
+
+            last_node_count = self._last_logged_node_count_by_stage.get(stage_name)
+            if last_node_count is not None and node_count < last_node_count:
+                # Stage restarted; reset tracking so iteration logs resume from 1.
+                self._last_logged_node_count_by_stage.pop(stage_name, None)
+                self._last_logged_iteration_by_stage.pop(stage_name, None)
+            last_logged_iter = self._last_logged_iteration_by_stage.get(stage_name)
+            if last_logged_iter is None or current_iter > last_logged_iter:
+                self._last_logged_iteration_by_stage[stage_name] = current_iter
+                self._last_logged_node_count_by_stage[stage_name] = node_count
+                try:
+                    self.event_callback(
+                        RunLogEvent(
+                            message=f"Stage {stage_name}: Iteration {current_iter}/{max_iters}",
+                            level="info",
+                        )
                     )
-                )
-            except Exception:
-                # Best-effort logging; never block iteration on event errors
-                pass
+                except Exception:
+                    # Best-effort logging; never block iteration on event errors
+                    pass
 
             # Drive one iteration of the agent to make forward progress.
             agent.step()

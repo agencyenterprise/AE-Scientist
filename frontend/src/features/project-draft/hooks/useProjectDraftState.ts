@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ConversationDetail, Idea } from "@/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { useProjectDraftData } from "./use-project-draft-data";
 import { useProjectDraftEdit } from "./use-project-draft-edit";
+import { parseInsufficientCreditsError } from "@/shared/utils/credits";
 
 interface UseProjectDraftStateProps {
   conversation: ConversationDetail;
@@ -122,7 +123,15 @@ export function useProjectDraftState({
       setIsCreateModalOpen(false);
       router.push("/research");
     } catch (error) {
-      // Re-throw to let the caller handle the error
+      if (error instanceof ApiError && error.status === 402) {
+        const info = parseInsufficientCreditsError(error.data);
+        const message =
+          info?.message ||
+          (info?.required
+            ? `You need at least ${info.required} credits to launch research.`
+            : "Insufficient credits to launch research.");
+        throw new Error(message);
+      }
       throw error;
     } finally {
       setIsCreatingProject(false);

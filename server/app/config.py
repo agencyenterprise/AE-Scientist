@@ -1,10 +1,27 @@
+import json
 import os
-from typing import List
+from typing import Dict, List
 
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+def _parse_price_map(raw_value: str) -> Dict[str, int]:
+    try:
+        parsed = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    sanitized: Dict[str, int] = {}
+    for key, value in parsed.items():
+        try:
+            sanitized[str(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return sanitized
 
 
 class Settings:
@@ -65,12 +82,26 @@ class Settings:
 
     # Authentication settings
     SESSION_EXPIRE_HOURS: int = int(os.getenv("SESSION_EXPIRE_HOURS", "24"))
+    MIN_USER_CREDITS_FOR_CONVERSATION: int = int(
+        os.getenv("MIN_USER_CREDITS_FOR_CONVERSATION", "0")
+    )
+    MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE: int = int(
+        os.getenv("MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE", "0")
+    )
 
     # Frontend URL for redirects
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     # Research pipeline webhook authentication
     TELEMETRY_WEBHOOK_TOKEN: str = os.getenv("TELEMETRY_WEBHOOK_TOKEN", "")
+
+    # Stripe / billing configuration
+    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    STRIPE_CHECKOUT_SUCCESS_URL: str = os.getenv("STRIPE_CHECKOUT_SUCCESS_URL", "")
+    STRIPE_PRICE_TO_CREDITS: Dict[str, int] = _parse_price_map(
+        os.getenv("STRIPE_PRICE_TO_CREDITS", "{}")
+    )
 
     @property
     def is_production(self) -> bool:
