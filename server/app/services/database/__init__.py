@@ -17,6 +17,7 @@ from .prompts import PromptsMixin
 from .research_pipeline_runs import ResearchPipelineRunsMixin
 from .rp_artifacts import ResearchPipelineArtifactsMixin
 from .rp_events import ResearchPipelineEventsMixin
+from .rp_llm_reviews import ResearchPipelineLlmReviewsMixin
 from .users import UsersDatabaseMixin
 
 
@@ -34,6 +35,7 @@ class DatabaseManager(
     ResearchPipelineRunsMixin,
     ResearchPipelineArtifactsMixin,
     ResearchPipelineEventsMixin,
+    ResearchPipelineLlmReviewsMixin,
 ):
     """
     Main database manager that combines all domain-specific functionality.

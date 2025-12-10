@@ -238,6 +238,111 @@ async def public_route(request: Request):
 
 ---
 
+## Union Response Pattern for "Not Found" States
+
+> Added from: auto-evaluation-details-ui implementation (2025-12-09)
+
+When "not found" is a valid business state rather than an error (e.g., review doesn't exist yet for a run, settings not configured), return a typed response instead of HTTP 404.
+
+### When to Use
+
+- Resource existence is expected to vary (not an error condition)
+- Frontend needs to distinguish between "not found" and actual errors
+- You want to return additional context about why the resource doesn't exist
+
+### When NOT to Use
+
+- Resource should always exist (use HTTP 404)
+- Unauthorized access (use HTTP 403)
+- Invalid parameters (use HTTP 400)
+
+### Implementation Pattern
+
+**Define response models:**
+```python
+# server/app/models/my_feature.py
+from pydantic import BaseModel, Field
+from typing import Union
+
+class MyResourceResponse(BaseModel):
+    """Response when resource exists."""
+    id: int
+    name: str
+    data: str
+
+class MyResourceNotFoundResponse(BaseModel):
+    """Response when resource doesn't exist (expected state)."""
+    resource_id: str = Field(..., description="Identifier that was searched")
+    exists: bool = Field(False, description="Always False for not-found response")
+    message: str = Field(..., description="User-friendly explanation")
+```
+
+**Endpoint with Union response:**
+```python
+# server/app/api/my_feature.py
+from typing import Union
+
+@router.get(
+    "/{resource_id}",
+    response_model=Union[MyResourceResponse, MyResourceNotFoundResponse]
+)
+def get_resource(resource_id: str, request: Request):
+    """Fetch resource by ID. Returns NotFoundResponse if resource doesn't exist."""
+    # Auth and ownership validation...
+
+    resource = db.get_resource(resource_id)
+    if resource is None:
+        return MyResourceNotFoundResponse(
+            resource_id=resource_id,
+            exists=False,
+            message="No data available for this resource yet"
+        )
+
+    return MyResourceResponse(
+        id=resource["id"],
+        name=resource["name"],
+        data=resource["data"]
+    )
+```
+
+**Frontend type guard:**
+```typescript
+// types/myFeature.ts
+export interface MyResourceResponse {
+  id: number;
+  name: string;
+  data: string;
+}
+
+export interface MyResourceNotFoundResponse {
+  resource_id: string;
+  exists: false;
+  message: string;
+}
+
+// Type guard to discriminate union
+export function isResource(
+  response: MyResourceResponse | MyResourceNotFoundResponse
+): response is MyResourceResponse {
+  return "id" in response && "name" in response;
+}
+
+// Usage in component
+const response = await apiFetch<MyResourceResponse | MyResourceNotFoundResponse>(url);
+if (isResource(response)) {
+  setData(response);
+} else {
+  setNotFound(true);
+  setMessage(response.message);
+}
+```
+
+### Reference Implementation
+
+See `server/app/api/research_pipeline_runs.py` endpoint `get_research_run_review()` and `frontend/src/features/research/hooks/useReviewData.ts`.
+
+---
+
 ## Common Pitfalls
 
 - **Always import router in routes.py**: Router won't be registered otherwise

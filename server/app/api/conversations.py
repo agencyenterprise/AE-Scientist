@@ -166,6 +166,7 @@ class ConversationListItem(BaseModel):
     last_assistant_message_content: Optional[str] = None
     manual_title: Optional[str] = None
     manual_hypothesis: Optional[str] = None
+    status: str = "draft"  # Conversation status: 'draft' or 'with_research'
 
 
 class ConversationListResponse(BaseModel):
@@ -964,6 +965,7 @@ async def list_conversations(
                 last_assistant_message_content=conv.last_assistant_message_content,
                 manual_title=conv.manual_title,
                 manual_hypothesis=conv.manual_hypothesis,
+                status=conv.status,
             )
             for conv in conversations
         ]

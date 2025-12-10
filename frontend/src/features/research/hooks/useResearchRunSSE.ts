@@ -69,7 +69,7 @@ export function useResearchRunSSE({
 
     try {
       const response = await fetch(
-        `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/stream`,
+        `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/events`,
         {
           credentials: "include",
           headers: { Accept: "text/event-stream" },

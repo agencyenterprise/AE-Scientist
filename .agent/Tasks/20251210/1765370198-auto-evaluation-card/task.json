@@ -1,0 +1,117 @@
+{
+  "id": "auto-evaluation-card",
+  "name": "Auto Evaluation Summary Card",
+  "description": "Update the Evaluation details section to show a summary card that displays Auto Evaluation header, Verdict (PASS/FAIL), Overall score (X/10), Decision (Accept/Reject), and a View Details button that opens the existing ReviewModal. This replaces the current simple button implementation.",
+  "created": "2025-12-10T12:03:18Z",
+  "lastUpdated": "2025-12-10T12:03:18Z",
+
+  "classification": {
+    "type": "ui-feature",
+    "scope": "single-feature",
+    "complexity": "simple",
+    "confidence": "high",
+    "requiresUserStories": false,
+    "workflow": ["feature-executor", "copy-reviewer"]
+  },
+
+  "techStack": {
+    "detected": ["nextjs-15", "typescript", "react-19", "tailwindcss"],
+    "versions": {
+      "next": "15.4.8",
+      "react": "19.1.2",
+      "typescript": "5.x"
+    }
+  },
+
+  "docsConsulted": {
+    "project": [
+      ".agent/SOP/frontend_features.md",
+      ".agent/README.md"
+    ],
+    "external": [],
+    "existingFeatures": [
+      "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+      "frontend/src/features/research/hooks/useReviewData.ts",
+      "frontend/src/app/(dashboard)/research/[runId]/page.tsx"
+    ]
+  },
+
+  "assets": {
+    "reuse": [
+      "ReviewModal component (existing)",
+      "useReviewData hook (existing)",
+      "LlmReviewResponse type (existing)"
+    ],
+    "create": [
+      "AutoEvaluationCard component"
+    ],
+    "extract": []
+  },
+
+  "files": {
+    "created": [],
+    "modified": [],
+    "pending": [
+      "frontend/src/features/research/components/run-detail/AutoEvaluationCard.tsx",
+      "frontend/src/features/research/components/run-detail/index.ts",
+      "frontend/src/app/(dashboard)/research/[runId]/page.tsx"
+    ]
+  },
+
+  "phases": [
+    {
+      "id": "classification",
+      "agent": "task-classifier",
+      "status": "completed",
+      "completedAt": "2025-12-10T12:03:18Z"
+    },
+    {
+      "id": "implementation",
+      "agent": "feature-executor",
+      "status": "pending"
+    },
+    {
+      "id": "copy-review",
+      "agent": "copy-reviewer",
+      "status": "pending"
+    }
+  ],
+
+  "decisions": [
+    {
+      "phase": "classification",
+      "key": "workflow",
+      "value": "ui-only",
+      "reason": "This is a UI-only change - creating a new component to display existing data from the already-implemented useReviewData hook and ReviewModal. No backend changes needed. Skipping design-expert and a11y-validator as this is a simple card component using existing patterns."
+    },
+    {
+      "phase": "classification",
+      "key": "skip-planner",
+      "value": true,
+      "reason": "The task is straightforward with clear implementation steps: create AutoEvaluationCard component that displays verdict/score/decision and triggers the existing ReviewModal. No planning needed."
+    },
+    {
+      "phase": "classification",
+      "key": "complexity",
+      "value": "simple",
+      "reason": "Single new component (~50-80 lines) that consumes existing hook and modal. Clear structure with data display and button handler."
+    }
+  ],
+
+  "searches": [],
+
+  "reviews": {
+    "copy": [
+      {
+        "element": "auto-evaluation-card",
+        "text": ["Auto Evaluation", "View Details", "PASS", "FAIL"],
+        "status": "pending"
+      }
+    ],
+    "queries": []
+  },
+
+  "currentPhase": "implementation",
+  "nextAgent": "feature-executor",
+  "blockedBy": null
+}
