@@ -21,7 +21,12 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
 from pydantic import BaseModel
 
 from ai_scientist.llm import structured_query_with_schema
-from ai_scientist.treesearch.events import BaseEvent, RunLogEvent, SubstageCompletedEvent
+from ai_scientist.treesearch.events import (
+    BaseEvent,
+    RunLogEvent,
+    RunStageProgressEvent,
+    SubstageCompletedEvent,
+)
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
@@ -80,10 +85,16 @@ class AgentManager:
         self.journals: Dict[str, Journal] = {}
         self.stage_history: List[StageTransition] = []
         self.completed_stages: List[str] = []
+        self._completed_stages: set[str] = set()
+        self._final_progress_emitted: set[str] = set()
+        self._substage_completed_emitted: set[str] = set()
         # Stage slugs/goals are defined in the stage classes
         # Create initial stage
         # Initialize the experiment with the first stage
         self._create_initial_stage()
+        # Track last iteration logs per stage to avoid duplicate spam when a stage stalls
+        self._last_logged_iteration_by_stage: Dict[str, int] = {}
+        self._last_logged_node_count_by_stage: Dict[str, int] = {}
 
     def get_max_iterations(self, stage_number: int) -> int:
         """Get max iterations for a stage from config or default"""
@@ -532,6 +543,71 @@ Your research idea:\n\n
 
         return True
 
+    def _emit_final_progress_if_needed(
+        self, *, current_substage: StageMeta, journal: Journal
+    ) -> None:
+        """Ensure a single final progress=1.0 event per stage."""
+        if current_substage.name in self._final_progress_emitted:
+            return
+        final_iteration = (
+            current_substage.max_iterations
+            if current_substage.max_iterations > 0
+            else len(journal.nodes)
+        )
+        try:
+            self.event_callback(
+                RunStageProgressEvent(
+                    stage=current_substage.name,
+                    iteration=final_iteration,
+                    max_iterations=current_substage.max_iterations,
+                    progress=1.0,
+                    total_nodes=len(journal.nodes),
+                    buggy_nodes=len(journal.buggy_nodes),
+                    good_nodes=len(journal.good_nodes),
+                    best_metric=(
+                        str(best_node.metric) if (best_node := journal.get_best_node()) else None
+                    ),
+                    eta_s=None,
+                    latest_iteration_time_s=None,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit final RunStageProgressEvent")
+        self._final_progress_emitted.add(current_substage.name)
+
+    def _emit_substage_completed_event(
+        self, *, current_substage: StageMeta, journal: Journal, reason: str
+    ) -> None:
+        """Emit SubstageCompletedEvent once per substage."""
+        if current_substage.name in self._substage_completed_emitted:
+            return
+        try:
+            best_node = journal.get_best_node()
+            summary: Dict[str, Any] = {
+                "goals": current_substage.goals,
+                "total_nodes": len(journal.nodes),
+                "buggy_nodes": len(journal.buggy_nodes),
+                "good_nodes": len(journal.good_nodes),
+                "best_metric": (str(best_node.metric) if best_node and best_node.metric else None),
+                "feedback": reason,
+            }
+            self.event_callback(
+                SubstageCompletedEvent(
+                    stage=current_substage.name,
+                    main_stage_number=current_substage.number,
+                    substage_number=current_substage.substage_number,
+                    substage_name=current_substage.substage_name,
+                    reason=reason,
+                    summary=summary,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit SubstageCompletedEvent")
+        self._substage_completed_emitted.add(current_substage.name)
+
+    def has_stage_completed(self, stage_name: str) -> bool:
+        return stage_name in self._completed_stages
+
     def _run_substage(
         self,
         current_substage: StageMeta,
@@ -547,22 +623,32 @@ Your research idea:\n\n
         """
         while True:
             # Emit iteration log before each step; progress events are handled in step_callback.
-            journal = self.journals[current_substage.name]
+            stage_name = current_substage.name
+            journal = self.journals[stage_name]
             max_iters = current_substage.max_iterations
-            current_iter = len(journal.nodes) + 1
-            logger.debug(f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}")
-            try:
-                self.event_callback(
-                    RunLogEvent(
-                        message=(
-                            f"Stage {current_substage.name}: Iteration {current_iter}/{max_iters}"
-                        ),
-                        level="info",
+            node_count = len(journal.nodes)
+            current_iter = node_count + 1
+            logger.debug(f"Stage {stage_name}: Iteration {current_iter}/{max_iters}")
+
+            last_node_count = self._last_logged_node_count_by_stage.get(stage_name)
+            if last_node_count is not None and node_count < last_node_count:
+                # Stage restarted; reset tracking so iteration logs resume from 1.
+                self._last_logged_node_count_by_stage.pop(stage_name, None)
+                self._last_logged_iteration_by_stage.pop(stage_name, None)
+            last_logged_iter = self._last_logged_iteration_by_stage.get(stage_name)
+            if last_logged_iter is None or current_iter > last_logged_iter:
+                self._last_logged_iteration_by_stage[stage_name] = current_iter
+                self._last_logged_node_count_by_stage[stage_name] = node_count
+                try:
+                    self.event_callback(
+                        RunLogEvent(
+                            message=f"Stage {stage_name}: Iteration {current_iter}/{max_iters}",
+                            level="info",
+                        )
                     )
-                )
-            except Exception:
-                # Best-effort logging; never block iteration on event errors
-                pass
+                except Exception:
+                    # Best-effort logging; never block iteration on event errors
+                    pass
 
             # Drive one iteration of the agent to make forward progress.
             agent.step()
@@ -583,36 +669,25 @@ Your research idea:\n\n
 
             # If substage completes, emit event (even if main stage also completes)
             if substage_complete:
-                # Emit a sub-stage completion event with a lightweight summary
-                try:
-                    journal = self.journals[current_substage.name]
-                    best_node = journal.get_best_node()
-                    summary: Dict[str, Any] = {
-                        "goals": current_substage.goals,
-                        "total_nodes": len(journal.nodes),
-                        "buggy_nodes": len(journal.buggy_nodes),
-                        "good_nodes": len(journal.good_nodes),
-                        "best_metric": (
-                            str(best_node.metric) if best_node and best_node.metric else None
-                        ),
-                        "feedback": substage_feedback,
-                    }
-                    self.event_callback(
-                        SubstageCompletedEvent(
-                            stage=current_substage.name,
-                            main_stage_number=current_substage.number,
-                            substage_number=current_substage.substage_number,
-                            substage_name=current_substage.substage_name,
-                            reason=substage_feedback,
-                            summary=summary,
-                        )
-                    )
-                except Exception:
-                    # Best-effort telemetry; never block progression on event errors
-                    logger.exception("Failed to emit SubstageCompletedEvent")
+                self._emit_substage_completed_event(
+                    current_substage=current_substage,
+                    journal=self.journals[current_substage.name],
+                    reason=substage_feedback,
+                )
 
             # If main stage completes, run multi-seed eval and return
             if main_stage_complete:
+                self._completed_stages.add(current_substage.name)
+                self._emit_final_progress_if_needed(
+                    current_substage=current_substage,
+                    journal=self.journals[current_substage.name],
+                )
+                if current_substage.name not in self._substage_completed_emitted:
+                    self._emit_substage_completed_event(
+                        current_substage=current_substage,
+                        journal=self.journals[current_substage.name],
+                        reason=main_stage_feedback,
+                    )
                 # After main stage completion, run multi-seed eval on the best node
                 multi_seed_ok = self._perform_multi_seed_eval_if_needed(
                     agent=agent,

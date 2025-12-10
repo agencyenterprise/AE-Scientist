@@ -6,6 +6,11 @@ export const config = {
 
   // Environment
   environment: process.env.NEXT_PUBLIC_ENVIRONMENT || "development",
+  stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
+  minCredits: {
+    conversation: Number(process.env.NEXT_PUBLIC_MIN_USER_CREDITS_FOR_CONVERSATION || "0"),
+    researchPipeline: Number(process.env.NEXT_PUBLIC_MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE || "0"),
+  },
 
   // Derived values
   get apiUrl() {

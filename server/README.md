@@ -70,6 +70,30 @@ A collaborative platform that transforms LLM conversations into structured resea
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:8000
 
+### Credits & Billing
+
+Refinement and research runs can now be gated behind prepaid credits. Configure the following
+environment variables in `server/.env` to enable Stripe-powered top-ups:
+
+| Variable | Description |
+| --- | --- |
+| `MIN_USER_CREDITS_FOR_CONVERSATION` | Minimum credits required before a user can refine/import a conversation |
+| `MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE` | Minimum credits required before launching a RunPod research run |
+| `STRIPE_SECRET_KEY` | Server-side Stripe key used for Checkout + webhook verification |
+| `STRIPE_WEBHOOK_SECRET` | Secret used to validate `checkout.session.*` events |
+| `STRIPE_CHECKOUT_SUCCESS_URL` | Optional default success redirect (defaults to `/billing?success=1`) |
+| `STRIPE_PRICE_TO_CREDITS` | JSON map of `price_id -> credits`, e.g. `{"price_small":100,"price_large":800}` |
+
+The backend exposes:
+
+- `GET /api/billing/wallet` – current balance + recent ledger entries
+- `GET /api/billing/packs` – configured Stripe prices and credit amounts
+- `POST /api/billing/checkout-session` – creates a Checkout session for the selected pack
+- `POST /api/billing/stripe-webhook` – receives Stripe events (whitelisted in auth middleware)
+
+On the frontend, add the corresponding public variables (`NEXT_PUBLIC_*`) so the Billing page can
+display thresholds and redirect URLs.
+
 ### Playwright Setup
 
 Playwright is used for browser automation in the backend (e.g., scraping and browser-driven tests). After installing backend dependencies, install the browser binaries locally.

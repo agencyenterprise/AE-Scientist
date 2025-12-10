@@ -419,6 +419,80 @@ export function useAuth() {
 }
 ```
 
+### Layout-Level Filter State (App Router)
+
+> Added from: conversations-filter-feature implementation (2025-12-10)
+
+When implementing filters that should persist across navigation between child routes, manage filter state in the layout component. In Next.js 15 App Router, layouts preserve state on navigation.
+
+**When to Use:**
+- Filter controls on a list page that has child detail pages
+- User navigates to detail and back, filter should remain
+- Filter values need to trigger API refetch
+
+**Pattern:**
+
+```typescript
+// app/(dashboard)/conversations/layout.tsx
+'use client'
+
+import { useState, useCallback, useMemo, type ReactNode } from 'react'
+import { DashboardContext } from '@/features/dashboard/contexts/DashboardContext'
+import type { ConversationStatusFilter, RunStatusFilter } from '@/features/conversation/types/conversation-filter.types'
+
+export default function ConversationsLayout({ children }: { children: ReactNode }) {
+  // Filter state persists across navigation
+  const [conversationStatusFilter, setConversationStatusFilter] = useState<ConversationStatusFilter>('all')
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>('all')
+
+  // Build query string for API, omitting "all" values
+  const loadConversations = useCallback(async () => {
+    const params = new URLSearchParams()
+    if (conversationStatusFilter !== 'all') {
+      params.set('conversation_status', conversationStatusFilter)
+    }
+    if (runStatusFilter !== 'all') {
+      params.set('run_status', runStatusFilter)
+    }
+    const queryString = params.toString()
+    const url = queryString ? `/conversations?${queryString}` : '/conversations'
+
+    const response = await apiFetch(url)
+    // ... handle response
+  }, [conversationStatusFilter, runStatusFilter])
+
+  // Refetch when filters change
+  useEffect(() => {
+    loadConversations()
+  }, [loadConversations])
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    conversationStatusFilter,
+    setConversationStatusFilter,
+    runStatusFilter,
+    setRunStatusFilter,
+    // ... other context values
+  }), [conversationStatusFilter, runStatusFilter])
+
+  return (
+    <DashboardContext.Provider value={contextValue}>
+      {children}
+    </DashboardContext.Provider>
+  )
+}
+```
+
+**Key Points:**
+1. `'use client'` in layout - Required for useState/useCallback
+2. Layout state persists on navigation - App Router feature
+3. Memoize context value with `useMemo` - Prevents child re-renders
+4. Omit "all" from query string - Cleaner API calls
+5. Use `useEffect` to refetch on filter change
+
+**Reference Implementation:**
+See `frontend/src/app/(dashboard)/conversations/layout.tsx` and `frontend/src/features/dashboard/contexts/DashboardContext.tsx`.
+
 ### Server State (React Query)
 - Use **React Query** via `QueryProvider` in `shared/providers/`
 - Configuration with sensible defaults

@@ -1,6 +1,10 @@
 "use client";
 
 import { DashboardContext, SortDir, SortKey } from "@/features/dashboard/contexts/DashboardContext";
+import type {
+  ConversationStatusFilter,
+  RunStatusFilter,
+} from "@/features/conversation/types/conversation-filter.types";
 
 import { ProtectedRoute } from "@/shared/components/ProtectedRoute";
 import type { Conversation } from "@/shared/lib/api-adapters";
@@ -22,6 +26,9 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
   const [isLoading, setIsLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("updated");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [conversationStatusFilter, setConversationStatusFilter] =
+    useState<ConversationStatusFilter>("all");
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>("all");
 
   const selectedConversationId = pathname.startsWith("/conversations/")
     ? (() => {
@@ -33,8 +40,21 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
   const loadConversations = useCallback(async (): Promise<void> => {
     try {
       setIsLoading(true);
+      // Build query string with filters
+      const params = new URLSearchParams();
+      params.set("limit", "500");
+      params.set("offset", "0");
+
+      // Only add filter params if they're not "all"
+      if (conversationStatusFilter !== "all") {
+        params.set("conversation_status", conversationStatusFilter);
+      }
+      if (runStatusFilter !== "all") {
+        params.set("run_status", runStatusFilter);
+      }
+
       const apiResponse = await apiFetch<ConversationListResponse>(
-        "/conversations?limit=500&offset=0"
+        `/conversations?${params.toString()}`
       );
       const data = convertApiConversationList(apiResponse);
       setConversations(data);
@@ -43,7 +63,7 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [conversationStatusFilter, runStatusFilter]);
 
   useEffect(() => {
     loadConversations();
@@ -65,6 +85,10 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
     setSortKey,
     sortDir,
     setSortDir,
+    conversationStatusFilter,
+    setConversationStatusFilter,
+    runStatusFilter,
+    setRunStatusFilter,
   };
 
   return (

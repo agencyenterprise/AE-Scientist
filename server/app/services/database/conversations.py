@@ -253,9 +253,28 @@ class ConversationsMixin(ConnectionProvider):
         ]
 
     def list_conversations(
-        self, limit: int = 100, offset: int = 0, user_id: int | None = None
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        user_id: int | None = None,
+        conversation_status: str | None = None,
+        run_status: str | None = None,
     ) -> List[DashboardConversation]:
-        """List conversations for dashboard with inline query and pagination."""
+        """List conversations for dashboard with optional filtering and pagination.
+
+        Args:
+            limit: Max results (default 100, max 1000)
+            offset: Pagination offset (default 0)
+            user_id: Filter by user (required for API endpoint)
+            conversation_status: Filter by "draft" or "with_research" (optional)
+            run_status: Filter by run status (optional)
+
+        Returns:
+            List of DashboardConversation objects
+
+        Note: Filters are ANDed together. When run_status is provided,
+        only conversations with at least one matching run are returned.
+        """
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 query = """
@@ -293,12 +312,37 @@ class ConversationsMixin(ConnectionProvider):
                     LEFT JOIN ideas i ON i.conversation_id = c.id
                     LEFT JOIN idea_versions iv ON i.active_idea_version_id = iv.id
                 """
+
                 params: list = []
+                where_conditions: list = []
+
+                # Add user filter (required for API)
                 if user_id is not None:
-                    query += " WHERE c.imported_by_user_id = %s"
+                    where_conditions.append("c.imported_by_user_id = %s")
                     params.append(user_id)
+
+                # Add conversation status filter
+                if conversation_status is not None:
+                    where_conditions.append("c.status = %s")
+                    params.append(conversation_status)
+
+                # Add research run status filter using EXISTS subquery
+                # (avoids JOIN + DISTINCT which conflicts with ORDER BY in subqueries)
+                if run_status is not None:
+                    where_conditions.append(
+                        "EXISTS (SELECT 1 FROM research_pipeline_runs rpr "
+                        "WHERE rpr.idea_id = i.id AND rpr.status = %s)"
+                    )
+                    params.append(run_status)
+
+                # Build complete WHERE clause
+                if where_conditions:
+                    query += " WHERE " + " AND ".join(where_conditions)
+
+                # Add ordering and pagination
                 query += " ORDER BY c.updated_at DESC LIMIT %s OFFSET %s"
                 params.extend([limit, offset])
+
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
 

@@ -159,6 +159,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/wallet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Wallet
+         * @description Return wallet balance plus recent transactions for the authenticated user.
+         */
+        get: operations["get_wallet_api_billing_wallet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Credit Packs
+         * @description Expose the configured Stripe price IDs and their associated credit amounts.
+         */
+        get: operations["list_credit_packs_api_billing_packs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/checkout-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Checkout Session
+         * @description Create a Stripe Checkout session for the requested price ID.
+         */
+        post: operations["create_checkout_session_api_billing_checkout_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/billing/stripe-webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe Webhook
+         * @description Handle Stripe webhook events.
+         */
+        post: operations["stripe_webhook_api_billing_stripe_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/chat": {
         parameters: {
             query?: never;
@@ -967,6 +1047,13 @@ export interface components {
              */
             name: string;
         };
+        /** BillingWalletResponse */
+        BillingWalletResponse: {
+            /** Balance */
+            balance: number;
+            /** Transactions */
+            transactions: components["schemas"]["CreditTransactionModel"][];
+        };
         /** Body_upload_file_api_conversations__conversation_id__files_post */
         Body_upload_file_api_conversations__conversation_id__files_post: {
             /**
@@ -1061,6 +1148,29 @@ export interface components {
              * @description List of file attachment IDs to include with this message
              */
             attachment_ids?: number[];
+        };
+        /** CheckoutSessionCreateRequest */
+        CheckoutSessionCreateRequest: {
+            /** Price Id */
+            price_id: string;
+            /**
+             * Success Url
+             * Format: uri
+             */
+            success_url: string;
+            /**
+             * Cancel Url
+             * Format: uri
+             */
+            cancel_url: string;
+        };
+        /** CheckoutSessionCreateResponse */
+        CheckoutSessionCreateResponse: {
+            /**
+             * Checkout Url
+             * Format: uri
+             */
+            checkout_url: string;
         };
         /**
          * ConversationListItem
@@ -1213,6 +1323,45 @@ export interface components {
         ConversationUpdateResponse: {
             /** @description Updated conversation */
             conversation: components["schemas"]["ConversationResponse"];
+        };
+        /** CreditPackListResponse */
+        CreditPackListResponse: {
+            /** Packs */
+            packs: components["schemas"]["CreditPackModel"][];
+        };
+        /** CreditPackModel */
+        CreditPackModel: {
+            /** Price Id */
+            price_id: string;
+            /** Credits */
+            credits: number;
+            /** Currency */
+            currency: string;
+            /** Unit Amount */
+            unit_amount: number;
+            /** Nickname */
+            nickname: string;
+        };
+        /** CreditTransactionModel */
+        CreditTransactionModel: {
+            /** Id */
+            id: number;
+            /** Amount */
+            amount: number;
+            /** Transaction Type */
+            transaction_type: string;
+            /** Status */
+            status: string;
+            /** Description */
+            description?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Stripe Session Id */
+            stripe_session_id?: string | null;
+            /** Created At */
+            created_at: string;
         };
         /**
          * ErrorResponse
@@ -2584,6 +2733,111 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    get_wallet_api_billing_wallet_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingWalletResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_credit_packs_api_billing_packs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditPackListResponse"];
+                };
+            };
+        };
+    };
+    create_checkout_session_api_billing_checkout_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutSessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutSessionCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stripe_webhook_api_billing_stripe_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

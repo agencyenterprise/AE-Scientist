@@ -44,6 +44,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/callback",
             "/api/auth/status",
             "/api/research-pipeline/events",
+            "/api/billing/stripe-webhook",
         ]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

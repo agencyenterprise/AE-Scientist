@@ -229,6 +229,144 @@
         }
       }
     },
+    "/api/billing/wallet": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get Wallet",
+        "description": "Return wallet balance plus recent transactions for the authenticated user.",
+        "operationId": "get_wallet_api_billing_wallet_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingWalletResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/packs": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "List Credit Packs",
+        "description": "Expose the configured Stripe price IDs and their associated credit amounts.",
+        "operationId": "list_credit_packs_api_billing_packs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditPackListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/checkout-session": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Create Checkout Session",
+        "description": "Create a Stripe Checkout session for the requested price ID.",
+        "operationId": "create_checkout_session_api_billing_checkout_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckoutSessionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutSessionCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/stripe-webhook": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Stripe Webhook",
+        "description": "Handle Stripe webhook events.",
+        "operationId": "stripe_webhook_api_billing_stripe_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/chat": {
       "get": {
         "summary": "Get Chat History",
@@ -2274,6 +2412,27 @@
         "title": "AuthUser",
         "description": "User information returned by authentication endpoints."
       },
+      "BillingWalletResponse": {
+        "properties": {
+          "balance": {
+            "type": "integer",
+            "title": "Balance"
+          },
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/CreditTransactionModel"
+            },
+            "type": "array",
+            "title": "Transactions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "balance",
+          "transactions"
+        ],
+        "title": "BillingWalletResponse"
+      },
       "Body_upload_file_api_conversations__conversation_id__files_post": {
         "properties": {
           "file": {
@@ -2412,6 +2571,51 @@
         ],
         "title": "ChatRequest",
         "description": "Request model for sending a chat message."
+      },
+      "CheckoutSessionCreateRequest": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "title": "Price Id"
+          },
+          "success_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Success Url"
+          },
+          "cancel_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Cancel Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "success_url",
+          "cancel_url"
+        ],
+        "title": "CheckoutSessionCreateRequest"
+      },
+      "CheckoutSessionCreateResponse": {
+        "properties": {
+          "checkout_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Checkout Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checkout_url"
+        ],
+        "title": "CheckoutSessionCreateResponse"
       },
       "ConversationListItem": {
         "properties": {
@@ -2720,6 +2924,115 @@
         ],
         "title": "ConversationUpdateResponse",
         "description": "Response for conversation updates."
+      },
+      "CreditPackListResponse": {
+        "properties": {
+          "packs": {
+            "items": {
+              "$ref": "#/components/schemas/CreditPackModel"
+            },
+            "type": "array",
+            "title": "Packs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "packs"
+        ],
+        "title": "CreditPackListResponse"
+      },
+      "CreditPackModel": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "title": "Price Id"
+          },
+          "credits": {
+            "type": "integer",
+            "title": "Credits"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "unit_amount": {
+            "type": "integer",
+            "title": "Unit Amount"
+          },
+          "nickname": {
+            "type": "string",
+            "title": "Nickname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "credits",
+          "currency",
+          "unit_amount",
+          "nickname"
+        ],
+        "title": "CreditPackModel"
+      },
+      "CreditTransactionModel": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "transaction_type": {
+            "type": "string",
+            "title": "Transaction Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "stripe_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Session Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "amount",
+          "transaction_type",
+          "status",
+          "created_at"
+        ],
+        "title": "CreditTransactionModel"
       },
       "ErrorResponse": {
         "properties": {

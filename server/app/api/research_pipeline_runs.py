@@ -4,16 +4,19 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Optional, Protocol, Sequence, cast
+from typing import Any, AsyncGenerator, Dict, Optional, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ArtifactPresignedUrlResponse,
+    LlmReviewNotFoundResponse,
+    LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunDetailsResponse,
     ResearchRunEvent,
@@ -23,6 +26,7 @@ from app.models import (
     ResearchRunSubstageEvent,
 )
 from app.services import get_database
+from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRun,
@@ -382,6 +386,12 @@ def submit_idea_for_research(
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
 
+    enforce_minimum_credits(
+        user_id=user.id,
+        required=settings.MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE,
+        action="research_pipeline",
+    )
+
     run_id = _create_and_launch_research_run(
         idea_data=cast(IdeaPayloadSource, idea_data),
         background_tasks=background_tasks,
@@ -438,6 +448,64 @@ def get_research_run_details(
         substage_events=substage_events,
         events=run_events,
         artifacts=artifacts,
+    )
+
+
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/review",
+    response_model=Union[LlmReviewResponse, LlmReviewNotFoundResponse],
+)
+def get_research_run_review(
+    conversation_id: int,
+    run_id: str,
+    request: Request,
+) -> Union[LlmReviewResponse, LlmReviewNotFoundResponse]:
+    """Fetch LLM review data for a research run."""
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    user = get_current_user(request)
+    db = get_database()
+
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    review = db.get_review_by_run_id(run_id)
+    if review is None:
+        return LlmReviewNotFoundResponse(
+            run_id=run_id,
+            exists=False,
+            message="No evaluation available for this research run",
+        )
+
+    return LlmReviewResponse(
+        id=review["id"],
+        run_id=review["run_id"],
+        summary=review["summary"],
+        strengths=review["strengths"] or [],
+        weaknesses=review["weaknesses"] or [],
+        originality=float(review["originality"]),
+        quality=float(review["quality"]),
+        clarity=float(review["clarity"]),
+        significance=float(review["significance"]),
+        questions=review["questions"] or [],
+        limitations=review["limitations"] or [],
+        ethical_concerns=review["ethical_concerns"],
+        soundness=float(review["soundness"]),
+        presentation=float(review["presentation"]),
+        contribution=float(review["contribution"]),
+        overall=float(review["overall"]),
+        confidence=float(review["confidence"]),
+        decision=review["decision"],
+        source_path=review["source_path"],
+        created_at=review["created_at"].isoformat(),
     )
 
 
@@ -620,28 +688,13 @@ def _is_meaningful_progress_change(
     return False
 
 
-@router.get(
-    "/{conversation_id}/idea/research-run/{run_id}/stream",
-    response_class=StreamingResponse,
-)
+@router.get("/{conversation_id}/idea/research-run/{run_id}/events")
 async def stream_research_run_events(
     conversation_id: int,
     run_id: str,
     request: Request,
 ) -> StreamingResponse:
-    """
-    Stream research run events via Server-Sent Events.
-
-    Event types:
-    - initial: Full snapshot on connection
-    - log: New log entries
-    - stage_progress: Meaningful progress changes only
-    - artifact: New artifacts
-    - run_update: Run status/info changes
-    - complete: Run finished (completed/failed)
-    - heartbeat: Keep-alive every 30s
-    - error: Error occurred
-    """
+    """Stream server-sent events for research run progress."""
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
 
@@ -658,105 +711,93 @@ async def stream_research_run_events(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    async def event_stream() -> AsyncGenerator[str, None]:
-        nonlocal run
-        last_log_check = datetime.now(timezone.utc)
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """Generate SSE events until the run completes or client disconnects."""
+        last_progress_event: Optional[StageProgressEvent] = None
         last_heartbeat = datetime.now(timezone.utc)
-        last_run_status = run.status
-        last_run_updated_at = run.updated_at
-
-        artifacts = db.list_run_artifacts(run_id)
-        last_artifact_count = len(artifacts)
-
-        last_emitted_progress: Optional[StageProgressEvent] = None
-
-        stage_events = db.list_stage_progress_events(run_id)
-        log_events = db.list_run_log_events(run_id)
-        substage_events = db.list_substage_completed_events(run_id)
-
-        initial_data = {
-            "type": "initial",
-            "data": {
-                "run": _run_to_info(run).model_dump(),
-                "stage_progress": [_stage_event_to_model(e).model_dump() for e in stage_events],
-                "logs": [_log_event_to_model(e).model_dump() for e in log_events],
-                "substage_events": [_node_event_to_model(e).model_dump() for e in substage_events],
-                "artifacts": [
-                    _artifact_to_model(a, conversation_id, run_id).model_dump() for a in artifacts
-                ],
-            },
-        }
-        yield f"data: {json.dumps(initial_data)}\n\n"
-
-        if stage_events:
-            last_emitted_progress = stage_events[-1]
-
-        if run.status in ("completed", "failed"):
-            yield f"data: {json.dumps({'type': 'complete', 'data': {'status': run.status}})}\n\n"
-            return
+        initial_sent = False
 
         while True:
-            try:
-                await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
-                now = datetime.now(timezone.utc)
+            # Check if client is still connected
+            if await request.is_disconnected():
+                logger.info("Client disconnected from SSE stream for run %s", run_id)
+                break
 
+            try:
+                # Fetch current run state
                 current_run = db.get_research_pipeline_run(run_id)
                 if current_run is None:
                     yield f"data: {json.dumps({'type': 'error', 'data': 'Run not found'})}\n\n"
                     break
 
-                if (
-                    current_run.status != last_run_status
-                    or current_run.updated_at != last_run_updated_at
-                ):
-                    run_info = _run_to_info(current_run)
-                    yield f"data: {json.dumps({'type': 'run_update', 'data': run_info.model_dump()})}\n\n"
-                    last_run_status = current_run.status
-                    last_run_updated_at = current_run.updated_at
+                # Send initial data on first iteration
+                if not initial_sent:
+                    stage_events = [
+                        _stage_event_to_model(e).model_dump()
+                        for e in db.list_stage_progress_events(run_id=run_id)
+                    ]
+                    log_events = [
+                        _log_event_to_model(e).model_dump()
+                        for e in db.list_run_log_events(run_id=run_id)
+                    ]
+                    substage_events = [
+                        _node_event_to_model(e).model_dump()
+                        for e in db.list_substage_completed_events(run_id=run_id)
+                    ]
+                    artifacts = [
+                        _artifact_to_model(a, conversation_id, run_id).model_dump()
+                        for a in db.list_run_artifacts(run_id=run_id)
+                    ]
+                    run_events = [
+                        _run_event_to_model(e).model_dump()
+                        for e in db.list_research_pipeline_run_events(run_id=run_id)
+                    ]
+                    initial_data = {
+                        "run": _run_to_info(current_run).model_dump(),
+                        "stage_progress": stage_events,
+                        "logs": log_events,
+                        "substage_events": substage_events,
+                        "artifacts": artifacts,
+                        "events": run_events,
+                    }
+                    yield f"data: {json.dumps({'type': 'initial', 'data': initial_data})}\n\n"
+                    initial_sent = True
 
-                    if current_run.status in ("completed", "failed"):
-                        yield f"data: {json.dumps({'type': 'complete', 'data': {'status': current_run.status}})}\n\n"
-                        break
+                # Check if run is complete
+                if current_run.status in ("completed", "failed", "cancelled"):
+                    # Emit final status event
+                    yield f"data: {json.dumps({'type': 'complete', 'data': {'status': current_run.status}})}\n\n"
+                    break
 
-                new_logs = db.list_run_log_events_since(run_id, last_log_check)
-                for log_event in new_logs:
-                    log_model = _log_event_to_model(log_event)
-                    yield f"data: {json.dumps({'type': 'log', 'data': log_model.model_dump()})}\n\n"
-                last_log_check = now
+                # Check and emit progress events if meaningful changes
+                all_progress = db.list_stage_progress_events(run_id=run_id)
+                if all_progress:
+                    curr_progress = all_progress[-1]  # Get most recent (ordered ASC)
+                    if _is_meaningful_progress_change(last_progress_event, curr_progress):
+                        progress_data = _stage_event_to_model(curr_progress)
+                        yield f"data: {json.dumps({'type': 'stage_progress', 'data': progress_data.model_dump()})}\n\n"
+                        last_progress_event = curr_progress
 
-                current_progress = db.get_latest_stage_progress(run_id)
-                if current_progress and _is_meaningful_progress_change(
-                    last_emitted_progress, current_progress
-                ):
-                    progress_model = _stage_event_to_model(current_progress)
-                    yield f"data: {json.dumps({'type': 'stage_progress', 'data': progress_model.model_dump()})}\n\n"
-                    last_emitted_progress = current_progress
-
-                current_artifacts = db.list_run_artifacts(run_id)
-                if len(current_artifacts) > last_artifact_count:
-                    for artifact in current_artifacts[last_artifact_count:]:
-                        artifact_model = _artifact_to_model(artifact, conversation_id, run_id)
-                        yield f"data: {json.dumps({'type': 'artifact', 'data': artifact_model.model_dump()})}\n\n"
-                    last_artifact_count = len(current_artifacts)
-
-                if (now - last_heartbeat).total_seconds() > SSE_HEARTBEAT_INTERVAL_SECONDS:
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'data': now.isoformat()})}\n\n"
+                # Emit heartbeat every SSE_HEARTBEAT_INTERVAL_SECONDS
+                now = datetime.now(timezone.utc)
+                if (now - last_heartbeat).total_seconds() >= SSE_HEARTBEAT_INTERVAL_SECONDS:
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
                     last_heartbeat = now
 
-            except asyncio.CancelledError:
-                logger.info("SSE stream cancelled for run %s", run_id)
-                break
-            except Exception as e:
-                logger.exception("Error in SSE stream for run %s", run_id)
-                yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+                # Wait before polling again
+                await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
+
+            except Exception as exc:
+                logger.exception("Error in SSE event generation for run %s", run_id)
+                yield f"data: {json.dumps({'type': 'error', 'data': str(exc)})}\n\n"
                 break
 
     return StreamingResponse(
-        event_stream(),
+        event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         },
     )

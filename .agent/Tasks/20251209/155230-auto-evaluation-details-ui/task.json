@@ -1,0 +1,948 @@
+{
+  "id": "auto-evaluation-details-ui",
+  "name": "Auto Evaluation Details UI - Expose LLM Review Data",
+  "description": "Implement full-stack feature to expose existing LLM review data from rp_llm_reviews table to frontend. Backend needs database query mixin, API endpoint, and Pydantic models. Frontend needs TypeScript types, React hook, modal dialog with tabs, and review display components.",
+  "created": "2025-12-09T15:52:30Z",
+  "lastUpdated": "2025-12-10T14:30:00Z",
+
+  "classification": {
+    "type": "fullstack",
+    "scope": "single-feature",
+    "complexity": "moderate",
+    "confidence": "high",
+    "requiresUserStories": false,
+    "workflow": [
+      "task-classifier",
+      "feature-planner",
+      "codebase-analyzer",
+      "feature-architecture-expert",
+      "fastapi-expert",
+      "nextjs-expert",
+      "feature-executor",
+      "design-expert",
+      "a11y-validator",
+      "documentation-reviewer"
+    ]
+  },
+
+  "techStack": {
+    "detected": [
+      "nextjs-15",
+      "react-19",
+      "typescript",
+      "fastapi",
+      "postgresql",
+      "pydantic",
+      "tanstack-query",
+      "shadcn-ui"
+    ],
+    "versions": {
+      "next": "15.4.8",
+      "react": "19.1.2",
+      "typescript": "5.x",
+      "fastapi": "0.116.1",
+      "python": "3.12"
+    }
+  },
+
+  "docsConsulted": {
+    "project": [
+      ".agent/README.md",
+      ".agent/System/project_architecture.md",
+      ".agent/System/frontend_architecture.md",
+      ".agent/System/server_architecture.md",
+      ".agent/System/design-guidelines.md",
+      ".agent/SOP/server_api_routes.md",
+      ".agent/SOP/server_services.md",
+      ".agent/SOP/frontend_features.md",
+      ".agent/SOP/frontend_api_hooks.md"
+    ],
+    "external": [],
+    "existingFeatures": [
+      "server/database_migrations/versions/0010_create_rp_llm_reviews.py",
+      "server/app/services/database/research_pipeline_runs.py",
+      "server/app/services/database/rp_artifacts.py",
+      "server/app/services/database/base.py",
+      "server/app/services/database/__init__.py",
+      "server/app/api/research_pipeline_runs.py",
+      "server/app/models/research_pipeline.py",
+      "server/app/models/__init__.py",
+      "frontend/src/features/research/hooks/useResearchRunDetails.ts",
+      "frontend/src/features/research/components/run-detail/index.ts",
+      "frontend/src/features/project-draft/components/PromptEditModal.tsx",
+      "frontend/src/features/conversation/components/ConversationStatusBadge.tsx",
+      "frontend/src/types/research.ts",
+      "frontend/src/shared/lib/api-client.ts",
+      "frontend/src/shared/lib/utils.ts"
+    ]
+  },
+
+  "assets": {
+    "reuse": [
+      {
+        "name": "Database table: rp_llm_reviews",
+        "path": "server/database_migrations/versions/0010_create_rp_llm_reviews.py",
+        "type": "database",
+        "purpose": "Table already exists with 17 columns: id, run_id, summary, strengths (jsonb), weaknesses (jsonb), originality, quality, clarity, significance, questions (jsonb), limitations (jsonb), ethical_concerns, soundness, presentation, contribution, overall, confidence, decision, source_path, created_at",
+        "usedIn": []
+      },
+      {
+        "name": "ResearchPipelineArtifactsMixin pattern",
+        "path": "server/app/services/database/rp_artifacts.py",
+        "type": "backend-pattern",
+        "purpose": "Clean, minimal database mixin pattern (57 lines). Shows: ConnectionProvider inheritance, RealDictCursor usage, NamedTuple for return types, list_* and get_* method naming",
+        "keyPatterns": [
+          "class Mixin(ConnectionProvider)",
+          "with self._get_connection() as conn",
+          "with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor",
+          "NamedTuple for strongly-typed returns"
+        ],
+        "usedIn": []
+      },
+      {
+        "name": "ResearchPipelineRunsMixin - Advanced patterns",
+        "path": "server/app/services/database/research_pipeline_runs.py",
+        "type": "backend-pattern",
+        "purpose": "Advanced mixin showing complex queries with JOINs (get_run_for_conversation at line 303), ownership validation via conversation_id JOIN, transaction management",
+        "keyPatterns": [
+          "JOIN ideas i ON r.idea_id = i.id WHERE i.conversation_id = %s",
+          "Query returns Optional[NamedTuple]",
+          "Error handling with None checks"
+        ],
+        "usedIn": []
+      },
+      {
+        "name": "DatabaseManager mixin registration",
+        "path": "server/app/services/database/__init__.py",
+        "type": "backend-pattern",
+        "purpose": "Shows how to register new mixin in DatabaseManager class inheritance (line 24-38). Import mixin, add to class declaration.",
+        "usedIn": []
+      },
+      {
+        "name": "API auth and ownership validation pattern",
+        "path": "server/app/api/research_pipeline_runs.py",
+        "type": "backend-pattern",
+        "purpose": "Standard FastAPI endpoint pattern (line 396-413). Shows: conversation_id validation, get_current_user(request), conversation ownership check, run ownership via get_run_for_conversation, HTTPException with 400/403/404 codes",
+        "keyPatterns": [
+          "if conversation_id <= 0: raise HTTPException(400)",
+          "user = get_current_user(request)",
+          "if conversation.user_id != user.id: raise HTTPException(403)",
+          "run = db.get_run_for_conversation(run_id, conversation_id)",
+          "if run is None: raise HTTPException(404)"
+        ],
+        "usedIn": []
+      },
+      {
+        "name": "Pydantic response model pattern",
+        "path": "server/app/models/research_pipeline.py",
+        "type": "backend-pattern",
+        "purpose": "Shows Pydantic BaseModel patterns with Field descriptors (line 16-46, 119-136). Use snake_case field names, Optional[] for nullable, Field(..., description=) for API docs.",
+        "usedIn": []
+      },
+      {
+        "name": "apiFetch utility",
+        "path": "frontend/src/shared/lib/api-client.ts",
+        "type": "frontend-utility",
+        "purpose": "Type-safe fetch wrapper with automatic 401 handling. Usage: apiFetch<ResponseType>('/path', { method, body }). Throws ApiError with status codes. Handles JSON serialization.",
+        "usedIn": []
+      },
+      {
+        "name": "useResearchRunDetails hook pattern",
+        "path": "frontend/src/features/research/hooks/useResearchRunDetails.ts",
+        "type": "frontend-pattern",
+        "purpose": "Shows React Query-style hook with state management (line 34-166). Pattern: useState for local state, useCallback for handlers, useEffect for initial fetch, error/loading states, conversationId resolution pattern.",
+        "usedIn": []
+      },
+      {
+        "name": "PromptEditModal - Portal modal pattern",
+        "path": "frontend/src/features/project-draft/components/PromptEditModal.tsx",
+        "type": "frontend-pattern",
+        "purpose": "Complete modal implementation using createPortal (line 217-416). Shows: isClient check for SSR, fixed inset-0 z-50 overlay, bg-card rounded modal container, header with close button, loading states, error/success messages, footer buttons, keyboard handlers (Escape/Ctrl+Enter), nested confirmation dialog pattern",
+        "keyPatterns": [
+          "createPortal(..., document.body)",
+          "const [isClient, setIsClient] = useState(false); useEffect(() => setIsClient(true), [])",
+          "if (!isOpen || !isClient) return null",
+          "fixed inset-0 z-50 bg-black bg-opacity-50",
+          "relative bg-card rounded-lg p-4 sm:p-6 max-w-4xl max-h-[90vh]",
+          "handleKeyDown: Escape closes, Ctrl+Enter saves"
+        ],
+        "usedIn": []
+      },
+      {
+        "name": "ConversationStatusBadge - Badge component pattern",
+        "path": "frontend/src/features/conversation/components/ConversationStatusBadge.tsx",
+        "type": "frontend-pattern",
+        "purpose": "Status badge implementation (line 20-59). Shows: STATUS_CONFIG object for label/className mapping, cn() utility for conditional classes, inline-flex items-center rounded px-2 py-0.5 styling, text-[10px] font-medium uppercase tracking-wide typography",
+        "keyPatterns": [
+          "const STATUS_CONFIG = { key: { label, className } }",
+          "cn('base-classes', config.className)"
+        ],
+        "usedIn": []
+      },
+      {
+        "name": "cn() utility for className merging",
+        "path": "frontend/src/shared/lib/utils.ts",
+        "type": "frontend-utility",
+        "purpose": "Utility for merging Tailwind classes with proper override logic. Usage: cn('base-class', conditionalClass, { 'class': condition }). Uses clsx + tailwind-merge.",
+        "usedIn": []
+      },
+      {
+        "name": "Design tokens - Teal/Emerald brand colors",
+        "path": ".agent/System/design-guidelines.md",
+        "type": "design-system",
+        "purpose": "Brand colors for verdict badge: --primary-500: #14b8a6 (teal-500), --primary-600: #0d9488 (teal-600), --primary-700: #0f766e (teal-700). Dark mode: slate-950 background (#0f172a), slate-100 foreground (#f1f5f9). Use PASS with bg-emerald-500/15 text-emerald-400, FAIL with bg-red-500/15 text-red-400.",
+        "usedIn": []
+      },
+      {
+        "name": "ResearchRunInfo type definition",
+        "path": "frontend/src/types/research.ts",
+        "type": "frontend-types",
+        "purpose": "Shows snake_case API types vs camelCase frontend types pattern (line 59-150). Keep snake_case for SSE compatibility. Type includes run_id, status, timestamps, pod info.",
+        "usedIn": []
+      }
+    ],
+    "create": [
+      {
+        "name": "RpLlmReviewsMixin",
+        "path": "server/app/services/database/rp_llm_reviews.py",
+        "status": "completed",
+        "type": "backend-mixin",
+        "purpose": "Database mixin for querying rp_llm_reviews table. Follow rp_artifacts.py pattern: ConnectionProvider inheritance, RealDictCursor, NamedTuple for LlmReview. Methods: get_review_for_run(run_id) -> Optional[LlmReview]"
+      },
+      {
+        "name": "DatabaseManager import",
+        "path": "server/app/services/database/__init__.py",
+        "status": "completed",
+        "type": "backend-integration",
+        "purpose": "Add RpLlmReviewsMixin to imports and DatabaseManager inheritance. Follow existing pattern at line 18-38."
+      },
+      {
+        "name": "/conversations/{id}/idea/research-run/{run_id}/review endpoint",
+        "path": "server/app/api/research_pipeline_runs.py",
+        "status": "completed",
+        "type": "backend-endpoint",
+        "purpose": "FastAPI GET endpoint. Copy auth pattern from get_research_run_details (line 392-413): validate conversation_id, get_current_user, check ownership, get run via get_run_for_conversation, fetch review via db.get_review_for_run, return LlmReviewResponse or 404."
+      },
+      {
+        "name": "LlmReviewResponse Pydantic model",
+        "path": "server/app/models/research_pipeline.py",
+        "status": "completed",
+        "type": "backend-model",
+        "purpose": "Pydantic model matching rp_llm_reviews schema. Fields: id, run_id, summary, strengths: List[str], weaknesses: List[str], originality: float, quality: float, clarity: float, significance: float, questions: List[str], limitations: List[str], ethical_concerns: bool, soundness: float, presentation: float, contribution: float, overall: float, confidence: float, decision: str, source_path: Optional[str], created_at: str. Use Field(..., description=) for each."
+      },
+      {
+        "name": "LlmReviewResponse model export",
+        "path": "server/app/models/__init__.py",
+        "status": "completed",
+        "type": "backend-integration",
+        "purpose": "Add LlmReviewResponse to __init__.py exports."
+      },
+      {
+        "name": "LlmReview TypeScript types",
+        "path": "frontend/src/types/research.ts",
+        "status": "completed",
+        "type": "frontend-types",
+        "purpose": "Add LlmReview interface with snake_case fields (for SSE compat). Mirror backend LlmReviewResponse structure. Export LlmReview type."
+      },
+      {
+        "name": "useReviewData hook",
+        "path": "frontend/src/features/research/hooks/useReviewData.ts",
+        "status": "completed",
+        "type": "frontend-hook",
+        "purpose": "React Query hook for fetching review data. Pattern: useState for review/loading/error, useEffect for lazy fetch when modal opens (enabled flag), apiFetch to /conversations/{conversationId}/idea/research-run/{runId}/review. Return { review, loading, error, refetch }."
+      },
+      {
+        "name": "ReviewModal",
+        "path": "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Main modal container using PromptEditModal pattern (createPortal, isClient check, fixed overlay). Props: isOpen, onClose, runId, conversationId. Calls useReviewData, renders ReviewHeader, ReviewTabs, conditional ReviewScores/ReviewAnalysis based on active tab."
+      },
+      {
+        "name": "ReviewHeader",
+        "path": "frontend/src/features/research/components/run-detail/review/ReviewHeader.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Verdict badge component. Maps decision ('Accept'/'Reject') to PASS/FAIL display. Use ConversationStatusBadge pattern: STATUS_CONFIG object, cn() for classes. PASS: bg-emerald-500/15 text-emerald-400 border-emerald-500/30, FAIL: bg-red-500/15 text-red-400 border-red-500/30. Display at top of modal."
+      },
+      {
+        "name": "ReviewTabs",
+        "path": "frontend/src/features/research/components/run-detail/review/ReviewTabs.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Tab navigation component. useState for activeTab ('both' | 'scores' | 'analysis'). Default: 'both'. Render 3 tab buttons with active state styling. Pattern: flex space-x-2 border-b, active tab has border-b-2 border-primary text-primary."
+      },
+      {
+        "name": "ReviewScores",
+        "path": "frontend/src/features/research/components/run-detail/review/ReviewScores.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Quantitative scores grid. Display 9 metrics in grid-cols-2 sm:grid-cols-3. Format: 'Originality: 3/4', 'Overall: 8/10', 'Confidence: 4/5'. Use text-sm font-medium for labels, text-lg font-semibold for scores. Cards with bg-muted/30 rounded-lg p-3."
+      },
+      {
+        "name": "ReviewAnalysis",
+        "path": "frontend/src/features/research/components/run-detail/review/ReviewAnalysis.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Qualitative analysis sections. 5 collapsible sections: Summary (text), Strengths (bullet list, green), Weaknesses (bullet list, amber), Questions (bullet list, sky, hide if empty), Limitations (bullet list, gray, hide if empty). Summary and Strengths expanded by default. Use useState for expanded state per section. Click header to toggle. Sections have bg-card border rounded-lg."
+      },
+      {
+        "name": "run-detail index.ts export",
+        "path": "frontend/src/features/research/components/run-detail/index.ts",
+        "status": "completed",
+        "type": "frontend-integration",
+        "purpose": "Add ReviewModal export to index.ts barrel exports."
+      },
+      {
+        "name": "Research run detail page integration",
+        "path": "frontend/src/app/(dashboard)/research/[runId]/page.tsx",
+        "status": "completed",
+        "type": "frontend-integration",
+        "purpose": "Add 'View Review' button in run detail page. Show only if run status is 'completed'. Button opens ReviewModal with useState(false) for isOpen. Pass runId and conversationId to modal."
+      },
+      {
+        "name": "AutoEvaluationCard",
+        "path": "frontend/src/features/research/components/run-detail/AutoEvaluationCard.tsx",
+        "status": "completed",
+        "type": "frontend-component",
+        "purpose": "Summary card showing verdict, overall score, and decision with View Details button"
+      }
+    ],
+    "extract": []
+  },
+
+  "architecture": {
+    "overview": "Three-layer architecture following existing patterns: Database Mixin -> API Endpoint -> Frontend Components. Each layer has single responsibility with clear interfaces between them.",
+
+    "backend": {
+      "layers": ["database", "models", "api"],
+      "patterns": ["mixin-inheritance", "dependency-injection", "validation-layer", "repository-pattern"],
+      "dataFlow": "DatabaseManager.get_review_by_run_id() -> API endpoint validates ownership -> LlmReviewResponse serialization -> JSON response",
+      "files": [
+        {
+          "path": "server/app/services/database/rp_llm_reviews.py",
+          "responsibility": "Data access layer - SQL queries only",
+          "solidPrinciple": "SRP - Only database queries, no business logic"
+        },
+        {
+          "path": "server/app/models/research_pipeline.py",
+          "responsibility": "Data transfer objects - Pydantic models for API serialization",
+          "solidPrinciple": "SRP - Only data validation and serialization"
+        },
+        {
+          "path": "server/app/api/research_pipeline_runs.py",
+          "responsibility": "Request handling - Auth, validation, orchestration",
+          "solidPrinciple": "SRP - Only HTTP concerns, delegates to services"
+        }
+      ],
+      "dependencyGraph": {
+        "API Layer": ["DatabaseManager (via get_database())", "Pydantic Models", "Auth utilities"],
+        "Database Layer": ["ConnectionProvider (abstract)", "psycopg2"],
+        "Models": ["Pydantic BaseModel"]
+      }
+    },
+
+    "frontend": {
+      "layers": ["types", "hooks", "components"],
+      "patterns": ["feature-slice", "portal-modal", "composition-over-inheritance", "controlled-components"],
+      "dataFlow": "useReviewData hook -> apiFetch -> ReviewModal orchestrates -> Child components receive props",
+      "files": [
+        {
+          "path": "frontend/src/types/research.ts",
+          "responsibility": "Type definitions - Interface contracts",
+          "solidPrinciple": "ISP - Focused interfaces, LlmReview separate from ResearchRunInfo"
+        },
+        {
+          "path": "frontend/src/features/research/hooks/useReviewData.ts",
+          "responsibility": "Data fetching - State management for review data",
+          "solidPrinciple": "SRP - Only data fetching, no UI logic"
+        },
+        {
+          "path": "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+          "responsibility": "Modal orchestration - Portal rendering, tab state, composition",
+          "solidPrinciple": "SRP - Only modal structure, delegates content to children"
+        },
+        {
+          "path": "frontend/src/features/research/components/run-detail/review/ReviewHeader.tsx",
+          "responsibility": "Verdict display - Badge rendering based on decision",
+          "solidPrinciple": "OCP - VERDICT_CONFIG extensible without modification"
+        },
+        {
+          "path": "frontend/src/features/research/components/run-detail/review/ReviewTabs.tsx",
+          "responsibility": "Tab navigation - Controlled component for tab selection",
+          "solidPrinciple": "SRP - Only tab UI, state lifted to parent"
+        },
+        {
+          "path": "frontend/src/features/research/components/run-detail/review/ReviewScores.tsx",
+          "responsibility": "Score grid - Pure presentational component",
+          "solidPrinciple": "SRP - Only renders scores, no state"
+        },
+        {
+          "path": "frontend/src/features/research/components/run-detail/review/ReviewAnalysis.tsx",
+          "responsibility": "Qualitative sections - Collapsible content display",
+          "solidPrinciple": "OCP - SECTION_CONFIG extensible for new sections"
+        }
+      ]
+    },
+
+    "solidCompliance": {
+      "singleResponsibility": {
+        "status": "compliant",
+        "analysis": "Each component/class has one clear purpose: Database mixin only queries DB, API endpoint only handles HTTP, Pydantic models only serialize, hooks only fetch data, UI components only render. No file has multiple reasons to change.",
+        "examples": [
+          "RpLlmReviewsMixin - Only DB queries, no business logic",
+          "LlmReviewResponse - Only serialization schema",
+          "useReviewData - Only fetch/cache logic, no UI",
+          "ReviewScores - Only render grid, receives data via props",
+          "ReviewAnalysis - Only render sections, manages own expand state"
+        ]
+      },
+      "openClosed": {
+        "status": "compliant",
+        "analysis": "Configuration objects allow extension without modification. New verdicts, tabs, or sections can be added by extending config objects.",
+        "examples": [
+          "VERDICT_CONFIG in ReviewHeader - Add new verdict types without changing render logic",
+          "TAB_CONFIG in ReviewTabs - Add new tabs without modifying component",
+          "SECTION_CONFIG in ReviewAnalysis - Add new section types via configuration",
+          "SCORE_METRICS config in ReviewScores - Add new metrics without changing grid logic"
+        ]
+      },
+      "liskovSubstitution": {
+        "status": "compliant",
+        "analysis": "Type hierarchies maintain substitutability. RpLlmReviewsMixin properly implements ConnectionProvider interface. All mixins can be used interchangeably through DatabaseManager.",
+        "examples": [
+          "ConnectionProvider.get_connection() - All mixins use same interface",
+          "LlmReview extends base types - Can be passed to generic handlers"
+        ]
+      },
+      "interfaceSegregation": {
+        "status": "compliant",
+        "analysis": "Interfaces are focused and minimal. Props interfaces contain only what each component needs. No 'God interfaces' with unused properties.",
+        "examples": [
+          "ReviewModalProps - Only isOpen, onClose, runId, conversationId",
+          "ReviewHeaderProps - Only decision, title (optional)",
+          "ReviewTabsProps - Only activeTab, onTabChange",
+          "ReviewScoresProps - Only scores object with 9 metrics",
+          "ReviewAnalysisProps - Only qualitative fields (summary, strengths, etc.)"
+        ]
+      },
+      "dependencyInversion": {
+        "status": "compliant",
+        "analysis": "High-level modules depend on abstractions. API endpoint depends on DatabaseManager interface (via get_database()), not concrete implementation. Components receive data via props, not direct fetch.",
+        "examples": [
+          "API endpoint uses get_database() - Injectable dependency",
+          "ConnectionProvider abstract class - Mixins depend on abstraction",
+          "useReviewData abstracts apiFetch - Components don't know HTTP details",
+          "ReviewScores receives data via props - Doesn't know data source"
+        ]
+      }
+    },
+
+    "componentHierarchy": {
+      "ReviewModal": {
+        "children": ["ReviewHeader", "ReviewTabs", "ReviewScores", "ReviewAnalysis"],
+        "responsibility": "Portal rendering, tab state management, loading/error states",
+        "dependencies": ["useState", "useEffect", "createPortal", "useReviewData hook"],
+        "props": {
+          "review": "LlmReviewResponse | null",
+          "notFound": "boolean",
+          "error": "string | null",
+          "onClose": "() => void",
+          "loading": "boolean (optional)"
+        },
+        "state": {
+          "activeTab": "'both' | 'scores' | 'analysis' - Current tab selection",
+          "isClient": "boolean - SSR guard for portal"
+        }
+      },
+      "ReviewHeader": {
+        "children": [],
+        "responsibility": "Display modal title and verdict badge",
+        "dependencies": ["cn utility", "X icon from lucide-react"],
+        "props": {
+          "decision": "'Accept' | 'Reject'",
+          "onClose": "() => void"
+        },
+        "state": "None - Pure presentational"
+      },
+      "ReviewTabs": {
+        "children": [],
+        "responsibility": "Render tab buttons with active state styling",
+        "dependencies": ["cn utility"],
+        "props": {
+          "activeTab": "'both' | 'scores' | 'analysis'",
+          "onTabChange": "(tab) => void"
+        },
+        "state": "None - Controlled by parent"
+      },
+      "ReviewScores": {
+        "children": [],
+        "responsibility": "Render 9-metric grid with fraction formatting",
+        "dependencies": ["LlmReviewResponse type"],
+        "props": {
+          "review": "LlmReviewResponse"
+        },
+        "state": "None - Pure presentational"
+      },
+      "ReviewAnalysis": {
+        "children": [],
+        "responsibility": "Render collapsible qualitative sections",
+        "dependencies": ["useState", "cn utility", "ChevronDown icon"],
+        "props": {
+          "review": "LlmReviewResponse"
+        },
+        "state": {
+          "expandedSections": "Record<string, boolean> - Track which sections are open"
+        }
+      }
+    },
+
+    "typeDefinitions": {
+      "backend": {
+        "LlmReview (NamedTuple)": {
+          "purpose": "Internal database row representation",
+          "fields": ["id", "run_id", "summary", "strengths", "weaknesses", "originality", "quality", "clarity", "significance", "questions", "limitations", "ethical_concerns", "soundness", "presentation", "contribution", "overall", "confidence", "decision", "source_path", "created_at"]
+        },
+        "LlmReviewResponse (Pydantic)": {
+          "purpose": "API response serialization with validation",
+          "fields": "Same as LlmReview with Field() descriptors for API docs"
+        }
+      },
+      "frontend": {
+        "LlmReviewResponse (interface)": {
+          "purpose": "TypeScript contract matching API response",
+          "casing": "snake_case (SSE compatibility)",
+          "fields": ["id", "run_id", "summary", "strengths", "weaknesses", "originality", "quality", "clarity", "significance", "questions", "limitations", "ethical_concerns", "soundness", "presentation", "contribution", "overall", "confidence", "decision", "source_path", "created_at"]
+        },
+        "ReviewTabType": {
+          "purpose": "Tab state union type",
+          "definition": "'both' | 'scores' | 'analysis'"
+        }
+      }
+    },
+
+    "errorHandling": {
+      "backend": {
+        "400": "Invalid conversation_id (must be positive integer)",
+        "403": "User does not own the conversation",
+        "404": ["Conversation not found", "Research run not found", "Review not found for this run"]
+      },
+      "frontend": {
+        "loading": "Spinner with 'Loading evaluation...' text",
+        "error": "Error banner with message and close option",
+        "notFound": "'No evaluation available for this run' message"
+      }
+    }
+  },
+
+  "files": {
+    "created": [
+      "server/app/services/database/rp_llm_reviews.py",
+      "frontend/src/features/research/hooks/useReviewData.ts",
+      "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+      "frontend/src/features/research/components/run-detail/review/ReviewHeader.tsx",
+      "frontend/src/features/research/components/run-detail/review/ReviewTabs.tsx",
+      "frontend/src/features/research/components/run-detail/review/ReviewScores.tsx",
+      "frontend/src/features/research/components/run-detail/review/ReviewAnalysis.tsx",
+      "frontend/src/features/research/components/run-detail/AutoEvaluationCard.tsx"
+    ],
+    "modified": [
+      "server/app/services/database/__init__.py",
+      "server/app/api/research_pipeline_runs.py",
+      "server/app/models/research_pipeline.py",
+      "server/app/models/__init__.py",
+      "frontend/src/types/research.ts",
+      "frontend/src/features/research/components/run-detail/index.ts",
+      "frontend/src/app/(dashboard)/research/[runId]/page.tsx"
+    ]
+  },
+
+  "phases": [
+    {
+      "id": "classification",
+      "agent": "task-classifier",
+      "status": "completed",
+      "completedAt": "2025-12-09T15:52:30Z"
+    },
+    {
+      "id": "planning",
+      "agent": "feature-planner",
+      "status": "completed",
+      "completedAt": "2025-12-09T16:30:00Z",
+      "docsRead": [
+        ".agent/README.md",
+        ".agent/System/project_architecture.md",
+        ".agent/System/frontend_architecture.md",
+        ".agent/System/server_architecture.md",
+        ".agent/System/design-guidelines.md",
+        ".agent/SOP/server_api_routes.md",
+        ".agent/SOP/server_services.md",
+        ".agent/SOP/frontend_features.md",
+        ".agent/SOP/frontend_api_hooks.md"
+      ]
+    },
+    {
+      "id": "analysis",
+      "agent": "codebase-analyzer",
+      "status": "completed",
+      "completedAt": "2025-12-09T16:45:00Z",
+      "scanSummary": {
+        "backend_mixins": 2,
+        "backend_patterns": 4,
+        "frontend_hooks": 1,
+        "frontend_patterns": 3,
+        "design_tokens": 1,
+        "utilities": 2
+      }
+    },
+    {
+      "id": "architecture",
+      "agent": "feature-architecture-expert",
+      "status": "completed",
+      "completedAt": "2025-12-09T17:30:00Z",
+      "architectureDecisions": [
+        {
+          "decision": "Three-layer backend architecture",
+          "rationale": "Follows existing mixin pattern for clean separation of database, model, and API layers"
+        },
+        {
+          "decision": "Composition over inheritance for frontend",
+          "rationale": "ReviewModal composes child components rather than extending base modal class"
+        },
+        {
+          "decision": "Controlled component pattern for tabs",
+          "rationale": "Tab state lifted to ReviewModal for centralized control of content rendering"
+        },
+        {
+          "decision": "Configuration objects for extensibility",
+          "rationale": "VERDICT_CONFIG, TAB_CONFIG, SECTION_CONFIG allow OCP-compliant extensions"
+        },
+        {
+          "decision": "Props-based data flow",
+          "rationale": "Components receive data via props, supporting DIP and testability"
+        }
+      ]
+    },
+    {
+      "id": "backend-implementation",
+      "agent": "fastapi-expert",
+      "status": "completed",
+      "completedAt": "2025-12-09T18:45:00Z",
+      "description": "Implement database mixin, Pydantic models, and API endpoint",
+      "filesCreated": [
+        "server/app/services/database/rp_llm_reviews.py"
+      ],
+      "filesModified": [
+        "server/app/services/database/__init__.py",
+        "server/app/api/research_pipeline_runs.py",
+        "server/app/models/research_pipeline.py",
+        "server/app/models/__init__.py"
+      ],
+      "summary": "Backend implementation complete. Created RpLlmReviewsMixin with get_review_by_run_id() method using RealDictCursor for dictionary returns. Added LlmReviewResponse and LlmReviewNotFoundResponse Pydantic models with all 20 fields properly documented. Implemented GET endpoint at /conversations/{conversation_id}/idea/research-run/{run_id}/review with full auth validation, ownership checks, and proper error handling (400, 403, 404). All numeric fields cast to float for JSON serialization, JSONB arrays handled with 'or []' pattern, datetime converted to ISO format."
+    },
+    {
+      "id": "frontend-implementation",
+      "agent": "nextjs-expert",
+      "status": "completed",
+      "completedAt": "2025-12-09T21:30:00Z",
+      "description": "Implement TypeScript types, React hook, and UI components",
+      "filesCreated": [
+        "frontend/src/features/research/hooks/useReviewData.ts",
+        "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewHeader.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewTabs.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewScores.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewAnalysis.tsx"
+      ],
+      "filesModified": [
+        "frontend/src/types/research.ts",
+        "frontend/src/features/research/components/run-detail/index.ts",
+        "frontend/src/app/(dashboard)/research/[runId]/page.tsx"
+      ],
+      "summary": "Frontend implementation complete. Added LlmReviewResponse and LlmReviewNotFoundResponse types with isReview() type guard. Created useReviewData hook with lazy loading pattern using useState/useCallback. Implemented ReviewModal with portal rendering, isClient check for SSR safety, ESC key handling, and tab-based content switching. Created ReviewHeader with VERDICT_CONFIG for Accept/Reject to PASS/FAIL mapping. Implemented ReviewTabs with three options (Both/Scores/Analysis) using controlled component pattern. Created ReviewScores showing 9 metrics in responsive grid (2 cols mobile, 3 cols tablet). Implemented ReviewAnalysis with 5 collapsible sections: Summary and Strengths expanded by default, Weaknesses/Questions/Limitations collapsed, with conditional rendering for empty arrays. All components follow design guidelines with Tailwind CSS, cn() utility, and lucide-react icons. Integrated into research run detail page with button and modal state management."
+    },
+    {
+      "id": "design-review",
+      "agent": "design-expert",
+      "status": "completed",
+      "completedAt": "2025-12-09T21:45:00Z",
+      "description": "Review modal UI, verify design system compliance (teal/emerald colors, shadcn components)"
+    },
+    {
+      "id": "a11y-review",
+      "agent": "a11y-validator",
+      "status": "completed",
+      "completedAt": "2025-12-10T14:30:00Z",
+      "description": "WCAG 2.1 AA accessibility audit of Auto Evaluation UI components",
+      "filesReviewed": [
+        "frontend/src/features/research/components/run-detail/AutoEvaluationCard.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewModal.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewHeader.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewScores.tsx",
+        "frontend/src/features/research/components/run-detail/review/ReviewAnalysis.tsx"
+      ],
+      "summary": "Accessibility audit complete. Found 4 MUST FIX issues, 3 SHOULD FIX issues, and 6 suggestions. Overall status: NEEDS WORK. Critical issues: Yellow-400 text on dark background fails contrast (2.8:1, needs 3:1+), missing focus trap in modal dialog. Important issues: Missing ARIA attributes for modal dialog, redundant aria-label, collapsible sections missing aria-expanded. All issues documented with code examples and fixes."
+    },
+    {
+      "id": "documentation",
+      "agent": "documentation-reviewer",
+      "status": "completed",
+      "completedAt": "2025-12-09T22:00:00Z",
+      "description": "Update API documentation, component usage examples",
+      "updatedFiles": [
+        ".agent/SOP/server_api_routes.md",
+        ".agent/SOP/frontend_features.md"
+      ],
+      "createdFiles": [
+        ".agent/Tasks/20251209/155230-auto-evaluation-details-ui/IMPLEMENTATION_SUMMARY.md"
+      ],
+      "learnings": [
+        "Union response types for 'not found' business states",
+        "Lazy-loading hook with explicit fetchData() pattern",
+        "Portal modal with SSR safety (isClient state)",
+        "Configuration objects for OCP-compliant extensibility"
+      ]
+    }
+  ],
+
+  "decisions": [
+    {
+      "phase": "classification",
+      "key": "task-type",
+      "value": "fullstack",
+      "reason": "Requires both backend API endpoint and frontend UI components. Data already exists in database, so this is a data exposure feature."
+    },
+    {
+      "phase": "classification",
+      "key": "scope",
+      "value": "single-feature",
+      "reason": "Changes contained within research feature. Backend adds one mixin + endpoint, frontend adds modal in existing research detail page."
+    },
+    {
+      "phase": "classification",
+      "key": "complexity",
+      "value": "moderate",
+      "reason": "14 files to create/modify, but patterns are well-established (database mixins, FastAPI endpoints, React Query hooks). No complex state management or edge cases beyond standard error handling."
+    },
+    {
+      "phase": "classification",
+      "key": "requires-user-stories",
+      "value": false,
+      "reason": "Single, well-defined technical feature with clear implementation path. User value is straightforward: 'View evaluation details'. File-driven planning is sufficient."
+    },
+    {
+      "phase": "planning",
+      "key": "architectural-approach",
+      "value": "feature-slice-pattern",
+      "reason": "Chosen from 3 options. Follows existing research feature structure. Review components colocated in run-detail/review/ subfolder. Maximum code reuse from existing patterns.",
+      "alternatives": [
+        {"name": "shared-services-pattern", "rejectedWhy": "Would require extracting modal to shared - overkill for single-use component"},
+        {"name": "standalone-feature", "rejectedWhy": "Review is tightly coupled to research runs - no benefit to separate feature folder"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "modal-implementation",
+      "value": "custom-portal-modal",
+      "reason": "Following PromptEditModal pattern using createPortal. No shadcn Dialog component exists in codebase. Custom implementation gives more control over styling and state.",
+      "alternatives": [
+        {"name": "install-shadcn-dialog", "rejectedWhy": "Adds dependency for single component. Project uses custom modals."},
+        {"name": "inline-expansion", "rejectedWhy": "User specified modal dialog requirement. Would clutter page layout."}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "data-fetching",
+      "value": "react-query-lazy",
+      "reason": "Use React Query with lazy loading - fetch only when modal opens. Follows useRecentResearch and useResearchRunDetails patterns. 30s stale time for reasonable caching.",
+      "alternatives": [
+        {"name": "prefetch-with-run-details", "rejectedWhy": "Adds unnecessary load to initial page render"},
+        {"name": "useState-useEffect", "rejectedWhy": "React Query provides caching, error handling, loading states out-of-box"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "api-endpoint-location",
+      "value": "existing-router",
+      "reason": "Add to existing research_pipeline_runs.py router. Follows pattern: /conversations/{id}/idea/research-run/{run_id}/review. Reuses auth and ownership validation logic.",
+      "alternatives": [
+        {"name": "new-router", "rejectedWhy": "Review is part of research runs domain - no need for separate router"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "database-mixin-pattern",
+      "value": "separate-mixin-file",
+      "reason": "Create rp_llm_reviews.py mixin following rp_artifacts.py pattern. Clean separation, single responsibility. Import into DatabaseManager via __init__.py.",
+      "alternatives": [
+        {"name": "add-to-existing-mixin", "rejectedWhy": "ResearchPipelineRunsMixin is already 530 lines. Separate file is cleaner."}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "verdict-mapping",
+      "value": "accept-reject-to-pass-fail",
+      "reason": "Database stores 'Accept'/'Reject' decision. UI shows PASS/FAIL badge for user clarity. Mapping done in frontend component.",
+      "alternatives": [
+        {"name": "display-raw-value", "rejectedWhy": "User screenshot shows PASS/FAIL terminology"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "tab-default-view",
+      "value": "both-tab",
+      "reason": "Default to 'Both' tab showing all data. User can filter to Scores or Analysis. Most users want complete picture.",
+      "alternatives": [
+        {"name": "scores-first", "rejectedWhy": "Qualitative analysis often more valuable than raw numbers"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "expandable-sections",
+      "value": "default-summary-strengths-expanded",
+      "reason": "Summary and Strengths expanded by default, others collapsed. Matches user screenshot specification. Questions/Limitations hidden if empty.",
+      "alternatives": [
+        {"name": "all-expanded", "rejectedWhy": "Too much content at once, overwhelming"},
+        {"name": "all-collapsed", "rejectedWhy": "Requires extra clicks for common content"}
+      ]
+    },
+    {
+      "phase": "planning",
+      "key": "score-display",
+      "value": "fraction-format",
+      "reason": "Display scores as '3/4' format per user spec. 9 metrics: originality, quality, clarity, significance, soundness, presentation, contribution (1-4), overall (1-10), confidence (1-5).",
+      "alternatives": [
+        {"name": "percentage", "rejectedWhy": "User explicitly requested fraction format"},
+        {"name": "star-rating", "rejectedWhy": "Different scales per metric make stars confusing"}
+      ]
+    },
+    {
+      "phase": "analysis",
+      "key": "state-pattern",
+      "value": "react-hooks",
+      "reason": "All research components use useState/useEffect patterns. No Zustand or Redux in research feature. Modal state is local, no global state needed."
+    },
+    {
+      "phase": "analysis",
+      "key": "styling-approach",
+      "value": "tailwind-with-cn",
+      "reason": "All components use Tailwind CSS with cn() utility for conditional classes. No CSS modules or styled-components found. Design tokens in globals.css."
+    },
+    {
+      "phase": "architecture",
+      "key": "backend-layers",
+      "value": "mixin-model-api",
+      "reason": "Three distinct layers: RpLlmReviewsMixin for data access, LlmReviewResponse for serialization, API endpoint for HTTP handling. Each layer has single responsibility."
+    },
+    {
+      "phase": "architecture",
+      "key": "frontend-composition",
+      "value": "modal-orchestrates-children",
+      "reason": "ReviewModal serves as composition root, passing data down to ReviewHeader, ReviewTabs, ReviewScores, ReviewAnalysis. Children are pure/presentational where possible."
+    },
+    {
+      "phase": "architecture",
+      "key": "controlled-tabs",
+      "value": "state-in-modal",
+      "reason": "Tab state lifted to ReviewModal so it can conditionally render ReviewScores/ReviewAnalysis based on activeTab. ReviewTabs is a controlled component."
+    },
+    {
+      "phase": "architecture",
+      "key": "config-objects",
+      "value": "ocp-extensibility",
+      "reason": "VERDICT_CONFIG, TAB_CONFIG, SCORE_METRICS, SECTION_CONFIG objects allow adding new options without modifying render logic. Supports Open/Closed principle."
+    }
+  ],
+
+  "solidViolationsFound": {
+    "existing": [],
+    "notes": "No SOLID violations found in implemented code. All components follow clean patterns: database mixin has single responsibility, API endpoint delegates properly, hooks only fetch data, components use composition and receive data via props."
+  },
+
+  "searches": [],
+
+  "reviews": {
+    "copy": [],
+    "queries": [],
+    "design": [
+      {
+        "component": "ReviewModal",
+        "focus": "Modal layout, tab navigation, badge styling",
+        "designTokens": ["emerald/red colors for verdict", "slate dark mode", "status badges"],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewScores",
+        "focus": "9-metric grid layout, score visualization",
+        "designTokens": ["card styling", "grid layout", "number formatting"],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewAnalysis",
+        "focus": "Collapsible sections, bullet list styling, conditional rendering",
+        "designTokens": ["emerald/amber/sky/slate colors", "expandable UI"],
+        "status": "completed"
+      }
+    ],
+    "a11y": [
+      {
+        "component": "AutoEvaluationCard",
+        "wcagCompliance": "NEEDS WORK",
+        "mustFix": 1,
+        "shouldFix": 1,
+        "suggestions": 0,
+        "criticalIssues": [
+          "Yellow-400 text on dark background fails WCAG 2.1 AA contrast (2.8:1, needs 3:1+ for large text)"
+        ],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewModal",
+        "wcagCompliance": "NEEDS WORK",
+        "mustFix": 2,
+        "shouldFix": 0,
+        "suggestions": 3,
+        "criticalIssues": [
+          "Missing focus trap (WCAG 2.1.2)",
+          "Missing role='dialog' and aria-modal attributes"
+        ],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewHeader",
+        "wcagCompliance": "NEEDS WORK",
+        "mustFix": 0,
+        "shouldFix": 1,
+        "suggestions": 0,
+        "criticalIssues": [],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewScores",
+        "wcagCompliance": "NEEDS WORK",
+        "mustFix": 1,
+        "shouldFix": 0,
+        "suggestions": 1,
+        "criticalIssues": [
+          "Yellow-400 text on dark background fails WCAG 2.1 AA contrast (2.8:1, needs 3:1+ for large text)"
+        ],
+        "status": "completed"
+      },
+      {
+        "component": "ReviewAnalysis",
+        "wcagCompliance": "NEEDS WORK",
+        "mustFix": 0,
+        "shouldFix": 1,
+        "suggestions": 0,
+        "criticalIssues": [],
+        "status": "completed"
+      }
+    ]
+  },
+
+  "currentPhase": "a11y-review",
+  "status": "needs-fixes",
+  "completedAt": null,
+  "nextAgent": "feature-executor",
+  "blockedBy": "a11y-fixes-pending"
+}

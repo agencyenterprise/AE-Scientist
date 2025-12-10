@@ -6,6 +6,7 @@ Each domain has its own mixin class with specialized methods.
 """
 
 from .base import BaseDatabaseManager
+from .billing import BillingDatabaseMixin
 from .chat_messages import ChatMessagesMixin
 from .chat_summaries import ChatSummariesMixin
 from .conversations import ConversationsMixin
@@ -18,6 +19,7 @@ from .prompts import PromptsMixin
 from .research_pipeline_runs import ResearchPipelineRunsMixin
 from .rp_artifacts import ResearchPipelineArtifactsMixin
 from .rp_events import ResearchPipelineEventsMixin
+from .rp_llm_reviews import ResearchPipelineLlmReviewsMixin
 from .users import UsersDatabaseMixin
 
 
@@ -36,6 +38,8 @@ class DatabaseManager(
     ResearchPipelineRunsMixin,
     ResearchPipelineArtifactsMixin,
     ResearchPipelineEventsMixin,
+    ResearchPipelineLlmReviewsMixin,
+    BillingDatabaseMixin,
 ):
     """
     Main database manager that combines all domain-specific functionality.
