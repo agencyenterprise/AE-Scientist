@@ -109,22 +109,33 @@ jobs:
       - name: Generate API types
         env:
           SKIP_DB_CONNECTION: "true"
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-          AWS_REGION: us-east-1
-          AWS_S3_BUCKET_NAME: dummy
-          ANTHROPIC_API_KEY: dummy
-          OPENAI_API_KEY: dummy
-          XAI_API_KEY: dummy
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+          OPENAI_API_KEY: dummy
+          ANTHROPIC_API_KEY: dummy
+          XAI_API_KEY: dummy
           GOOGLE_CLIENT_ID: dummy
           GOOGLE_CLIENT_SECRET: dummy
           GOOGLE_REDIRECT_URI: http://localhost:8000/api/auth/callback
           FRONTEND_URL: http://localhost:3000
+          TELEMETRY_WEBHOOK_TOKEN: dummy
+          HF_TOKEN: dummy
+          RUNPOD_API_KEY: dummy
+          PIPELINE_MONITOR_POLL_INTERVAL_SECONDS: "60"
+          PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS: "60"
+          PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS: "5"
+          PIPELINE_MONITOR_STARTUP_GRACE_SECONDS: "600"
+          PIPELINE_MONITOR_MAX_RUNTIME_HOURS: "12"
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+          AWS_REGION: us-east-1
+          AWS_S3_BUCKET_NAME: dummy
+          MIN_USER_CREDITS_FOR_CONVERSATION: "10"
+          MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE: "25"
           STRIPE_SECRET_KEY: sk_test_dummy
           STRIPE_WEBHOOK_SECRET: whsec_dummy
+          STRIPE_CHECKOUT_SUCCESS_URL: http://localhost:3000/billing?success=1
           STRIPE_PRICE_TO_CREDITS: "{}"
-          TELEMETRY_WEBHOOK_TOKEN: dummy
+          RESEARCH_RUN_CREDITS_PER_MINUTE: "1"
         run: |
           make gen-api-types
 
