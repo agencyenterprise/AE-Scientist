@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-10T10:42:35.076094",
+  "lastUpdated": "2025-12-10T10:48:32.952580",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -1354,6 +1354,54 @@
       "results": 0,
       "at": "2025-12-10T10:42:35.076079",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend"
+    },
+    {
+      "pattern": "role=\"group\"",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:47:56.373378",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "Query\\[",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:48:07.587736",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server/app/api",
+      "glob": "*.py"
+    },
+    {
+      "pattern": "export const.*FILTER",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:48:15.014919",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/conversation",
+      "glob": "*.ts"
+    },
+    {
+      "pattern": "fetchConversations|getConversations",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:48:23.672775",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "\\/conversations\\?",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:48:32.947145",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.ts*"
+    },
+    {
+      "pattern": "status_filter|conversation_status|run_status",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T10:48:32.952572",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server",
+      "glob": "*.py"
     }
   ],
   "reviews": {
