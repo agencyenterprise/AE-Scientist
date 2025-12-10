@@ -7,7 +7,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from ai_scientist.perform_icbinb_writeup import (
     load_exp_summaries,
     load_idea_text,
 )
+from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,8 @@ def aggregate_plots(
     temperature: float,
     n_reflections: int = 5,
     run_dir_name: Optional[str] = None,
+    event_callback: Optional[Callable[[BaseEvent], None]] = None,
+    run_id: Optional[str] = None,
 ) -> None:
     filename = "auto_plot_aggregator.py"
     aggregator_script_path = os.path.join(base_folder, filename)
@@ -248,6 +251,18 @@ def aggregate_plots(
         logger.debug(response_dict)
         return
 
+    # Emit event: plot_aggregation starting
+    if event_callback and run_id:
+        event_callback(
+            PaperGenerationProgressEvent(
+                run_id=run_id,
+                step="plot_aggregation",
+                substep="Starting plot aggregation...",
+                progress=0.0,
+                step_progress=0.0,
+            )
+        )
+
     # First run of aggregator script
     aggregator_out = run_aggregator_script(
         aggregator_code, aggregator_script_path, base_folder, filename
@@ -262,6 +277,20 @@ def aggregate_plots(
                 [f for f in os.listdir(figures_dir) if os.path.isfile(os.path.join(figures_dir, f))]
             )
         logger.info(f"[{i + 1} / {n_reflections}]: Number of figures: {figure_count}")
+
+        # Emit event: plot aggregation reflection progress
+        if event_callback and run_id:
+            step_progress = (i + 1) / n_reflections
+            event_callback(
+                PaperGenerationProgressEvent(
+                    run_id=run_id,
+                    step="plot_aggregation",
+                    substep=f"Reflection {i + 1} of {n_reflections} (figures: {figure_count})",
+                    progress=0.15 * step_progress,  # plot_aggregation is 0-15% of overall
+                    step_progress=step_progress,
+                    details={"figure_count": figure_count} if figure_count > 0 else None,
+                )
+            )
         # Reflection prompt with reminder for common checks and early exit
         reflection_prompt = f"""We have run your aggregator script and it produced {figure_count} figure(s). The script's output is:
 ```

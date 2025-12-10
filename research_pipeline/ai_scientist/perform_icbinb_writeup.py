@@ -10,7 +10,7 @@ import tempfile
 import traceback
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from langchain_core.messages import BaseMessage
 
@@ -25,6 +25,7 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.perform_writeup import _ensure_graphicspath
+from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -774,6 +775,8 @@ def gather_citations(
     temperature: float,
     num_cite_rounds: int,
     run_dir_name: Optional[str] = None,
+    event_callback: Optional[Callable[[BaseEvent], None]] = None,
+    run_id: Optional[str] = None,
 ) -> Optional[str]:
     """
     Gather citations for a paper, with ability to resume from previous progress.
@@ -821,11 +824,38 @@ def gather_citations(
         )
         filtered_summaries_str = json.dumps(filtered_summaries, indent=2)
 
+        # Emit event: citation gathering starting
+        if event_callback and run_id:
+            event_callback(
+                PaperGenerationProgressEvent(
+                    run_id=run_id,
+                    step="citation_gathering",
+                    substep="Starting citation gathering...",
+                    progress=0.15,
+                    step_progress=0.0,
+                )
+            )
+
         # Run model for citation additions
         citation_model = model
 
         for round_idx in range(current_round, num_cite_rounds):
             try:
+                # Emit event: citation gathering round progress
+                if event_callback and run_id:
+                    step_progress = (round_idx + 1) / num_cite_rounds
+                    citation_count = len(re.findall(r"@\w+{", citations_text))
+                    event_callback(
+                        PaperGenerationProgressEvent(
+                            run_id=run_id,
+                            step="citation_gathering",
+                            substep=f"Round {round_idx + 1} of {num_cite_rounds}",
+                            progress=0.15 + 0.15 * step_progress,  # citation_gathering is 15-30%
+                            step_progress=step_progress,
+                            details={"citations_found": citation_count} if citation_count > 0 else None,
+                        )
+                    )
+
                 context_for_citation = (filtered_summaries_str, citations_text)
                 addition, done = get_citation_addition(
                     model=citation_model,
@@ -876,6 +906,20 @@ def gather_citations(
                 with open(progress_path, "w") as f:
                     json.dump({"completed_rounds": round_idx, "status": "error"}, f)
                 continue
+
+        # Emit event: citation gathering completed
+        if event_callback and run_id:
+            citation_count = len(re.findall(r"@\w+{", citations_text))
+            event_callback(
+                PaperGenerationProgressEvent(
+                    run_id=run_id,
+                    step="citation_gathering",
+                    substep="Citation gathering completed",
+                    progress=0.30,
+                    step_progress=1.0,
+                    details={"citations_found": citation_count} if citation_count > 0 else None,
+                )
+            )
 
         return citations_text if citations_text else None
 

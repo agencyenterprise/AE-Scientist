@@ -590,6 +590,8 @@ def run_plot_aggregation(
     run_dir_path: Path | None,
     should_run_reports: bool,
     artifact_callback: ArtifactCallback,
+    event_callback: Callable[[BaseEvent], None] | None = None,
+    run_id: str | None = None,
 ) -> bool:
     if writeup_cfg is None or not should_run_reports:
         return False
@@ -599,6 +601,8 @@ def run_plot_aggregation(
             model=writeup_cfg.plot_model,
             temperature=writeup_cfg.temperature,
             run_dir_name=run_dir_path.name if run_dir_path is not None else None,
+            event_callback=event_callback,
+            run_id=run_id,
         )
         try:
             if run_dir_path is None:
@@ -637,6 +641,8 @@ def run_writeup_stage(
     should_run_reports: bool,
     agg_ok: bool,
     artifact_callback: ArtifactCallback,
+    event_callback: Callable[[BaseEvent], None] | None = None,
+    run_id: str | None = None,
 ) -> bool:
     if writeup_cfg is None or not should_run_reports or not agg_ok:
         return False
@@ -653,6 +659,8 @@ def run_writeup_stage(
         model=citation_model,
         run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         temperature=writeup_cfg.temperature,
+        event_callback=event_callback,
+        run_id=run_id,
     )
     writeup_success = False
     try:
@@ -666,6 +674,8 @@ def run_writeup_stage(
                     citations_text=citations_text,
                     run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                     temperature=writeup_cfg.temperature,
+                    event_callback=event_callback,
+                    run_id=run_id,
                 )
             else:
                 writeup_success = perform_icbinb_writeup(
@@ -723,6 +733,8 @@ def run_review_stage(
     agg_ok: bool,
     artifact_callback: ArtifactCallback,
     telemetry_cfg: TelemetryConfig | None,
+    event_callback: Callable[[BaseEvent], None] | None = None,
+    run_id: str | None = None,
 ) -> None:
     if (
         review_cfg is None
@@ -752,6 +764,8 @@ def run_review_stage(
         context=review_context,
         num_reviews_ensemble=3,
         num_reflections=2,
+        event_callback=event_callback,
+        run_id=run_id,
     )
     if isinstance(review_result, tuple):
         review: ReviewResponseModel = review_result[0]
@@ -898,12 +912,15 @@ def execute_launcher(args: argparse.Namespace) -> None:
         write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
 
         should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
+        run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
         agg_ok = run_plot_aggregation(
             writeup_cfg=writeup_cfg,
             reports_base=reports_base,
             run_dir_path=run_dir_path,
             should_run_reports=should_run_reports,
             artifact_callback=artifact_callback,
+            event_callback=event_callback,
+            run_id=run_id,
         )
 
         cleanup_aggregated_results(reports_base=reports_base)
@@ -919,6 +936,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
             artifact_callback=artifact_callback,
+            event_callback=event_callback,
+            run_id=run_id,
         )
 
         run_review_stage(
@@ -930,6 +949,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
             agg_ok=agg_ok,
             artifact_callback=artifact_callback,
             telemetry_cfg=base_cfg.telemetry,
+            event_callback=event_callback,
+            run_id=run_id,
         )
 
         if artifact_callback is not None and run_dir_path is not None:

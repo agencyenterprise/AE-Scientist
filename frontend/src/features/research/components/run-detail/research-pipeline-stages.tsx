@@ -35,6 +35,12 @@ const PIPELINE_STAGES = [
     title: "Ablation Studies",
     description: "Component analysis to validate individual contributions",
   },
+  {
+    id: 5,
+    key: "paper_generation",
+    title: "Paper Generation",
+    description: "Plot aggregation, citation gathering, paper writeup, and peer review",
+  },
 ] as const;
 
 /**

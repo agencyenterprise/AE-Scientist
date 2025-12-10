@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-10T11:33:38.376483",
+  "lastUpdated": "2025-12-10T12:09:23.945983",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -1572,6 +1572,63 @@
       "results": 0,
       "at": "2025-12-10T11:33:38.376475",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "frontend/src/features/research/**/*.tsx",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T12:05:19.172094"
+    },
+    {
+      "pattern": "paper_review|paper_writeup|plot_aggregation|semantic_scholar|citation|stage|rating|originality|quality",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T12:05:19.229183"
+    },
+    {
+      "pattern": "backend/**/*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T12:05:19.363618"
+    },
+    {
+      "pattern": "(class|def).*(Run|Review|Score|Rating)",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T12:05:26.621559",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/server"
+    },
+    {
+      "pattern": "server/app/**/*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T12:05:26.733349",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "StageProgress|SubstageEvent",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T12:05:31.165229"
+    },
+    {
+      "pattern": "def perform_.*writeup|def perform_.*review|def perform_plotting|plot_aggregation",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T12:05:32.994636"
+    },
+    {
+      "pattern": "(review|Review|score|Score|rating|Rating)",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T12:05:47.386720",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src/features/research"
+    },
+    {
+      "pattern": "**/telemetry/*.py",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T12:09:23.945973"
     }
   ],
   "reviews": {
@@ -1778,4 +1835,5 @@
   "currentPhase": "documentation",
   "nextAgent": "documentation-reviewer",
   "blockedBy": null
+}By": null
 }

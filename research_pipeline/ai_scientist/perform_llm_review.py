@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from textwrap import dedent
-from typing import Any, Dict, Iterable, List, Literal, Optional
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional
 
 import numpy as np
 import pymupdf  # type: ignore[import-untyped]
@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from ai_scientist.llm import get_structured_response_from_llm
+from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,8 @@ def perform_review(
     reviewer_system_prompt: str = reviewer_system_prompt_balanced,
     review_instruction_form: str = neurips_form,
     calibration_notes: str = CALIBRATION_GUIDE,
+    event_callback: Optional[Callable[[BaseEvent], None]] = None,
+    run_id: Optional[str] = None,
 ) -> ReviewResponseModel | tuple[ReviewResponseModel, list[BaseMessage]]:
     context_block = _render_context_block(context)
     base_prompt = review_instruction_form
@@ -242,6 +245,18 @@ Here is the paper you are asked to review:
 ```
 {text}
 ```"""
+
+    # Emit event: paper review starting
+    if event_callback and run_id:
+        event_callback(
+            PaperGenerationProgressEvent(
+                run_id=run_id,
+                step="paper_review",
+                substep="Starting paper review...",
+                progress=0.80,
+                step_progress=0.0,
+            )
+        )
 
     def _invoke_review_prompt(
         prompt_text: str,
@@ -266,6 +281,19 @@ Here is the paper you are asked to review:
         histories: List[list[BaseMessage]] = []
         for idx in range(num_reviews_ensemble):
             try:
+                # Emit event: review ensemble progress
+                if event_callback and run_id:
+                    step_progress = (idx + 1) / num_reviews_ensemble
+                    event_callback(
+                        PaperGenerationProgressEvent(
+                            run_id=run_id,
+                            step="paper_review",
+                            substep=f"Review {idx + 1} of {num_reviews_ensemble}",
+                            progress=0.80 + 0.20 * step_progress,
+                            step_progress=step_progress,
+                        )
+                    )
+
                 parsed, history = _invoke_review_prompt(base_prompt, msg_history)
                 parsed_reviews.append(parsed)
                 histories.append(history)

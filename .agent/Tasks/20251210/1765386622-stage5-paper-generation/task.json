@@ -1,0 +1,594 @@
+{
+  "id": "stage5-paper-generation",
+  "name": "Stage 5: Paper Generation & Review UI",
+  "description": "Implement Stage 5: Paper Generation & Review for the research pipeline UI. This adds real-time progress tracking for post-Stage-4 operations (plot aggregation, citation gathering, paper writeup, paper review) following the existing event pattern used by stages 1-4. A complete implementation plan exists at ~/.claude/plans/prancy-foraging-kazoo.md.",
+  "created": "2025-12-10T15:37:02Z",
+  "lastUpdated": "2025-12-10T17:00:00Z",
+
+  "classification": {
+    "type": "fullstack",
+    "scope": "cross-feature",
+    "complexity": "moderate",
+    "confidence": "high",
+    "requiresUserStories": false,
+    "workflow": [
+      "feature-planner",
+      "codebase-analyzer",
+      "feature-architecture-expert",
+      "fastapi-expert",
+      "nextjs-expert",
+      "feature-executor",
+      "documentation-reviewer"
+    ],
+    "reasoning": "Fullstack feature that follows existing stage progress event patterns. Spans database, backend pipeline, server API, and frontend UI. Moderate complexity as the pattern is well-established. User stories not needed as this is implementing an existing detailed plan with clear technical requirements."
+  },
+
+  "techStack": {
+    "detected": [
+      "python",
+      "fastapi",
+      "postgresql",
+      "nextjs-15",
+      "typescript",
+      "react"
+    ],
+    "versions": {
+      "python": "3.12",
+      "next": "15.4.8",
+      "react": "19.1.2",
+      "fastapi": "0.115.0"
+    }
+  },
+
+  "docsConsulted": {
+    "project": [
+      "~/.claude/plans/prancy-foraging-kazoo.md",
+      ".agent/README.md",
+      ".agent/System/server_architecture.md",
+      ".agent/System/frontend_architecture.md",
+      ".agent/SOP/server_database_migrations.md"
+    ],
+    "external": [],
+    "existingFeatures": [
+      "server/database_migrations/versions/0004_rp_event_tables.py",
+      "server/database_migrations/versions/0012_substage_completed_events.py",
+      "server/database_migrations/versions/0016_billing_tables.py",
+      "research_pipeline/ai_scientist/treesearch/events.py",
+      "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+      "server/app/services/database/rp_events.py",
+      "server/app/api/research_pipeline_events.py",
+      "server/app/api/research_pipeline_runs.py",
+      "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+      "frontend/src/features/research/hooks/useResearchRunSSE.ts",
+      "frontend/src/types/research.ts"
+    ]
+  },
+
+  "assets": {
+    "reuse": [
+      {
+        "name": "RunStageProgressEvent pattern",
+        "path": "research_pipeline/ai_scientist/treesearch/events.py",
+        "description": "Base event class with type(), to_dict(), persistence_record() methods",
+        "usage": "Copy structure for PaperGenerationProgressEvent - @dataclass(frozen=True) with fields for sub-step tracking"
+      },
+      {
+        "name": "SubstageCompletedEvent pattern",
+        "path": "research_pipeline/ai_scientist/treesearch/events.py",
+        "description": "Event for completed sub-stages with summary dict",
+        "usage": "Reference for summary field structure if needed"
+      },
+      {
+        "name": "EventKind literal type",
+        "path": "research_pipeline/ai_scientist/treesearch/events.py",
+        "description": "Literal type for event kinds: 'run_stage_progress', 'run_log', 'substage_completed'",
+        "usage": "Add 'paper_generation_progress' to this literal type"
+      },
+      {
+        "name": "EventPersistenceManager",
+        "path": "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+        "description": "Manages background persistence with _persist_event(), _insert_stage_progress(), etc.",
+        "usage": "Add _insert_paper_generation_progress() method following same pattern"
+      },
+      {
+        "name": "WebhookClient",
+        "path": "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+        "description": "HTTP client with _EVENT_PATHS dict mapping event kinds to webhook paths",
+        "usage": "Add 'paper_generation_progress': '/paper-generation-progress' to _EVENT_PATHS"
+      },
+      {
+        "name": "EventQueueEmitter",
+        "path": "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+        "description": "Callable that enqueues events for persistence",
+        "usage": "Already handles any BaseEvent with persistence_record() - no changes needed"
+      },
+      {
+        "name": "Database migration pattern (event table)",
+        "path": "server/database_migrations/versions/0004_rp_event_tables.py",
+        "description": "Creates rp_run_stage_progress_events with BigInt id, run_id, stage, progress fields",
+        "usage": "Copy structure for rp_paper_generation_events - use same column types and indexes"
+      },
+      {
+        "name": "Database migration pattern (JSONB summary)",
+        "path": "server/database_migrations/versions/0012_substage_completed_events.py",
+        "description": "Creates table with JSONB summary field using postgresql.JSONB()",
+        "usage": "Reference if adding summary/metadata JSONB field"
+      },
+      {
+        "name": "ResearchPipelineEventsMixin",
+        "path": "server/app/services/database/rp_events.py",
+        "description": "Mixin with list_stage_progress_events(), list_substage_completed_events() methods",
+        "usage": "Add list_paper_generation_events() following same query pattern"
+      },
+      {
+        "name": "StageProgressEvent NamedTuple",
+        "path": "server/app/services/database/rp_events.py",
+        "description": "NamedTuple for DB row -> Python object mapping",
+        "usage": "Create PaperGenerationEvent NamedTuple with sub-step fields"
+      },
+      {
+        "name": "Webhook endpoint pattern",
+        "path": "server/app/api/research_pipeline_events.py",
+        "description": "POST /stage-progress with bearer token auth, logs event, returns 204",
+        "usage": "Create POST /paper-generation-progress following exact same pattern"
+      },
+      {
+        "name": "Pydantic event models",
+        "path": "server/app/api/research_pipeline_events.py",
+        "description": "StageProgressEvent, StageProgressPayload BaseModel classes",
+        "usage": "Create PaperGenerationProgressEvent, PaperGenerationPayload models"
+      },
+      {
+        "name": "Bearer token verification",
+        "path": "server/app/api/research_pipeline_events.py",
+        "description": "_verify_bearer_token() dependency validates TELEMETRY_WEBHOOK_TOKEN",
+        "usage": "Use same dependency for new webhook endpoint"
+      },
+      {
+        "name": "SSE event streaming",
+        "path": "server/app/api/research_pipeline_runs.py",
+        "description": "stream_research_run_events() with event_generator(), polls DB, sends 'initial', 'stage_progress', 'complete' events",
+        "usage": "Add paper generation event polling to existing SSE generator"
+      },
+      {
+        "name": "SSE event converter functions",
+        "path": "server/app/api/research_pipeline_runs.py",
+        "description": "_stage_event_to_model(), _node_event_to_model() convert DB -> API models",
+        "usage": "Create _paper_generation_event_to_model() converter"
+      },
+      {
+        "name": "Frontend TypeScript event types",
+        "path": "frontend/src/types/research.ts",
+        "description": "StageProgress, SubstageEvent interfaces matching backend",
+        "usage": "Add PaperGenerationEvent interface with sub-step fields"
+      },
+      {
+        "name": "useResearchRunSSE hook",
+        "path": "frontend/src/features/research/hooks/useResearchRunSSE.ts",
+        "description": "SSE hook with event type switch: 'initial', 'stage_progress', 'log', 'artifact', 'complete'",
+        "usage": "Add 'paper_generation_progress' case to switch statement, call onPaperGenerationProgress callback"
+      },
+      {
+        "name": "Stage progress component pattern",
+        "path": "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+        "description": "PIPELINE_STAGES array, extractStageSlug(), getSegmentsByStage() for progress visualization",
+        "usage": "Add stage 5 to PIPELINE_STAGES, create sub-step progress component"
+      },
+      {
+        "name": "TelemetryHooks pattern",
+        "path": "research_pipeline/launch_scientist_bfts.py",
+        "description": "NamedTuple with event_callback, persistence, webhook for passing to pipeline functions",
+        "usage": "Pass event_callback to perform_plotting, perform_writeup, perform_review functions"
+      },
+      {
+        "name": "event_callback parameter pattern",
+        "path": "research_pipeline/launch_scientist_bfts.py",
+        "description": "Functions accept event_callback: Callable[[BaseEvent], None] and call it to emit events",
+        "usage": "Add event_callback parameter to perform_plotting, perform_writeup, perform_review"
+      }
+    ],
+    "create": [
+      {
+        "name": "rp_paper_generation_events migration",
+        "path": "server/database_migrations/versions/0017_rp_paper_generation_events.py",
+        "status": "pending",
+        "basePattern": "0004_rp_event_tables.py + 0012_substage_completed_events.py",
+        "fields": "id, run_id, step (text), substep (text), progress (float), step_progress (float), details (JSONB), created_at"
+      },
+      {
+        "name": "PaperGenerationProgressEvent class",
+        "path": "research_pipeline/ai_scientist/treesearch/events.py",
+        "status": "pending",
+        "basePattern": "RunStageProgressEvent",
+        "fields": "step, substep, progress, step_progress, details (optional dict)"
+      },
+      {
+        "name": "Backend persistence methods",
+        "path": "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+        "status": "pending",
+        "methods": ["_insert_paper_generation_progress", "update _persist_event switch", "add to _EVENT_PATHS"]
+      },
+      {
+        "name": "Event emission in perform_plotting",
+        "path": "research_pipeline/ai_scientist/perform_plotting.py",
+        "status": "pending",
+        "emissions": ["plot_aggregation events during reflection loops"]
+      },
+      {
+        "name": "Event emission in perform_writeup",
+        "path": "research_pipeline/ai_scientist/perform_writeup.py",
+        "status": "pending",
+        "emissions": ["citation_gathering events", "paper_writeup events per round/step"]
+      },
+      {
+        "name": "Event emission in perform_llm_review",
+        "path": "research_pipeline/ai_scientist/perform_llm_review.py",
+        "status": "pending",
+        "emissions": ["paper_review events per review, include scores"]
+      },
+      {
+        "name": "Server webhook endpoint",
+        "path": "server/app/api/research_pipeline_events.py",
+        "status": "pending",
+        "endpoint": "POST /paper-generation-progress",
+        "basePattern": "ingest_stage_progress"
+      },
+      {
+        "name": "Database service methods",
+        "path": "server/app/services/database/rp_events.py",
+        "status": "pending",
+        "methods": ["list_paper_generation_events", "PaperGenerationEvent NamedTuple"]
+      },
+      {
+        "name": "SSE integration",
+        "path": "server/app/api/research_pipeline_runs.py",
+        "status": "pending",
+        "changes": ["Add to initial data fetch", "Add paper_generation_progress to SSE events", "Add converter function"]
+      },
+      {
+        "name": "Frontend types",
+        "path": "frontend/src/types/research.ts",
+        "status": "pending",
+        "types": ["PaperGenerationEvent interface"]
+      },
+      {
+        "name": "SSE hook update",
+        "path": "frontend/src/features/research/hooks/useResearchRunSSE.ts",
+        "status": "pending",
+        "changes": ["Add onPaperGenerationProgress callback", "Add 'paper_generation_progress' case to switch"]
+      },
+      {
+        "name": "Paper generation progress component",
+        "path": "frontend/src/features/research/components/run-detail/paper-generation-progress.tsx",
+        "status": "pending",
+        "displays": ["Sub-step list with progress bars", "Status indicators", "Timestamps", "Details (citations found, figure count, scores)"]
+      },
+      {
+        "name": "Stage 5 UI integration",
+        "path": "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+        "status": "pending",
+        "changes": ["Add stage 5 to PIPELINE_STAGES", "Render paper generation component when stage 5 active"]
+      }
+    ],
+    "extract": []
+  },
+
+  "files": {
+    "created": [],
+    "modified": [],
+    "pending": [
+      "server/database_migrations/versions/0017_rp_paper_generation_events.py",
+      "research_pipeline/ai_scientist/treesearch/events.py",
+      "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+      "research_pipeline/launch_scientist_bfts.py",
+      "research_pipeline/ai_scientist/perform_plotting.py",
+      "research_pipeline/ai_scientist/perform_writeup.py",
+      "research_pipeline/ai_scientist/perform_llm_review.py",
+      "server/app/services/database/rp_events.py",
+      "server/app/api/research_pipeline_events.py",
+      "server/app/api/research_pipeline_runs.py",
+      "frontend/src/types/research.ts",
+      "frontend/src/features/research/hooks/useResearchRunSSE.ts",
+      "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+      "frontend/src/features/research/components/run-detail/paper-generation-progress.tsx"
+    ]
+  },
+
+  "phases": [
+    {
+      "id": "classification",
+      "agent": "task-classifier",
+      "status": "completed",
+      "completedAt": "2025-12-10T15:37:02Z"
+    },
+    {
+      "id": "planning",
+      "agent": "feature-planner",
+      "status": "completed",
+      "completedAt": "2025-12-10T16:20:00Z",
+      "docsRead": [
+        ".agent/README.md",
+        ".agent/System/server_architecture.md",
+        ".agent/System/frontend_architecture.md",
+        ".agent/SOP/server_database_migrations.md",
+        "server/database_migrations/versions/0004_rp_event_tables.py",
+        "server/database_migrations/versions/0012_substage_completed_events.py",
+        "server/app/services/database/rp_events.py",
+        "server/app/api/research_pipeline_events.py",
+        "server/app/api/research_pipeline_runs.py",
+        "research_pipeline/ai_scientist/treesearch/events.py",
+        "research_pipeline/ai_scientist/telemetry/event_persistence.py",
+        "frontend/src/types/research.ts",
+        "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+        "frontend/src/features/research/hooks/useResearchRunSSE.ts"
+      ],
+      "output": "PRD.md",
+      "validation": {
+        "planValid": true,
+        "corrections": [
+          "Webhook endpoint should be in research_pipeline_events.py (not research_pipeline_runs.py)",
+          "Migration number needs verification against current head"
+        ]
+      }
+    },
+    {
+      "id": "analysis",
+      "agent": "codebase-analyzer",
+      "status": "completed",
+      "completedAt": "2025-12-10T15:45:00Z",
+      "note": "Analyzed existing patterns: events.py, event_persistence.py, migrations, server endpoints, SSE streaming, frontend hooks"
+    },
+    {
+      "id": "architecture",
+      "agent": "feature-architecture-expert",
+      "status": "completed",
+      "completedAt": "2025-12-10T17:00:00Z",
+      "note": "Architecture validated. SOLID compliance verified. Implementation order confirmed. Migration number corrected to 0017."
+    },
+    {
+      "id": "tech-guidance",
+      "parallel": true,
+      "subtasks": [
+        {
+          "agent": "fastapi-expert",
+          "status": "pending",
+          "focus": "Server webhook endpoints, SSE broadcasting, database service methods"
+        },
+        {
+          "agent": "nextjs-expert",
+          "status": "pending",
+          "focus": "Frontend SSE hook updates, new progress component with sub-steps"
+        }
+      ]
+    },
+    {
+      "id": "implementation",
+      "agent": "feature-executor",
+      "status": "pending",
+      "note": "Execute in order: DB migration -> Backend events -> Server -> Frontend"
+    },
+    {
+      "id": "documentation",
+      "agent": "documentation-reviewer",
+      "status": "pending"
+    }
+  ],
+
+  "decisions": [
+    {
+      "phase": "classification",
+      "key": "workflow",
+      "value": "fullstack-optimized",
+      "reason": "Follows existing stage progress event pattern. Includes codebase analyzer to ensure pattern consistency, tech experts for FastAPI and Next.js guidance, but skips UI-specific reviewers (copy, design) as this is technical progress UI."
+    },
+    {
+      "phase": "classification",
+      "key": "skip-user-stories",
+      "value": true,
+      "reason": "Complete implementation plan already exists with detailed file-level changes. This is technical infrastructure following established patterns, not a user-centric feature requiring story decomposition."
+    },
+    {
+      "phase": "classification",
+      "key": "implementation-order",
+      "value": "bottom-up",
+      "reason": "Must implement bottom-up: Database -> Backend pipeline events -> Server API -> Frontend. Each layer depends on the previous layer's interfaces."
+    },
+    {
+      "phase": "classification",
+      "key": "pattern-consistency",
+      "value": "critical",
+      "reason": "Must follow exact same pattern as existing stage progress events (stages 1-4) for consistency. Codebase analyzer should validate against existing implementations."
+    },
+    {
+      "phase": "planning",
+      "key": "webhook-endpoint-file",
+      "value": "research_pipeline_events.py",
+      "reason": "Original plan suggested research_pipeline_runs.py but existing webhook endpoints (stage-progress, substage-completed, run-started, etc.) are in research_pipeline_events.py. Follow existing pattern for consistency."
+    },
+    {
+      "phase": "planning",
+      "key": "event-kind-update",
+      "value": "paper_generation_progress",
+      "reason": "Must add 'paper_generation_progress' to EventKind Literal type in events.py for type safety."
+    },
+    {
+      "phase": "planning",
+      "key": "sse-initial-data",
+      "value": "include-paper-generation",
+      "reason": "SSE endpoint sends initial data payload with all event types. Must add paper_generation_events to initial_data dict in stream_research_run_events()."
+    },
+    {
+      "phase": "planning",
+      "key": "plan-validation",
+      "value": "approved-with-corrections",
+      "reason": "Original plan at ~/.claude/plans/prancy-foraging-kazoo.md is comprehensive and follows correct patterns. Minor corrections: webhook file location, migration number verification needed."
+    },
+    {
+      "phase": "analysis",
+      "key": "event-table-schema",
+      "value": "step + substep + progress + step_progress + details",
+      "reason": "Paper generation has 4 sub-steps (plot aggregation, citation gathering, writeup, review). Table needs step identifier, substep for finer granularity, overall progress (0-1), step progress (0-1), JSONB details for step-specific data."
+    },
+    {
+      "phase": "analysis",
+      "key": "event-emission-points",
+      "value": "During reflection loops and key milestones",
+      "reason": "Emit events at: aggregate_plots reflections, citation gathering rounds, writeup reflections, review per-review. Include details like figure count, citations found, scores."
+    },
+    {
+      "phase": "analysis",
+      "key": "sse-integration-approach",
+      "value": "Extend existing SSE stream",
+      "reason": "Add paper_generation events to existing stream_research_run_events() generator. Frontend already handles multiple event types in single SSE connection."
+    },
+    {
+      "phase": "architecture",
+      "key": "migration-number",
+      "value": "0017",
+      "reason": "Current head is 0016_billing_tables.py. New migration will be 0017_rp_paper_generation_events.py."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-srp",
+      "value": "responsibilities-separated",
+      "reason": "Each layer has single responsibility: events.py defines event structure, event_persistence.py handles DB writes + webhooks, server endpoints receive webhooks, rp_events.py queries DB, SSE streams to frontend, frontend renders. No violations detected."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-ocp",
+      "value": "extensible-via-event-kind",
+      "reason": "EventKind Literal type allows adding new event types without modifying existing event handling. _persist_event() uses if-elif for event routing which requires modification - acceptable trade-off for simplicity."
+    },
+    {
+      "phase": "architecture",
+      "key": "solid-dip",
+      "value": "callback-injection",
+      "reason": "Pipeline functions receive event_callback: Callable[[BaseEvent], None] parameter, allowing dependency injection. EventQueueEmitter already handles any BaseEvent via duck typing on persistence_record()."
+    },
+    {
+      "phase": "architecture",
+      "key": "frontend-component-structure",
+      "value": "separate-component-integrated-via-prop",
+      "reason": "Create paper-generation-progress.tsx as standalone component. Integrate into research-pipeline-stages.tsx via conditional render when paper_generation_events exist. Maintains SRP - stages component orchestrates, progress component renders."
+    },
+    {
+      "phase": "architecture",
+      "key": "sse-hook-extension",
+      "value": "add-callback-and-case",
+      "reason": "Add onPaperGenerationProgress callback to UseResearchRunSSEOptions interface. Add 'paper_generation_progress' case to switch statement in event handler. Follows existing pattern for log/artifact/run_update events."
+    },
+    {
+      "phase": "architecture",
+      "key": "implementation-order-validated",
+      "value": "correct",
+      "reason": "Implementation order is correct: 1) DB migration (creates table), 2) Backend events (defines event class + persistence), 3) Pipeline emission (uses event class), 4) Server (receives webhooks + queries DB + SSE), 5) Frontend (consumes SSE + renders). Each layer depends on previous."
+    }
+  ],
+
+  "searches": [],
+
+  "reviews": {
+    "copy": [],
+    "queries": []
+  },
+
+  "implementationPlan": {
+    "source": "~/.claude/plans/prancy-foraging-kazoo.md",
+    "phases": [
+      {
+        "id": 1,
+        "name": "Database",
+        "description": "Create migration for rp_paper_generation_events table",
+        "files": ["server/database_migrations/versions/0017_rp_paper_generation_events.py"],
+        "pattern": "Follow 0004_rp_event_tables.py structure with JSONB details field from 0012",
+        "dependencies": []
+      },
+      {
+        "id": 2,
+        "name": "Backend Event Infrastructure",
+        "description": "Add PaperGenerationProgressEvent class, update EventKind type, add persistence, add webhook path",
+        "files": [
+          "research_pipeline/ai_scientist/treesearch/events.py",
+          "research_pipeline/ai_scientist/telemetry/event_persistence.py"
+        ],
+        "pattern": "Follow RunStageProgressEvent pattern exactly",
+        "dependencies": [1]
+      },
+      {
+        "id": 3,
+        "name": "Pipeline Event Emission",
+        "description": "Add event_callback parameters and emit progress events from pipeline functions",
+        "files": [
+          "research_pipeline/launch_scientist_bfts.py",
+          "research_pipeline/ai_scientist/perform_plotting.py",
+          "research_pipeline/ai_scientist/perform_writeup.py",
+          "research_pipeline/ai_scientist/perform_llm_review.py"
+        ],
+        "pattern": "Call event_callback() during key milestones and loops",
+        "dependencies": [2]
+      },
+      {
+        "id": 4,
+        "name": "Server",
+        "description": "Add webhook endpoint to research_pipeline_events.py, database service methods, and update SSE endpoint",
+        "files": [
+          "server/app/api/research_pipeline_events.py",
+          "server/app/services/database/rp_events.py",
+          "server/app/api/research_pipeline_runs.py"
+        ],
+        "pattern": "Follow stage-progress endpoint and SSE pattern",
+        "dependencies": [1]
+      },
+      {
+        "id": 5,
+        "name": "Frontend",
+        "description": "Add types, update SSE hook, and build Stage 5 UI component with sub-step visualization",
+        "files": [
+          "frontend/src/types/research.ts",
+          "frontend/src/features/research/hooks/useResearchRunSSE.ts",
+          "frontend/src/features/research/components/run-detail/research-pipeline-stages.tsx",
+          "frontend/src/features/research/components/run-detail/paper-generation-progress.tsx"
+        ],
+        "pattern": "Follow stage progress component pattern with sub-step visualization",
+        "dependencies": [4]
+      }
+    ]
+  },
+
+  "architectureValidation": {
+    "solidCompliance": {
+      "srp": {
+        "status": "pass",
+        "notes": "Each file has clear single responsibility. No god classes or mixed concerns."
+      },
+      "ocp": {
+        "status": "pass-with-note",
+        "notes": "EventKind Literal requires modification for new types. Acceptable trade-off for type safety over full OCP compliance."
+      },
+      "lsp": {
+        "status": "pass",
+        "notes": "PaperGenerationProgressEvent properly extends BaseEvent contract with required methods."
+      },
+      "isp": {
+        "status": "pass",
+        "notes": "Interfaces are focused. SSE hook uses specific callback props rather than fat interface."
+      },
+      "dip": {
+        "status": "pass",
+        "notes": "event_callback injection allows decoupled testing. EventQueueEmitter uses duck typing on BaseEvent."
+      }
+    },
+    "patternConsistency": {
+      "status": "verified",
+      "notes": "All patterns match existing stage progress event implementation exactly. No deviations from established patterns."
+    },
+    "implementationOrder": {
+      "status": "confirmed",
+      "notes": "Bottom-up order is correct. DB -> Backend events -> Pipeline emission -> Server -> Frontend. Server phase can partially parallelize with Pipeline emission phase."
+    }
+  },
+
+  "currentPhase": "tech-guidance",
+  "nextAgent": "fastapi-expert",
+  "blockedBy": null
+}

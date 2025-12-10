@@ -3,7 +3,7 @@ Database helpers for research pipeline telemetry events.
 """
 
 from datetime import datetime
-from typing import List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -40,6 +40,17 @@ class SubstageCompletedEvent(NamedTuple):
     run_id: str
     stage: str
     summary: dict
+    created_at: datetime
+
+
+class PaperGenerationEvent(NamedTuple):
+    id: int
+    run_id: str
+    step: str
+    substep: Optional[str]
+    progress: float
+    step_progress: float
+    details: Optional[Dict[str, Any]]
     created_at: datetime
 
 
@@ -124,3 +135,32 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 cursor.execute(query, (run_id,))
                 row = cursor.fetchone()
         return StageProgressEvent(**row) if row else None
+
+    def list_paper_generation_events(self, run_id: str) -> List[PaperGenerationEvent]:
+        """Fetch all paper generation events for a run, ordered chronologically."""
+        query = """
+            SELECT id, run_id, step, substep, progress, step_progress, details, created_at
+            FROM rp_paper_generation_events
+            WHERE run_id = %s
+            ORDER BY created_at ASC
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                rows = cursor.fetchall() or []
+        return [PaperGenerationEvent(**row) for row in rows]
+
+    def get_latest_paper_generation_event(self, run_id: str) -> Optional[PaperGenerationEvent]:
+        """Fetch most recent paper generation event for a run."""
+        query = """
+            SELECT id, run_id, step, substep, progress, step_progress, details, created_at
+            FROM rp_paper_generation_events
+            WHERE run_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                row = cursor.fetchone()
+        return PaperGenerationEvent(**row) if row else None

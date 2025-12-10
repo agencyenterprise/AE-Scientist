@@ -91,7 +91,7 @@ export function ReviewModal({
     if (!isClient) return;
 
     document.addEventListener("keydown", handleKeyDown);
-    // Focus the modal when it opens
+    // Focus the modal when it opensN
     modalRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", handleKeyDown);

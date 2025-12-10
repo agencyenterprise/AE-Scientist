@@ -10,7 +10,7 @@ import traceback
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
@@ -25,6 +25,7 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
 )
+from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -820,6 +821,8 @@ def perform_writeup(
     page_limit: int = 8,
     citations_text: str | None = None,
     run_dir_name: str | None = None,
+    event_callback: Optional[Callable[[BaseEvent], None]] = None,
+    run_id: Optional[str] = None,
 ) -> bool:
     logger.info("\n" + "=" * 80)
     logger.info("STARTING PERFORM_WRITEUP")
@@ -829,6 +832,18 @@ def perform_writeup(
     logger.debug(f"n_writeup_reflections: {n_writeup_reflections}")
     logger.debug(f"citations_text provided: {citations_text is not None}")
     logger.info("=" * 80 + "\n")
+
+    # Emit event: paper writeup starting
+    if event_callback and run_id:
+        event_callback(
+            PaperGenerationProgressEvent(
+                run_id=run_id,
+                step="paper_writeup",
+                substep="Starting paper writeup...",
+                progress=0.30,
+                step_progress=0.0,
+            )
+        )
 
     compile_attempt = 0
     final_pdf_path: Path | None = None
@@ -972,6 +987,19 @@ def perform_writeup(
         )
 
         for reflection_idx in range(n_writeup_reflections):
+            # Emit event: paper writeup reflection progress
+            if event_callback and run_id:
+                step_progress = (reflection_idx + 1) / n_writeup_reflections
+                event_callback(
+                    PaperGenerationProgressEvent(
+                        run_id=run_id,
+                        step="paper_writeup",
+                        substep=f"Reflection {reflection_idx + 1} of {n_writeup_reflections}",
+                        progress=0.30 + 0.50 * step_progress,  # paper_writeup is 30-80%
+                        step_progress=step_progress,
+                    )
+                )
+
             current_latex = writeup_file.read_text(encoding="utf-8")
             referenced_figs_temp = re.findall(
                 r"\\includegraphics(?:\[[^\]]*\])?{([^}]+)}", current_latex

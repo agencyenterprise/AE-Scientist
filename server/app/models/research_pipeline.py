@@ -2,7 +2,7 @@
 Pydantic models for research pipeline run APIs.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -97,6 +97,22 @@ class ResearchRunSubstageEvent(BaseModel):
     created_at: str = Field(..., description="ISO timestamp of the event")
 
 
+class ResearchRunPaperGenerationProgress(BaseModel):
+    id: int = Field(..., description="Unique identifier of the paper generation event")
+    run_id: str = Field(..., description="Research run identifier")
+    step: str = Field(
+        ...,
+        description="Current step: plot_aggregation, citation_gathering, paper_writeup, or paper_review",
+    )
+    substep: Optional[str] = Field(None, description="Substep identifier (e.g., 'round_1', 'revision_2')")
+    progress: float = Field(..., description="Overall progress (0.0-1.0)")
+    step_progress: float = Field(..., description="Progress within current step (0.0-1.0)")
+    details: Optional[Dict[str, Any]] = Field(
+        None, description="Step-specific metadata (figures, citations, scores, etc.)"
+    )
+    created_at: str = Field(..., description="ISO timestamp when the event was recorded")
+
+
 class ResearchRunArtifactMetadata(BaseModel):
     id: int = Field(..., description="Artifact identifier")
     artifact_type: str = Field(..., description="Artifact type label")
@@ -133,6 +149,9 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     artifacts: List[ResearchRunArtifactMetadata] = Field(
         default_factory=list, description="Artifacts uploaded for the run"
+    )
+    paper_generation_progress: List[ResearchRunPaperGenerationProgress] = Field(
+        default_factory=list, description="Paper generation progress events (Stage 5)"
     )
 
 

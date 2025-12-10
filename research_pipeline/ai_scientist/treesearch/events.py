@@ -1,7 +1,12 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional, Tuple
 
-EventKind = Literal["run_stage_progress", "run_log", "substage_completed"]
+EventKind = Literal[
+    "run_stage_progress",
+    "run_log",
+    "substage_completed",
+    "paper_generation_progress",
+]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
 

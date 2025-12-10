@@ -6,6 +6,7 @@ import type {
   LogEntry,
   ArtifactMetadata,
   ResearchRunDetails,
+  PaperGenerationEvent,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -24,6 +25,7 @@ interface UseResearchRunSSEOptions {
   onLog: (event: LogEntry) => void;
   onArtifact: (event: ArtifactMetadata) => void;
   onRunUpdate: (run: ResearchRunInfo) => void;
+  onPaperGenerationProgress: (event: PaperGenerationEvent) => void;
   onComplete: (status: string) => void;
   onError?: (error: string) => void;
 }
@@ -44,6 +46,7 @@ export function useResearchRunSSE({
   onLog,
   onArtifact,
   onRunUpdate,
+  onPaperGenerationProgress,
   onComplete,
   onError,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
@@ -127,6 +130,9 @@ export function useResearchRunSSE({
               case "run_update":
                 onRunUpdate(event.data as ResearchRunInfo);
                 break;
+              case "paper_generation_progress":
+                onPaperGenerationProgress(event.data as PaperGenerationEvent);
+                break;
               case "complete":
                 onComplete((event.data as { status: string }).status);
                 setIsConnected(false);
@@ -169,6 +175,7 @@ export function useResearchRunSSE({
     onLog,
     onArtifact,
     onRunUpdate,
+    onPaperGenerationProgress,
     onComplete,
     onError,
   ]);

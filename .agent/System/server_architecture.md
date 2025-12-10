@@ -201,6 +201,47 @@ All routes prefixed with `/api`.
 | GET | `/llm-defaults/{type}` | Get default LLM for prompt type |
 | PUT | `/llm-defaults/{type}` | Update default LLM |
 
+### Research Pipeline Events (`/api/research-pipeline/events`)
+
+> Added from: Stage 5 Paper Generation implementation (2025-12-10)
+
+Webhook endpoints for receiving telemetry events from the research pipeline. All endpoints require Bearer token authentication via `TELEMETRY_WEBHOOK_TOKEN` environment variable.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/stage-progress` | Stage 1-4 iteration progress |
+| POST | `/substage-completed` | Sub-stage completion with summary |
+| POST | `/paper-generation-progress` | Stage 5 (paper generation) progress |
+| POST | `/run-started` | Pipeline startup notification |
+| POST | `/run-finished` | Pipeline completion (success/failure) |
+| POST | `/heartbeat` | Liveness signal |
+| POST | `/gpu-shortage` | GPU availability issue |
+
+**Event Flow:**
+```
+Pipeline (RunPod) --> Webhook Endpoint --> Database --> SSE Stream --> Frontend
+```
+
+**SSE Event Types** (streamed via `/conversations/{id}/idea/research-run/{run_id}/stream`):
+| Event Type | Description |
+|------------|-------------|
+| `initial` | Full state snapshot on connection |
+| `stage_progress` | Stages 1-4 progress updates |
+| `paper_generation_progress` | Stage 5 progress updates |
+| `log` | Log entries from pipeline |
+| `artifact` | New artifacts available for download |
+| `run_update` | Run status changes |
+| `complete` | Stream termination signal |
+
+**Adding New Event Types:**
+1. Add event class to `research_pipeline/ai_scientist/treesearch/events.py`
+2. Update `EventKind` Literal type with new event kind
+3. Add persistence method to `event_persistence.py`
+4. Add webhook path to `WebhookClient._EVENT_PATHS`
+5. Create Pydantic models in `research_pipeline_events.py`
+6. Add POST endpoint for webhook reception
+7. Update SSE generator to poll and emit new event type
+
 ---
 
 ## 4. Service Layer

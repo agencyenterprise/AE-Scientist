@@ -210,6 +210,58 @@ def upgrade() -> None:
     """)
 ```
 
+### Adding Event Tables (Telemetry Pattern)
+
+> Added from: Stage 5 Paper Generation implementation (2025-12-10)
+
+For research pipeline telemetry event tables, follow this pattern using SQLAlchemy's `op.create_table()`:
+
+```python
+from sqlalchemy.dialects import postgresql
+
+def upgrade() -> None:
+    op.create_table(
+        "rp_my_events",
+        sa.Column("id", sa.BigInteger(), nullable=False),
+        sa.Column("run_id", sa.Text(), nullable=False),
+        sa.Column("step", sa.Text(), nullable=False),
+        sa.Column("substep", sa.Text(), nullable=True),
+        sa.Column("progress", sa.Float(), nullable=False),
+        sa.Column(
+            "details",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id", name="rp_my_events_pkey"),
+    )
+    # Index for filtering by run
+    op.create_index("idx_rp_my_events_run", "rp_my_events", ["run_id"])
+    # Index for chronological ordering
+    op.create_index("idx_rp_my_events_created", "rp_my_events", ["created_at"])
+
+
+def downgrade() -> None:
+    op.drop_index("idx_rp_my_events_created", table_name="rp_my_events")
+    op.drop_index("idx_rp_my_events_run", table_name="rp_my_events")
+    op.drop_table("rp_my_events")
+```
+
+**Key points:**
+- Use `BigInteger` for id (auto-incrementing via BIGSERIAL)
+- Always index `run_id` for filtering
+- Always index `created_at` for chronological ordering
+- Use `postgresql.JSONB` for flexible metadata fields
+- Name primary key constraint explicitly for consistency
+- Drop indexes before dropping table in downgrade
+
+**Reference:** `server/database_migrations/versions/0017_rp_paper_generation_events.py`
+
 ---
 
 ## Available Commands

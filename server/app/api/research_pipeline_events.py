@@ -76,6 +76,19 @@ class GPUShortagePayload(BaseModel):
     message: Optional[str] = None
 
 
+class PaperGenerationProgressEvent(BaseModel):
+    step: str
+    substep: Optional[str] = None
+    progress: float
+    step_progress: float
+    details: Optional[Dict[str, Any]] = None
+
+
+class PaperGenerationProgressPayload(BaseModel):
+    run_id: str
+    event: PaperGenerationProgressEvent
+
+
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
     expected_token = settings.TELEMETRY_WEBHOOK_TOKEN
     if not expected_token:
@@ -153,6 +166,22 @@ def ingest_substage_completed(
         f"{event.main_stage_number}.{event.substage_number}",
         event.substage_name,
         event.reason,
+    )
+
+
+@router.post("/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_paper_generation_progress(
+    payload: PaperGenerationProgressPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    logger.info(
+        "Paper generation progress: run=%s step=%s substep=%s progress=%.1f%% step_progress=%.1f%%",
+        payload.run_id,
+        event.step,
+        event.substep or "N/A",
+        event.progress * 100,
+        event.step_progress * 100,
     )
 
 
