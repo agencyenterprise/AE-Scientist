@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-10T11:28:06.462072",
+  "lastUpdated": "2025-12-10T11:33:38.376483",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -1565,6 +1565,13 @@
       "results": 0,
       "at": "2025-12-10T11:28:06.462062",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks"
+    },
+    {
+      "pattern": ".agent/System/*.md",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T11:33:38.376475",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
     }
   ],
   "reviews": {

@@ -343,6 +343,162 @@ See `server/app/api/research_pipeline_runs.py` endpoint `get_research_run_review
 
 ---
 
+## Optional Query Parameter Filtering Pattern
+
+> Added from: conversations-filter-feature implementation (2025-12-10)
+
+When adding server-side filtering to list endpoints with optional query parameters, follow this pattern:
+
+### When to Use
+
+- List endpoints that need to filter by status or category
+- Filters should be optional (return all when not specified)
+- Filtering by related table data (one-to-many relationships)
+
+### API Endpoint Pattern
+
+```python
+# server/app/api/my_feature.py
+from typing import Union
+
+@router.get("")
+async def list_items(
+    request: Request,
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    status: str | None = None,           # Optional filter
+    related_status: str | None = None,   # Filter by related table
+) -> Union[ItemListResponse, ErrorResponse]:
+    """
+    List items with optional filtering.
+
+    Query Parameters:
+    - status: Filter by item status (optional)
+    - related_status: Filter by related entity status (optional)
+    """
+    user = get_current_user(request)
+
+    # Validate against known constants BEFORE database call
+    if status is not None and status not in VALID_STATUSES:
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid status",
+            detail=f"Must be one of: {', '.join(VALID_STATUSES)}"
+        )
+
+    if related_status is not None and related_status not in VALID_RELATED_STATUSES:
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid related_status",
+            detail=f"Must be one of: {', '.join(VALID_RELATED_STATUSES)}"
+        )
+
+    # Pass filters to database layer
+    db = get_database()
+    items = db.list_items(
+        limit=limit,
+        offset=offset,
+        user_id=user.id,
+        status=status,
+        related_status=related_status,
+    )
+
+    return ItemListResponse(items=[...])
+```
+
+### Database Method Pattern (Dynamic WHERE Clauses)
+
+```python
+# server/app/services/database/my_feature.py
+def list_items(
+    self,
+    limit: int = 100,
+    offset: int = 0,
+    user_id: int | None = None,
+    status: str | None = None,
+    related_status: str | None = None,
+) -> List[Item]:
+    """List items with optional filtering."""
+    with self._get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # Base query
+            query = """
+                SELECT i.*, ...
+                FROM items i
+                LEFT JOIN users u ON i.user_id = u.id
+            """
+
+            params: list = []
+            where_conditions: list = []
+
+            # Add user filter
+            if user_id is not None:
+                where_conditions.append("i.user_id = %s")
+                params.append(user_id)
+
+            # Add status filter
+            if status is not None:
+                where_conditions.append("i.status = %s")
+                params.append(status)
+
+            # Add related entity filter with conditional JOIN
+            if related_status is not None:
+                # Add JOIN for related table ONLY when needed
+                query = query.replace(
+                    "FROM items i",
+                    "FROM items i\n                LEFT JOIN related_items ri ON ri.item_id = i.id"
+                )
+                # Add DISTINCT to handle multiple related items per item
+                query = query.replace("SELECT i.*", "SELECT DISTINCT i.*")
+                where_conditions.append("ri.status = %s")
+                params.append(related_status)
+
+            # Build complete WHERE clause
+            if where_conditions:
+                query += " WHERE " + " AND ".join(where_conditions)
+
+            # Add ordering and pagination
+            query += " ORDER BY i.updated_at DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+    return [Item(**row) for row in rows]
+```
+
+### Key Points
+
+1. **Validate at endpoint level**: Check filter values against known constants before database call
+2. **Use `str | None = None`**: Makes parameter optional, FastAPI handles omission
+3. **Build WHERE dynamically**: Only add conditions when filter is provided
+4. **Conditional JOINs**: Only add JOIN for related tables when that filter is active
+5. **Always use DISTINCT**: When JOINing one-to-many tables to avoid duplicate rows
+6. **Parameterized queries**: Always use `%s` placeholders, never string interpolation
+7. **Frontend should omit param for "all"**: Don't send `?status=all`, just omit the param
+
+### Frontend Integration
+
+```typescript
+// Build query string, omitting "all" values
+const params = new URLSearchParams();
+if (statusFilter !== 'all') {
+  params.set('status', statusFilter);
+}
+if (relatedStatusFilter !== 'all') {
+  params.set('related_status', relatedStatusFilter);
+}
+const queryString = params.toString();
+const url = queryString ? `/items?${queryString}` : '/items';
+```
+
+### Reference Implementation
+
+See `server/app/api/conversations.py` endpoint `list_conversations()` and `server/app/services/database/conversations.py` method `list_conversations()` for conversation/run status filtering.
+
+---
+
 ## Common Pitfalls
 
 - **Always import router in routes.py**: Router won't be registered otherwise

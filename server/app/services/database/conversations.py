@@ -326,18 +326,13 @@ class ConversationsMixin(ConnectionProvider):
                     where_conditions.append("c.status = %s")
                     params.append(conversation_status)
 
-                # Add research run status filter with conditional JOIN
+                # Add research run status filter using EXISTS subquery
+                # (avoids JOIN + DISTINCT which conflicts with ORDER BY in subqueries)
                 if run_status is not None:
-                    # Add JOIN for research_pipeline_runs table
-                    query = query.replace(
-                        "LEFT JOIN idea_versions iv ON i.active_idea_version_id = iv.id",
-                        "LEFT JOIN idea_versions iv ON i.active_idea_version_id = iv.id\n"
-                        "LEFT JOIN research_pipeline_runs rpr ON rpr.idea_id = i.id"
+                    where_conditions.append(
+                        "EXISTS (SELECT 1 FROM research_pipeline_runs rpr "
+                        "WHERE rpr.idea_id = i.id AND rpr.status = %s)"
                     )
-                    # Add DISTINCT to handle multiple runs per conversation
-                    query = query.replace("SELECT", "SELECT DISTINCT")
-                    # Filter by run status
-                    where_conditions.append("rpr.status = %s")
                     params.append(run_status)
 
                 # Build complete WHERE clause
