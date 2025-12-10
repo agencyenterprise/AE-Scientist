@@ -155,6 +155,7 @@ def perform_experiments_bfts(
             # additional nodes do not advance the effective iteration), only emit when
             # the iteration for this stage actually increases.
             # Also emit when stage completes (reaches max_iterations) to ensure final progress=1.0 is recorded.
+            stage_completed = manager.has_stage_completed(stage.name)
             previous_iteration = last_reported_iteration_by_stage.get(stage.name)
             stage_complete = stage.max_iterations > 0 and len(journal.nodes) >= stage.max_iterations
             # Emit if iteration increased, or if stage completed and we haven't emitted the final event yet
@@ -167,7 +168,7 @@ def perform_experiments_bfts(
                 and previous_iteration < stage.max_iterations
             )
             should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
-            if should_emit:
+            if should_emit and not stage_completed:
                 last_reported_iteration_by_stage[stage.name] = iteration_display
                 # When stage completes, ensure progress is exactly 1.0 and iteration equals max_iterations
                 if stage_complete and stage.max_iterations > 0:
