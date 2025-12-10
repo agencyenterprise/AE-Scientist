@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from PIL import Image
 from pydantic import BaseModel
 
-from .token_tracker import TrackCostCallbackHandler, track_token_usage
+from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
 
@@ -55,7 +55,6 @@ def _build_vlm_messages(
     return messages
 
 
-@track_token_usage
 def make_vlm_call(
     model: str,
     temperature: float,

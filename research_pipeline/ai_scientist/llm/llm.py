@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 
-from .token_tracker import TrackCostCallbackHandler, track_token_usage
+from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
 
@@ -47,7 +47,6 @@ def get_batch_responses_from_llm(
     return contents, histories
 
 
-@track_token_usage
 def make_llm_call(
     model: str,
     temperature: float,

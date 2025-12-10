@@ -29,7 +29,6 @@ from omegaconf import OmegaConf
 
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
-from ai_scientist.llm import token_tracker
 from ai_scientist.perform_icbinb_writeup import gather_citations
 from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
 from ai_scientist.perform_llm_review import ReviewResponseModel, load_paper, perform_review
@@ -73,19 +72,6 @@ class TelemetryHooks(NamedTuple):
 
 
 ArtifactCallback = Callable[[ArtifactSpec], None]
-
-
-def save_token_tracker(idea_dir: str) -> None:
-    try:
-        with open(osp.join(idea_dir, "token_tracker.json"), "w") as f:
-            json.dump(token_tracker.get_summary(), f)
-    except Exception:
-        traceback.print_exc()
-    try:
-        with open(osp.join(idea_dir, "token_tracker_interactions.json"), "w") as f:
-            json.dump(token_tracker.get_interactions(), f)
-    except Exception:
-        traceback.print_exc()
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -907,10 +893,6 @@ def execute_launcher(args: argparse.Namespace) -> None:
         )
 
         cleanup_aggregated_results(reports_base=reports_base)
-
-        save_token_tracker(
-            idea_dir=run_dir_path.as_posix() if run_dir_path is not None else reports_base
-        )
 
         writeup_success = run_writeup_stage(
             writeup_cfg=writeup_cfg,
