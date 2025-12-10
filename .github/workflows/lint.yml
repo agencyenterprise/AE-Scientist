@@ -74,3 +74,76 @@ jobs:
       - name: Lint frontend (ESLint, Prettier, Stylelint, TypeScript)
         run: |
           make lint-frontend
+
+  check-api-types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install server dependencies
+        run: |
+          cd server && uv sync --frozen
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend && npm ci
+
+      - name: Generate API types
+        env:
+          SKIP_DB_CONNECTION: "true"
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+          OPENAI_API_KEY: dummy
+          ANTHROPIC_API_KEY: dummy
+          XAI_API_KEY: dummy
+          GOOGLE_CLIENT_ID: dummy
+          GOOGLE_CLIENT_SECRET: dummy
+          GOOGLE_REDIRECT_URI: http://localhost:8000/api/auth/callback
+          FRONTEND_URL: http://localhost:3000
+          TELEMETRY_WEBHOOK_TOKEN: dummy
+          HF_TOKEN: dummy
+          RUNPOD_API_KEY: dummy
+          PIPELINE_MONITOR_POLL_INTERVAL_SECONDS: "60"
+          PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS: "60"
+          PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS: "5"
+          PIPELINE_MONITOR_STARTUP_GRACE_SECONDS: "600"
+          PIPELINE_MONITOR_MAX_RUNTIME_HOURS: "12"
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+          AWS_REGION: us-east-1
+          AWS_S3_BUCKET_NAME: dummy
+          MIN_USER_CREDITS_FOR_CONVERSATION: "10"
+          MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE: "25"
+          STRIPE_SECRET_KEY: sk_test_dummy
+          STRIPE_WEBHOOK_SECRET: whsec_dummy
+          STRIPE_CHECKOUT_SUCCESS_URL: http://localhost:3000/billing?success=1
+          STRIPE_PRICE_TO_CREDITS: "{}"
+          RESEARCH_RUN_CREDITS_PER_MINUTE: "1"
+        run: |
+          make gen-api-types
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code server/openapi.json frontend/src/types/api.gen.ts; then
+            echo "❌ Error: API types are out of date!"
+            echo "Please run 'make gen-api-types' and commit the changes."
+            exit 1
+          fi
+          echo "✅ API types are up to date"

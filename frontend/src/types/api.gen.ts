@@ -2814,9 +2814,9 @@ export interface operations {
     };
     auth_callback_api_auth_callback_get: {
         parameters: {
-            query: {
+            query?: {
                 /** @description Authorization code from Google */
-                code: string;
+                code?: string;
                 /** @description State parameter for security */
                 state?: string;
                 /** @description Error from OAuth provider */

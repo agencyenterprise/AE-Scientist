@@ -36,7 +36,6 @@ class BillingService:
     def get_wallet(
         self, *, user_id: int, limit: int = 20, offset: int = 0
     ) -> tuple[BillingWallet, List[CreditTransaction]]:
-        self.db.ensure_user_wallet(user_id)
         wallet = self.db.get_user_wallet(user_id)
         if wallet is None:
             raise RuntimeError(f"Wallet missing for user {user_id}")
@@ -44,7 +43,6 @@ class BillingService:
         return wallet, transactions
 
     def get_balance(self, user_id: int) -> int:
-        self.db.ensure_user_wallet(user_id)
         return self.db.get_user_wallet_balance(user_id)
 
     # ------------------------------------------------------------------

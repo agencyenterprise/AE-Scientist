@@ -31,6 +31,8 @@ class BaseDatabaseManager(ConnectionProvider):
 
     def __init__(self) -> None:
         """Initialize database manager."""
+        skip_db = os.environ.get("SKIP_DB_CONNECTION", "").lower() in ("true", "1", "yes")
+
         if settings.DATABASE_URL:
             parsed = urlparse(settings.DATABASE_URL)
             self.pg_config: Dict[str, Any] = {
@@ -48,6 +50,11 @@ class BaseDatabaseManager(ConnectionProvider):
                 "user": settings.POSTGRES_USER,
                 "password": settings.POSTGRES_PASSWORD,
             }
+
+        if skip_db:
+            logger.info("Skipping database connection (SKIP_DB_CONNECTION=true)")
+            return
+
         if BaseDatabaseManager._pool is None:
             min_conn = int(os.environ.get("DB_POOL_MIN_CONN", "1"))
             max_conn = int(os.environ.get("DB_POOL_MAX_CONN", "10"))
