@@ -38,7 +38,6 @@ def save_cost_track(
 ) -> None:
     if run_id is None:
         run_id = RUN_ID
-    run_id = None
     if (input_tokens is None or output_tokens is None) and ai_message is None:
         raise ValueError("Either input_tokens and output_tokens or ai_message must be provided")
     if ai_message:
