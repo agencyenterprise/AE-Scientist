@@ -329,6 +329,10 @@ export interface paths {
         /**
          * List Conversations
          * @description Get a paginated list of conversations for the current user.
+         *
+         *     Query Parameters:
+         *     - conversation_status: Filter by "draft" or "with_research" (optional)
+         *     - run_status: Filter by "pending", "running", "completed", or "failed" (optional)
          */
         get: operations["list_conversations_api_conversations_get"];
         put?: never;
@@ -780,6 +784,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Research Run Review
+         * @description Fetch LLM review data for a research run.
+         */
+        get: operations["get_research_run_review_api_conversations__conversation_id__idea_research_run__run_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
         parameters: {
             query?: never;
@@ -834,7 +858,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stream": {
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -843,19 +867,9 @@ export interface paths {
         };
         /**
          * Stream Research Run Events
-         * @description Stream research run events via Server-Sent Events.
-         *
-         *     Event types:
-         *     - initial: Full snapshot on connection
-         *     - log: New log entries
-         *     - stage_progress: Meaningful progress changes only
-         *     - artifact: New artifacts
-         *     - run_update: Run status/info changes
-         *     - complete: Run finished (completed/failed)
-         *     - heartbeat: Keep-alive every 30s
-         *     - error: Error occurred
+         * @description Stream server-sent events for research run progress.
          */
-        get: operations["stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get"];
+        get: operations["stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1207,6 +1221,11 @@ export interface components {
             manual_title?: string | null;
             /** Manual Hypothesis */
             manual_hypothesis?: string | null;
+            /**
+             * Status
+             * @default draft
+             */
+            status: string;
         };
         /**
          * ConversationListResponse
@@ -1903,6 +1922,134 @@ export interface components {
             providers: {
                 [key: string]: components["schemas"]["LLMModel"][];
             };
+        };
+        /**
+         * LlmReviewNotFoundResponse
+         * @description Response model when no review exists for a run.
+         */
+        LlmReviewNotFoundResponse: {
+            /**
+             * Run Id
+             * @description Research run identifier
+             */
+            run_id: string;
+            /**
+             * Exists
+             * @description Indicates no review exists
+             * @default false
+             */
+            exists: boolean;
+            /**
+             * Message
+             * @description Explanation that no review was found
+             */
+            message: string;
+        };
+        /**
+         * LlmReviewResponse
+         * @description Response model for LLM review data.
+         */
+        LlmReviewResponse: {
+            /**
+             * Id
+             * @description Unique identifier of the review
+             */
+            id: number;
+            /**
+             * Run Id
+             * @description Research run identifier
+             */
+            run_id: string;
+            /**
+             * Summary
+             * @description Executive summary of the review
+             */
+            summary: string;
+            /**
+             * Strengths
+             * @description List of identified strengths
+             */
+            strengths: string[];
+            /**
+             * Weaknesses
+             * @description List of identified weaknesses
+             */
+            weaknesses: string[];
+            /**
+             * Originality
+             * @description Originality score (1-4)
+             */
+            originality: number;
+            /**
+             * Quality
+             * @description Quality score (1-4)
+             */
+            quality: number;
+            /**
+             * Clarity
+             * @description Clarity score (1-4)
+             */
+            clarity: number;
+            /**
+             * Significance
+             * @description Significance score (1-4)
+             */
+            significance: number;
+            /**
+             * Questions
+             * @description List of reviewer questions
+             */
+            questions: string[];
+            /**
+             * Limitations
+             * @description List of identified limitations
+             */
+            limitations: string[];
+            /**
+             * Ethical Concerns
+             * @description Whether ethical concerns were raised
+             */
+            ethical_concerns: boolean;
+            /**
+             * Soundness
+             * @description Soundness score (1-4)
+             */
+            soundness: number;
+            /**
+             * Presentation
+             * @description Presentation score (1-4)
+             */
+            presentation: number;
+            /**
+             * Contribution
+             * @description Contribution score (1-4)
+             */
+            contribution: number;
+            /**
+             * Overall
+             * @description Overall quality score (1-10)
+             */
+            overall: number;
+            /**
+             * Confidence
+             * @description Reviewer confidence score (1-5)
+             */
+            confidence: number;
+            /**
+             * Decision
+             * @description Final decision ('Accept' or 'Reject')
+             */
+            decision: string;
+            /**
+             * Source Path
+             * @description Source path or reference for the review
+             */
+            source_path?: string | null;
+            /**
+             * Created At
+             * @description ISO timestamp when the review was created
+             */
+            created_at: string;
         };
         /**
          * ManualIdeaSeedRequest
@@ -2979,6 +3126,8 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                conversation_status?: string | null;
+                run_status?: string | null;
             };
             header?: never;
             path?: never;
@@ -3870,6 +4019,38 @@ export interface operations {
             };
         };
     };
+    get_research_run_review_api_conversations__conversation_id__idea_research_run__run_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmReviewResponse"] | components["schemas"]["LlmReviewNotFoundResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stop_research_run_api_conversations__conversation_id__idea_research_run__run_id__stop_post: {
         parameters: {
             query?: never;
@@ -3968,7 +4149,7 @@ export interface operations {
             };
         };
     };
-    stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__stream_get: {
+    stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -3985,7 +4166,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

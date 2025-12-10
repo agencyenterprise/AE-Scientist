@@ -55,12 +55,16 @@ class UsersDatabaseMixin(ConnectionProvider):
                         """,
                         (google_id, email, name),
                     )
+                    if email.endswith("@ae.studio") or email.endswith("@agencyenterprise.com"):
+                        is_ae_user = True
+                    else:
+                        is_ae_user = False
                     result = cursor.fetchone()
                     conn.commit()
                     if result:
                         try:
                             if isinstance(self, BillingDatabaseMixin):
-                                self.ensure_user_wallet(int(result["id"]))
+                                self.ensure_user_wallet(int(result["id"]), is_ae_user=is_ae_user)
                         except Exception as wallet_error:  # noqa: BLE001
                             logger.exception(
                                 "Failed to initialize wallet for user %s: %s",

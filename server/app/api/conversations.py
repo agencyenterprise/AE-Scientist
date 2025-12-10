@@ -49,8 +49,7 @@ from app.services.database.conversations import DashboardConversation as DBDashb
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
-from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
@@ -973,15 +972,14 @@ async def list_conversations(
         response.status_code = 400
         return ErrorResponse(
             error="Invalid conversation_status",
-            detail=f"Must be one of: {', '.join(CONVERSATION_STATUSES)}"
+            detail=f"Must be one of: {', '.join(CONVERSATION_STATUSES)}",
         )
 
     # Validate run_status
     if run_status is not None and run_status not in PIPELINE_RUN_STATUSES:
         response.status_code = 400
         return ErrorResponse(
-            error="Invalid run_status",
-            detail=f"Must be one of: {', '.join(PIPELINE_RUN_STATUSES)}"
+            error="Invalid run_status", detail=f"Must be one of: {', '.join(PIPELINE_RUN_STATUSES)}"
         )
 
     db = get_database()
