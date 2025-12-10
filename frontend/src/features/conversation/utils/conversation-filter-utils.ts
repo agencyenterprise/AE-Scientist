@@ -5,7 +5,7 @@ export const CONVERSATION_STATUS_OPTIONS: ConversationStatusFilter[] = ['all', '
 export const CONVERSATION_STATUS_FILTER_CONFIG: Record<ConversationStatusFilter, FilterConfig> = {
   all: { label: 'All', activeClass: 'bg-slate-500/15 text-slate-300' },
   draft: { label: 'Draft', activeClass: 'bg-amber-500/15 text-amber-400' },
-  with_research: { label: 'With Research', activeClass: 'bg-emerald-500/15 text-emerald-400' },
+  with_research: { label: 'Researched', activeClass: 'bg-emerald-500/15 text-emerald-400' },
 };
 
 export const RUN_STATUS_OPTIONS: RunStatusFilter[] = ['all', 'pending', 'running', 'completed', 'failed'];

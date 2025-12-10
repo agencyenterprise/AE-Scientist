@@ -3,7 +3,7 @@
   "name": "Conversation Status Tracking",
   "description": "Add status column to conversations table (Draft | With Research) with auto-update when research runs are created, and Edit buttons in IdeationQueueCard and InlineIdeaView to navigate to /conversation/[id] page",
   "created": "2025-12-08T00:00:00Z",
-  "lastUpdated": "2025-12-10T11:04:00.171585",
+  "lastUpdated": "2025-12-10T11:28:06.462072",
   "classification": {
     "type": "fullstack",
     "scope": "single-feature",
@@ -1526,6 +1526,45 @@
       "results": 0,
       "at": "2025-12-10T11:04:00.171575",
       "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist"
+    },
+    {
+      "pattern": "Draft|draft",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T11:27:45.036646",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "Pending|Running|Completed|Failed",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T11:27:45.041446",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "conversation|Conversation",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T11:27:53.089230",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "research run|Research run|Research Run",
+      "tool": "grep",
+      "results": 0,
+      "at": "2025-12-10T11:27:53.095375",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/frontend/src",
+      "glob": "*.tsx"
+    },
+    {
+      "pattern": "**/1765373943-conversations-filter-feature/**",
+      "tool": "glob",
+      "results": 0,
+      "at": "2025-12-10T11:28:06.462062",
+      "path": "/Users/jarbasmoraes/code/ae/ae-scientist/AE-Scientist/.agent/Tasks"
     }
   ],
   "reviews": {
