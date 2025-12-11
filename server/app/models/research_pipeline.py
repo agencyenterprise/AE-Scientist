@@ -104,7 +104,9 @@ class ResearchRunPaperGenerationProgress(BaseModel):
         ...,
         description="Current step: plot_aggregation, citation_gathering, paper_writeup, or paper_review",
     )
-    substep: Optional[str] = Field(None, description="Substep identifier (e.g., 'round_1', 'revision_2')")
+    substep: Optional[str] = Field(
+        None, description="Substep identifier (e.g., 'round_1', 'revision_2')"
+    )
     progress: float = Field(..., description="Overall progress (0.0-1.0)")
     step_progress: float = Field(..., description="Progress within current step (0.0-1.0)")
     details: Optional[Dict[str, Any]] = Field(

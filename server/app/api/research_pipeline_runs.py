@@ -35,13 +35,13 @@ from app.services.database.research_pipeline_runs import (
     ResearchPipelineRunEvent,
 )
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
-from app.services.database.rp_tree_viz import TreeVizRecord
 from app.services.database.rp_events import (
     PaperGenerationEvent,
     RunLogEvent,
     StageProgressEvent,
     SubstageCompletedEvent,
 )
+from app.services.database.rp_tree_viz import TreeVizRecord
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -353,7 +353,9 @@ def _node_event_to_model(event: SubstageCompletedEvent) -> ResearchRunSubstageEv
     )
 
 
-def _paper_generation_event_to_model(event: PaperGenerationEvent) -> ResearchRunPaperGenerationProgress:
+def _paper_generation_event_to_model(
+    event: PaperGenerationEvent,
+) -> ResearchRunPaperGenerationProgress:
     return ResearchRunPaperGenerationProgress(
         id=event.id,
         run_id=event.run_id,
@@ -476,7 +478,8 @@ def get_research_run_details(
     ]
     tree_viz = [_tree_viz_to_model(record) for record in db.list_tree_viz_for_run(run_id=run_id)]
     paper_gen_events = [
-        _paper_generation_event_to_model(event) for event in db.list_paper_generation_events(run_id=run_id)
+        _paper_generation_event_to_model(event)
+        for event in db.list_paper_generation_events(run_id=run_id)
     ]
 
     return ResearchRunDetailsResponse(

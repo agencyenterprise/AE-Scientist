@@ -48,12 +48,12 @@ def save_cost_track(
     now = datetime.now()
     if _should_use_db_tracking(run_id):
         save_db_cost_track(
-            run_id,
-            provider,
-            model_name,
-            input_tokens,
-            output_tokens,
-            now,
+            run_id=run_id,
+            provider=provider,
+            model_name=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            now=now,
         )
     else:
         save_file_cost_track(
@@ -101,7 +101,7 @@ def save_db_cost_track(
                 FROM research_pipeline_runs rpr 
                 INNER JOIN ideas i 
                     ON i.id=rpr.idea_id 
-                WHERE rpr.id = %s 
+                WHERE rpr.run_id = %s 
                 LIMIT 1
                 RETURNING id
                 """,
