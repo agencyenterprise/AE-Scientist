@@ -136,6 +136,7 @@ jobs:
           STRIPE_CHECKOUT_SUCCESS_URL: http://localhost:3000/billing?success=1
           STRIPE_PRICE_TO_CREDITS: "{}"
           RESEARCH_RUN_CREDITS_PER_MINUTE: "1"
+          JSON_MODEL_PRICE_PER_MILLION_IN_CENTS: "{}"
         run: |
           make gen-api-types
 

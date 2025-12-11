@@ -290,6 +290,7 @@ export function useChatStreaming({
       onConversationLocked,
       onProjectDraftUpdate,
       restorePendingFiles,
+      onStreamEnd,
     ]
   );
 

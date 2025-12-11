@@ -46,15 +46,9 @@ export function CostDetailModal({ isOpen, onClose, cost, isLoading }: CostDetail
             </div>
           ) : cost ? (
             <div>
-              <div className="mb-6 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                <h2 className="text-lg font-semibold text-center">
-                  Total Conversation Cost: {formatCurrency(cost.total_cost)}
-                </h2>
-              </div>
-
               <div>
-                <div className="mb-6">
-                  <h3 className="text-md font-semibold mb-2 border-b pb-2">Cost by Model</h3>
+                <div className="pt-6">
+                  <h3 className="text-md font-semibold mb-2 border-b pb-2">Chat</h3>
                   {cost.cost_by_model.length > 0 ? (
                     <ul className="space-y-2">
                       {cost.cost_by_model.map((modelCost: ModelCost) => (
@@ -65,13 +59,21 @@ export function CostDetailModal({ isOpen, onClose, cost, isLoading }: CostDetail
                           </span>
                         </li>
                       ))}
+                      <li className="flex justify-between items-center font-bold border-t pt-2 mt-2">
+                        <span>Total</span>
+                        <span className="font-mono text-sm">
+                          {formatCurrency(
+                            cost.cost_by_model.reduce((acc, modelCost) => acc + modelCost.cost, 0)
+                          )}
+                        </span>
+                      </li>
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500">No model costs available.</p>
+                    <p className="text-sm text-gray-500">No chat costs available.</p>
                   )}
                 </div>
                 <div>
-                  <h3 className="text-md font-semibold mb-2 border-b pb-2">Cost by Research</h3>
+                  <h3 className="text-md font-semibold mb-2 border-b pt-10 pb-2">Research</h3>
                   {cost.cost_by_research.length > 0 ? (
                     <ul className="space-y-2">
                       {cost.cost_by_research.map((researchCost: ResearchCost) => (
@@ -84,11 +86,27 @@ export function CostDetailModal({ isOpen, onClose, cost, isLoading }: CostDetail
                           </span>
                         </li>
                       ))}
+                      <li className="flex justify-between items-center font-bold border-t pt-2 mt-2">
+                        <span>Total</span>
+                        <span className="font-mono text-sm">
+                          {formatCurrency(
+                            cost.cost_by_research.reduce(
+                              (acc, researchCost) => acc + researchCost.cost,
+                              0
+                            )
+                          )}
+                        </span>
+                      </li>
                     </ul>
                   ) : (
                     <p className="text-sm text-gray-500">No research costs available.</p>
                   )}
                 </div>
+              </div>
+              <div className="mt-6 bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                <h2 className="text-lg font-semibold text-center">
+                  Total Cost: {formatCurrency(cost.total_cost)}
+                </h2>
               </div>
             </div>
           ) : (
