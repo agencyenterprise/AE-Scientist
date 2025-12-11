@@ -1,7 +1,7 @@
 """Create table for paper generation progress events.
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0020
+Revises: 0019
 Create Date: 2025-12-10
 """
 
@@ -12,8 +12,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "0019"
-down_revision: Union[str, None] = "0018"
+revision: str = "0020"
+down_revision: Union[str, None] = "0019"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
