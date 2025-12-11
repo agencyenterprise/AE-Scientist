@@ -41,7 +41,7 @@ from app.services import (
     get_database,
 )
 from app.services.base_llm_service import LLMIdeaGeneration
-from app.services.billing_guard import enforce_minimum_credits
+from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.conversations import CONVERSATION_STATUSES
 from app.services.database.conversations import Conversation as DBConversation
@@ -889,6 +889,17 @@ async def import_conversation(
         required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
         action="input_pipeline",
     )
+    charge_user_credits(
+        user_id=user.id,
+        cost=settings.CHAT_MESSAGE_CREDIT_COST,
+        action="conversation_import",
+        description="Conversation import request",
+        metadata={
+            "url": url,
+            "llm_provider": llm_provider,
+            "llm_model": llm_model,
+        },
+    )
 
     async def generate_import_stream() -> AsyncGenerator[str, None]:
         async for chunk in _stream_import_pipeline(
@@ -924,6 +935,17 @@ async def import_manual_seed(
         user_id=user.id,
         required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
         action="input_pipeline",
+    )
+    charge_user_credits(
+        user_id=user.id,
+        cost=settings.CHAT_MESSAGE_CREDIT_COST,
+        action="manual_import",
+        description="Manual idea seed request",
+        metadata={
+            "idea_title": manual_data.idea_title.strip(),
+            "llm_provider": manual_data.llm_provider,
+            "llm_model": manual_data.llm_model,
+        },
     )
 
     async def generate_manual_stream() -> AsyncGenerator[str, None]:

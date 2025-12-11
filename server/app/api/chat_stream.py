@@ -13,10 +13,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api.llm_providers import LLM_PROVIDER_REGISTRY
+from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import ChatMessageData, ChatRequest
 from app.services import SummarizerService, get_database
 from app.services.base_llm_service import FileAttachmentData
+from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
 from app.services.chat_models import StreamDoneEvent
 
 router = APIRouter(prefix="/conversations")
@@ -78,6 +80,12 @@ async def stream_chat_with_idea(
         else:
             idea_id = idea_data.idea_id
 
+        enforce_minimum_credits(
+            user_id=user.id,
+            required=settings.CHAT_MESSAGE_CREDIT_COST,
+            action="chat_message",
+        )
+
         # Get chat history
         chat_history = db.get_chat_messages(idea_id)
 
@@ -89,6 +97,18 @@ async def stream_chat_with_idea(
             sent_by_user_id=user.id,
         )
         logger.info(f"Stored user message with ID: {user_msg_id}")
+
+        charge_user_credits(
+            user_id=user.id,
+            cost=settings.CHAT_MESSAGE_CREDIT_COST,
+            action="chat_message",
+            description=f"Conversation {conversation_id} message",
+            metadata={
+                "conversation_id": conversation_id,
+                "idea_id": idea_id,
+                "chat_message_id": user_msg_id,
+            },
+        )
 
         # Process file attachments if provided
         attached_files = []

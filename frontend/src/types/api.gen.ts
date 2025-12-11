@@ -219,6 +219,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/billing/wallet/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Wallet
+         * @description Stream wallet balance updates for the authenticated user.
+         *     Emits a credits event when the balance changes and a heartbeat periodically.
+         */
+        get: operations["stream_wallet_api_billing_wallet_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/stripe-webhook": {
         parameters: {
             query?: never;
@@ -2965,6 +2986,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_wallet_api_billing_wallet_stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

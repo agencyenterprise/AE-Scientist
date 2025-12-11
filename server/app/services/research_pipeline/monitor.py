@@ -280,6 +280,18 @@ class ResearchPipelineMonitor:
             description=f"Research run {run.run_id} ({billable_minutes} minute(s))",
             metadata={"run_id": run.run_id, "minutes_billed": billable_minutes},
         )
+        new_balance = available - charge_amount
+        db.insert_research_pipeline_run_event(
+            run_id=run.run_id,
+            event_type="billing_debit",
+            metadata={
+                "minutes_billed": billable_minutes,
+                "rate_per_minute": rate,
+                "amount_charged": charge_amount,
+                "balance": new_balance,
+            },
+            occurred_at=now,
+        )
         db.update_research_pipeline_run(
             run_id=run.run_id,
             last_billed_at=last_billed + timedelta(minutes=billable_minutes),
