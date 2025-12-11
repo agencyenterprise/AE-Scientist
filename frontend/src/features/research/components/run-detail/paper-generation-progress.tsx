@@ -26,19 +26,16 @@ const STEP_ORDER = ["plot_aggregation", "citation_gathering", "paper_writeup", "
 
 export function PaperGenerationProgress({ events }: PaperGenerationProgressProps) {
   if (events.length === 0) {
-    return (
-      <div className="text-sm text-slate-500 italic">
-        No paper generation events yet
-      </div>
-    );
+    return <div className="text-sm text-slate-500 italic">No paper generation events yet</div>;
   }
 
   // Get the latest event to show overall progress
-  const latestEvent = events[events.length - 1];
+  // Safe to assert non-null since we return early if events.length === 0
+  const latestEvent = events[events.length - 1]!;
 
   // Get unique steps from events
   const eventsByStep = new Map<string, PaperGenerationEvent[]>();
-  events.forEach((event) => {
+  events.forEach(event => {
     if (!eventsByStep.has(event.step)) {
       eventsByStep.set(event.step, []);
     }
@@ -46,20 +43,17 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
   });
 
   // Render each step in order
-  const renderedSteps = STEP_ORDER.map((step) => {
+  const renderedSteps = STEP_ORDER.map(step => {
     const stepEvents = eventsByStep.get(step) || [];
     const isActive = latestEvent.step === step;
-    const isCompleted =
-      STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf(latestEvent.step);
+    const isCompleted = STEP_ORDER.indexOf(step) < STEP_ORDER.indexOf(latestEvent.step);
 
     if (stepEvents.length === 0 && !isCompleted && !isActive) {
       return null;
     }
 
     const latestStepEvent = stepEvents[stepEvents.length - 1];
-    const progressPercent = latestStepEvent
-      ? Math.round(latestStepEvent.step_progress * 100)
-      : 0;
+    const progressPercent = latestStepEvent ? Math.round(latestStepEvent.step_progress * 100) : 0;
 
     return (
       <div key={step} className="space-y-2 mb-4">
@@ -78,9 +72,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
               )}
               {STEP_LABELS[step]}
             </h4>
-            <p className="text-xs text-slate-500">
-              {STEP_DESCRIPTIONS[step]}
-            </p>
+            <p className="text-xs text-slate-500">{STEP_DESCRIPTIONS[step]}</p>
           </div>
           {latestStepEvent && (
             <div className="text-xs text-slate-600">
@@ -95,11 +87,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
             <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
-                  isCompleted
-                    ? "bg-green-500"
-                    : isActive
-                      ? "bg-blue-500"
-                      : "bg-slate-300"
+                  isCompleted ? "bg-green-500" : isActive ? "bg-blue-500" : "bg-slate-300"
                 }`}
                 style={{ width: `${progressPercent}%` }}
               />
@@ -107,9 +95,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
             <div className="flex justify-between text-xs text-slate-600">
               <span>{progressPercent}% complete</span>
               {latestStepEvent?.substep && (
-                <span className="text-slate-500">
-                  {latestStepEvent.substep}
-                </span>
+                <span className="text-slate-500">{latestStepEvent.substep}</span>
               )}
             </div>
           </div>
@@ -128,9 +114,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
                     </div>
                   ))}
                 {Object.keys(latestStepEvent.details).length > 2 && (
-                  <div>
-                    +{Object.keys(latestStepEvent.details).length - 2} more
-                  </div>
+                  <div>+{Object.keys(latestStepEvent.details).length - 2} more</div>
                 )}
               </div>
             </TooltipTrigger>
@@ -150,9 +134,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
         {stepEvents.length > 1 && (
           <div className="text-xs text-slate-500 space-y-1">
             <details className="cursor-pointer">
-              <summary>
-                {stepEvents.length} events in this step
-              </summary>
+              <summary>{stepEvents.length} events in this step</summary>
               <div className="pl-4 mt-2 space-y-1 border-l-2 border-slate-200">
                 {stepEvents.map((event, idx) => (
                   <div key={idx} className="text-xs text-slate-600">
@@ -195,10 +177,7 @@ export function PaperGenerationProgress({ events }: PaperGenerationProgressProps
 
         {/* Current Step Indicator */}
         <div className="mt-3 text-sm text-slate-700">
-          Current step:{" "}
-          <span className="font-medium">
-            {STEP_LABELS[latestEvent.step]}
-          </span>
+          Current step: <span className="font-medium">{STEP_LABELS[latestEvent.step]}</span>
         </div>
       </div>
 

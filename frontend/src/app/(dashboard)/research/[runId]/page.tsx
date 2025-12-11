@@ -80,7 +80,8 @@ export default function ResearchRunDetailPage() {
     );
   }
 
-  const { run, stage_progress, logs, artifacts, substage_events } = details;
+  const { run, stage_progress, logs, artifacts, substage_events, paper_generation_progress } =
+    details;
   const latestProgress = stage_progress[stage_progress.length - 1];
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
@@ -118,6 +119,7 @@ export default function ResearchRunDetailPage() {
             <ResearchPipelineStages
               stageProgress={stage_progress}
               substageEvents={substage_events}
+              paperGenerationProgress={paper_generation_progress}
             />
           </div>
           <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">

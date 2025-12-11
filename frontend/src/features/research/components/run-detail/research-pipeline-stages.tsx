@@ -1,11 +1,12 @@
 "use client";
 
-import type { SubstageEvent, StageProgress } from "@/types/research";
+import type { SubstageEvent, StageProgress, PaperGenerationEvent } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
   substageEvents: SubstageEvent[];
+  paperGenerationProgress: PaperGenerationEvent[];
 }
 
 // Define pipeline stages with their metadata
@@ -198,16 +199,105 @@ const getSegmentsByStage = (
 /**
  * Pipeline stages section showing all stages with segmented progress bars
  */
+// Paper generation step labels for Stage 5
+const PAPER_GENERATION_STEPS = [
+  { key: "plot_aggregation", label: "Plot Aggregation" },
+  { key: "citation_gathering", label: "Citation Gathering" },
+  { key: "paper_writeup", label: "Paper Writeup" },
+  { key: "paper_review", label: "Paper Review" },
+] as const;
+
+/**
+ * Progress bar for paper generation (Stage 5)
+ * Shows progress through 4 steps: plot_aggregation, citation_gathering, paper_writeup, paper_review
+ */
+interface PaperGenerationProgressBarProps {
+  events: PaperGenerationEvent[];
+}
+
+function PaperGenerationProgressBar({ events }: PaperGenerationProgressBarProps) {
+  if (events.length === 0) {
+    return <div className="text-xs text-slate-500">No steps yet</div>;
+  }
+
+  // Safe: we return early if events.length === 0
+  const latestEvent = events[events.length - 1];
+  if (!latestEvent) {
+    return <div className="text-xs text-slate-500">No steps yet</div>;
+  }
+  const currentStepIndex = PAPER_GENERATION_STEPS.findIndex(s => s.key === latestEvent.step);
+
+  return (
+    <div className="flex gap-1 w-full">
+      {PAPER_GENERATION_STEPS.map((step, index) => {
+        const isCompleted = index < currentStepIndex;
+        const isCurrent = step.key === latestEvent.step;
+
+        // Show segment if completed or current
+        if (!isCompleted && !isCurrent) {
+          return null;
+        }
+
+        return (
+          <Tooltip key={step.key}>
+            <TooltipTrigger asChild>
+              <div className="h-2 flex-1 rounded-sm transition-all duration-300 cursor-help bg-blue-500" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">{step.label}</p>
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ResearchPipelineStages({
   stageProgress,
   substageEvents,
+  paperGenerationProgress,
 }: ResearchPipelineStagesProps) {
   /**
    * Get aggregated stage information for a given main stage
    * Handles multiple substages within a main stage by using the latest progress
    */
   const getStageInfo = (stageKey: string): StageInfo => {
-    // Find all progress events that match this main stage (across all substages)
+    // Stage 5 (paper_generation) uses paperGenerationProgress instead of stageProgress
+    if (stageKey === "paper_generation") {
+      if (paperGenerationProgress.length === 0) {
+        return {
+          status: "pending",
+          progressPercent: 0,
+          details: null,
+        };
+      }
+
+      const latestEvent = paperGenerationProgress[paperGenerationProgress.length - 1];
+      if (!latestEvent) {
+        return {
+          status: "pending",
+          progressPercent: 0,
+          details: null,
+        };
+      }
+      const progressPercent = Math.round(latestEvent.progress * 100);
+
+      let status: "pending" | "in_progress" | "completed";
+      if (latestEvent.progress >= 1.0) {
+        status = "completed";
+      } else {
+        status = "in_progress";
+      }
+
+      return {
+        status,
+        progressPercent,
+        details: null, // Paper generation doesn't use StageProgress type
+      };
+    }
+
+    // Stages 1-4 use stageProgress
     const stageProgresses = stageProgress.filter(progress => {
       const slug = extractStageSlug(progress.stage);
       return slug === stageKey;
@@ -257,7 +347,10 @@ export function ResearchPipelineStages({
       <div className="flex flex-col gap-6">
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
-          const segments = getSegmentsByStage(stage.key, substageEvents, stageProgress);
+          const isPaperGeneration = stage.key === "paper_generation";
+          const segments = isPaperGeneration
+            ? []
+            : getSegmentsByStage(stage.key, substageEvents, stageProgress);
 
           return (
             <div key={stage.id} className="flex flex-col gap-3">
@@ -284,8 +377,12 @@ export function ResearchPipelineStages({
                 )}
               </div>
 
-              {/* Segmented progress bar - one segment per node */}
-              <SegmentedProgressBar segments={segments} />
+              {/* Progress bar - different for paper generation vs other stages */}
+              {isPaperGeneration ? (
+                <PaperGenerationProgressBar events={paperGenerationProgress} />
+              ) : (
+                <SegmentedProgressBar segments={segments} />
+              )}
             </div>
           );
         })}

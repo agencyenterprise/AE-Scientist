@@ -336,6 +336,33 @@ class EventPersistenceManager:
                 ),
             )
 
+    def _insert_paper_generation_progress(
+        self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
+    ) -> None:
+        details = payload.get("details") or {}
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO rp_paper_generation_events (
+                    run_id,
+                    step,
+                    substep,
+                    progress,
+                    step_progress,
+                    details
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    self._run_id,
+                    payload.get("step"),
+                    payload.get("substep"),
+                    payload.get("progress"),
+                    payload.get("step_progress"),
+                    psycopg2.extras.Json(details),
+                ),
+            )
+
 
 @dataclass
 class EventQueueEmitter:
