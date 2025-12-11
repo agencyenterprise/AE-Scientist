@@ -1,24 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
 import { TreeVizViewer } from "./tree-viz-viewer";
 
 interface Props {
   treeViz?: TreeVizItem[] | null;
   conversationId: number | null;
-  runId: string;
   artifacts: ArtifactMetadata[];
 }
 
-export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props) {
-  const list = treeViz ?? [];
+export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
+  const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
   const [selectedStageId, setSelectedStageId] = useState<string | null>(
-    hasViz ? list[0]?.stage_id ?? null : null
+    hasViz ? (list[0]?.stage_id ?? null) : null
   );
   const selectedViz =
-    hasViz && selectedStageId ? list.find(v => v.stage_id === selectedStageId) ?? list[0] : null;
+    hasViz && selectedStageId ? (list.find(v => v.stage_id === selectedStageId) ?? list[0]) : null;
 
   // Keep selection in sync if tree viz data changes
   useEffect(() => {
@@ -59,12 +58,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
               {new Date(selectedViz.updated_at).toLocaleString()}
             </span>
           </div>
-          <TreeVizViewer
-            viz={selectedViz}
-            artifacts={artifacts}
-            conversationId={conversationId}
-            runId={runId}
-          />
+          <TreeVizViewer viz={selectedViz} artifacts={artifacts} conversationId={conversationId} />
         </>
       )}
     </div>

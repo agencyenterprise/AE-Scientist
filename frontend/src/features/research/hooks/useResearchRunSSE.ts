@@ -174,6 +174,7 @@ export function useResearchRunSSE({
     onLog,
     onArtifact,
     onRunUpdate,
+    onRunEvent,
     onComplete,
     onError,
   ]);

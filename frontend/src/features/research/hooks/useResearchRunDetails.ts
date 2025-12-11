@@ -8,6 +8,7 @@ import type {
   StageProgress,
   LogEntry,
   ArtifactMetadata,
+  TreeVizItem,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -96,7 +97,9 @@ export function useResearchRunDetails({
         return;
       }
       try {
-        const treeViz = await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`);
+        const treeViz = await apiFetch<TreeVizItem[]>(
+          `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
+        );
         setDetails(prev => (prev ? { ...prev, tree_viz: treeViz } : prev));
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -118,7 +121,9 @@ export function useResearchRunDetails({
     const fetchTreeViz = async () => {
       treeVizFetchAttempted.current = true;
       try {
-        const treeViz = await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`);
+        const treeViz = await apiFetch<TreeVizItem[]>(
+          `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
+        );
         setDetails(prev => (prev ? { ...prev, tree_viz: treeViz } : prev));
       } catch (err) {
         // eslint-disable-next-line no-console

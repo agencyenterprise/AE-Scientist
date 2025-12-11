@@ -1,31 +1,38 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import type { ArtifactMetadata, TreeVizItem } from "@/types/research";
 import { config } from "@/shared/lib/config";
 
+type MetricName = {
+  metric_name: string;
+  lower_is_better?: boolean;
+  description?: string;
+  data: Array<{ dataset_name?: string; final_value?: number; best_value?: number }>;
+};
+
+type MetricEntry = {
+  metric_names?: MetricName[];
+};
+
+type PlotAnalysis = { plot_path?: string; analysis?: string; key_findings?: string[] };
+
 type TreeVizPayload = TreeVizItem["viz"] & {
-  layout: number[][];
-  edges: number[][];
+  layout: Array<[number, number]>;
+  edges: Array<[number, number]>;
   code?: string[];
   plan?: string[];
   analysis?: string[];
-  metrics?: Array<{
-    metric_names?: Array<{
-      metric_name: string;
-      lower_is_better?: boolean;
-      description?: string;
-      data: Array<{ dataset_name?: string; final_value?: number; best_value?: number }>;
-    }>;
-  } | null>;
+  metrics?: Array<MetricEntry | null>;
   exc_type?: Array<string | null>;
   exc_info?: Array<{ args?: unknown[] } | null>;
   exc_stack?: Array<unknown>;
   plot_plan?: Array<string | null>;
   plot_code?: Array<string | null>;
-  plot_analyses?: Array<
-    Array<{ plot_path?: string; analysis?: string; key_findings?: string[] } | null>
-  >;
+  plot_analyses?: Array<Array<PlotAnalysis | null> | null>;
+  plots?: Array<string | string[] | null>;
+  plot_paths?: Array<string | string[] | null>;
   vlm_feedback_summary?: Array<string | string[] | null>;
   datasets_successfully_tested?: Array<string[] | null>;
   exec_time?: Array<number | string | null>;
@@ -37,28 +44,27 @@ interface Props {
   viz: TreeVizItem;
   artifacts: ArtifactMetadata[];
   conversationId: number | null;
-  runId: string;
 }
 
 const NODE_SIZE = 14;
 const BLUE = "#1a73e8";
 const GRAY = "#6b7280";
 
-export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) {
+export function TreeVizViewer({ viz, artifacts, conversationId }: Props) {
   const payload = viz.viz as TreeVizPayload;
   const [selected, setSelected] = useState<number>(0);
 
   const nodes = useMemo(() => {
     return (payload.layout || []).map((coords, idx) => ({
       id: idx,
-      x: coords[0],
-      y: coords[1],
+      x: coords?.[0] ?? 0,
+      y: coords?.[1] ?? 0,
       code: payload.code?.[idx] ?? "",
       plan: payload.plan?.[idx] ?? "",
       analysis: payload.analysis?.[idx] ?? "",
       excType: payload.exc_type?.[idx],
       excInfo: payload.exc_info?.[idx],
-      metrics: payload.metrics?.[idx],
+      metrics: payload.metrics?.[idx] ?? null,
       plotPlan: payload.plot_plan?.[idx] ?? "",
       plotCode: payload.plot_code?.[idx] ?? "",
       plotAnalyses: payload.plot_analyses?.[idx] ?? [],
@@ -70,13 +76,18 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
     }));
   }, [payload]);
 
-  const edges = payload.edges || [];
+  const edges: Array<[number, number]> = payload.edges ?? [];
 
   const selectedNode = nodes[selected];
-  const plotFiles = payload.plots ?? [];
-  const plotPaths = payload.plot_paths ?? [];
-  const plotsForNode = selectedNode ? plotFiles[selected] ?? plotPaths[selected] ?? [] : [];
-  const plotList = Array.isArray(plotsForNode) ? plotsForNode : plotsForNode ? [plotsForNode] : [];
+  const plotList = useMemo(() => {
+    if (!selectedNode) return [];
+    const plotFiles = payload.plots ?? [];
+    const plotPaths = payload.plot_paths ?? [];
+    const plotsForNode = plotFiles[selected] ?? plotPaths[selected] ?? [];
+    if (Array.isArray(plotsForNode)) return plotsForNode;
+    if (plotsForNode) return [plotsForNode];
+    return [];
+  }, [payload, selected, selectedNode]);
 
   const plotUrls = useMemo(() => {
     if (!conversationId) return [];
@@ -110,15 +121,7 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
             const cx = c.x * 90 + 5;
             const cy = c.y * 90 + 5;
             return (
-              <line
-                key={idx}
-                x1={px}
-                y1={py}
-                x2={cx}
-                y2={cy}
-                stroke="#cbd5e1"
-                strokeWidth={0.6}
-              />
+              <line key={idx} x1={px} y1={py} x2={cx} y2={cy} stroke="#cbd5e1" strokeWidth={0.6} />
             );
           })}
           {nodes.map(node => {
@@ -127,11 +130,7 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
             const cx = node.x * 90 + 5;
             const cy = node.y * 90 + 5;
             return (
-              <g
-                key={node.id}
-                onClick={() => setSelected(node.id)}
-                className="cursor-pointer"
-              >
+              <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
                 <circle
                   cx={cx}
                   cy={cy}
@@ -162,7 +161,10 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
               <Section label="Plan" value={selectedNode.plan} />
               <Section label="Analysis" value={selectedNode.analysis} />
               <MetricsSection metrics={selectedNode.metrics} />
-              <ExecSection execTime={selectedNode.execTime} feedback={selectedNode.execTimeFeedback} />
+              <ExecSection
+                execTime={selectedNode.execTime}
+                feedback={selectedNode.execTimeFeedback}
+              />
               {selectedNode.datasetsTested && selectedNode.datasetsTested.length > 0 && (
                 <div>
                   <div className="text-xs font-semibold text-slate-300">Datasets Tested</div>
@@ -181,10 +183,13 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
                   <div className="text-xs font-semibold text-slate-300">Plots</div>
                   <div className="grid grid-cols-1 gap-2">
                     {plotUrls.map(url => (
-                      <img
+                      <Image
                         key={url}
                         src={url}
                         alt="Plot"
+                        width={800}
+                        height={400}
+                        unoptimized
                         className="w-full rounded border border-slate-700 bg-slate-900"
                       />
                     ))}
@@ -212,7 +217,15 @@ export function TreeVizViewer({ viz, artifacts, conversationId, runId }: Props) 
   );
 }
 
-function Section({ label, value, isMono = false }: { label: string; value: string; isMono?: boolean }) {
+function Section({
+  label,
+  value,
+  isMono = false,
+}: {
+  label: string;
+  value: string;
+  isMono?: boolean;
+}) {
   if (!value) return null;
   return (
     <div>
@@ -231,8 +244,8 @@ function CollapsibleSection({
   value: string;
   isMono?: boolean;
 }) {
-  if (!value) return null;
   const [open, setOpen] = useState(false);
+  if (!value) return null;
   return (
     <div>
       <button
@@ -243,18 +256,20 @@ function CollapsibleSection({
         {open ? "▾" : "▸"} {label}
       </button>
       {open && (
-        <div className={`mt-1 whitespace-pre-wrap ${isMono ? "font-mono text-xs" : ""}`}>{value}</div>
+        <div className={`mt-1 whitespace-pre-wrap ${isMono ? "font-mono text-xs" : ""}`}>
+          {value}
+        </div>
       )}
     </div>
   );
 }
 
-function MetricsSection({ metrics }: { metrics: TreeVizPayload["metrics"][number] }) {
+function MetricsSection({ metrics }: { metrics: MetricEntry | null | undefined }) {
   if (!metrics || !metrics.metric_names || metrics.metric_names.length === 0) return null;
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold text-slate-300">Metrics</div>
-      {metrics.metric_names.map(metric => (
+      {metrics.metric_names.map((metric: MetricName) => (
         <div key={metric.metric_name} className="rounded border border-slate-700 p-2 text-xs">
           <div className="font-semibold text-slate-100">{metric.metric_name}</div>
           {metric.description && <div className="text-slate-300">{metric.description}</div>}
@@ -267,7 +282,7 @@ function MetricsSection({ metrics }: { metrics: TreeVizPayload["metrics"][number
               </tr>
             </thead>
             <tbody>
-              {(metric.data || []).map((d, idx) => (
+              {(metric.data || []).map((d: MetricName["data"][number], idx: number) => (
                 <tr key={idx}>
                   <td className="pr-2">{d.dataset_name || "default"}</td>
                   <td className="pr-2">{d.final_value ?? "n/a"}</td>
@@ -282,7 +297,13 @@ function MetricsSection({ metrics }: { metrics: TreeVizPayload["metrics"][number
   );
 }
 
-function ExecSection({ execTime, feedback }: { execTime: number | string | null | undefined; feedback: string }) {
+function ExecSection({
+  execTime,
+  feedback,
+}: {
+  execTime: number | string | null | undefined;
+  feedback: string;
+}) {
   if (!execTime && !feedback) return null;
   return (
     <div className="text-xs text-slate-200 space-y-1">
@@ -304,13 +325,13 @@ function ExecSection({ execTime, feedback }: { execTime: number | string | null 
 function PlotAnalysesSection({
   analyses,
 }: {
-  analyses: TreeVizPayload["plot_analyses"][number] | undefined;
+  analyses: Array<PlotAnalysis | null> | null | undefined;
 }) {
   if (!analyses || analyses.length === 0) return null;
   return (
     <div className="space-y-2">
       <div className="text-xs font-semibold text-slate-300">Plot Analyses</div>
-      {analyses.map((analysis, idx) => {
+      {analyses.map((analysis: PlotAnalysis | null, idx: number) => {
         if (!analysis) return null;
         return (
           <div key={idx} className="rounded border border-slate-700 p-2 text-xs text-slate-200">

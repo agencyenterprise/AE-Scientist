@@ -160,7 +160,6 @@ export default function ResearchRunDetailPage() {
             <TreeVizCard
               treeViz={details.tree_viz ?? []}
               conversationId={conversationId}
-              runId={runId}
               artifacts={artifacts}
             />
           </div>
