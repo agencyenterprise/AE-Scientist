@@ -51,7 +51,7 @@ class BillingDatabaseMixin(ConnectionProvider):
 
     def ensure_user_wallet(self, user_id: int, is_ae_user: bool) -> None:
         """Create a wallet row for the user if one does not yet exist."""
-        balance = 1000 if is_ae_user else 0
+        balance = 10_000 if is_ae_user else 10
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
