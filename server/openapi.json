@@ -347,6 +347,26 @@
         }
       }
     },
+    "/api/billing/wallet/stream": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Stream Wallet",
+        "description": "Stream wallet balance updates for the authenticated user.\nEmits a credits event when the balance changes and a heartbeat periodically.",
+        "operationId": "stream_wallet_api_billing_wallet_stream_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/billing/stripe-webhook": {
       "post": {
         "tags": [

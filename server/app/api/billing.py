@@ -2,12 +2,15 @@
 Billing API endpoints for wallet info, packs, checkout sessions, and Stripe webhooks.
 """
 
+import asyncio
+import json
 import logging
-from typing import cast
+from datetime import datetime, timezone
+from typing import AsyncGenerator, cast
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import HttpUrl
 
 from app.config import settings
@@ -20,6 +23,7 @@ from app.models import (
     CreditPackModel,
     CreditTransactionModel,
 )
+from app.services import get_database
 from app.services.billing_service import BillingService
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -97,6 +101,48 @@ def create_checkout_session(
         "Stripe checkout session created for user_id=%s price_id=%s", user.id, payload.price_id
     )
     return CheckoutSessionCreateResponse(checkout_url=cast(HttpUrl, checkout_url))
+
+
+@router.get("/wallet/stream")
+async def stream_wallet(request: Request) -> StreamingResponse:
+    """
+    Stream wallet balance updates for the authenticated user.
+    Emits a credits event when the balance changes and a heartbeat periodically.
+    """
+    user = get_current_user(request)
+    db = get_database()
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        last_balance: int | None = None
+        last_heartbeat = datetime.now(timezone.utc)
+
+        while True:
+            if await request.is_disconnected():
+                logger.info("Wallet SSE client disconnected for user_id=%s", user.id)
+                break
+
+            balance = db.get_user_wallet_balance(user.id)
+            if last_balance is None or balance != last_balance:
+                payload = {"type": "credits", "data": {"balance": balance}}
+                yield f"data: {json.dumps(payload)}\n\n"
+                last_balance = balance
+                last_heartbeat = datetime.now(timezone.utc)
+
+            now = datetime.now(timezone.utc)
+            if (now - last_heartbeat).total_seconds() >= 30:
+                yield 'data: {"type":"heartbeat"}\n\n'
+                last_heartbeat = now
+
+            await asyncio.sleep(5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.post("/stripe-webhook", status_code=status.HTTP_200_OK)

@@ -135,10 +135,10 @@ class Settings:
     # Authentication settings
     SESSION_EXPIRE_HOURS: int = int(os.getenv("SESSION_EXPIRE_HOURS", "24"))
     MIN_USER_CREDITS_FOR_CONVERSATION: int = int(
-        os.getenv("MIN_USER_CREDITS_FOR_CONVERSATION", "0")
+        os.getenv("MIN_USER_CREDITS_FOR_CONVERSATION", "1")
     )
     MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE: int = int(
-        os.getenv("MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE", "0")
+        os.getenv("MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE", "30")
     )
 
     # Frontend URL for redirects
@@ -155,6 +155,7 @@ class Settings:
         os.getenv("STRIPE_PRICE_TO_CREDITS", "{}")
     )
     RESEARCH_RUN_CREDITS_PER_MINUTE: int = int(os.getenv("RESEARCH_RUN_CREDITS_PER_MINUTE", "1"))
+    CHAT_MESSAGE_CREDIT_COST: int = int(os.getenv("CHAT_MESSAGE_CREDIT_COST", "1"))
 
     # LLM pricing configuration
     LLM_PRICING: LLMPricing = LLMPricing(os.getenv("JSON_MODEL_PRICE_PER_MILLION_IN_CENTS", ""))
