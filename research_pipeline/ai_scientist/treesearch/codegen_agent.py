@@ -151,20 +151,19 @@ class MinimalAgent:
                 "  - This is extremely important because the input to the model's forward pass directly affects the output, and the loss function is computed based on the output",
             ]
         )
-        if hasattr(self.cfg.experiment, "num_syn_datasets"):
-            num_syn_datasets = self.cfg.experiment.num_syn_datasets
-            if num_syn_datasets > 1:
-                impl_guideline.extend(
-                    [
-                        f"You MUST evaluate your solution on at least {num_syn_datasets} different datasets to ensure robustness:",
-                        "  - Use dataset sizes appropriate to the experiment at hand",
-                        "  - Use standard benchmark datasets when available",
-                        f"  - If using synthetic data, generate at least {num_syn_datasets} variants with different characteristics",
-                        "  - For very large datasets (>10GB), use streaming=True to avoid memory issues",
-                        "  - Report metrics separately for each dataset",
-                        "  - Compute and report the average metric across all datasets",
-                    ]
-                )
+        num_syn_datasets = self.cfg.experiment.num_syn_datasets
+        if num_syn_datasets > 1:
+            impl_guideline.extend(
+                [
+                    f"You MUST evaluate your solution on at least {num_syn_datasets} different datasets to ensure robustness:",
+                    "  - Use dataset sizes appropriate to the experiment at hand",
+                    "  - Use standard benchmark datasets when available",
+                    f"  - If using synthetic data, generate at least {num_syn_datasets} variants with different characteristics",
+                    "  - For very large datasets (>10GB), use streaming=True to avoid memory issues",
+                    "  - Report metrics separately for each dataset",
+                    "  - Compute and report the average metric across all datasets",
+                ]
+            )
         impl_guideline.extend(
             [
                 "For generative modeling tasks, you must:",
@@ -397,10 +396,8 @@ class MinimalAgent:
             "Execution output": wrap_code(node.term_out, lang=""),
             "Analysis": node.analysis,
             "Metric": str(node.metric) if node.metric else "Failed",
-            "Plot Analyses": (node.plot_analyses if hasattr(node, "plot_analyses") else []),
-            "VLM Feedback": (
-                node.vlm_feedback_summary if hasattr(node, "vlm_feedback_summary") else ""
-            ),
+            "Plot Analyses": node.plot_analyses,
+            "VLM Feedback": node.vlm_feedback_summary,
         }
         # Query the feedback model for a structured summary
         return structured_query_with_schema(

@@ -3,16 +3,52 @@
 import json
 import logging
 import textwrap
+from ast import literal_eval
 from pathlib import Path
-from typing import Iterator, cast
+from typing import Iterator, Protocol, cast
 
 import numpy as np
 from igraph import Graph  # type: ignore[import-untyped]
 from numpy.typing import NDArray
 
+from ...tree_viz_store import TreeVizStore
 from ..journal import Journal
 
 logger = logging.getLogger(__name__)
+
+
+class TelemetryLike(Protocol):
+    database_url: str
+    run_id: str
+
+
+def _normalize_stage_id(stage_name: str) -> str:
+    if stage_name.startswith("stage_"):
+        parts = stage_name.split("_")
+        if len(parts) >= 2 and parts[1].isdigit():
+            return f"Stage_{parts[1]}"
+    return stage_name
+
+
+def _normalize_vlm_feedback(val: object) -> str | list[str]:
+    """
+    Preserve list feedback; parse stringified lists into real lists; otherwise cast to string.
+    """
+    if val is None:
+        return ""
+    if isinstance(val, list):
+        return [str(x) for x in val if str(x).strip()]
+    if isinstance(val, str):
+        stripped = val.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = literal_eval(stripped)
+                if isinstance(parsed, list):
+                    return [str(x) for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+        return stripped
+    return str(val)
 
 
 def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
@@ -243,11 +279,7 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
 
     try:
         tmp["vlm_feedback_summary"] = [
-            textwrap.fill(
-                (str(n.vlm_feedback_summary) if n.vlm_feedback_summary is not None else ""),
-                width=80,
-            )
-            for n in jou.nodes
+            _normalize_vlm_feedback(n.vlm_feedback_summary) for n in jou.nodes
         ]
     except Exception as e:
         logger.error(f"Error setting vlm_feedback_summary: {e}")
@@ -379,7 +411,14 @@ def generate_html(tree_graph_str: str) -> str:
         return html
 
 
-def generate(exp_name: str, jou: Journal, out_path: Path) -> None:
+def generate(
+    *,
+    exp_name: str,
+    jou: Journal,
+    out_path: Path,
+    stage_name: str,
+    telemetry_cfg: TelemetryLike | None,
+) -> None:
     logger.debug("Checking Journal")
     try:
         tree_struct = cfg_to_tree_struct(exp_name=exp_name, jou=jou, out_path=out_path)
@@ -415,6 +454,19 @@ def generate(exp_name: str, jou: Journal, out_path: Path) -> None:
     except Exception as e:
         logger.exception(f"Error creating unified visualization: {e}")
         # Continue even if unified viz creation fails
+
+    # Persist tree visualization payload directly from research_pipeline
+    try:
+        if telemetry_cfg is not None:
+            store = TreeVizStore(database_url=telemetry_cfg.database_url)
+            store.upsert(
+                run_id=telemetry_cfg.run_id,
+                stage_id=_normalize_stage_id(stage_name),
+                viz=tree_struct,
+                version=1,
+            )
+    except Exception as e:
+        logger.exception(f"Error storing tree viz to database: {e}")
 
 
 def create_unified_viz(current_stage_viz_path: Path) -> None:

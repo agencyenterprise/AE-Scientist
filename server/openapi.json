@@ -2196,6 +2196,123 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "List Tree Viz",
+        "description": "List stored tree visualizations for a run.",
+        "operationId": "list_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TreeVizItem"
+                  },
+                  "title": "Response List Tree Viz Api Conversations  Conversation Id  Idea Research Run  Run Id  Tree Viz Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Tree Viz",
+        "description": "Fetch tree viz payload for a specific stage.",
+        "operationId": "get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreeVizItem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
       "get": {
         "tags": [
@@ -4294,6 +4411,14 @@
             "type": "array",
             "title": "Artifacts",
             "description": "Artifacts uploaded for the run"
+          },
+          "tree_viz": {
+            "items": {
+              "$ref": "#/components/schemas/TreeVizItem"
+            },
+            "type": "array",
+            "title": "Tree Viz",
+            "description": "Tree visualizations stored for this run"
           }
         },
         "type": "object",
@@ -5212,6 +5337,58 @@
         ],
         "title": "SummaryResponse",
         "description": "Response for summary operations."
+      },
+      "TreeVizItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Tree viz identifier"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "stage_id": {
+            "type": "string",
+            "title": "Stage Id",
+            "description": "Stage identifier (Stage_1..Stage_4)"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Version counter for the stored viz"
+          },
+          "viz": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Viz",
+            "description": "Tree visualization payload"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the viz was stored"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp when the viz was last updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_id",
+          "stage_id",
+          "version",
+          "viz",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TreeVizItem",
+        "description": "Stored tree visualization payload for a run stage."
       },
       "UserListItem": {
         "properties": {

@@ -32,7 +32,8 @@ def apply_log_level(*, level_name: str) -> None:
     This overrides any earlier basicConfig/env defaults and ensures consistency
     across main and worker processes.
     """
-    level = getattr(logging, level_name.upper(), logging.INFO)
+    level_candidate = logging.getLevelName(level_name.upper())
+    level = level_candidate if isinstance(level_candidate, int) else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     logging.getLogger("ai-scientist").setLevel(level)
@@ -299,6 +300,8 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
             exp_name=cfg.exp_name,
             jou=journal,
             out_path=save_dir / "tree_plot.html",
+            stage_name=stage_name,
+            telemetry_cfg=cfg.telemetry,
         )
     except Exception as e:
         logger.exception(f"Error generating tree: {e}")

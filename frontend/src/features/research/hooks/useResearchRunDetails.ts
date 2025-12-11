@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/shared/lib/api-client";
 import type {
   ResearchRunDetails,
@@ -85,6 +85,49 @@ export function useResearchRunDetails({
     setDetails(prev => (prev ? { ...prev, run } : null));
   }, []);
 
+  const handleRunEvent = useCallback(
+    async (event: { event_type?: string } | unknown) => {
+      if (
+        !conversationId ||
+        !event ||
+        typeof event !== "object" ||
+        (event as { event_type?: string }).event_type !== "tree_viz_stored"
+      ) {
+        return;
+      }
+      try {
+        const treeViz = await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`);
+        setDetails(prev => (prev ? { ...prev, tree_viz: treeViz } : prev));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to refresh tree viz", err);
+      }
+    },
+    [conversationId, runId]
+  );
+
+  // Ensure tree viz is loaded when details are present but tree_viz is missing/empty
+  const treeVizFetchAttempted = useRef(false);
+  useEffect(() => {
+    if (!conversationId || !details) return;
+    if (details.tree_viz && details.tree_viz.length > 0) {
+      treeVizFetchAttempted.current = true;
+      return;
+    }
+    if (treeVizFetchAttempted.current) return;
+    const fetchTreeViz = async () => {
+      treeVizFetchAttempted.current = true;
+      try {
+        const treeViz = await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`);
+        setDetails(prev => (prev ? { ...prev, tree_viz: treeViz } : prev));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load tree viz", err);
+      }
+    };
+    fetchTreeViz();
+  }, [conversationId, details, runId]);
+
   const handleComplete = useCallback((status: string) => {
     setDetails(prev =>
       prev
@@ -114,6 +157,7 @@ export function useResearchRunDetails({
     onArtifact: handleArtifact,
     onRunUpdate: handleRunUpdate,
     onComplete: handleComplete,
+    onRunEvent: handleRunEvent,
     onError: handleSSEError,
   });
 

@@ -8,6 +8,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple
 
+import psycopg2
+import psycopg2.extras
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel
@@ -93,7 +95,9 @@ def _schedule_ready_transition(record: PodRecord, delay_seconds: int) -> None:
         with _lock:
             current = _pods.get(record.id)
             if current is None:
+                logger.warning("Ready transition skipped; pod %s not found", record.id)
                 return
+            logger.info("Transitioning pod %s to RUNNING", record.id)
             updated = PodRecord(
                 id=current.id,
                 name=current.name,
@@ -140,6 +144,9 @@ def _start_fake_runner(
 
 @app.post("/pods")
 def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
+    logger.info(
+        "Received create_pod request: name=%s gpuTypeIds=%s", request.name, request.gpuTypeIds
+    )
     if not request.gpuTypeIds:
         raise HTTPException(status_code=400, detail="gpuTypeIds required")
     run_id = request.env.get("RUN_ID")
@@ -172,6 +179,7 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     )
     with _lock:
         _pods[pod_id] = record
+    logger.info("Created fake pod %s for run %s", pod_id, run_id)
     _schedule_ready_transition(record, delay_seconds=1)
     webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
     webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
@@ -348,15 +356,19 @@ class FakeRunner:
             self._persistence = LocalPersistence(webhook_client)
         self._webhook_client: Any = getattr(self._persistence, "_webhook_client", None)
         self._heartbeat_stop = threading.Event()
+        self._data_dir = Path(__file__).parent / "fake_run_pod_data"
+        self._plot_filename: str | None = None
 
     def run(self) -> None:
         self._persistence.start()
+        logger.info("FakeRunner started for run_id=%s pod_id=%s", self._run_id, self._pod_id)
         self._publish_run_started()
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop, name=f"heartbeat-{self._run_id}", daemon=True
         )
         heartbeat_thread.start()
         try:
+            self._publish_fake_plot_artifact()
             self._emit_progress_flow()
             self._publish_fake_artifact()
             self._publish_run_finished(True, "")
@@ -364,10 +376,12 @@ class FakeRunner:
             self._heartbeat_stop.set()
             heartbeat_thread.join(timeout=self._heartbeat_interval_seconds + 1)
             self._persistence.stop()
+            logger.info("FakeRunner stopped for run_id=%s", self._run_id)
 
     def _heartbeat_loop(self) -> None:
         webhook_client = self._webhook_client
         while not self._heartbeat_stop.is_set():
+            logger.debug("Heartbeat tick for run %s", self._run_id)
             self._persistence.queue.put(
                 PersistableEvent(kind="run_log", data={"message": "heartbeat", "level": "debug"})
             )
@@ -382,10 +396,18 @@ class FakeRunner:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage
         current_iter = 0
         for stage_index, (stage_name, max_iterations) in enumerate(self._stage_plan):
+            logger.info("Starting fake stage %s (%s iterations)", stage_name, max_iterations)
             iterations_to_emit = min(self._iterations_per_stage, max_iterations)
             for iteration in range(iterations_to_emit):
                 current_iter += 1
                 progress = (iteration + 1) / max_iterations
+                logger.debug(
+                    "Emitting progress run=%s stage=%s iteration=%s progress=%.2f",
+                    self._run_id,
+                    stage_name,
+                    iteration + 1,
+                    progress,
+                )
                 self._persistence.queue.put(
                     PersistableEvent(
                         kind="run_stage_progress",
@@ -412,6 +434,16 @@ class FakeRunner:
                         },
                     )
                 )
+                # Mid-stage tree viz emit on second iteration (iteration index 1)
+                if iteration == 1:
+                    try:
+                        self._store_tree_viz(stage_number=stage_index + 1, version=iteration + 1)
+                    except Exception:
+                        logger.exception(
+                            "Failed to store mid-stage tree viz for stage %s iteration %s",
+                            stage_name,
+                            iteration + 1,
+                        )
                 time.sleep(20)
             summary = {
                 "goals": f"Goals for {stage_name}",
@@ -421,6 +453,7 @@ class FakeRunner:
                 "buggy_nodes": 1,
                 "total_nodes": 3,
             }
+            logger.info("Emitting substage_completed for stage %s", stage_name)
             self._persistence.queue.put(
                 PersistableEvent(
                     kind="substage_completed",
@@ -434,11 +467,16 @@ class FakeRunner:
                     },
                 )
             )
+            try:
+                self._store_tree_viz(stage_number=stage_index + 1)
+            except Exception:
+                logger.exception("Failed to store fake tree viz for stage %s", stage_name)
 
     def _publish_fake_artifact(self) -> None:
         temp_dir = Path(os.environ.get("TMPDIR") or "/tmp")
         artifact_path = temp_dir / f"{self._run_id}-fake-result.txt"
         artifact_path.write_text("fake run output\n", encoding="utf-8")
+        logger.info("Uploading fake artifact %s", artifact_path)
         publisher = ArtifactPublisher(
             run_id=self._run_id,
             aws_access_key_id=self._aws_access_key_id,
@@ -465,6 +503,35 @@ class FakeRunner:
         except OSError:
             logger.warning("Failed to delete temp artifact %s", artifact_path)
 
+    def _publish_fake_plot_artifact(self) -> None:
+        plot_path = self._data_dir / "loss_curves.png"
+        if not plot_path.exists():
+            logger.warning("Fake plot not found at %s; skipping plot upload", plot_path)
+            return
+        logger.info("Uploading fake plot artifact %s", plot_path)
+        publisher = ArtifactPublisher(
+            run_id=self._run_id,
+            aws_access_key_id=self._aws_access_key_id,
+            aws_secret_access_key=self._aws_secret_access_key,
+            aws_region=self._aws_region,
+            aws_s3_bucket_name=self._aws_s3_bucket_name,
+            database_url=self._database_url,
+        )
+        spec = ArtifactSpec(
+            artifact_type="plot",
+            path=plot_path,
+            packaging="file",
+            archive_name=None,
+            exclude_dir_names=tuple(),
+        )
+        try:
+            publisher.publish(spec=spec)
+            self._plot_filename = plot_path.name
+        except Exception:
+            logger.exception("Failed to publish fake plot artifact for run %s", self._run_id)
+        finally:
+            publisher.close()
+
     def _publish_run_started(self) -> None:
         try:
             if self._webhook_client is not None:
@@ -481,6 +548,76 @@ class FakeRunner:
                 )
         except Exception:
             logger.exception("Failed to publish run-finished for %s", self._run_id)
+
+    def _store_tree_viz(self, *, stage_number: int, version: int = 1) -> None:
+        stage_id = f"Stage_{stage_number}"
+        data_path = self._data_dir / f"stage_{stage_number}_tree_data.json"
+        if not data_path.exists():
+            logger.warning("Fake tree viz data not found for %s at %s", stage_id, data_path)
+            return
+        logger.info("Storing fake tree viz for %s from %s", stage_id, data_path)
+        with data_path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        if self._plot_filename:
+            n_nodes = len(payload.get("layout") or payload.get("code") or [])
+            if n_nodes > 0:
+                plots = payload.get("plots")
+                if not isinstance(plots, list) or len(plots) != n_nodes:
+                    plots = [[] for _ in range(n_nodes)]
+                plots[0] = [self._plot_filename]
+                payload["plots"] = plots
+                plot_paths = payload.get("plot_paths")
+                if not isinstance(plot_paths, list) or len(plot_paths) != n_nodes:
+                    plot_paths = [[] for _ in range(n_nodes)]
+                plot_paths[0] = [self._plot_filename]
+                payload["plot_paths"] = plot_paths
+                logger.debug(
+                    "Injected plot %s into node 0 plots/plot_paths for %s",
+                    self._plot_filename,
+                    stage_id,
+                )
+
+        conn = psycopg2.connect(self._database_url)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO rp_tree_viz (run_id, stage_id, viz, version)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (run_id, stage_id)
+                        DO UPDATE SET
+                            viz = EXCLUDED.viz,
+                            version = EXCLUDED.version,
+                            updated_at = now()
+                        RETURNING id
+                        """,
+                        (self._run_id, stage_id, psycopg2.extras.Json(payload), version),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        raise RuntimeError("Failed to upsert rp_tree_viz in fake runner")
+                    tree_viz_id = int(row[0])
+                    cursor.execute(
+                        """
+                        INSERT INTO research_pipeline_run_events (run_id, event_type, metadata, occurred_at)
+                        VALUES (%s, %s, %s, now())
+                        """,
+                        (
+                            self._run_id,
+                            "tree_viz_stored",
+                            psycopg2.extras.Json(
+                                {
+                                    "stage_id": stage_id,
+                                    "tree_viz_id": tree_viz_id,
+                                    "version": version,
+                                }
+                            ),
+                        ),
+                    )
+        finally:
+            conn.close()
 
 
 def main() -> None:

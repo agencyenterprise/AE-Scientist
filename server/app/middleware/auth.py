@@ -122,10 +122,15 @@ def get_current_user(request: Request) -> UserData:
     Raises:
         HTTPException: If no user is authenticated
     """
-    if not hasattr(request.state, "auth_type") or request.state.auth_type != "user":
+    auth_type = getattr(request.state, "auth_type", None)
+    if auth_type != "user":
         raise HTTPException(status_code=401, detail="User authentication required")
 
-    return request.state.user  # type: ignore[no-any-return]
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User authentication required")
+
+    return user  # type: ignore[no-any-return]
 
 
 def get_current_service(request: Request) -> str:
@@ -141,10 +146,15 @@ def get_current_service(request: Request) -> str:
     Raises:
         HTTPException: If no service is authenticated
     """
-    if not hasattr(request.state, "auth_type") or request.state.auth_type != "service":
+    auth_type = getattr(request.state, "auth_type", None)
+    if auth_type != "service":
         raise HTTPException(status_code=401, detail="Service authentication required")
 
-    return request.state.service_name  # type: ignore[no-any-return]
+    service_name = getattr(request.state, "service_name", None)
+    if service_name is None:
+        raise HTTPException(status_code=401, detail="Service authentication required")
+
+    return service_name  # type: ignore[no-any-return]
 
 
 def require_auth(auth_types: Optional[list[str]] = None) -> Callable:
@@ -162,10 +172,11 @@ def require_auth(auth_types: Optional[list[str]] = None) -> Callable:
 
     def decorator(func: Callable) -> Callable:
         async def wrapper(request: Request, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if not hasattr(request.state, "auth_type"):
+            auth_type = getattr(request.state, "auth_type", None)
+            if auth_type is None:
                 raise HTTPException(status_code=401, detail="Authentication required")
 
-            if request.state.auth_type not in auth_types:
+            if auth_type not in auth_types:
                 allowed = " or ".join(auth_types)
                 raise HTTPException(
                     status_code=403, detail=f"This endpoint requires {allowed} authentication"

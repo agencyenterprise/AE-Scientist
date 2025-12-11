@@ -66,7 +66,7 @@ def make_vlm_call(
     # We rebuild LangChain messages from that history.
     history = prompt[:-1]
     last = prompt[-1] if prompt else HumanMessage(content="")
-    user_content = getattr(last, "content", "")
+    user_content = last.content
     # user_content may already be a list of content blocks (text + image_url)
     if isinstance(user_content, list):
         messages: list[BaseMessage] = []
@@ -85,8 +85,8 @@ def make_vlm_call(
         logger.debug(
             "VLM make_vlm_call - request message %s: %s - %s",
             idx,
-            getattr(message, "type", type(message).__name__),
-            getattr(message, "content", ""),
+            message.type,
+            message.content,
         )
     chat = init_chat_model(
         model=model,
@@ -99,8 +99,8 @@ def make_vlm_call(
     ai_message = retrying_chat.invoke(messages)
     logger.debug(
         "VLM make_vlm_call - response: %s - %s",
-        getattr(ai_message, "type", type(ai_message).__name__),
-        getattr(ai_message, "content", ""),
+        ai_message.type,
+        ai_message.content,
     )
     return ai_message
 
@@ -146,8 +146,8 @@ def get_response_from_vlm(
             logger.debug(
                 "%s, %s: %s",
                 idx,
-                getattr(message, "type", type(message).__name__),
-                getattr(message, "content", ""),
+                message.type,
+                message.content,
             )
         logger.debug("%s", content_str)
         logger.debug("%s VLM END %s", "*" * 21, "*" * 21)

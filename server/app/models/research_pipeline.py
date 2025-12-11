@@ -116,6 +116,18 @@ class ArtifactPresignedUrlResponse(BaseModel):
     filename: str = Field(..., description="Original filename")
 
 
+class TreeVizItem(BaseModel):
+    """Stored tree visualization payload for a run stage."""
+
+    id: int = Field(..., description="Tree viz identifier")
+    run_id: str = Field(..., description="Research run identifier")
+    stage_id: str = Field(..., description="Stage identifier (Stage_1..Stage_4)")
+    version: int = Field(..., description="Version counter for the stored viz")
+    viz: dict = Field(..., description="Tree visualization payload")
+    created_at: str = Field(..., description="ISO timestamp when the viz was stored")
+    updated_at: str = Field(..., description="ISO timestamp when the viz was last updated")
+
+
 class ResearchRunDetailsResponse(BaseModel):
     run: ResearchRunInfo = Field(..., description="Metadata describing the run")
     stage_progress: List[ResearchRunStageProgress] = Field(
@@ -133,6 +145,10 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     artifacts: List[ResearchRunArtifactMetadata] = Field(
         default_factory=list, description="Artifacts uploaded for the run"
+    )
+    tree_viz: List[TreeVizItem] = Field(
+        default_factory=list,
+        description="Tree visualizations stored for this run",
     )
 
 

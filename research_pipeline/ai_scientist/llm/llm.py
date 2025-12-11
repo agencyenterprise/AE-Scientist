@@ -64,8 +64,8 @@ def make_llm_call(
         logger.debug(
             "LLM make_llm_call - request message %s: %s - %s",
             idx,
-            getattr(message, "type", type(message).__name__),
-            getattr(message, "content", ""),
+            message.type,
+            message.content,
         )
     chat = init_chat_model(
         model=model,
@@ -78,8 +78,8 @@ def make_llm_call(
     ai_message = retrying_chat.invoke(messages)
     logger.debug(
         "LLM make_llm_call - response: %s - %s",
-        getattr(ai_message, "type", type(ai_message).__name__),
-        getattr(ai_message, "content", ""),
+        ai_message.type,
+        ai_message.content,
     )
     return ai_message
 
@@ -110,7 +110,7 @@ def get_response_from_llm(
         logger.debug("%s", "")
         logger.debug("%s", "*" * 20 + " LLM START " + "*" * 20)
         for idx, message in enumerate(full_history):
-            logger.debug("%s, %s: %s", idx, message.type, getattr(message, "content", ""))
+            logger.debug("%s, %s: %s", idx, message.type, message.content)
         logger.debug("%s", content)
         logger.debug("%s", "*" * 21 + " LLM END " + "*" * 21)
         logger.debug("%s", "")
@@ -210,7 +210,7 @@ def get_structured_response_from_llm(
         logger.debug("")
         logger.debug("%s", "*" * 20 + " LLM STRUCTURED START " + "*" * 20)
         for idx, message in enumerate(full_history):
-            logger.debug("%s, %s: %s", idx, message.type, getattr(message, "content", ""))
+            logger.debug("%s, %s: %s", idx, message.type, message.content)
         logger.debug(json.dumps(parsed, indent=2))
         logger.debug("%s", "*" * 21 + " LLM STRUCTURED END " + "*" * 21)
         logger.debug("")
@@ -263,8 +263,8 @@ def _invoke_langchain_query(
         logger.debug(
             "LLM _invoke_langchain_query - message %s: %s - %s",
             idx,
-            getattr(message, "type", type(message).__name__),
-            getattr(message, "content", ""),
+            message.type,
+            message.content,
         )
     chat = init_chat_model(
         model=model,
@@ -273,8 +273,8 @@ def _invoke_langchain_query(
     ai_message = chat.invoke(messages)
     logger.debug(
         "LLM _invoke_langchain_query - response: %s - %s",
-        getattr(ai_message, "type", type(ai_message).__name__),
-        getattr(ai_message, "content", ""),
+        ai_message.type,
+        ai_message.content,
     )
     return str(ai_message.content)
 
@@ -300,8 +300,8 @@ def _invoke_structured_langchain_query(
         logger.debug(
             "LLM _invoke_structured_langchain_query - message %s: %s - %s",
             idx,
-            getattr(message, "type", type(message).__name__),
-            getattr(message, "content", ""),
+            message.type,
+            message.content,
         )
     chat = init_chat_model(
         model=model,

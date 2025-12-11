@@ -849,28 +849,22 @@ Your research idea:\n\n
 
         # Gather individual node summaries
         for node in journal.nodes:
-            if hasattr(node, "_agent"):
+            if node._agent is not None:
                 node_summary = node._agent._generate_node_summary(node)
                 metrics["node_summaries"].append(node_summary)
 
         # Get VLM feedback from plot analysis
         for node in journal.good_nodes:
-            if hasattr(node, "_vlm_feedback"):
+            if node._vlm_feedback is not None:
                 metrics["vlm_feedback"].append(node._vlm_feedback)
 
         best_node = journal.get_best_node()
         if best_node and best_node.metric is not None:
             metrics["best_metric"] = {
                 "value": best_node.metric.value,
-                "name": (
-                    best_node.metric.name
-                    if hasattr(best_node.metric, "name")
-                    else "validation_metric"
-                ),
-                "maximize": (
-                    best_node.metric.maximize if hasattr(best_node.metric, "maximize") else False
-                ),
-                "analysis": (best_node.analysis if hasattr(best_node, "analysis") else None),
+                "name": best_node.metric.name or "validation_metric",
+                "maximize": bool(best_node.metric.maximize),
+                "analysis": best_node.analysis,
             }
 
         return metrics
@@ -888,10 +882,8 @@ Your research idea:\n\n
             # Group similar issues
             error_patterns: Dict[str, List[str]] = {}
             for node in buggy_leaves:
-                if hasattr(node, "analysis"):
-                    # Use the error message as key to group similar issues
-                    key = node.analysis if node.analysis is not None else "Unknown error"
-                    error_patterns.setdefault(key, []).append(node.id)
+                key = node.analysis if node.analysis is not None else "Unknown error"
+                error_patterns.setdefault(key, []).append(node.id)
 
             # Report persistent issues
             for error_msg, node_ids in error_patterns.items():
@@ -901,17 +893,16 @@ Your research idea:\n\n
         # Include VLM-identified systemic issues
         vlm_issues = set()  # Use set to avoid duplicate issues
         for node in journal.good_nodes:
-            if hasattr(node, "_vlm_feedback"):
-                vlm_feedback = node._vlm_feedback
-                if isinstance(vlm_feedback, dict):
-                    # Look for systemic issues identified by VLM
-                    if "systemic_issues" in vlm_feedback:
-                        vlm_issues.update(vlm_feedback["systemic_issues"])
-                    # Look for recurring patterns in plot analysis
-                    if "plot_analyses" in vlm_feedback:
-                        for analysis in vlm_feedback["plot_analyses"]:
-                            if "limitation" in analysis.get("type", "").lower():
-                                vlm_issues.add(f"VLM (Node {node.id}): {analysis['analysis']}")
+            vlm_feedback = node._vlm_feedback
+            if isinstance(vlm_feedback, dict):
+                # Look for systemic issues identified by VLM
+                if "systemic_issues" in vlm_feedback:
+                    vlm_issues.update(vlm_feedback["systemic_issues"])
+                # Look for recurring patterns in plot analysis
+                if "plot_analyses" in vlm_feedback:
+                    for analysis in vlm_feedback["plot_analyses"]:
+                        if "limitation" in analysis.get("type", "").lower():
+                            vlm_issues.add(f"VLM (Node {node.id}): {analysis['analysis']}")
 
         issues.extend(list(vlm_issues))
 
@@ -935,7 +926,7 @@ Your research idea:\n\n
                     "node_id": node.id,
                     "metric": (node.metric.value if node.metric is not None else None),
                     "parent_id": node.parent.id if node.parent else None,
-                    "analysis": node.analysis if hasattr(node, "analysis") else None,
+                    "analysis": node.analysis,
                 }
                 progress["recent_changes"].append(change)
 

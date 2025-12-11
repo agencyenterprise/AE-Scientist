@@ -107,6 +107,10 @@ class Node(DataClassJsonMixin):
     is_seed_node: bool = field(default=False, kw_only=True)
     is_seed_agg_node: bool = field(default=False, kw_only=True)
 
+    # ---- internal helpers injected by agents ----
+    _agent: Any | None = field(default=None, kw_only=True, repr=False)
+    _vlm_feedback: dict[str, Any] | None = field(default=None, kw_only=True, repr=False)
+
     def __post_init__(self) -> None:
         # Ensure children is a set even if initialized with a list
         if isinstance(cast(Any, self.children), list):
@@ -135,9 +139,7 @@ class Node(DataClassJsonMixin):
     def __getstate__(self) -> dict:
         """Return state for pickling"""
         state = self.__dict__.copy()
-        # Ensure id is included in the state
-        if hasattr(self, "id"):
-            state["id"] = self.id
+        state["id"] = self.id
         return state
 
     def __setstate__(self, state: dict) -> None:
@@ -212,7 +214,7 @@ class Node(DataClassJsonMixin):
         return {
             "code": self.code,
             "plan": self.plan,
-            "overall_plan": (self.overall_plan if hasattr(self, "overall_plan") else None),
+            "overall_plan": self.overall_plan,
             "plot_code": self.plot_code,
             "plot_plan": self.plot_plan,
             "step": self.step,
@@ -238,12 +240,8 @@ class Node(DataClassJsonMixin):
             "metric": {
                 "value": self.metric.value if self.metric else None,
                 "maximize": self.metric.maximize if self.metric else None,
-                "name": self.metric.name if self.metric and hasattr(self.metric, "name") else None,
-                "description": (
-                    self.metric.description
-                    if self.metric and hasattr(self.metric, "description")
-                    else None
-                ),
+                "name": self.metric.name if self.metric else None,
+                "description": self.metric.description if self.metric else None,
             },
             "is_buggy": self.is_buggy,
             "is_buggy_plots": self.is_buggy_plots,
@@ -594,9 +592,9 @@ class Journal:
             candidate_info = f"ID: {node.id}\n"
             if node.metric:
                 candidate_info += f"Metric: {str(node.metric)}\n"
-            elif hasattr(node, "analysis"):
+            elif node.analysis:
                 candidate_info += f"Training Analysis: {node.analysis}\n"
-            elif hasattr(node, "vlm_feedback_summary"):
+            elif node.vlm_feedback_summary:
                 candidate_info += f"VLM Feedback: {node.vlm_feedback_summary}\n"
             else:
                 candidate_info += "N/A\n"
@@ -755,7 +753,7 @@ class Journal:
             failure_info = f"Design: {node.plan}\n  "
             failure_info += f"Error Analysis: {node.analysis}\n"
             failure_info += (
-                f"Error Type: {node.exc_type if hasattr(node, 'exc_type') else 'Unknown'}\n"
+                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n"
             )
             failure_info += f"Debug Depth: {node.debug_depth}\n"
             if include_code:

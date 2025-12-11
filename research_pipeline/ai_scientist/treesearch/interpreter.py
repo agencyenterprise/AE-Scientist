@@ -199,11 +199,12 @@ def exception_summary(
     tb_str = tb_str.replace(str(working_dir / exec_file_name), exec_file_name)
 
     exc_info: dict[str, Any] = {}
-    if hasattr(e, "args"):
+    if e.args:
         exc_info["args"] = [str(i) for i in e.args]
+    details = vars(e)
     for att in ["name", "msg", "obj"]:
-        if hasattr(e, att):
-            exc_info[att] = str(getattr(e, att))
+        if att in details:
+            exc_info[att] = str(details[att])
 
     tb_stack = traceback.extract_tb(e.__traceback__)
     exc_stack = [(t.filename, t.lineno or 0, t.name, t.line) for t in tb_stack]

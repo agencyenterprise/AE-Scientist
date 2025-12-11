@@ -275,6 +275,7 @@ Here is the paper you are asked to review:
             review = get_meta_review(model, temperature, parsed_reviews)
             if review is None:
                 review = parsed_reviews[0]
+            parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
             for score, limits in [
                 ("Originality", (1, 4)),
                 ("Quality", (1, 4)),
@@ -287,8 +288,8 @@ Here is the paper you are asked to review:
                 ("Confidence", (1, 5)),
             ]:
                 collected: List[float] = []
-                for parsed in parsed_reviews:
-                    value = getattr(parsed, score, None)
+                for parsed_dict in parsed_dicts:
+                    value = parsed_dict.get(score)
                     if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
                         collected.append(float(value))
                 if collected and review is not None:

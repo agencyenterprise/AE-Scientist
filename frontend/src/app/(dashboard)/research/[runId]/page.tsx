@@ -12,6 +12,7 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
+  TreeVizCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
@@ -141,16 +142,29 @@ export default function ResearchRunDetailPage() {
           <div className="flex w-full sm:w-[60%] max-h-[600px] overflow-y-auto">
             <ResearchLogsList logs={logs} />
           </div>
-          <div className="flex w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
-            {conversationId !== null && (
+          <div className="flex w-full sm:w-[40%] max-h-[600px] overflow-y-auto flex-col gap-4">
+            {conversationId !== null ? (
               <ResearchArtifactsList
                 artifacts={artifacts}
                 conversationId={conversationId}
                 runId={runId}
               />
+            ) : (
+              <p className="text-sm text-slate-400">Conversation not yet available.</p>
             )}
           </div>
         </div>
+
+        {conversationId !== null && (
+          <div className="w-full">
+            <TreeVizCard
+              treeViz={details.tree_viz ?? []}
+              conversationId={conversationId}
+              runId={runId}
+              artifacts={artifacts}
+            />
+          </div>
+        )}
       </div>
 
       {showReview && (

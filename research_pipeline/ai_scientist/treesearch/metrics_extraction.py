@@ -17,7 +17,7 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
     vlm_feedback_list: list[object] = []
 
     for node in journal.nodes:
-        if hasattr(node, "_agent"):
+        if node._agent is not None:
             try:
                 node_summary = node._agent._generate_node_summary(node)
                 node_summaries.append(node_summary)
@@ -25,7 +25,7 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
                 continue
 
     for node in journal.good_nodes:
-        if hasattr(node, "_vlm_feedback"):
+        if node._vlm_feedback is not None:
             vlm_feedback_list.append(node._vlm_feedback)
 
     best_metric_obj: Dict[str, object] | None = None
@@ -33,9 +33,11 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
     if best_node and best_node.metric is not None:
         best_metric_obj = {
             "value": best_node.metric.value,
-            "name": getattr(best_node.metric, "name", "validation_metric"),
-            "maximize": getattr(best_node.metric, "maximize", False),
-            "analysis": getattr(best_node, "analysis", None),
+            "name": (
+                best_node.metric.name if best_node.metric.name is not None else "validation_metric"
+            ),
+            "maximize": bool(best_node.metric.maximize),
+            "analysis": best_node.analysis,
         }
 
     return {
@@ -60,9 +62,8 @@ def identify_issues(*, journal: Journal) -> List[str]:
         # Group similar issues
         error_patterns: Dict[str, List[str]] = {}
         for node in buggy_leaves:
-            if hasattr(node, "analysis"):
-                key = node.analysis if node.analysis is not None else "Unknown error"
-                error_patterns.setdefault(key, []).append(node.id)
+            key = node.analysis if node.analysis is not None else "Unknown error"
+            error_patterns.setdefault(key, []).append(node.id)
 
         for error_msg, node_ids in error_patterns.items():
             if len(node_ids) >= 2:
@@ -71,21 +72,20 @@ def identify_issues(*, journal: Journal) -> List[str]:
     # Include VLM-identified systemic issues
     vlm_issues: set[str] = set()
     for node in journal.good_nodes:
-        if hasattr(node, "_vlm_feedback"):
-            vlm_feedback = node._vlm_feedback
-            if isinstance(vlm_feedback, dict):
-                systemic = vlm_feedback.get("systemic_issues", [])
-                if isinstance(systemic, list):
-                    vlm_issues.update([str(x) for x in systemic])
-                analyses = vlm_feedback.get("plot_analyses", [])
-                if isinstance(analyses, list):
-                    for analysis in analyses:
-                        if (
-                            isinstance(analysis, dict)
-                            and "limitation" in str(analysis.get("type", "")).lower()
-                        ):
-                            detail = analysis.get("analysis", "")
-                            vlm_issues.add(f"VLM (Node {node.id}): {detail}")
+        vlm_feedback = node._vlm_feedback
+        if isinstance(vlm_feedback, dict):
+            systemic = vlm_feedback.get("systemic_issues", [])
+            if isinstance(systemic, list):
+                vlm_issues.update([str(x) for x in systemic])
+            analyses = vlm_feedback.get("plot_analyses", [])
+            if isinstance(analyses, list):
+                for analysis in analyses:
+                    if (
+                        isinstance(analysis, dict)
+                        and "limitation" in str(analysis.get("type", "")).lower()
+                    ):
+                        detail = analysis.get("analysis", "")
+                        vlm_issues.add(f"VLM (Node {node.id}): {detail}")
 
     issues.extend(list(vlm_issues))
     return issues
@@ -109,7 +109,7 @@ def analyze_progress(*, journal: Journal) -> Dict[str, object]:
                 "node_id": node.id,
                 "metric": (node.metric.value if node.metric is not None else None),
                 "parent_id": node.parent.id if node.parent else None,
-                "analysis": getattr(node, "analysis", None),
+                "analysis": node.analysis,
             }
             recent_list = progress.get("recent_changes")
             if isinstance(recent_list, list):

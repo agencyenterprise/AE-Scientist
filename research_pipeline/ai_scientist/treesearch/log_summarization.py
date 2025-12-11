@@ -129,19 +129,11 @@ def get_nodes_infos(nodes: list[Node]) -> str:
     node_infos = ""
     for n in nodes:
         node_info = f"Node ID: {n.id}\n"
-        node_info += (
-            f"Plan: {n.overall_plan}\n" if hasattr(n, "overall_plan") else "Plan: Not available\n"
-        )
-        node_info += (
-            f"Analysis: {n.analysis}\n" if hasattr(n, "analysis") else "Analysis: Not available\n"
-        )
-        node_info += (
-            f"Numerical Results: {n.metric}\n"
-            if hasattr(n, "metric")
-            else "Numerical Results: Not available\n"
-        )
+        node_info += f"Plan: {n.overall_plan}\n"
+        node_info += f"Analysis: {n.analysis}\n"
+        node_info += f"Numerical Results: {n.metric}\n"
         node_info += "Plot Analyses:\n"
-        if hasattr(n, "plot_analyses") and n.plot_analyses:
+        if n.plot_analyses:
             for plot in n.plot_analyses:
                 node_info += f"- Plot Path: {plot.get('plot_path', 'Not available')}, Description: {plot.get('analysis', 'Not available')}\n"
         else:

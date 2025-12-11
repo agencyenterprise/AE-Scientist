@@ -24,6 +24,7 @@ from app.models import (
     ResearchRunLogEntry,
     ResearchRunStageProgress,
     ResearchRunSubstageEvent,
+    TreeVizItem,
 )
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
@@ -34,6 +35,7 @@ from app.services.database.research_pipeline_runs import (
 )
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import RunLogEvent, StageProgressEvent, SubstageCompletedEvent
+from app.services.database.rp_tree_viz import TreeVizRecord
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -361,6 +363,18 @@ def _artifact_to_model(
     )
 
 
+def _tree_viz_to_model(record: TreeVizRecord) -> TreeVizItem:
+    return TreeVizItem(
+        id=record.id,
+        run_id=record.run_id,
+        stage_id=record.stage_id,
+        version=record.version,
+        viz=record.viz,
+        created_at=record.created_at.isoformat(),
+        updated_at=record.updated_at.isoformat(),
+    )
+
+
 @router.post(
     "/{conversation_id}/idea/research-run",
     response_model=ResearchRunAcceptedResponse,
@@ -441,6 +455,7 @@ def get_research_run_details(
     run_events = [
         _run_event_to_model(event) for event in db.list_research_pipeline_run_events(run_id=run_id)
     ]
+    tree_viz = [_tree_viz_to_model(record) for record in db.list_tree_viz_for_run(run_id=run_id)]
 
     return ResearchRunDetailsResponse(
         run=_run_to_info(run),
@@ -449,6 +464,7 @@ def get_research_run_details(
         substage_events=substage_events,
         events=run_events,
         artifacts=artifacts,
+        tree_viz=tree_viz,
     )
 
 
@@ -668,6 +684,61 @@ def get_artifact_presigned_url(
     )
 
 
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/tree-viz",
+    response_model=list[TreeVizItem],
+)
+def list_tree_viz(
+    conversation_id: int,
+    run_id: str,
+    request: Request,
+) -> list[TreeVizItem]:
+    """List stored tree visualizations for a run."""
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+    user = get_current_user(request)
+    db = get_database()
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    records = db.list_tree_viz_for_run(run_id=run_id)
+    return [_tree_viz_to_model(record) for record in records]
+
+
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}",
+    response_model=TreeVizItem,
+)
+def get_tree_viz(
+    conversation_id: int,
+    run_id: str,
+    stage_id: str,
+    request: Request,
+) -> TreeVizItem:
+    """Fetch tree viz payload for a specific stage."""
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+    user = get_current_user(request)
+    db = get_database()
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    record = db.get_tree_viz(run_id=run_id, stage_id=stage_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Tree viz not found")
+    return _tree_viz_to_model(record)
+
+
 SSE_POLL_INTERVAL_SECONDS = 2.0
 SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
 
@@ -750,6 +821,10 @@ async def stream_research_run_events(
                         _artifact_to_model(a, conversation_id, run_id).model_dump()
                         for a in db.list_run_artifacts(run_id=run_id)
                     ]
+                    tree_viz = [
+                        _tree_viz_to_model(record).model_dump()
+                        for record in db.list_tree_viz_for_run(run_id=run_id)
+                    ]
                     run_events_raw = db.list_research_pipeline_run_events(run_id=run_id)
                     run_events = [_run_event_to_model(e).model_dump() for e in run_events_raw]
                     if run_events_raw:
@@ -760,6 +835,7 @@ async def stream_research_run_events(
                         "logs": log_events,
                         "substage_events": substage_events,
                         "artifacts": artifacts,
+                        "tree_viz": tree_viz,
                         "events": run_events,
                     }
                     yield f"data: {json.dumps({'type': 'initial', 'data': initial_data})}\n\n"

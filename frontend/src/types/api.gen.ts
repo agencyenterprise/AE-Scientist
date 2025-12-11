@@ -879,6 +879,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tree Viz
+         * @description List stored tree visualizations for a run.
+         */
+        get: operations["list_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tree Viz
+         * @description Fetch tree viz payload for a specific stage.
+         */
+        get: operations["get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
         parameters: {
             query?: never;
@@ -2186,6 +2226,11 @@ export interface components {
              * @description Artifacts uploaded for the run
              */
             artifacts?: components["schemas"]["ResearchRunArtifactMetadata"][];
+            /**
+             * Tree Viz
+             * @description Tree visualizations stored for this run
+             */
+            tree_viz?: components["schemas"]["TreeVizItem"][];
         };
         /** ResearchRunEvent */
         ResearchRunEvent: {
@@ -2687,6 +2732,49 @@ export interface components {
              * @description Generated or updated summary
              */
             summary: string;
+        };
+        /**
+         * TreeVizItem
+         * @description Stored tree visualization payload for a run stage.
+         */
+        TreeVizItem: {
+            /**
+             * Id
+             * @description Tree viz identifier
+             */
+            id: number;
+            /**
+             * Run Id
+             * @description Research run identifier
+             */
+            run_id: string;
+            /**
+             * Stage Id
+             * @description Stage identifier (Stage_1..Stage_4)
+             */
+            stage_id: string;
+            /**
+             * Version
+             * @description Version counter for the stored viz
+             */
+            version: number;
+            /**
+             * Viz
+             * @description Tree visualization payload
+             */
+            viz: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * @description ISO timestamp when the viz was stored
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp when the viz was last updated
+             */
+            updated_at: string;
         };
         /**
          * UserListItem
@@ -4177,6 +4265,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtifactPresignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreeVizItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+                stage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreeVizItem"];
                 };
             };
             /** @description Validation Error */

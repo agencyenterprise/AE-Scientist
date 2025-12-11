@@ -9,6 +9,8 @@ export { ResearchRunHeader } from "./research-run-header";
 export { ResearchRunStats } from "./research-run-stats";
 export { ResearchStageProgress } from "./research-stage-progress";
 export { StatCard } from "./stat-card";
+export { TreeVizCard } from "./tree-viz-card";
+export { TreeVizViewer } from "./tree-viz-viewer";
 export { ReviewModal } from "./review/ReviewModal";
 export { ReviewHeader } from "./review/ReviewHeader";
 export { ReviewTabs } from "./review/ReviewTabs";
