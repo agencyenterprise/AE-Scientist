@@ -20,7 +20,7 @@ generate_report: True
 # LLM settings for final report from journal
 report:
   model: claude-haiku-4-5
-  temp: 1.0
+  temperature: 1.0
 
 # LLM settings for paper writeup
 writeup:
@@ -58,16 +58,16 @@ agent:
   # LLM settings for coding
   code:
     model: claude-haiku-4-5
-    temp: 1.0
+    temperature: 1.0
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
     model: claude-haiku-4-5
-    temp: 0.5
+    temperature: 0.5
 
   vlm_feedback:
     model: claude-haiku-4-5
-    temp: 0.5
+    temperature: 0.5
 
   search:
     max_debug_depth: 5  # increased from 3 - try harder to debug

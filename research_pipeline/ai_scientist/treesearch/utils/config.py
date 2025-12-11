@@ -94,7 +94,7 @@ class TaskDescription(BaseModel):
 @dataclass
 class StageConfig:
     model: str
-    temp: float
+    temperature: float
 
 
 @dataclass

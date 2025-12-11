@@ -180,7 +180,7 @@ class Stage4Ablation(Stage):
             system_message=prompt,
             user_message=None,
             model=cfg.agent.feedback.model,
-            temperature=cfg.agent.feedback.temp,
+            temperature=cfg.agent.feedback.temperature,
             schema_class=StageCompletionEvaluation,
         )
         if evaluation.is_complete:

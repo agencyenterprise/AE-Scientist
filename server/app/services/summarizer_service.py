@@ -136,6 +136,8 @@ class SummarizerService:
 
         service = get_llm_service_by_provider(target_model.provider)
         chat_model = service.get_or_create_model(target_model.id)
+        if not getattr(chat_model, "profile", None):
+            chat_model.profile = {"max_input_tokens": target_model.context_window_tokens}
 
         return SummarizerService(chat_model)
 

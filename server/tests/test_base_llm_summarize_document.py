@@ -65,16 +65,6 @@ class _StubService(BaseLLMService):
         del llm_model, image_url
         return ""
 
-    async def generate_imported_chat_keywords(
-        self, llm_model: str, imported_conversation_text: str
-    ) -> str:
-        del llm_model, imported_conversation_text
-        return ""
-
-    def get_context_window_tokens(self, llm_model: str) -> int:
-        del llm_model
-        return self._tokens
-
     async def generate_text_single_call(
         self,
         llm_model: str,

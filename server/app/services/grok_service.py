@@ -71,9 +71,3 @@ class GrokService(OpenAIService):
             streaming=True,
             stream_usage=True,
         )
-
-    def get_context_window_tokens(self, llm_model: str) -> int:
-        for model in SUPPORTED_MODELS:
-            if model.id == llm_model:
-                return model.context_window_tokens
-        raise ValueError(f"Unknown Grok model for context window: {llm_model}")

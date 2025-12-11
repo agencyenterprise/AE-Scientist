@@ -20,7 +20,7 @@ generate_report: True
 # LLM settings for final report from journal
 report:
   model: Qwen/Qwen2.5-VL-7B-Instruct
-  temp: 1.0
+  temperature: 1.0
 
 # LLM settings for paper writeup
 writeup:
@@ -58,16 +58,16 @@ agent:
   # LLM settings for coding
   code:
     model: Qwen/Qwen2.5-VL-7B-Instruct
-    temp: 1.0
+    temperature: 1.0
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
     model: Qwen/Qwen2.5-VL-7B-Instruct
-    temp: 0.5
+    temperature: 0.5
 
   vlm_feedback:
     model: Qwen/Qwen2.5-VL-7B-Instruct
-    temp: 0.5
+    temperature: 0.5
 
   search:
     max_debug_depth: 5  # increased from 3 - try harder to debug

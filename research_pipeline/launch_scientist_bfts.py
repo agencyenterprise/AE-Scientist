@@ -506,8 +506,8 @@ def resume_run(
         manager.journals[next_meta.name] = Journal(
             summary_model=cfg_obj.report.model,
             node_selection_model=cfg_obj.agent.feedback.model,
-            summary_temperature=cfg_obj.report.temp,
-            node_selection_temperature=cfg_obj.agent.feedback.temp,
+            summary_temperature=cfg_obj.report.temperature,
+            node_selection_temperature=cfg_obj.agent.feedback.temperature,
             event_callback=event_callback,
         )
 

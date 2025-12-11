@@ -178,7 +178,7 @@ def determine_datasets_successfully_tested(
             result = structured_query_with_schema(
                 system_message=determine_prompt,
                 model=agent.cfg.agent.feedback.model,
-                temperature=agent.cfg.agent.feedback.temp,
+                temperature=agent.cfg.agent.feedback.temperature,
                 schema_class=DatasetsSuccessfullyTestedResult,
             )
         except Exception:
@@ -252,7 +252,7 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
                 system_message=prompt_select_plots,
                 user_message=None,
                 model=agent.cfg.agent.feedback.model,
-                temperature=agent.cfg.agent.feedback.temp,
+                temperature=agent.cfg.agent.feedback.temperature,
                 schema_class=PLOT_SELECTION_SCHEMA,
             )
             selected_plots = node.plot_paths[:10]
@@ -273,7 +273,7 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         logger.debug(f"Selected {len(selected_plots)} plot(s) for VLM analysis: {selected_plots}")
         logger.debug(
             f"VLM feedback model: {agent.cfg.agent.vlm_feedback.model}, "
-            f"temperature: {agent.cfg.agent.vlm_feedback.temp}"
+            f"temperature: {agent.cfg.agent.vlm_feedback.temperature}"
         )
     except Exception:
         logger.debug("Failed to log selected plots for VLM analysis (non-fatal).")
@@ -315,7 +315,7 @@ def analyze_plots_with_vlm(*, agent: SupportsPlottingAgent, node: Node) -> None:
         system_message=None,
         user_message=user_message,
         model=agent.cfg.agent.vlm_feedback.model,
-        temperature=agent.cfg.agent.vlm_feedback.temp,
+        temperature=agent.cfg.agent.vlm_feedback.temperature,
         schema_class=VLM_FEEDBACK_SCHEMA,
     )
     response = response_model.model_dump(by_alias=True)

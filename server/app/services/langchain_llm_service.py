@@ -135,12 +135,6 @@ class LangChainLLMService(BaseLLMService, ABC):
     def pdf_service(self) -> PDFService:
         return self._pdf_service
 
-    def get_context_window_tokens(self, llm_model: str) -> int:
-        for model in self._supported_models:
-            if model.id == llm_model:
-                return model.context_window_tokens
-        raise ValueError(f"Unknown model '{llm_model}' for provider {self.provider_name}")
-
     def get_or_create_model(self, llm_model: str) -> BaseChatModel:
         if llm_model not in self._model_cache:
             self._model_cache[llm_model] = self._build_chat_model(model_id=llm_model)
@@ -530,14 +524,6 @@ class LangChainLLMService(BaseLLMService, ABC):
         if not isinstance(response, AIMessage):
             return ""
         return self._message_to_text(message=response)
-
-    async def generate_imported_chat_keywords(
-        self, llm_model: str, imported_conversation_text: str
-    ) -> str:
-        return await self._generate_imported_chat_keywords(
-            llm_model=llm_model,
-            conversation_text=imported_conversation_text,
-        )
 
     async def chat_with_idea_stream(
         self,

@@ -618,7 +618,7 @@ def parse_and_assign_metrics(
                 system_message=metrics_prompt,
                 user_message=None,
                 model=cfg.agent.feedback.model,
-                temperature=cfg.agent.feedback.temp,
+                temperature=cfg.agent.feedback.temperature,
                 schema_class=METRIC_PARSE_SCHEMA,
             )
             metrics_response = metrics_model.model_dump(by_alias=True)

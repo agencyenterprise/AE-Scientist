@@ -111,6 +111,14 @@ SUPPORTED_MODELS = [
         context_window_tokens=400_000,
     ),
     LLMModel(
+        id="gpt-5.2",
+        provider="openai",
+        label="GPT-5.2",
+        supports_images=True,
+        supports_pdfs=True,
+        context_window_tokens=400_000,
+    ),
+    LLMModel(
         id="o1",
         provider="openai",
         label="o1",

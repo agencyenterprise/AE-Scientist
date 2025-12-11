@@ -285,7 +285,7 @@ class MinimalAgent:
                 response = structured_query_with_schema(
                     system_message=prompt,
                     model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temp,
+                    temperature=self.cfg.agent.code.temperature,
                     schema_class=PlanAndCodeSchema,
                 )
             except Exception as exc:
@@ -370,7 +370,7 @@ class MinimalAgent:
             system_message=prompt,
             user_message=None,
             model=self.cfg.agent.feedback.model,
-            temperature=self.cfg.agent.feedback.temp,
+            temperature=self.cfg.agent.feedback.temperature,
             schema_class=REVIEW_RESPONSE_SCHEMA,
         )
         response = response_model.model_dump(by_alias=True)
@@ -404,6 +404,6 @@ class MinimalAgent:
             system_message=summary_prompt,
             user_message=None,
             model=self.cfg.agent.feedback.model,
-            temperature=self.cfg.agent.feedback.temp,
+            temperature=self.cfg.agent.feedback.temperature,
             schema_class=SUMMARY_RESPONSE_SCHEMA,
         ).model_dump(by_alias=True)

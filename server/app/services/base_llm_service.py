@@ -5,7 +5,6 @@ This module defines the common interface that all LLM services (OpenAI, Anthropi
 must implement to ensure consistent behavior across different providers.
 """
 
-import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from logging import getLogger
@@ -150,18 +149,6 @@ class BaseLLMService(ABC):
         pass
 
     @abstractmethod
-    async def generate_imported_chat_keywords(
-        self, llm_model: str, imported_conversation_text: str
-    ) -> str:
-        """Generate imported chat keywords."""
-        pass
-
-    @abstractmethod
-    def get_context_window_tokens(self, llm_model: str) -> int:
-        """Get the context window tokens for a given model id from SUPPORTED_MODELS."""
-        pass
-
-    @abstractmethod
     async def generate_text_single_call(
         self,
         llm_model: str,
@@ -217,101 +204,6 @@ class BaseLLMService(ABC):
             start_index = split_at
         return [c for c in (s.strip() for s in chunks) if c]
 
-    async def _generate_imported_chat_keywords(self, llm_model: str, conversation_text: str) -> str:
-        """
-        Extract 10–20 keywords using a map-reduce strategy under context limits.
-
-        Splits the text to fit the model budget, extracts 5–10 keywords per
-        chunk (map), merges and deduplicates, then reduces to a final set.
-        """
-
-        def parse_comma_separated_keywords_line(line: str) -> List[str]:
-            """
-            Parse a comma-separated keywords line into a list of normalized tokens.
-
-            Normalizes whitespace and trims quotes. Ignores empty tokens.
-            """
-            cleaned = line.strip().replace("\n", " ")
-            cleaned = re.sub(r"\s*,\s*", ", ", cleaned)
-            cleaned = re.sub(r"\s+", " ", cleaned)
-            parts = [p.strip().strip("\"'") for p in cleaned.split(",")]
-            return [p for p in parts if p]
-
-        def dedupe_keywords_preserve_case_frequency(items: List[str]) -> List[str]:
-            """
-            Dedupe keywords case-insensitively while preserving original casing.
-
-            Orders by descending frequency (case-insensitive) with stable order
-            among equals, to keep more common terms first.
-            """
-            seen: dict[str, int] = {}
-            ordered: List[str] = []
-            for item in items:
-                key = item.lower()
-                if key not in seen:
-                    seen[key] = 1
-                    ordered.append(item)
-                else:
-                    seen[key] += 1
-            ordered.sort(key=lambda v: -(seen[v.lower()]))
-            return ordered
-
-        system_prompt = (
-            "You extract focused keywords. Return ONLY a single line of comma-separated keywords."
-        )
-        map_instruction = (
-            "Extract 5-10 concise, specific keywords and key phrases from this chat excerpt. "
-            "No explanatory text, no numbering, no quotes. Output a single line, comma-separated.\n\n"
-        )
-        reduce_instruction = (
-            "From the following candidate keywords, choose the 10-20 most salient, "
-            "deduplicate and normalize phrases. Return a single line, comma-separated.\n\n"
-        )
-
-        context_tokens = self.get_context_window_tokens(llm_model)
-        map_completion_tokens = 600
-        reduce_completion_tokens = 600
-        overhead_tokens = 128
-        sys_tokens = self.estimate_tokens_via_char_heuristic(system_prompt)
-        map_inst_tokens = self.estimate_tokens_via_char_heuristic(map_instruction)
-        available_for_map_text = max(
-            context_tokens
-            - (sys_tokens + map_inst_tokens + overhead_tokens + map_completion_tokens),
-            0,
-        )
-        char_budget = max(available_for_map_text * 4, 0)
-
-        text_chunks = self.split_text_to_fit_char_budget(
-            text=conversation_text, max_chars=char_budget
-        )
-        candidate_keywords: List[str] = []
-        for chunk in text_chunks:
-            user_prompt = f"{map_instruction}Excerpt:\n\n{chunk}"
-            piece = await self.generate_text_single_call(
-                llm_model=llm_model,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                max_completion_tokens=map_completion_tokens,
-            )
-            candidate_keywords.extend(parse_comma_separated_keywords_line(piece))
-
-        merged = dedupe_keywords_preserve_case_frequency(candidate_keywords)
-        if len(merged) <= 20:
-            return ", ".join(merged)
-
-        max_reduce_candidates = 60
-        reduce_input = ", ".join(merged[:max_reduce_candidates])
-        reduce_user_prompt = f"{reduce_instruction}Candidates: {reduce_input}"
-        reduced_text = await self.generate_text_single_call(
-            llm_model=llm_model,
-            system_prompt=system_prompt,
-            user_prompt=reduce_user_prompt,
-            max_completion_tokens=reduce_completion_tokens,
-        )
-        reduced_list = parse_comma_separated_keywords_line(reduced_text)
-        reduced_list = dedupe_keywords_preserve_case_frequency(reduced_list)[:20]
-        return ", ".join(reduced_list)
-
     async def _summarize_document(self, llm_model: LLMModel, content: str) -> str:
         """
         Summarize long content with map-reduce to respect model context limits.
@@ -333,7 +225,7 @@ class BaseLLMService(ABC):
         )
 
         model_id = llm_model.id
-        context_tokens = self.get_context_window_tokens(model_id)
+        context_tokens = llm_model.context_window_tokens
         map_completion_tokens = 600
         reduce_completion_tokens = 600
         overhead_tokens = 128

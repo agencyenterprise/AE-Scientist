@@ -151,7 +151,7 @@ class ParallelAgent:
             system_message=prompt,
             user_message=None,
             model=self.cfg.agent.code.model,
-            temperature=self.cfg.agent.code.temp,
+            temperature=self.cfg.agent.code.temperature,
         )
 
         logger.debug(f"Defined eval metrics: {response}")
@@ -167,7 +167,7 @@ class ParallelAgent:
                 response = structured_query_with_schema(
                     system_message=prompt,
                     model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temp,
+                    temperature=self.cfg.agent.code.temperature,
                     schema_class=PlanAndCodeSchema,
                 )
             except Exception as exc:
@@ -489,7 +489,7 @@ class ParallelAgent:
                     base_stage1_code=base_stage1_code,
                     tried=tried_list,
                     model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temp,
+                    temperature=self.cfg.agent.code.temperature,
                 )
                 self._hyperparam_tuning_state["tried_hyperparams"].add(new_hyperparam_idea.name)
                 new_ablation_idea = None
@@ -500,7 +500,7 @@ class ParallelAgent:
                     base_stage3_code=base_stage3_code,
                     completed=completed_list,
                     model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temp,
+                    temperature=self.cfg.agent.code.temperature,
                 )
                 self._ablation_state["completed_ablations"].add(new_ablation_idea.name)
                 new_hyperparam_idea = None

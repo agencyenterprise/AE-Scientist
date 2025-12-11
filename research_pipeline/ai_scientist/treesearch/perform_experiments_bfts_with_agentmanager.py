@@ -224,7 +224,7 @@ def perform_experiments_bfts(
         ) = overall_summarize(
             list(manager.journals.items()),
             model=cfg.report.model,
-            temperature=cfg.report.temp,
+            temperature=cfg.report.temperature,
         )
         draft_summary_path = cfg.log_dir / "draft_summary.json"
         baseline_summary_path = cfg.log_dir / "baseline_summary.json"
