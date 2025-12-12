@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useIsClient } from "@/shared/hooks/use-is-client";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
@@ -23,19 +24,7 @@ export function SectionEditModal({
 }: SectionEditModalProps): React.JSX.Element | null {
   const [editContent, setEditContent] = useState<string>(content);
   const [error, setError] = useState<string>("");
-  const [isClient, setIsClient] = useState<boolean>(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Reset content when modal opens with new content
-  useEffect(() => {
-    if (isOpen) {
-      setEditContent(content);
-      setError("");
-    }
-  }, [isOpen, content]);
+  const isClient = useIsClient();
 
   const handleSave = async (): Promise<void> => {
     if (!editContent.trim()) {

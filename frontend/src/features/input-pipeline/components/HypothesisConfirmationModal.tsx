@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface HypothesisConfirmationModalProps {
   isOpen: boolean;
@@ -17,14 +17,9 @@ export function HypothesisConfirmationModal({
   onConfirm,
   onCancel,
 }: HypothesisConfirmationModalProps) {
+  // Note: Parent component should pass key={`${initialTitle}-${initialDescription}`} to reset state when props change
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
-
-  // Update state when props change
-  useEffect(() => {
-    setTitle(initialTitle);
-    setDescription(initialDescription);
-  }, [initialTitle, initialDescription]);
 
   if (!isOpen) return null;
 

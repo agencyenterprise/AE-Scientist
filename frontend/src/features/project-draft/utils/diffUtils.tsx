@@ -1,4 +1,4 @@
-import React, { ReactElement } from "react";
+import type { ReactElement } from "react";
 import { diff_match_patch } from "diff-match-patch";
 import type { IdeaVersion } from "@/types";
 

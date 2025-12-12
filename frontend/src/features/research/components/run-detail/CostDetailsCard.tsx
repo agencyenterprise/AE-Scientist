@@ -2,7 +2,6 @@
 
 import type { ModelCost, ResearchRunCostResponse } from "@/types";
 import { DollarSign, Loader2 } from "lucide-react";
-import React from "react";
 
 interface CostDetailsCardProps {
   cost: ResearchRunCostResponse | null;

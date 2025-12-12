@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useIsClient } from "@/shared/hooks/use-is-client";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
@@ -19,11 +19,7 @@ export function DeleteConfirmModal({
   onConfirm,
   onCancel,
 }: DeleteConfirmModalProps) {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  const isClient = useIsClient();
 
   if (!isOpen || !isClient) return null;
 

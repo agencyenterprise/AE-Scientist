@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
 import { TreeVizViewer } from "./tree-viz-viewer";
 
@@ -13,22 +13,23 @@ interface Props {
 export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(
-    hasViz ? (list[0]?.stage_id ?? null) : null
-  );
+
+  // User selection - null means use default (first item)
+  const [userSelectedStageId, setUserSelectedStageId] = useState<string | null>(null);
+
+  // Derived selected stage ID - falls back to first item if user selection is invalid
+  const selectedStageId = useMemo(() => {
+    if (!hasViz) return null;
+    // If user has selected a valid stage, use it
+    if (userSelectedStageId && list.find(v => v.stage_id === userSelectedStageId)) {
+      return userSelectedStageId;
+    }
+    // Otherwise default to first item
+    return list[0]?.stage_id ?? null;
+  }, [hasViz, list, userSelectedStageId]);
+
   const selectedViz =
     hasViz && selectedStageId ? (list.find(v => v.stage_id === selectedStageId) ?? list[0]) : null;
-
-  // Keep selection in sync if tree viz data changes
-  useEffect(() => {
-    if (!hasViz) {
-      setSelectedStageId(null);
-      return;
-    }
-    if (!selectedStageId || !list.find(v => v.stage_id === selectedStageId)) {
-      setSelectedStageId(list[0]?.stage_id ?? null);
-    }
-  }, [hasViz, list, selectedStageId]);
 
   return (
     <div className="w-full rounded-lg border border-slate-800 bg-slate-900/60 p-4">
@@ -41,7 +42,7 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
               <button
                 key={`${viz.stage_id}-${viz.id}`}
                 type="button"
-                onClick={() => setSelectedStageId(viz.stage_id)}
+                onClick={() => setUserSelectedStageId(viz.stage_id)}
                 className={`rounded px-3 py-1 text-xs ${
                   viz.stage_id === selectedStageId
                     ? "bg-emerald-500 text-slate-900"

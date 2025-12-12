@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
 import { PromptEditModal } from "@/features/project-draft/components/PromptEditModal";
 import { PromptTypes } from "@/shared/lib/prompt-types";
