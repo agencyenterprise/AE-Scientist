@@ -3,7 +3,7 @@
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DollarSign, Settings } from "lucide-react";
 
 import { useConversationContext } from "../context/ConversationContext";
@@ -26,13 +26,11 @@ export function ConversationHeader({
   conversation,
   onConversationDeleted,
   onTitleUpdated,
-  viewMode,
   costDetails,
 }: ConversationHeaderProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const [pendingView, setPendingView] = useState<ViewMode | null>(null);
   const [showCostModal, setShowCostModal] = useState(false);
 
   const { isDeleting, isUpdatingTitle, deleteConversation, updateTitle } = useConversationActions();
@@ -49,12 +47,6 @@ export function ConversationHeader({
     handleModelCapabilities,
     onOpenPromptModal,
   } = useConversationContext();
-
-  useEffect(() => {
-    if (pendingView && viewMode === pendingView) {
-      setPendingView(null);
-    }
-  }, [viewMode, pendingView]);
 
   const handleDeleteConversation = async (): Promise<void> => {
     const success = await deleteConversation(conversation.id);

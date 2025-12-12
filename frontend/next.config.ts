@@ -1,19 +1,19 @@
-import {withSentryConfig} from '@sentry/nextjs';
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: 'http',
-        hostname: 'localhost',
-        port: '8000',
-        pathname: '/conversations/files/**',
+        protocol: "http",
+        hostname: "localhost",
+        port: "8000",
+        pathname: "/conversations/files/**",
       },
       {
-        protocol: 'https',
-        hostname: '*.railway.app',
-        pathname: '/conversations/files/**',
+        protocol: "https",
+        hostname: "*.railway.app",
+        pathname: "/conversations/files/**",
       },
     ],
   },
@@ -42,12 +42,17 @@ export default withSentryConfig(nextConfig, {
   // side errors will fail.
   tunnelRoute: "/monitoring",
 
-  // Automatically tree-shake Sentry logger statements to reduce bundle size
-  disableLogger: true,
+  // Webpack-specific options
+  webpack: {
+    // Automatically tree-shake Sentry logger statements to reduce bundle size
+    treeshake: {
+      removeDebugLogging: true,
+    },
 
-  // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-  // See the following for more information:
-  // https://docs.sentry.io/product/crons/
-  // https://vercel.com/docs/cron-jobs
-  automaticVercelMonitors: true,
+    // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
+    // See the following for more information:
+    // https://docs.sentry.io/product/crons/
+    // https://vercel.com/docs/cron-jobs
+    automaticVercelMonitors: true,
+  },
 });

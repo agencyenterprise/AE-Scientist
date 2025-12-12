@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { Idea, IdeaVersion, IdeaVersionsResponse } from "@/types";
 import { config } from "@/shared/lib/config";
 import {
@@ -88,20 +88,17 @@ export function useVersionManagement({
     }
   }, [conversationId]);
 
-  // Reset version selection when switching out of diff mode or when conversation changes
-  useEffect(() => {
-    if (!showDiffs) {
+  // Wrapper function that combines state updates to avoid cascading effects
+  const setShowDiffsWithReset = useCallback((show: boolean) => {
+    setShowDiffs(show);
+    if (!show) {
       setSelectedVersionForComparison(null);
     }
-  }, [showDiffs]);
-
-  useEffect(() => {
-    setSelectedVersionForComparison(null);
-  }, [conversationId]);
+  }, []);
 
   return {
     showDiffs,
-    setShowDiffs,
+    setShowDiffs: setShowDiffsWithReset,
     allVersions,
     selectedVersionForComparison,
     setSelectedVersionForComparison,

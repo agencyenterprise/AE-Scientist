@@ -1,9 +1,9 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import { useIsClient } from "@/shared/hooks/use-is-client";
 import type { ConversationCostResponse, ModelCost, ResearchCost } from "@/types";
 import { DollarSign } from "lucide-react";
-import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface CostDetailModalProps {
@@ -14,11 +14,7 @@ interface CostDetailModalProps {
 }
 
 export function CostDetailModal({ isOpen, onClose, cost, isLoading }: CostDetailModalProps) {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  const isClient = useIsClient();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
