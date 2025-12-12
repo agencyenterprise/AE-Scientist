@@ -7,7 +7,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
-from app.api.research_pipeline_runs import IdeaPayloadSource, _create_and_launch_research_run
+from app.api.research_pipeline_runs import (
+    REQUESTER_NAME_FALLBACK,
+    IdeaPayloadSource,
+    _create_and_launch_research_run,
+    extract_first_name,
+)
 from app.config import settings
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -146,6 +151,16 @@ def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
     upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+
+
+def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
+    owner_id = db.get_run_owner_user_id(run_id=run_id)
+    if owner_id is None:
+        return REQUESTER_NAME_FALLBACK
+    user = db.get_user_by_id(user_id=owner_id)
+    if user is None:
+        return REQUESTER_NAME_FALLBACK
+    return extract_first_name(full_name=user.name)
 
 
 @router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -421,7 +436,11 @@ def _retry_run_after_gpu_shortage(*, db: DatabaseManager, failed_run: ResearchPi
         expected_outcome=idea_version.expected_outcome,
         risk_factors_and_limitations=_coerce_list(idea_version.risk_factors_and_limitations),
     )
-    new_run_id = _create_and_launch_research_run(idea_data=idea_payload)
+    requester_first_name = _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
+    new_run_id = _create_and_launch_research_run(
+        idea_data=idea_payload,
+        requested_by_first_name=requester_first_name,
+    )
     logger.info(
         "Scheduled retry run %s after GPU shortage on run %s.",
         new_run_id,

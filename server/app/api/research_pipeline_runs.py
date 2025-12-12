@@ -56,6 +56,21 @@ from app.services.s3_service import get_s3_service
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
+REQUESTER_NAME_FALLBACK = "Scientist"
+
+
+def extract_first_name(*, full_name: str) -> str:
+    """Return a cleaned first-name token suitable for pod naming."""
+    stripped = full_name.strip()
+    if not stripped:
+        return REQUESTER_NAME_FALLBACK
+    token = stripped.split()[0]
+    alnum_only = "".join(char for char in token if char.isalnum())
+    if not alnum_only:
+        return REQUESTER_NAME_FALLBACK
+    return f"{alnum_only[0].upper()}{alnum_only[1:]}"
+
+
 _launch_cancel_events: dict[str, threading.Event] = {}
 _launch_cancel_lock = threading.Lock()
 
@@ -138,6 +153,7 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
 def _create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
+    requested_by_first_name: str,
     background_tasks: BackgroundTasks | None = None,
 ) -> str:
     db = get_database()
@@ -161,6 +177,7 @@ def _create_and_launch_research_run(
             _launch_research_pipeline_job,
             run_id=run_id,
             idea_payload=idea_payload,
+            requested_by_first_name=requested_by_first_name,
             cancel_event=cancel_event,
         )
     else:
@@ -169,6 +186,7 @@ def _create_and_launch_research_run(
             kwargs={
                 "run_id": run_id,
                 "idea_payload": idea_payload,
+                "requested_by_first_name": requested_by_first_name,
                 "cancel_event": cancel_event,
             },
             daemon=True,
@@ -203,6 +221,7 @@ def _launch_research_pipeline_job(
     *,
     run_id: str,
     idea_payload: Dict[str, object],
+    requested_by_first_name: str,
     cancel_event: threading.Event | None = None,
 ) -> None:
     """Background task that launches the RunPod job and updates DB state."""
@@ -225,6 +244,7 @@ def _launch_research_pipeline_job(
             idea=idea_payload,
             config_name=config_name,
             run_id=run_id,
+            requested_by_first_name=requested_by_first_name,
         )
 
         if cancel_event and cancel_event.is_set():
@@ -442,8 +462,10 @@ def submit_idea_for_research(
         action="research_pipeline",
     )
 
+    requester_first_name = extract_first_name(full_name=user.name)
     run_id = _create_and_launch_research_run(
         idea_data=cast(IdeaPayloadSource, idea_data),
+        requested_by_first_name=requester_first_name,
         background_tasks=background_tasks,
     )
     return ResearchRunAcceptedResponse(run_id=run_id)

@@ -104,6 +104,33 @@ class UsersDatabaseMixin(ConnectionProvider):
             logger.exception(f"Error getting user by Google ID: {e}")
             return None
 
+    def get_user_by_id(self, user_id: int) -> Optional[UserData]:
+        """
+        Get user by database ID.
+
+        Args:
+            user_id: User's primary key
+
+        Returns:
+            User data dict if found, None otherwise
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    cursor.execute(
+                        """
+                        SELECT id, google_id, email, name, is_active, created_at, updated_at
+                        FROM users
+                        WHERE id = %s
+                        """,
+                        (user_id,),
+                    )
+                    result = cursor.fetchone()
+                    return UserData(**result) if result else None
+        except Exception as e:
+            logger.exception("Error getting user by id %s: %s", user_id, e)
+            return None
+
     def update_user(self, user_id: int, email: str, name: str) -> Optional[UserData]:
         """
         Update user information.
