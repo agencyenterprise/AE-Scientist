@@ -129,7 +129,7 @@ def save_file_cost_track(
     output_tokens: int | None,
     now: datetime | None,
 ) -> None:
-    file_path = Path(os.environ.get("RUN_DIR_PATH") or "") / "cost_track.csv"
+    file_path = Path(os.environ.get("WORKSPACE_DIR") or "") / "cost_track.csv"
     file_path.parent.mkdir(parents=True, exist_ok=True)
     if not file_path.exists():
         with file_path.open(mode="w", newline="") as f:
