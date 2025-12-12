@@ -116,6 +116,10 @@ class Settings:
     # Logging settings
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # Sentry settings
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    SENTRY_ENVIRONMENT: str = os.getenv("SENTRY_ENVIRONMENT", "")
+
     # LLM generation constraints
     IDEA_MAX_COMPLETION_TOKENS: int = int(os.getenv("IDEA_MAX_COMPLETION_TOKENS", "8192"))
 

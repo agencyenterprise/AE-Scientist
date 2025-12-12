@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +11,15 @@ from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.research_pipeline.monitor import pipeline_monitor
 from app.validation import validate_configuration
+
+# Initialize Sentry (must be done before FastAPI app is created)
+if settings.SENTRY_DSN and settings.RAILWAY_ENVIRONMENT_NAME != "development":
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.SENTRY_ENVIRONMENT or settings.RAILWAY_ENVIRONMENT_NAME,
+        traces_sample_rate=1.0,
+        send_default_pii=True,
+    )
 
 
 def configure_logging() -> None:
