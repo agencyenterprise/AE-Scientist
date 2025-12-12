@@ -1,7 +1,7 @@
 ---
 description: 🚀 Initialize agent system for this codebase
 model: opus
-allowed-tools: Read, Glob, Grep, Bash, Write, Edit
+allowed-tools: Read, Glob, Grep, Bash, Write, Edit, AskUserQuestion
 ---
 
 # Initialize Project Agent System
@@ -83,6 +83,52 @@ Run `/adr-research [topic]` to explore any area of the codebase.
 
 ## Error Handling
 
-- No package.json? → Ask about project type
-- Unusual structure? → Ask for clarification
-- Multiple frameworks? → Ask which is primary
+**No package.json - use AskUserQuestion:**
+
+```
+Question:
+  header: "Project Type"
+  question: "No package.json found. What type of project is this?"
+  options:
+    - label: "Python"
+      description: "Python project (pyproject.toml, requirements.txt)"
+    - label: "Go"
+      description: "Go project (go.mod)"
+    - label: "Rust"
+      description: "Rust project (Cargo.toml)"
+    - label: "Monorepo"
+      description: "Multiple projects in subdirectories"
+  multiSelect: false
+```
+
+**Unusual structure - use AskUserQuestion:**
+
+```
+Question:
+  header: "Structure"
+  question: "Non-standard project structure detected. Where is the main source code?"
+  options:
+    - label: "src/"
+      description: "Standard source directory"
+    - label: "lib/"
+      description: "Library-style layout"
+    - label: "app/"
+      description: "Application directory"
+  multiSelect: false
+```
+
+User can select "Other" to specify custom paths.
+
+**Multiple frameworks - use AskUserQuestion:**
+
+```
+Question:
+  header: "Framework"
+  question: "Multiple frameworks detected. Which is the primary one?"
+  options:
+    - label: "{framework1}"
+      description: "Found in {location1}"
+    - label: "{framework2}"
+      description: "Found in {location2}"
+  multiSelect: false
+```

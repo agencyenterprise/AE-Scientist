@@ -2,7 +2,7 @@
 description: 📝 Extract ADRs from commit history
 argument-hint: [n|since-adr|interactive]
 model: haiku
-allowed-tools: Read, Glob, Grep, Bash(git:*), Write, Task
+allowed-tools: Read, Glob, Grep, Bash(git:*), Write, Task, AskUserQuestion
 ---
 
 # Extract ADRs from Commits
@@ -20,14 +20,38 @@ $ARGUMENTS
 - `interactive` → Pick from recent commits
 - Empty → Ask user which mode
 
-**If no argument provided, ask:**
-```
-Which mode for commit selection?
-1. [n] - Analyze last N commits
-2. [since-adr] - Since last ADR was created
-3. [interactive] - Pick from recent commits
+**If no argument provided, use AskUserQuestion:**
 
-Enter [1/2/3]:
+```
+Question 1:
+  header: "Mode"
+  question: "Which mode for commit selection?"
+  options:
+    - label: "Last N commits"
+      description: "Analyze a specific number of recent commits"
+    - label: "Since last ADR"
+      description: "Commits since the last ADR was created"
+    - label: "Interactive"
+      description: "Pick specific commits from recent history"
+  multiSelect: false
+```
+
+If "Last N commits" selected, follow up:
+
+```
+Question 2:
+  header: "Count"
+  question: "How many commits to analyze?"
+  options:
+    - label: "5 commits"
+      description: "Quick analysis of recent work"
+    - label: "10 commits"
+      description: "Standard batch size"
+    - label: "20 commits"
+      description: "Larger analysis, may spawn subagents"
+    - label: "50 commits"
+      description: "Comprehensive history, will use subagents"
+  multiSelect: false
 ```
 
 ---
@@ -54,7 +78,24 @@ git log --since="$(stat -f "%Sm" -t "%Y-%m-%d" "$LAST_ADR" 2>/dev/null || echo "
 # Show recent 20 commits for selection
 git log -20 --oneline --no-merges
 ```
-Then ask: "Enter commit hashes (space-separated) or range (abc..def):"
+
+After showing commits, use AskUserQuestion to let user select commit ranges:
+
+```
+Question:
+  header: "Commits"
+  question: "Which commit range do you want to analyze?"
+  options:
+    - label: "Last 5"
+      description: "HEAD~5..HEAD - most recent commits"
+    - label: "Last 10"
+      description: "HEAD~10..HEAD - recent work"
+    - label: "Last week"
+      description: "All commits from the past 7 days"
+  multiSelect: false
+```
+
+User can select "Other" to provide specific commit hashes or ranges.
 
 ### Step 2: Count and Route
 
@@ -144,21 +185,29 @@ Use adr-commit-clusterer-agent with all compressed findings
 ### Excluded (no decision signal)
 - jkl012: "Fix typo in README"
 - mno345: "Update deps"
-
----
-
-**Actions:**
-- `approve` - Create ADRs as shown
-- `merge 1,2` - Combine groups into single ADR
-- `split 1` - Break a group apart
-- `drop 2` - Exclude group from ADR creation
-- `rename 1 "New title"` - Change proposed title
-- `cancel` - Abort without creating ADRs
-
-Enter action:
 ```
 
-**Process user action and loop until `approve` or `cancel`.**
+**Use AskUserQuestion for approval:**
+
+```
+Question:
+  header: "Action"
+  question: "How would you like to proceed with these ADR groupings?"
+  options:
+    - label: "Approve all"
+      description: "Create ADRs as shown above"
+    - label: "Merge groups"
+      description: "Combine multiple groups into single ADR"
+    - label: "Drop some groups"
+      description: "Exclude specific groups from ADR creation"
+    - label: "Cancel"
+      description: "Abort without creating any ADRs"
+  multiSelect: false
+```
+
+If "Merge groups" or "Drop some groups" selected, present follow-up question with group numbers as options.
+
+**Loop until user selects "Approve all" or "Cancel".**
 
 ---
 
@@ -169,17 +218,20 @@ Before creating, check for overlap:
 grep -rli "KEYWORDS" adr/decisions/ 2>/dev/null
 ```
 
-**If overlap found:**
+**If overlap found, use AskUserQuestion:**
+
 ```
-Warning: Potential overlap with existing ADR:
-- adr/decisions/20251201-similar-topic.md
-
-Options:
-1. Create anyway (new perspective)
-2. Skip this group
-3. View existing ADR
-
-Enter [1/2/3]:
+Question:
+  header: "Overlap"
+  question: "Found potential overlap with existing ADR. How to proceed?"
+  options:
+    - label: "Create anyway"
+      description: "This covers a new perspective worth documenting"
+    - label: "Skip this group"
+      description: "Existing ADR is sufficient"
+    - label: "View existing"
+      description: "Show me the existing ADR first"
+  multiSelect: false
 ```
 
 ---
@@ -261,21 +313,20 @@ No commits found for the specified range.
 - If using `interactive`: ensure branch has commits
 ```
 
-**No decision signals:**
+**No decision signals - use AskUserQuestion:**
+
 ```
-Analyzed {n} commits but found no architectural decisions.
-
-Commits appear to be routine changes:
-- Bug fixes without rationale
-- Documentation updates
-- Dependency bumps
-
-Options:
-1. Force analysis (may create low-value ADRs)
-2. Select different commits
-3. Cancel
-
-Enter [1/2/3]:
+Question:
+  header: "No signals"
+  question: "No architectural decisions found. How to proceed?"
+  options:
+    - label: "Force analysis"
+      description: "Create ADRs anyway (may be low-value)"
+    - label: "Different commits"
+      description: "Select a different commit range"
+    - label: "Cancel"
+      description: "Exit without creating ADRs"
+  multiSelect: false
 ```
 
 ---

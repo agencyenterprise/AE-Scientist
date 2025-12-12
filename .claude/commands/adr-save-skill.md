@@ -2,7 +2,7 @@
 description: 💾 Create skill from successful pattern
 argument-hint: [skill-name]
 model: sonnet
-allowed-tools: Read, Write, Bash
+allowed-tools: Read, Write, Bash, AskUserQuestion
 ---
 
 # Save Skill
@@ -33,16 +33,20 @@ ls .claude/skills/ skills/ 2>/dev/null
 grep -rli "$ARGUMENTS" .claude/skills/*/SKILL.md skills/*/SKILL.md 2>/dev/null
 ```
 
-**If similar skill found:**
+**If similar skill found, use AskUserQuestion:**
+
 ```
-Found existing skill: adr-{similar-name}
-
-Options:
-1. Merge into existing skill
-2. Create new skill anyway (different scope)
-3. Cancel and use existing skill
-
-Which option? [1/2/3]
+Question:
+  header: "Duplicate"
+  question: "Found existing skill: adr-{similar-name}. How to proceed?"
+  options:
+    - label: "Merge"
+      description: "Add this pattern to the existing skill"
+    - label: "Create new"
+      description: "This has different scope, create separate skill"
+    - label: "Cancel"
+      description: "Use the existing skill instead"
+  multiSelect: false
 ```
 
 Only proceed if creating a genuinely new skill or extending an existing one.

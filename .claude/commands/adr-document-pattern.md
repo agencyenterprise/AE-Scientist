@@ -2,7 +2,7 @@
 description: 📋 Document a code pattern as an ADR
 argument-hint: [pattern description]
 model: sonnet
-allowed-tools: Read, Glob, Grep, Bash(grep:*), Bash(find:*), Write
+allowed-tools: Read, Glob, Grep, Bash(grep:*), Bash(find:*), Write, AskUserQuestion
 ---
 
 # Document Pattern as ADR
@@ -31,17 +31,20 @@ grep -rli "$ARGUMENTS" adr/decisions/ 2>/dev/null
 grep -rli "$ARGUMENTS" .claude/skills/*/SKILL.md 2>/dev/null
 ```
 
-**If found:**
+**If found, use AskUserQuestion:**
+
 ```
-Existing documentation found:
-- adr/decisions/20251201-similar-pattern.md
-
-Options:
-1. View existing documentation
-2. Create new ADR anyway (different aspect)
-3. Cancel
-
-Enter [1/2/3]:
+Question:
+  header: "Existing"
+  question: "Found existing documentation. How to proceed?"
+  options:
+    - label: "View existing"
+      description: "Show me the existing documentation first"
+    - label: "Create new"
+      description: "Document a different aspect of this pattern"
+    - label: "Cancel"
+      description: "Use existing documentation instead"
+  multiSelect: false
 ```
 
 ---
@@ -99,30 +102,69 @@ grep -rn "import.*PATTERN\|from.*PATTERN" . --include="*.ts" | head -20
 
 ### Step 4: Ask Clarifying Questions
 
-**Present questions to user:**
+**Use AskUserQuestion to gather reasoning:**
 
-```markdown
-To document this pattern properly, I need to understand the reasoning:
+```
+Question 1:
+  header: "Problem"
+  question: "What problem does this pattern solve?"
+  options:
+    - label: "Consistency"
+      description: "Ensures uniform behavior across codebase"
+    - label: "Performance"
+      description: "Optimizes speed or resource usage"
+    - label: "Reliability"
+      description: "Prevents errors or handles edge cases"
+    - label: "Security"
+      description: "Protects against vulnerabilities"
+  multiSelect: false
 
-### 1. Why this approach?
-What problem does this pattern solve? Why was it chosen over alternatives?
+Question 2:
+  header: "Alternatives"
+  question: "Were alternatives considered?"
+  options:
+    - label: "Yes, rejected"
+      description: "Tried other approaches that didn't work"
+    - label: "Industry standard"
+      description: "This is the established best practice"
+    - label: "Inherited"
+      description: "Existing pattern from framework/library"
+    - label: "Unknown"
+      description: "Not sure of the history"
+  multiSelect: false
 
-### 2. Alternatives considered?
-Were other approaches tried or rejected? What were they?
+Question 3:
+  header: "Trade-offs"
+  question: "What are the main trade-offs?"
+  options:
+    - label: "Complexity"
+      description: "More code/setup required"
+    - label: "Performance cost"
+      description: "Trades speed for other benefits"
+    - label: "Flexibility"
+      description: "Less flexible but more predictable"
+    - label: "Minimal"
+      description: "Few significant downsides"
+  multiSelect: true
 
-### 3. Trade-offs?
-What are the downsides or constraints of this pattern?
-
-### 4. Exceptions?
-Are there cases where this pattern should NOT be used?
-
-### 5. Historical context?
-When was this introduced? Was there a specific incident or requirement?
-
-Please answer these questions so I can create a complete ADR.
+Question 4:
+  header: "Exceptions"
+  question: "When should this pattern NOT be used?"
+  options:
+    - label: "Legacy code"
+      description: "Old code may use different approach"
+    - label: "Performance-critical"
+      description: "Hot paths may need optimization"
+    - label: "Simple cases"
+      description: "Over-engineering for trivial use"
+    - label: "Always use"
+      description: "No known exceptions"
+  multiSelect: true
 ```
 
-**Wait for user response before proceeding.**
+User can select "Other" to provide additional context for any question.
+
+**Wait for all answers before proceeding to Step 5.**
 
 ---
 
@@ -188,7 +230,7 @@ The pattern is implemented in:
 
 ### Step 6: Confirm and Save
 
-**Show preview to user:**
+**Show preview to user, then use AskUserQuestion:**
 
 ```markdown
 ## Preview: ADR to be created
@@ -196,15 +238,20 @@ The pattern is implemented in:
 **File:** `adr/decisions/{timestamp}-{title}.md`
 
 {Show full ADR content}
+```
 
----
-
-**Actions:**
-- `save` — Create the ADR
-- `edit` — Modify before saving
-- `cancel` — Discard
-
-Enter action:
+```
+Question:
+  header: "Confirm"
+  question: "How would you like to proceed with this ADR?"
+  options:
+    - label: "Save (Recommended)"
+      description: "Create the ADR file as shown"
+    - label: "Edit first"
+      description: "Make modifications before saving"
+    - label: "Cancel"
+      description: "Discard without creating ADR"
+  multiSelect: false
 ```
 
 ---

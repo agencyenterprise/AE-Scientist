@@ -73,7 +73,7 @@ function calculateOverallProgress(stageProgress: StageProgress[]): number {
 const getStageDisplayName = (stageProgress: StageProgress[]): string => {
   if (!stageProgress.length) return "Pending";
   const latestProgress = stageProgress[stageProgress.length - 1];
-  return latestProgress.stage || "Pending";
+  return latestProgress?.stage || "Pending";
 };
 
 /**
