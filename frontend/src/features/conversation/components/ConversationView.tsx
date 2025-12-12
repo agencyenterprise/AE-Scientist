@@ -4,7 +4,7 @@ import { ConversationHeader } from "@/features/conversation/components/Conversat
 import { ConversationProvider } from "@/features/conversation/context/ConversationContext";
 import { ProjectDraftTab } from "@/features/project-draft/components/ProjectDraftTab";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
-import React, { useState } from "react";
+import { useState } from "react";
 import { MessageCircle } from "lucide-react";
 
 interface ConversationViewProps {

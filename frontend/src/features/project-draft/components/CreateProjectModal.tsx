@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { X, AlertTriangle, Loader2, Plus } from "lucide-react";
 
 interface CreateProjectModalProps {

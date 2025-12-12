@@ -1,6 +1,5 @@
 "use client";
 
-import React from "react";
 import { X } from "lucide-react";
 
 type ConflictItem = { id: number; title: string; updated_at: string; url: string };

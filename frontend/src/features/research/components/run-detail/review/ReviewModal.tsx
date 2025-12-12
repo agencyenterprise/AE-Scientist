@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useIsClient } from "@/shared/hooks/use-is-client";
 import { createPortal } from "react-dom";
 import { Loader2, AlertCircle } from "lucide-react";
 import type { LlmReviewResponse } from "@/types/research";
@@ -48,16 +49,10 @@ export function ReviewModal({
   onClose,
   loading = false,
 }: ReviewModalProps) {
-  const [isClient, setIsClient] = useState(false);
+  const isClient = useIsClient();
   const [activeTab, setActiveTab] = useState<"both" | "scores" | "analysis">("both");
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<Element | null>(null);
-
-  useEffect(() => {
-    setIsClient(true);
-    // Store the previously focused element to restore on close
-    previousActiveElement.current = document.activeElement;
-  }, []);
 
   // Focus trap and keyboard handling
   const handleKeyDown = useCallback(
@@ -90,8 +85,11 @@ export function ReviewModal({
   useEffect(() => {
     if (!isClient) return;
 
+    // Store the previously focused element to restore on close
+    previousActiveElement.current = document.activeElement;
+
     document.addEventListener("keydown", handleKeyDown);
-    // Focus the modal when it opensN
+    // Focus the modal when it opens
     modalRef.current?.focus();
     return () => {
       document.removeEventListener("keydown", handleKeyDown);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { useStreamingImport } from "@/shared/hooks/use-streaming-import";
 import { useImportFormState } from "./use-import-form-state";
@@ -110,6 +110,7 @@ export function useConversationImport(
   const [currentProvider, setCurrentProvider] = useState("");
 
   // Streaming import hook
+  // Note: Auto-scroll is handled internally by useStreamingImport
   const streaming = useStreamingImport({
     onStart: onImportStart,
     onEnd: onImportEnd,
@@ -117,13 +118,6 @@ export function useConversationImport(
     onError,
     autoRedirect,
   });
-
-  // Auto-scroll streaming content
-  useEffect(() => {
-    if (streaming.state.isStreaming && streaming.streamingRef.current) {
-      streaming.streamingRef.current.scrollTop = streaming.streamingRef.current.scrollHeight;
-    }
-  }, [streaming.state.streamingContent, streaming.state.isStreaming, streaming.streamingRef]);
 
   // Reset all state
   const reset = useCallback(() => {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useIsClient } from "@/shared/hooks/use-is-client";
 import { createPortal } from "react-dom";
 import { X, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
@@ -29,33 +30,20 @@ export function ArraySectionEditModal({
   itemLabel = "Item",
   isSaving = false,
 }: ArraySectionEditModalProps): React.JSX.Element | null {
+  const isClient = useIsClient();
+
+  // Compute initial single item content
+  const initialSingleItemContent = isAddingNew
+    ? ""
+    : editingIndex !== null && items[editingIndex]
+      ? items[editingIndex]
+      : "";
+
   const [editItems, setEditItems] = useState<string[]>(items);
-  const [singleItemContent, setSingleItemContent] = useState<string>("");
+  const [singleItemContent, setSingleItemContent] = useState<string>(initialSingleItemContent);
   const [error, setError] = useState<string>("");
-  const [isClient, setIsClient] = useState<boolean>(false);
 
   const isSingleItemMode = editingIndex !== null || isAddingNew;
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // Reset content when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setEditItems([...items]);
-      if (isAddingNew) {
-        // Adding a new item - start with empty content
-        setSingleItemContent("");
-      } else if (editingIndex !== null && items[editingIndex]) {
-        // Editing existing item
-        setSingleItemContent(items[editingIndex]);
-      } else {
-        setSingleItemContent("");
-      }
-      setError("");
-    }
-  }, [isOpen, items, editingIndex, isAddingNew]);
 
   const handleSave = async (): Promise<void> => {
     setError("");

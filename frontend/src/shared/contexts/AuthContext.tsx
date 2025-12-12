@@ -91,41 +91,46 @@ function AuthProviderInner({ children }: AuthProviderProps) {
     }
   };
 
-  // Check for OAuth callback errors
+  // Initialize auth - check for OAuth errors and auth status on mount
   useEffect(() => {
-    const error = searchParams.get("error");
-    if (error) {
-      let errorMessage = "Authentication failed";
+    const initAuth = async () => {
+      // Check for OAuth callback errors in URL
+      const error = searchParams.get("error");
+      if (error) {
+        let errorMessage = "Authentication failed";
 
-      switch (error) {
-        case "oauth_cancelled":
-          errorMessage = "Login was cancelled. Please try again if you want to sign in.";
-          break;
-        case "oauth_error":
-          errorMessage = "OAuth authentication failed";
-          break;
-        case "auth_failed":
-          errorMessage = "Authentication failed";
-          break;
-        case "server_error":
-          errorMessage = "Server error during authentication";
-          break;
-        default:
-          errorMessage = `Authentication error: ${error}`;
+        switch (error) {
+          case "oauth_cancelled":
+            errorMessage = "Login was cancelled. Please try again if you want to sign in.";
+            break;
+          case "oauth_error":
+            errorMessage = "OAuth authentication failed";
+            break;
+          case "auth_failed":
+            errorMessage = "Authentication failed";
+            break;
+          case "server_error":
+            errorMessage = "Server error during authentication";
+            break;
+          default:
+            errorMessage = `Authentication error: ${error}`;
+        }
+
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          user: null,
+          error: errorMessage,
+        });
+        return;
       }
 
-      setAuthState(prev => ({
-        ...prev,
-        error: errorMessage,
-        isLoading: false,
-      }));
-    }
-  }, [searchParams]);
+      // No error - check auth status
+      await checkAuthStatus();
+    };
 
-  // Check auth status on mount
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
+    initAuth();
+  }, [searchParams]);
 
   const contextValue: AuthContextValue = {
     ...authState,
