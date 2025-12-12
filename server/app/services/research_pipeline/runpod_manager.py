@@ -6,6 +6,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import tempfile
@@ -252,6 +253,22 @@ class RunPodEnvironment:
 
 logger = logging.getLogger(__name__)
 
+POD_NAME_PREFIX = "aeScientist"
+_POD_USER_FALLBACK = "Scientist"
+_POD_USER_MAX_LEN = 24
+
+
+def _sanitize_pod_user_component(*, value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed:
+        return _POD_USER_FALLBACK
+    sanitized = re.sub(pattern=r"[^A-Za-z0-9]", repl="", string=trimmed)
+    if not sanitized:
+        return _POD_USER_FALLBACK
+    truncated = sanitized[:_POD_USER_MAX_LEN]
+    return f"{truncated[0].upper()}{truncated[1:]}"
+
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
@@ -426,6 +443,7 @@ def launch_research_pipeline_run(
     idea: Dict[str, Any],
     config_name: str,
     run_id: str,
+    requested_by_first_name: str,
 ) -> Dict[str, Any]:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -484,7 +502,8 @@ def launch_research_pipeline_run(
         "NVIDIA RTX A4500",
         "NVIDIA RTX A5000",
     ]
-    pod_name = f"ae-scientist-{int(time.time())}"
+    user_component = _sanitize_pod_user_component(value=requested_by_first_name)
+    pod_name = f"{POD_NAME_PREFIX}-{user_component}-{int(time.time())}"
     pod = creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1",
