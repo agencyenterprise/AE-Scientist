@@ -3,7 +3,7 @@
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { DollarSign, Settings } from "lucide-react";
 
 import { useConversationContext } from "../context/ConversationContext";

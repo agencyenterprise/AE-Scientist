@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import { useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Home, Plus, MessageCircle, Loader2 } from "lucide-react";
 

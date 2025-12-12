@@ -3,7 +3,7 @@
 import { Button } from "@/shared/components/ui/button";
 import type { ConversationCostResponse, ModelCost, ResearchCost } from "@/types";
 import { DollarSign } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface CostDetailModalProps {
