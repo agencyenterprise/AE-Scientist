@@ -312,38 +312,6 @@ class Node(DataClassJsonMixin):
 
 
 @dataclass
-class InteractiveSession(DataClassJsonMixin):
-    """
-    A collection of nodes for an interaction session
-    (when the agent interacts with a Jupyter notebook-like interface).
-    """
-
-    nodes: list[Node] = field(default_factory=list)
-    completed: bool = False
-
-    def append(self, node: Node) -> None:
-        node.step = len(self.nodes)
-        self.nodes.append(node)
-
-    def generate_nb_trace(self, include_prompt: bool, comment_headers: bool = True) -> str:
-        """Generate a trace of the interactive session in IPython format."""
-        trace = []
-        header_prefix = "## " if comment_headers else ""
-        for n in self.nodes:
-            if n.step is not None:
-                trace.append(f"\n{header_prefix}In [{n.step + 1}]:\n")
-                trace.append(n.code)
-                trace.append(f"\n{header_prefix}Out [{n.step + 1}]:\n")
-                trace.append(n.term_out)
-
-        if include_prompt and self.nodes:
-            last_step_index = (self.nodes[-1].step or 0) + 2
-            trace.append(f"\n{header_prefix}In [{last_step_index}]:\n")
-
-        return "\n".join(trace).strip()
-
-
-@dataclass
 class Journal:
     """A collection of nodes representing the solution tree."""
 
@@ -398,7 +366,7 @@ class Journal:
                 BestNodeSelectedEvent(
                     run_id=self.run_id,
                     stage=self.stage_name,
-                    node_id=node.id,
+                    node_id=str(node.step),
                     reasoning=reasoning_text,
                 )
             )
