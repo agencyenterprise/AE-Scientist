@@ -39,7 +39,7 @@ class WebhookClient:
 
     _EVENT_PATHS: dict[EventKind, str] = {
         "run_stage_progress": "/stage-progress",
-        "run_log": "",
+        "run_log": "/run-log",
         # Sub-stage completion events are also forwarded to the web server.
         "substage_completed": "/substage-completed",
         "paper_generation_progress": "/paper-generation-progress",
@@ -73,8 +73,6 @@ class WebhookClient:
             )
 
     def publish(self, *, kind: EventKind, payload: dict[str, Any]) -> None:
-        if kind == "run_log":
-            return
         endpoint = self._EVENT_PATHS.get(kind)
         if not endpoint:
             logger.debug("No webhook endpoint configured for kind=%s", kind)

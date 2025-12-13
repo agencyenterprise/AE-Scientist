@@ -16,6 +16,7 @@ from app.api.llm_providers import LLM_PROVIDER_REGISTRY
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import ChatMessageData, ChatRequest
+from app.models.sse import ChatStreamEvent
 from app.services import SummarizerService, get_database
 from app.services.base_llm_service import FileAttachmentData
 from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
@@ -36,7 +37,18 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = Field(None, description="Additional error details")
 
 
-@router.post("/{conversation_id}/idea/chat/stream", response_model=None)
+@router.post(
+    "/{conversation_id}/idea/chat/stream",
+    response_model=ChatStreamEvent,
+    responses={
+        200: {
+            "description": "Server-sent events emitted while streaming chat responses",
+            "content": {
+                "text/event-stream": {"schema": {"$ref": "#/components/schemas/ChatStreamEvent"}}
+            },
+        }
+    },
+)
 async def stream_chat_with_idea(
     conversation_id: int, request_data: ChatRequest, request: Request, response: Response
 ) -> Union[StreamingResponse, ErrorResponse]:

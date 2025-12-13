@@ -44,6 +44,12 @@ export type ResearchCost = import("./api.gen").components["schemas"]["ResearchCo
 export type ModelCost = import("./api.gen").components["schemas"]["ModelCost"];
 export type ResearchRunCostResponse =
   import("./api.gen").components["schemas"]["ResearchRunCostResponse"];
+export type ChatStreamEvent = import("./api.gen").components["schemas"]["ChatStreamEvent"];
+export type ConversationImportStreamEvent =
+  import("./api.gen").components["schemas"]["ConversationImportStreamEvent"];
+export type ResearchRunStreamEvent =
+  import("./api.gen").components["schemas"]["ResearchRunStreamEvent"];
+export type WalletStreamEvent = import("./api.gen").components["schemas"]["WalletStreamEvent"];
 // Note: LLMPromptDeleteRequest does not exist in the schema; no alias exported.
 
 // Local-only enums/structures that are not part of the API schema
