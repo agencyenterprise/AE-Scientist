@@ -1,6 +1,7 @@
 ---
+name: adr-create-feature
 description: Standard feature implementation with research-plan-execute workflow
-tools: Read, Write, Edit, Bash, Glob, Grep, Task
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
 ---
 
 # ADR Create Feature Skill

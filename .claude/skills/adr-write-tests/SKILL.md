@@ -1,6 +1,7 @@
 ---
+name: adr-write-tests
 description: Testing patterns and templates for this project
-tools: Read, Write, Bash, Glob, Grep
+allowed-tools: Read, Write, Bash, Glob, Grep
 ---
 
 # ADR Write Tests Skill

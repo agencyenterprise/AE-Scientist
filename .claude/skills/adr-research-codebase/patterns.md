@@ -1,256 +1,204 @@
 # Codebase Patterns
 
-> AE-Scientist patterns — a research pipeline platform
+> AE-Scientist-specific patterns discovered through research
 
 ## File Organization
 
-### Frontend (Next.js)
+**Root Structure:**
 
 ```
-frontend/src/
-├── app/                    # Next.js App Router pages
-│   ├── (dashboard)/       # Dashboard route group
-│   │   ├── research/      # Research runs pages
-│   │   ├── conversations/ # Conversations pages
-│   │   └── billing/       # Billing pages
-│   └── login/             # Auth pages
-├── features/              # Feature modules
-│   ├── research/          # Research run feature
-│   │   ├── components/    # React components
-│   │   ├── hooks/         # Custom hooks
-│   │   ├── contexts/      # React contexts
-│   │   └── utils/         # Feature utilities
-│   ├── conversation/      # Conversation feature
-│   ├── project-draft/     # Draft editing feature
-│   └── model-selector/    # LLM model selection
-├── shared/                # Cross-feature shared code
-│   ├── components/        # Shared UI components
-│   ├── lib/               # Utility libraries
-│   └── providers/         # React providers
-└── types/                 # TypeScript types
-    └── api.gen.ts         # Auto-generated from OpenAPI
-```
-
-### Backend (FastAPI)
-
-```
-server/app/
-├── api/                   # FastAPI routers
-│   ├── auth.py           # Auth endpoints
-│   ├── conversations.py  # Conversation CRUD
-│   ├── research_runs.py  # Research run endpoints
-│   ├── research_pipeline_runs.py  # Pipeline management
-│   ├── billing.py        # Stripe billing
-│   └── files.py          # File uploads
-├── models/               # Pydantic models
-│   ├── research_pipeline.py  # Pipeline models
-│   ├── conversations.py      # Conversation models
-│   └── billing.py            # Billing models
-├── services/             # Business logic
-│   ├── database/         # Database access layer
-│   │   ├── base.py       # Connection pooling
-│   │   ├── conversations.py
-│   │   ├── research_pipeline_runs.py
-│   │   └── billing.py
-│   ├── research_pipeline/  # RunPod management
-│   └── scraper/            # Chat import parsers
-├── middleware/           # Auth middleware
-└── config.py             # Settings
-```
-
-### Research Pipeline
-
-```
-research_pipeline/ai_scientist/
-├── treesearch/           # Research tree search
-│   ├── stages/           # Pipeline stages
-│   └── utils/            # Tree utilities
-├── ideation/             # Idea generation
-├── llm/                  # LLM clients
-├── perform_writeup.py    # Paper generation
-├── perform_plotting.py   # Visualization
-└── perform_llm_review.py # Auto review
+AE-Scientist/
+├── frontend/              # Next.js 16 web app (React 19)
+│   └── src/
+│       ├── features/      # Feature-based modules
+│       ├── shared/        # Shared hooks, lib, components
+│       ├── types/         # TypeScript types
+│       └── app/           # Next.js app router
+├── server/                # FastAPI backend (Python 3.12)
+│   └── app/
+│       ├── api/           # Route handlers
+│       ├── services/      # Business logic
+│       ├── models/        # Pydantic models
+│       └── middleware/    # Auth, etc.
+├── orchestrator/          # Next.js orchestration (TypeScript)
+│   ├── app/api/           # API routes
+│   ├── lib/               # Repos, services, schemas, state
+│   └── components/        # React components
+├── research_pipeline/     # AI scientist ML pipeline (Python)
+│   └── ai_scientist/
+│       ├── treesearch/    # BFTS + stages
+│       ├── llm/           # LLM integrations
+│       └── telemetry/     # Event tracking
+├── adr/                   # Architecture Decision Records
+│   ├── decisions/         # ADR documents
+│   └── tasks/             # Task research/plans
+└── .claude/               # Agent system
+    ├── agents/            # Agent definitions
+    ├── commands/          # Slash commands
+    └── skills/            # Reusable skills
 ```
 
 ## Naming Conventions
 
-| Type            | Pattern                         | Example                                |
-| --------------- | ------------------------------- | -------------------------------------- |
-| Components      | PascalCase                      | `ResearchHistoryCard.tsx`              |
-| Hooks           | camelCase, use\* prefix         | `useResearchRunDetails.ts`             |
-| API Routes      | kebab-case URL, snake_case file | `/research-runs/` → `research_runs.py` |
-| Pydantic Models | PascalCase                      | `ResearchRunListItem`                  |
-| DB Functions    | snake_case                      | `list_all_research_pipeline_runs`      |
-| Feature Folders | kebab-case                      | `project-draft/`, `model-selector/`    |
+| Type                 | Pattern                 | Example                         |
+| -------------------- | ----------------------- | ------------------------------- |
+| Components           | PascalCase              | `ResearchHistoryList.tsx`       |
+| Hooks                | camelCase, use\* prefix | `useRecentResearch.ts`          |
+| TypeScript Types     | camelCase               | `research.ts`                   |
+| API Routes (Next.js) | route.ts                | `runs/[id]/route.ts`            |
+| Schemas (Zod)        | PascalCaseZ suffix      | `RunZ`, `StageZ`                |
+| Repositories         | \*.repo.ts              | `runs.repo.ts`                  |
+| FastAPI Routes       | snake_case.py           | `research_pipeline_runs.py`     |
+| Python Services      | snake_case.py           | `runpod_manager.py`             |
+| Pydantic Models      | snake_case.py           | `research_pipeline.py`          |
+| Python Classes       | PascalCase              | `RunPodManager`                 |
+| ADR Decisions        | YYYYMMDD_HHMMSS-slug.md | `20251212_120944-adr-system.md` |
+| Agent Definitions    | agent-name.md           | `adr-research-agent.md`         |
 
-## Frontend Patterns
-
-### Hook Pattern (React Query + apiFetch)
+## React Query Hook Pattern
 
 ```typescript
-// frontend/src/features/research/hooks/useResearchRunDetails.ts
-export function useResearchRunDetails({ runId }: Options): Return {
-  const [details, setDetails] = useState<ResearchRunDetails | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // SSE for real-time updates
-  const { isConnected, reconnect } = useResearchRunSSE({
-    runId,
-    enabled: !!conversationId && details?.run.status === "running",
-    onInitialData: handleInitialData,
-    onStageProgress: handleStageProgress,
+// frontend/src/features/research/hooks/useRecentResearch.ts:25-39
+export function useRecentResearch(): UseRecentResearchReturn {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["recent-research"],
+    queryFn: fetchRecentResearch,
+    staleTime: 30 * 1000,
   });
 
-  return { details, loading, error, isConnected };
+  return {
+    researchRuns: data ?? [],
+    isLoading,
+    error: error instanceof Error ? error.message : error ? "..." : null,
+    refetch,
+  };
 }
 ```
 
-### API Client Pattern
+## Repository Pattern
 
 ```typescript
-// frontend/src/shared/lib/api-client.ts
-export async function apiFetch<T>(
-  path: string,
-  options?: ApiFetchOptions,
-): Promise<T> {
-  const response = await fetch(buildRequestUrl(path), {
-    ...fetchOptions,
-    credentials: "include", // Cookie auth
-    headers: { "Content-Type": "application/json", ...headers },
-  });
+// orchestrator/lib/repos/runs.repo.ts:12-32
+export async function createRun(run: Run): Promise<Run> {
+  const dto = RunZ.parse(run);
+  const db = await getDb();
+  await db
+    .collection<Run>(COLLECTION)
+    .insertOne(dto as OptionalUnlessRequiredId<Run>);
+  return dto;
+}
 
-  if (!response.ok) {
-    if (response.status === 401) window.location.href = "/login";
-    throw new ApiError(response.status, `HTTP ${response.status}`);
-  }
-  return response.json();
+export async function updateRun(
+  id: string,
+  patch: Partial<Run>,
+): Promise<void> {
+  const db = await getDb();
+  const updateDoc = { ...patch, updatedAt: new Date() };
+  await db
+    .collection<Run>(COLLECTION)
+    .updateOne({ _id: id }, { $set: updateDoc });
 }
 ```
 
-### Component Structure
+## Schema Validation Pattern
 
 ```typescript
-// Feature component pattern
-interface Props {
-  runId: string;
-}
-
-export function ResearchRunHeader({ runId }: Props) {
-  // 1. Hooks first
-  const { details, loading } = useResearchRunDetails({ runId });
-
-  // 2. Early returns
-  if (loading) return <Skeleton />;
-
-  // 3. Derived state
-  const isRunning = details?.run.status === "running";
-
-  // 4. Handlers
-  const handleStop = async () => { /* ... */ };
-
-  // 5. Render
-  return <div>...</div>;
-}
+// orchestrator/lib/schemas/run.ts:9-14
+const StageProgressZ = z.preprocess(
+  (val: any) => {
+    // Defensive: Clamp progress to [0, 1]
+    if (val && typeof val === "object" && typeof val.progress === "number") {
+      return { ...val, progress: Math.max(0, Math.min(val.progress, 1)) };
+    }
+    return val;
+  },
+  z.object({
+    /* ... */
+  }),
+);
 ```
 
-## Backend Patterns
-
-### FastAPI Router Pattern
+## FastAPI Route Pattern
 
 ```python
-# server/app/api/research_runs.py
-router = APIRouter(prefix="/research-runs", tags=["research-runs"])
+# server/app/api/research_pipeline_runs.py:1-50
+from fastapi import APIRouter, HTTPException, Request, Depends
+from app.middleware.auth import get_current_user
+from app.models import ResearchRunDetailsResponse
+from app.services import get_database
+from app.services.database import DatabaseManager
 
-@router.get("/", response_model=ResearchRunListResponse)
-def list_research_runs(
+router = APIRouter()
+
+@router.get("/research-runs/{run_id}")
+async def get_research_run(
+    run_id: str,
     request: Request,
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    search: str = Query(None),
-) -> ResearchRunListResponse:
-    user = get_current_user(request)
-    db = get_database()
-    rows, total = db.list_all_research_pipeline_runs(limit=limit, offset=offset, user_id=user.id)
-    return ResearchRunListResponse(items=[_row_to_list_item(row) for row in rows], total=total)
+    current_user = Depends(get_current_user),
+    db: DatabaseManager = Depends(get_database)
+):
+    # Implementation
 ```
 
-### Database Service Pattern
+## Service Pattern
 
 ```python
-# server/app/services/database/base.py
-class BaseDatabaseManager(ConnectionProvider):
-    _pool: ThreadedConnectionPool | None = None
+# server/app/services/research_pipeline/runpod_manager.py:22-30
+class RunPodError(Exception):
+    """Custom exception for RunPod-related errors."""
+    pass
 
-    @contextmanager
-    def _get_connection(self) -> Iterator[connection]:
-        conn = BaseDatabaseManager._pool.getconn()
-        try:
-            yield conn
-        except Exception:
-            conn.rollback()
-            raise
-        else:
-            conn.commit()
-        finally:
-            BaseDatabaseManager._pool.putconn(conn)
+class RunPodManager:
+    """Manages RunPod GPU instance lifecycle."""
+
+    def __init__(self, config: dict):
+        # Implementation
 ```
 
-### Pydantic Model Pattern
+## Data Flow Patterns
 
-```python
-# server/app/models/research_pipeline.py
-class ResearchRunListItem(BaseModel):
-    run_id: str
-    status: str
-    idea_title: str
-    current_stage: str | None
-    progress: float | None
-    created_at: str
+**Research Run Lifecycle:**
+
+```
+Frontend (useRecentResearch.ts:8)
+  → Server API (research_pipeline_runs.py:1)
+  → Database Service (research_pipeline_runs.py:34)
+  → RunPod Manager (runpod_manager.py:441)
+  → Research Pipeline (treesearch/perform_experiments_bfts_with_agentmanager.py)
+  → Telemetry (telemetry/event_persistence.py)
+  → SSE Stream (useResearchRunSSE.ts:122)
+  → UI Updates (research-pipeline-stages.tsx:244)
 ```
 
-## Testing Patterns
+**Progress Tracking:**
 
-### Python (pytest)
-
-```python
-# server/tests/test_*.py
-@pytest.mark.asyncio
-async def test_list_research_runs():
-    response = await client.get("/research-runs/")
-    assert response.status_code == 200
-    data = response.json()
-    assert "items" in data
+```
+Pipeline Stage → Telemetry → Server Ingest → Database
+  → SSE Endpoint → Frontend Hook → State Update → Component Render
 ```
 
-### TypeScript (Vitest)
+## ADR Workflow Pattern
 
-```typescript
-// orchestrator/tests/*.test.ts
-import { describe, it, expect } from "vitest";
-
-describe("component", () => {
-  it("should render", () => {
-    // test implementation
-  });
-});
 ```
-
-## Key Integration Points
-
-| Flow         | Path                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| Auth         | Google OAuth → Cookie → `middleware/auth.py` → `get_current_user()`                        |
-| Research Run | Frontend SSE → `research_pipeline_events.py` → RunPod webhook                              |
-| Type Safety  | `server/openapi.json` → `npm run gen:api-types` → `types/api.gen.ts`                       |
-| Real-time    | `useResearchRunSSE` → EventSource → `/conversations/{id}/idea/research-run/{runId}/events` |
+/adr-feature "feature name"
+  → decision-support-agent (decision-brief.md)
+  → ux-strategy-agent (ux-strategy.md) [if frontend]
+  → research-agent (research.md)
+  → planner-agent (plan.md)
+  → executor-agent (code)
+  → review-agent (compliance check)
+```
 
 ## Discovered Patterns
 
-| Pattern            | Location                    | Usage                  |
-| ------------------ | --------------------------- | ---------------------- |
-| Feature modules    | `frontend/src/features/`    | Colocate feature code  |
-| SSE updates        | `useResearchRunSSE` hook    | Real-time run progress |
-| Connection pooling | `BaseDatabaseManager`       | Shared DB pool         |
-| OpenAPI types      | `api.gen.ts`                | Type-safe API calls    |
-| Cookie auth        | `apiFetch` with credentials | Session management     |
+| Pattern                | Location                                            | Usage                                                |
+| ---------------------- | --------------------------------------------------- | ---------------------------------------------------- |
+| Feature-based org      | `frontend/src/features/`                            | Each has components/, hooks/, utils/, contexts/      |
+| Repository pattern     | `orchestrator/lib/repos/*.repo.ts`                  | Data access abstraction                              |
+| Schema preprocessing   | `orchestrator/lib/schemas/run.ts:24-48`             | Normalize/validate before parsing                    |
+| Service layering       | `server/app/services/`                              | database/, scraper/, research_pipeline/ subdomains   |
+| Event-driven telemetry | `research_pipeline/ai_scientist/telemetry/`         | Pipeline stages emit typed events                    |
+| SSE streaming          | Server API → Frontend hooks                         | Real-time progress updates                           |
+| Stage-based pipeline   | `research_pipeline/ai_scientist/treesearch/stages/` | stage1-4 implementations                             |
+| ADR workflow           | `adr/tasks/{timestamp}-{slug}/`                     | research.md → plan.md → execution                    |
+| Agent delegation       | `.claude/agents/`                                   | Specialized agents for research, planning, execution |

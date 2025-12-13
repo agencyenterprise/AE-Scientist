@@ -101,7 +101,6 @@ export default function ResearchRunDetailPage() {
     paper_generation_progress,
     best_node_selections = [],
   } = details;
-  const latestProgress = stage_progress[stage_progress.length - 1];
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 
@@ -128,7 +127,7 @@ export default function ResearchRunDetailPage() {
         )}
 
         <ResearchRunStats
-          latestProgress={latestProgress}
+          stageProgress={stage_progress}
           gpuType={run.gpu_type}
           artifactsCount={artifacts.length}
         />

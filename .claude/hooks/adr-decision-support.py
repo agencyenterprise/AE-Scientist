@@ -99,7 +99,10 @@ def search_adrs(keywords: list[str], base_path: Path) -> list[dict]:
 
 def search_skills(keywords: list[str], base_path: Path) -> list[str]:
     """Find applicable skills."""
-    skills_path = base_path / "skills"
+    # Check both installed location and template repo location
+    skills_path = base_path / ".claude" / "skills"
+    if not skills_path.exists():
+        skills_path = base_path / "skills"
     if not skills_path.exists():
         return []
 
@@ -247,7 +250,12 @@ def main():
     context = build_context(adrs, skills, tasks, constraints)
 
     if context:
-        print(json.dumps({"additionalContext": context}))
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": context
+            }
+        }))
 
     sys.exit(0)
 

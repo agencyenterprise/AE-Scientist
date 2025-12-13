@@ -82,7 +82,12 @@ const extractStageSlug = (stageName: string): string | null => {
 
 interface StageInfo {
   status: "pending" | "in_progress" | "completed";
-  progressPercent: number;
+  /** For Stages 1-4: current iteration (1-based) */
+  iteration: number | null;
+  /** For Stages 1-4: max iterations (budget) */
+  maxIterations: number | null;
+  /** For Stage 5 only: step-based progress percent */
+  progressPercent: number | null;
   details: StageProgress | null;
 }
 
@@ -204,6 +209,14 @@ const PAPER_GENERATION_STEPS = [
   { key: "paper_review", label: "Paper Review" },
 ] as const;
 
+// Step key to display name mapping for Stage 5 header
+const STEP_LABELS: Record<string, string> = {
+  plot_aggregation: "Plot Aggregation",
+  citation_gathering: "Citation Gathering",
+  paper_writeup: "Paper Writeup",
+  paper_review: "Paper Review",
+};
+
 /**
  * Get segments for paper generation (Stage 5)
  * Shows only completed and current steps
@@ -247,6 +260,8 @@ export function ResearchPipelineStages({
       if (paperGenerationProgress.length === 0) {
         return {
           status: "pending",
+          iteration: null,
+          maxIterations: null,
           progressPercent: 0,
           details: null,
         };
@@ -256,6 +271,8 @@ export function ResearchPipelineStages({
       if (!latestEvent) {
         return {
           status: "pending",
+          iteration: null,
+          maxIterations: null,
           progressPercent: 0,
           details: null,
         };
@@ -271,6 +288,8 @@ export function ResearchPipelineStages({
 
       return {
         status,
+        iteration: null,
+        maxIterations: null,
         progressPercent,
         details: null, // Paper generation doesn't use StageProgress type
       };
@@ -286,6 +305,8 @@ export function ResearchPipelineStages({
     if (stageProgresses.length === 0) {
       return {
         status: "pending",
+        iteration: null,
+        maxIterations: null,
         progressPercent: 0,
         details: null,
       };
@@ -296,15 +317,20 @@ export function ResearchPipelineStages({
     if (!latestProgress) {
       return {
         status: "pending",
+        iteration: null,
+        maxIterations: null,
         progressPercent: 0,
         details: null,
       };
     }
     const progressPercent = Math.round(latestProgress.progress * 100);
 
-    // Determine status based on progress value
+    // Determine status based on progress value OR good_nodes (early completion)
+    // A stage is completed when:
+    // 1. progress >= 1.0 (exhausted all iterations), OR
+    // 2. good_nodes >= 1 (found a successful result early - search succeeded)
     let status: "pending" | "in_progress" | "completed";
-    if (latestProgress.progress >= 1.0) {
+    if (latestProgress.progress >= 1.0 || latestProgress.good_nodes >= 1) {
       status = "completed";
     } else if (latestProgress.progress > 0) {
       status = "in_progress";
@@ -314,6 +340,8 @@ export function ResearchPipelineStages({
 
     return {
       status,
+      iteration: latestProgress.iteration,
+      maxIterations: latestProgress.max_iterations,
       progressPercent,
       details: latestProgress,
     };
@@ -335,6 +363,15 @@ export function ResearchPipelineStages({
             ? null
             : getBestNodeForStage(stage.key, bestNodeSelections);
 
+          const latestPaperEvent =
+            isPaperGeneration && paperGenerationProgress.length > 0
+              ? paperGenerationProgress[paperGenerationProgress.length - 1]
+              : null;
+
+          const currentStepIndex = latestPaperEvent?.step
+            ? PAPER_GENERATION_STEPS.findIndex(s => s.key === latestPaperEvent.step)
+            : -1;
+
           return (
             <div key={stage.id} className="flex flex-col gap-3">
               {/* Stage header with title, description, and status */}
@@ -342,8 +379,36 @@ export function ResearchPipelineStages({
                 <div className="flex flex-col gap-1">
                   <h3 className="text-base font-semibold text-white">
                     Stage {stage.id}: {stage.title}
-                    {info.status !== "pending" && (
-                      <span className="ml-2 text-slate-400">({info.progressPercent}%)</span>
+                    {/* Stages 1-4: Show iteration count for in_progress */}
+                    {info.status === "in_progress" &&
+                      !isPaperGeneration &&
+                      info.iteration !== null && (
+                        <span className="ml-2 text-slate-400">
+                          — Iteration {info.iteration} of {info.maxIterations}
+                        </span>
+                      )}
+                    {/* Stages 1-4: Show completion iteration count for completed */}
+                    {info.status === "completed" &&
+                      !isPaperGeneration &&
+                      info.iteration !== null && (
+                        <span className="ml-2 text-slate-400">
+                          — Completed in {info.iteration} iterations
+                        </span>
+                      )}
+                    {/* Stage 5: Show step name + step count for in_progress */}
+                    {isPaperGeneration &&
+                      info.status === "in_progress" &&
+                      latestPaperEvent?.step && (
+                        <span className="ml-2 text-slate-400">
+                          — {STEP_LABELS[latestPaperEvent.step]} (Step {currentStepIndex + 1} of{" "}
+                          {PAPER_GENERATION_STEPS.length})
+                        </span>
+                      )}
+                    {/* Stage 5: Show completed message */}
+                    {isPaperGeneration && info.status === "completed" && (
+                      <span className="ml-2 text-slate-400">
+                        — Completed in {PAPER_GENERATION_STEPS.length} steps
+                      </span>
                     )}
                   </h3>
                 </div>

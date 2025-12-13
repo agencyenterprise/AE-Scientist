@@ -4,15 +4,16 @@
 
 ## Available Skills
 
-| Skill | Description | Location |
-|-------|-------------|----------|
-| `adr-research-codebase` | Explore this codebase efficiently | `.claude/skills/adr-research-codebase/` |
-| `adr-create-feature` | Standard feature implementation workflow | `.claude/skills/adr-create-feature/` |
-| `adr-write-tests` | Testing patterns for this project | `.claude/skills/adr-write-tests/` |
+| Skill                   | Description                                                         | Location                                |
+| ----------------------- | ------------------------------------------------------------------- | --------------------------------------- |
+| `adr-research-codebase` | Explore AE-Scientist codebase efficiently (TypeScript, Python, MDX) | `.claude/skills/adr-research-codebase/` |
+| `adr-create-feature`    | Standard feature implementation workflow                            | `.claude/skills/adr-create-feature/`    |
+| `adr-write-tests`       | Testing patterns for this project                                   | `.claude/skills/adr-write-tests/`       |
 
 ## Usage
 
 To activate a skill, read its SKILL.md:
+
 ```
 Read .claude/skills/adr-{skill-name}/SKILL.md
 ```
