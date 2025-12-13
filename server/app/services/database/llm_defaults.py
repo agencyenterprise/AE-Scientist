@@ -41,7 +41,7 @@ class LLMDefaultsMixin(ConnectionProvider):
                     return DefaultLLMParametersData(**result)
 
         return DefaultLLMParametersData(
-            llm_model="gpt-4o",
+            llm_model="gpt-5.2",
             llm_provider="openai",
         )
 
