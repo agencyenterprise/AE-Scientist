@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
@@ -121,10 +121,37 @@ class PhaseSummaryEnvelope:
 
 
 class PhaseSummaryLLMResponse(BaseModel):
-    summary: str
-    steering_guidance: list[str]
-    confidence: Literal["high", "medium", "low"]
-    goal_alignment: Literal["on_track", "at_risk", "blocked"]
+    summary: str = Field(
+        ...,
+        description=(
+            "2‑4 sentences that synthesize the phase outcome for the user. "
+            "Highlight decisive experiments, artifact references, and plan progress."
+        ),
+    )
+    steering_guidance: list[str] = Field(
+        ...,
+        description=(
+            "0‑3 actionable suggestions (short imperatives) the user could take next. "
+            "Only include guidance that materially affects the next steps."
+        ),
+    )
+    confidence: Literal["high", "medium", "low"] = Field(
+        ...,
+        description=(
+            "Confidence in the summary based on available evidence: "
+            "'high' when multiple successful signals align, "
+            "'medium' when evidence is mixed, "
+            "and 'low' when results are sparse or conflicting."
+        ),
+    )
+    goal_alignment: Literal["on_track", "at_risk", "blocked"] = Field(
+        ...,
+        description=(
+            "'on_track' when current evidence meets phase goals, "
+            "'at_risk' when more work is needed but progress exists, "
+            "'blocked' when objectives cannot be met without external changes."
+        ),
+    )
 
 
 def _collect_phase_decisions(*, journal: "Journal") -> list[dict[str, str]]:
@@ -404,6 +431,7 @@ def build_phase_summary(
         "(5) whether progress is on_track, at_risk, or blocked. "
         "Offer concrete steering suggestions if progress is uncertain."
     )
+    logger.debug("System prompt: %s", system_prompt)
     llm_response = structured_query_with_schema(
         system_message=system_prompt,
         user_message=user_payload,
