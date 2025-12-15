@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -359,6 +359,7 @@ class FakeRunner:
             ("4_ablation_studies_1_first_attempt", 5),
         ]
         self._heartbeat_interval_seconds = 10
+        self._periodic_log_interval_seconds = 15
         webhook_client = WebhookClient(
             base_url=self._webhook_url,
             token=self._webhook_token,
@@ -377,6 +378,8 @@ class FakeRunner:
             self._persistence = LocalPersistence(webhook_client)
         self._webhook_client: Any = getattr(self._persistence, "_webhook_client", None)
         self._heartbeat_stop = threading.Event()
+        self._log_stop = threading.Event()
+        self._log_thread: Optional[threading.Thread] = None
         self._data_dir = Path(__file__).parent / "fake_run_pod_data"
         self._plot_filename: str | None = None
 
@@ -391,6 +394,11 @@ class FakeRunner:
             target=self._heartbeat_loop, name=f"heartbeat-{self._run_id}", daemon=True
         )
         heartbeat_thread.start()
+        log_thread = threading.Thread(
+            target=self._log_generator_loop, name=f"loggen-{self._run_id}", daemon=True
+        )
+        log_thread.start()
+        self._log_thread = log_thread
         logger.info(
             "[FakeRunner %s] Heartbeat thread started (interval=%ds)",
             self._run_id[:8],
@@ -403,7 +411,10 @@ class FakeRunner:
             self._publish_run_finished(True, "")
         finally:
             self._heartbeat_stop.set()
+            self._log_stop.set()
             heartbeat_thread.join(timeout=self._heartbeat_interval_seconds + 1)
+            if self._log_thread is not None:
+                self._log_thread.join(timeout=self._periodic_log_interval_seconds + 1)
             self._persistence.stop()
             logger.info("FakeRunner stopped for run_id=%s", self._run_id)
             logger.info("[FakeRunner %s] Simulation complete", self._run_id[:8])
@@ -421,6 +432,18 @@ class FakeRunner:
             except Exception:
                 logger.exception("Failed to publish heartbeat for run %s", self._run_id)
             self._heartbeat_stop.wait(timeout=self._heartbeat_interval_seconds)
+
+    def _log_generator_loop(self) -> None:
+        counter = 1
+        while not self._log_stop.is_set():
+            message = f"[FakeRunner {self._run_id[:8]}] periodic log #{counter}"
+            payload = {"message": message, "level": "info"}
+            try:
+                self._persistence.queue.put(PersistableEvent(kind="run_log", data=payload))
+            except Exception:
+                logger.exception("Failed to enqueue periodic log for run %s", self._run_id)
+            counter += 1
+            self._log_stop.wait(timeout=self._periodic_log_interval_seconds)
 
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage

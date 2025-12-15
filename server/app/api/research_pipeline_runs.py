@@ -25,6 +25,7 @@ from app.models import (
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
+    ResearchRunStreamEvent,
     ResearchRunSubstageEvent,
     TreeVizItem,
 )
@@ -57,6 +58,23 @@ router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
 REQUESTER_NAME_FALLBACK = "Scientist"
+_RUN_LOG_QUEUES: dict[str, asyncio.Queue[ResearchRunLogEntry]] = {}
+
+
+def _get_run_log_queue(run_id: str) -> asyncio.Queue[ResearchRunLogEntry]:
+    queue = _RUN_LOG_QUEUES.get(run_id)
+    if queue is None:
+        queue = asyncio.Queue(maxsize=1000)
+        _RUN_LOG_QUEUES[run_id] = queue
+    return queue
+
+
+def publish_run_log_event(run_id: str, log_entry: ResearchRunLogEntry) -> None:
+    queue = _get_run_log_queue(run_id)
+    try:
+        queue.put_nowait(log_entry)
+    except asyncio.QueueFull:
+        logger.warning("Dropping run log event for run_id=%s due to full queue", run_id)
 
 
 def extract_first_name(*, full_name: str) -> str:
@@ -827,7 +845,20 @@ def _is_meaningful_progress_change(
     return False
 
 
-@router.get("/{conversation_id}/idea/research-run/{run_id}/events")
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/events",
+    response_model=ResearchRunStreamEvent,
+    responses={
+        200: {
+            "description": "Research pipeline progress events",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ResearchRunStreamEvent"}
+                }
+            },
+        }
+    },
+)
 async def stream_research_run_events(
     conversation_id: int,
     run_id: str,
@@ -850,6 +881,8 @@ async def stream_research_run_events(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
+    log_queue = _get_run_log_queue(run_id)
+
     async def event_generator() -> AsyncGenerator[str, None]:
         """Generate SSE events until the run completes or client disconnects."""
         last_progress_event: Optional[StageProgressEvent] = None
@@ -858,6 +891,7 @@ async def stream_research_run_events(
         initial_sent = False
         last_run_event_id: Optional[int] = None
         last_best_node_event_id: Optional[int] = None
+        last_log_event_id: Optional[int] = None
 
         while True:
             # Check if client is still connected
@@ -882,6 +916,8 @@ async def stream_research_run_events(
                         _log_event_to_model(e).model_dump()
                         for e in db.list_run_log_events(run_id=run_id)
                     ]
+                    if log_events:
+                        last_log_event_id = max(event["id"] for event in log_events)
                     substage_events = [
                         _node_event_to_model(e).model_dump()
                         for e in db.list_substage_completed_events(run_id=run_id)
@@ -951,6 +987,30 @@ async def stream_research_run_events(
                     for event in new_events:
                         yield f"data: {json.dumps({'type': 'run_event', 'data': _run_event_to_model(event).model_dump()})}\n\n"
                         last_run_event_id = event.id
+
+                if last_log_event_id is None:
+                    latest_log = db.list_run_log_events(run_id=run_id, limit=1)
+                    if latest_log:
+                        last_log_event_id = latest_log[0].id
+                else:
+                    new_logs = db.list_run_log_events_after_id(
+                        run_id=run_id, last_id=last_log_event_id, limit=100
+                    )
+                    if new_logs:
+                        for log_event in new_logs:
+                            payload = _log_event_to_model(log_event).model_dump()
+                            yield f"data: {json.dumps({'type': 'log', 'data': payload})}\n\n"
+                        last_log_event_id = new_logs[-1].id
+
+                while True:
+                    try:
+                        queued_log = log_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    payload = queued_log.model_dump()
+                    yield f"data: {json.dumps({'type': 'log', 'data': payload})}\n\n"
+                    if last_log_event_id is None or payload["id"] > last_log_event_id:
+                        last_log_event_id = payload["id"]
 
                 best_node_events = db.list_best_node_reasoning_events(run_id=run_id)
                 if best_node_events:

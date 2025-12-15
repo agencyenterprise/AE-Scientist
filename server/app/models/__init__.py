@@ -89,6 +89,12 @@ from app.models.research_pipeline import (
     ResearchRunSubstageEvent,
     TreeVizItem,
 )
+from app.models.sse import (
+    ChatStreamEvent,
+    ConversationImportStreamEvent,
+    ResearchRunStreamEvent,
+    WalletStreamEvent,
+)
 
 __all__ = [
     # Conversation models
@@ -164,4 +170,9 @@ __all__ = [
     "CreditPackListResponse",
     "CheckoutSessionCreateRequest",
     "CheckoutSessionCreateResponse",
+    # SSE models
+    "ChatStreamEvent",
+    "ConversationImportStreamEvent",
+    "ResearchRunStreamEvent",
+    "WalletStreamEvent",
 ]

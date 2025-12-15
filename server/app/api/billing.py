@@ -22,6 +22,7 @@ from app.models import (
     CreditPackListResponse,
     CreditPackModel,
     CreditTransactionModel,
+    WalletStreamEvent,
 )
 from app.services import get_database
 from app.services.billing_service import BillingService
@@ -103,7 +104,18 @@ def create_checkout_session(
     return CheckoutSessionCreateResponse(checkout_url=cast(HttpUrl, checkout_url))
 
 
-@router.get("/wallet/stream")
+@router.get(
+    "/wallet/stream",
+    response_model=WalletStreamEvent,
+    responses={
+        200: {
+            "description": "Wallet balance updates and heartbeats",
+            "content": {
+                "text/event-stream": {"schema": {"$ref": "#/components/schemas/WalletStreamEvent"}}
+            },
+        }
+    },
+)
 async def stream_wallet(request: Request) -> StreamingResponse:
     """
     Stream wallet balance updates for the authenticated user.

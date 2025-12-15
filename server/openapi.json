@@ -357,10 +357,17 @@
         "operationId": "stream_wallet_api_billing_wallet_stream_get",
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Wallet balance updates and heartbeats",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WalletStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletStreamEvent"
+                }
               }
             }
           }
@@ -463,10 +470,17 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Server-sent events emitted while streaming chat responses",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
               }
             }
           },
@@ -519,10 +533,17 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Server-sent events emitted while importing a conversation",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationImportStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationImportStreamEvent"
+                }
               }
             }
           },
@@ -556,10 +577,17 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Server-sent events emitted while generating an idea from manual seed data",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationImportStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationImportStreamEvent"
+                }
               }
             }
           },
@@ -1831,6 +1859,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/run-log": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Run Log",
+        "operationId": "ingest_run_log_api_research_pipeline_events_run_log_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunLogPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/run-started": {
       "post": {
         "tags": [
@@ -2481,10 +2554,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Research pipeline progress events",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
+                }
               }
             }
           },
@@ -3027,6 +3107,185 @@
         "title": "ChatRequest",
         "description": "Request model for sending a chat message."
       },
+      "ChatStatus": {
+        "type": "string",
+        "enum": [
+          "analyzing_request",
+          "executing_tools",
+          "getting_idea",
+          "updating_idea",
+          "generating_response",
+          "done"
+        ],
+        "title": "ChatStatus",
+        "description": "Status enum for chat operations."
+      },
+      "ChatStreamContentEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "content",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamContentEvent"
+      },
+      "ChatStreamConversationLockedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "conversation_locked",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamConversationLockedEvent"
+      },
+      "ChatStreamDoneData": {
+        "properties": {
+          "idea_updated": {
+            "type": "boolean",
+            "title": "Idea Updated"
+          },
+          "assistant_response": {
+            "type": "string",
+            "title": "Assistant Response"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idea_updated",
+          "assistant_response"
+        ],
+        "title": "ChatStreamDoneData",
+        "description": "Final payload emitted when chat streaming completes."
+      },
+      "ChatStreamDoneEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "done",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ChatStreamDoneData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamDoneEvent"
+      },
+      "ChatStreamErrorEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamErrorEvent"
+      },
+      "ChatStreamEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatStreamStatusEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ChatStreamContentEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ChatStreamIdeaUpdatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ChatStreamConversationLockedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ChatStreamErrorEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ChatStreamDoneEvent"
+          }
+        ],
+        "title": "ChatStreamEvent",
+        "description": "Root model exposed in OpenAPI for chat SSE events.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "content": "#/components/schemas/ChatStreamContentEvent",
+            "conversation_locked": "#/components/schemas/ChatStreamConversationLockedEvent",
+            "done": "#/components/schemas/ChatStreamDoneEvent",
+            "error": "#/components/schemas/ChatStreamErrorEvent",
+            "idea_updated": "#/components/schemas/ChatStreamIdeaUpdatedEvent",
+            "status": "#/components/schemas/ChatStreamStatusEvent"
+          }
+        }
+      },
+      "ChatStreamIdeaUpdatedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "idea_updated",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamIdeaUpdatedEvent"
+      },
+      "ChatStreamStatusEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "status",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ChatStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ChatStreamStatusEvent"
+      },
       "CheckoutSessionCreateRequest": {
         "properties": {
           "price_id": {
@@ -3100,6 +3359,347 @@
           "cost_by_research"
         ],
         "title": "ConversationCostResponse"
+      },
+      "ConversationImportConflictData": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationImportConflictItem"
+            },
+            "type": "array",
+            "title": "Conversations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversations"
+        ],
+        "title": "ConversationImportConflictData"
+      },
+      "ConversationImportConflictEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "conflict",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationImportConflictData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportConflictEvent"
+      },
+      "ConversationImportConflictItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "updated_at",
+          "url"
+        ],
+        "title": "ConversationImportConflictItem"
+      },
+      "ConversationImportContentEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "content",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportContentEvent"
+      },
+      "ConversationImportDoneData": {
+        "properties": {
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idea": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Idea"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "title": "ConversationImportDoneData"
+      },
+      "ConversationImportDoneEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "done",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationImportDoneData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportDoneEvent"
+      },
+      "ConversationImportErrorEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportErrorEvent"
+      },
+      "ConversationImportModelLimitData": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ConversationImportModelLimitData"
+      },
+      "ConversationImportModelLimitEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "model_limit_conflict",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationImportModelLimitData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportModelLimitEvent"
+      },
+      "ConversationImportProgressEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "progress",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConversationImportProgressPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportProgressEvent"
+      },
+      "ConversationImportProgressPayload": {
+        "properties": {
+          "phase": {
+            "type": "string",
+            "title": "Phase"
+          },
+          "current": {
+            "type": "integer",
+            "title": "Current"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phase",
+          "current",
+          "total"
+        ],
+        "title": "ConversationImportProgressPayload"
+      },
+      "ConversationImportSectionUpdateEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "section_update",
+            "title": "Type"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "field",
+          "data"
+        ],
+        "title": "ConversationImportSectionUpdateEvent"
+      },
+      "ConversationImportStateEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "state",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "enum": [
+              "importing",
+              "creating_manual_seed",
+              "summarizing",
+              "generating"
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportStateEvent"
+      },
+      "ConversationImportStreamEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ConversationImportSectionUpdateEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportStateEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportConflictEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportModelLimitEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportErrorEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportDoneEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportContentEvent"
+          }
+        ],
+        "title": "ConversationImportStreamEvent",
+        "description": "Root model for conversation import SSE stream events.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "conflict": "#/components/schemas/ConversationImportConflictEvent",
+            "content": "#/components/schemas/ConversationImportContentEvent",
+            "done": "#/components/schemas/ConversationImportDoneEvent",
+            "error": "#/components/schemas/ConversationImportErrorEvent",
+            "model_limit_conflict": "#/components/schemas/ConversationImportModelLimitEvent",
+            "progress": "#/components/schemas/ConversationImportProgressEvent",
+            "section_update": "#/components/schemas/ConversationImportSectionUpdateEvent",
+            "state": "#/components/schemas/ConversationImportStateEvent"
+          }
+        }
       },
       "ConversationListItem": {
         "properties": {
@@ -4715,6 +5315,24 @@
         ],
         "title": "ResearchRunArtifactMetadata"
       },
+      "ResearchRunBestNodeEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "best_node_selection",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunBestNodeEvent"
+      },
       "ResearchRunBestNodeSelection": {
         "properties": {
           "id": {
@@ -4752,6 +5370,44 @@
           "created_at"
         ],
         "title": "ResearchRunBestNodeSelection"
+      },
+      "ResearchRunCompleteData": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ResearchRunCompleteData"
+      },
+      "ResearchRunCompleteEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "complete",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunCompleteData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunCompleteEvent"
       },
       "ResearchRunCostResponse": {
         "properties": {
@@ -4851,6 +5507,25 @@
         ],
         "title": "ResearchRunDetailsResponse"
       },
+      "ResearchRunErrorEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunErrorEvent"
+      },
       "ResearchRunEvent": {
         "properties": {
           "id": {
@@ -4888,6 +5563,32 @@
           "occurred_at"
         ],
         "title": "ResearchRunEvent"
+      },
+      "ResearchRunHeartbeatEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "heartbeat",
+            "title": "Type"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "ResearchRunHeartbeatEvent"
       },
       "ResearchRunInfo": {
         "properties": {
@@ -5052,6 +5753,100 @@
           "updated_at"
         ],
         "title": "ResearchRunInfo"
+      },
+      "ResearchRunInitialEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "initial",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunInitialEventData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunInitialEvent"
+      },
+      "ResearchRunInitialEventData": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ResearchRunInfo"
+          },
+          "stage_progress": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageProgress"
+            },
+            "type": "array",
+            "title": "Stage Progress"
+          },
+          "logs": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunLogEntry"
+            },
+            "type": "array",
+            "title": "Logs"
+          },
+          "substage_events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunSubstageEvent"
+            },
+            "type": "array",
+            "title": "Substage Events"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "tree_viz": {
+            "items": {
+              "$ref": "#/components/schemas/TreeVizItem"
+            },
+            "type": "array",
+            "title": "Tree Viz"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "paper_generation_progress": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunPaperGenerationProgress"
+            },
+            "type": "array",
+            "title": "Paper Generation Progress"
+          },
+          "best_node_selections": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
+            },
+            "type": "array",
+            "title": "Best Node Selections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "stage_progress",
+          "logs",
+          "substage_events",
+          "artifacts",
+          "tree_viz",
+          "events",
+          "paper_generation_progress",
+          "best_node_selections"
+        ],
+        "title": "ResearchRunInitialEventData"
       },
       "ResearchRunListItem": {
         "properties": {
@@ -5243,6 +6038,42 @@
         ],
         "title": "ResearchRunLogEntry"
       },
+      "ResearchRunLogEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "log",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunLogEntry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunLogEvent"
+      },
+      "ResearchRunPaperGenerationEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "paper_generation_progress",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunPaperGenerationProgress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunPaperGenerationEvent"
+      },
       "ResearchRunPaperGenerationProgress": {
         "properties": {
           "id": {
@@ -5311,6 +6142,24 @@
           "created_at"
         ],
         "title": "ResearchRunPaperGenerationProgress"
+      },
+      "ResearchRunRunEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "run_event",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunRunEvent"
       },
       "ResearchRunStageProgress": {
         "properties": {
@@ -5404,6 +6253,24 @@
         ],
         "title": "ResearchRunStageProgress"
       },
+      "ResearchRunStageProgressEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "stage_progress",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageProgress"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageProgressEvent"
+      },
       "ResearchRunStopResponse": {
         "properties": {
           "run_id": {
@@ -5426,6 +6293,53 @@
           "message"
         ],
         "title": "ResearchRunStopResponse"
+      },
+      "ResearchRunStreamEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ResearchRunInitialEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunCompleteEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunStageProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunRunEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunLogEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunPaperGenerationEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunErrorEvent"
+          }
+        ],
+        "title": "ResearchRunStreamEvent",
+        "description": "Root model for research pipeline SSE events.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
+            "complete": "#/components/schemas/ResearchRunCompleteEvent",
+            "error": "#/components/schemas/ResearchRunErrorEvent",
+            "heartbeat": "#/components/schemas/ResearchRunHeartbeatEvent",
+            "initial": "#/components/schemas/ResearchRunInitialEvent",
+            "log": "#/components/schemas/ResearchRunLogEvent",
+            "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
+            "run_event": "#/components/schemas/ResearchRunRunEvent",
+            "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent"
+          }
+        }
       },
       "ResearchRunSubstageEvent": {
         "properties": {
@@ -5653,6 +6567,41 @@
           "success"
         ],
         "title": "RunFinishedPayload"
+      },
+      "RunLogEvent": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level",
+            "default": "info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "RunLogEvent"
+      },
+      "RunLogPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/RunLogEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "RunLogPayload"
       },
       "RunStartedPayload": {
         "properties": {
@@ -5966,6 +6915,82 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WalletCreditsData": {
+        "properties": {
+          "balance": {
+            "type": "integer",
+            "title": "Balance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "balance"
+        ],
+        "title": "WalletCreditsData"
+      },
+      "WalletCreditsEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "credits",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WalletCreditsData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "WalletCreditsEvent"
+      },
+      "WalletHeartbeatEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "heartbeat",
+            "title": "Type"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "WalletHeartbeatEvent"
+      },
+      "WalletStreamEvent": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/WalletCreditsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/WalletHeartbeatEvent"
+          }
+        ],
+        "title": "WalletStreamEvent",
+        "description": "Root model for wallet SSE updates.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "credits": "#/components/schemas/WalletCreditsEvent",
+            "heartbeat": "#/components/schemas/WalletHeartbeatEvent"
+          }
+        }
       }
     }
   }

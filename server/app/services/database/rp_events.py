@@ -128,6 +128,22 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 rows = cursor.fetchall() or []
         return [RunLogEvent(**row) for row in rows]
 
+    def list_run_log_events_after_id(
+        self, run_id: str, last_id: int, *, limit: int = 100
+    ) -> List[RunLogEvent]:
+        query = """
+            SELECT id, run_id, message, level, created_at
+            FROM rp_run_log_events
+            WHERE run_id = %s AND id > %s
+            ORDER BY id ASC
+            LIMIT %s
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id, last_id, limit))
+                rows = cursor.fetchall() or []
+        return [RunLogEvent(**row) for row in rows]
+
     def get_latest_stage_progress(self, run_id: str) -> Optional[StageProgressEvent]:
         """Fetch the most recent stage progress event for a run."""
         query = """

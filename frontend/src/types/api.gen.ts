@@ -757,6 +757,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/run-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Run Log */
+        post: operations["ingest_run_log_api_research_pipeline_events_run_log_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/run-started": {
         parameters: {
             query?: never;
@@ -1313,6 +1330,85 @@ export interface components {
              */
             attachment_ids?: number[];
         };
+        /**
+         * ChatStatus
+         * @description Status enum for chat operations.
+         * @enum {string}
+         */
+        ChatStatus: "analyzing_request" | "executing_tools" | "getting_idea" | "updating_idea" | "generating_response" | "done";
+        /** ChatStreamContentEvent */
+        ChatStreamContentEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "content";
+            /** Data */
+            data: string;
+        };
+        /** ChatStreamConversationLockedEvent */
+        ChatStreamConversationLockedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conversation_locked";
+            /** Data */
+            data: string;
+        };
+        /**
+         * ChatStreamDoneData
+         * @description Final payload emitted when chat streaming completes.
+         */
+        ChatStreamDoneData: {
+            /** Idea Updated */
+            idea_updated: boolean;
+            /** Assistant Response */
+            assistant_response: string;
+        };
+        /** ChatStreamDoneEvent */
+        ChatStreamDoneEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
+            data: components["schemas"]["ChatStreamDoneData"];
+        };
+        /** ChatStreamErrorEvent */
+        ChatStreamErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Data */
+            data: string;
+        };
+        /**
+         * ChatStreamEvent
+         * @description Root model exposed in OpenAPI for chat SSE events.
+         */
+        ChatStreamEvent: components["schemas"]["ChatStreamStatusEvent"] | components["schemas"]["ChatStreamContentEvent"] | components["schemas"]["ChatStreamIdeaUpdatedEvent"] | components["schemas"]["ChatStreamConversationLockedEvent"] | components["schemas"]["ChatStreamErrorEvent"] | components["schemas"]["ChatStreamDoneEvent"];
+        /** ChatStreamIdeaUpdatedEvent */
+        ChatStreamIdeaUpdatedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "idea_updated";
+            /** Data */
+            data: string;
+        };
+        /** ChatStreamStatusEvent */
+        ChatStreamStatusEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "status";
+            data: components["schemas"]["ChatStatus"];
+        };
         /** CheckoutSessionCreateRequest */
         CheckoutSessionCreateRequest: {
             /** Price Id */
@@ -1345,6 +1441,133 @@ export interface components {
             /** Cost By Research */
             cost_by_research: components["schemas"]["ResearchCost"][];
         };
+        /** ConversationImportConflictData */
+        ConversationImportConflictData: {
+            /** Conversations */
+            conversations: components["schemas"]["ConversationImportConflictItem"][];
+        };
+        /** ConversationImportConflictEvent */
+        ConversationImportConflictEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "conflict";
+            data: components["schemas"]["ConversationImportConflictData"];
+        };
+        /** ConversationImportConflictItem */
+        ConversationImportConflictItem: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string;
+            /** Url */
+            url: string;
+        };
+        /** ConversationImportContentEvent */
+        ConversationImportContentEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "content";
+            /** Data */
+            data: string;
+        };
+        /** ConversationImportDoneData */
+        ConversationImportDoneData: {
+            conversation?: components["schemas"]["ConversationResponse"] | null;
+            idea?: components["schemas"]["Idea"] | null;
+            /** Error */
+            error?: string | null;
+        };
+        /** ConversationImportDoneEvent */
+        ConversationImportDoneEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "done";
+            data: components["schemas"]["ConversationImportDoneData"];
+        };
+        /** ConversationImportErrorEvent */
+        ConversationImportErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Data */
+            data: string;
+            /** Code */
+            code?: string | null;
+        };
+        /** ConversationImportModelLimitData */
+        ConversationImportModelLimitData: {
+            /** Message */
+            message: string;
+            /** Suggestion */
+            suggestion?: string | null;
+        };
+        /** ConversationImportModelLimitEvent */
+        ConversationImportModelLimitEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "model_limit_conflict";
+            data: components["schemas"]["ConversationImportModelLimitData"];
+        };
+        /** ConversationImportProgressEvent */
+        ConversationImportProgressEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "progress";
+            data: components["schemas"]["ConversationImportProgressPayload"];
+        };
+        /** ConversationImportProgressPayload */
+        ConversationImportProgressPayload: {
+            /** Phase */
+            phase: string;
+            /** Current */
+            current: number;
+            /** Total */
+            total: number;
+        };
+        /** ConversationImportSectionUpdateEvent */
+        ConversationImportSectionUpdateEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "section_update";
+            /** Field */
+            field: string;
+            /** Data */
+            data: string;
+        };
+        /** ConversationImportStateEvent */
+        ConversationImportStateEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "state";
+            /**
+             * Data
+             * @enum {string}
+             */
+            data: "importing" | "creating_manual_seed" | "summarizing" | "generating";
+        };
+        /**
+         * ConversationImportStreamEvent
+         * @description Root model for conversation import SSE stream events.
+         */
+        ConversationImportStreamEvent: components["schemas"]["ConversationImportSectionUpdateEvent"] | components["schemas"]["ConversationImportStateEvent"] | components["schemas"]["ConversationImportProgressEvent"] | components["schemas"]["ConversationImportConflictEvent"] | components["schemas"]["ConversationImportModelLimitEvent"] | components["schemas"]["ConversationImportErrorEvent"] | components["schemas"]["ConversationImportDoneEvent"] | components["schemas"]["ConversationImportContentEvent"];
         /**
          * ConversationListItem
          * @description Response model for dashboard list view.
@@ -2330,6 +2553,15 @@ export interface components {
              */
             download_path: string;
         };
+        /** ResearchRunBestNodeEvent */
+        ResearchRunBestNodeEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "best_node_selection";
+            data: components["schemas"]["ResearchRunBestNodeSelection"];
+        };
         /** ResearchRunBestNodeSelection */
         ResearchRunBestNodeSelection: {
             /**
@@ -2357,6 +2589,23 @@ export interface components {
              * @description ISO timestamp when the reasoning was recorded
              */
             created_at: string;
+        };
+        /** ResearchRunCompleteData */
+        ResearchRunCompleteData: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+        };
+        /** ResearchRunCompleteEvent */
+        ResearchRunCompleteEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "complete";
+            data: components["schemas"]["ResearchRunCompleteData"];
         };
         /** ResearchRunCostResponse */
         ResearchRunCostResponse: {
@@ -2410,6 +2659,16 @@ export interface components {
              */
             paper_generation_progress?: components["schemas"]["ResearchRunPaperGenerationProgress"][];
         };
+        /** ResearchRunErrorEvent */
+        ResearchRunErrorEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "error";
+            /** Data */
+            data: string;
+        };
         /** ResearchRunEvent */
         ResearchRunEvent: {
             /**
@@ -2439,6 +2698,18 @@ export interface components {
              * @description ISO timestamp when the event was recorded
              */
             occurred_at: string;
+        };
+        /** ResearchRunHeartbeatEvent */
+        ResearchRunHeartbeatEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "heartbeat";
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ResearchRunInfo */
         ResearchRunInfo: {
@@ -2528,6 +2799,35 @@ export interface components {
              * @description ISO timestamp representing the start deadline window
              */
             start_deadline_at?: string | null;
+        };
+        /** ResearchRunInitialEvent */
+        ResearchRunInitialEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "initial";
+            data: components["schemas"]["ResearchRunInitialEventData"];
+        };
+        /** ResearchRunInitialEventData */
+        ResearchRunInitialEventData: {
+            run: components["schemas"]["ResearchRunInfo"];
+            /** Stage Progress */
+            stage_progress: components["schemas"]["ResearchRunStageProgress"][];
+            /** Logs */
+            logs: components["schemas"]["ResearchRunLogEntry"][];
+            /** Substage Events */
+            substage_events: components["schemas"]["ResearchRunSubstageEvent"][];
+            /** Artifacts */
+            artifacts: components["schemas"]["ResearchRunArtifactMetadata"][];
+            /** Tree Viz */
+            tree_viz: components["schemas"]["TreeVizItem"][];
+            /** Events */
+            events: components["schemas"]["ResearchRunEvent"][];
+            /** Paper Generation Progress */
+            paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
+            /** Best Node Selections */
+            best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
         };
         /**
          * ResearchRunListItem
@@ -2650,6 +2950,24 @@ export interface components {
              */
             created_at: string;
         };
+        /** ResearchRunLogEvent */
+        ResearchRunLogEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "log";
+            data: components["schemas"]["ResearchRunLogEntry"];
+        };
+        /** ResearchRunPaperGenerationEvent */
+        ResearchRunPaperGenerationEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paper_generation_progress";
+            data: components["schemas"]["ResearchRunPaperGenerationProgress"];
+        };
         /** ResearchRunPaperGenerationProgress */
         ResearchRunPaperGenerationProgress: {
             /**
@@ -2694,6 +3012,15 @@ export interface components {
              * @description ISO timestamp when the event was recorded
              */
             created_at: string;
+        };
+        /** ResearchRunRunEvent */
+        ResearchRunRunEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run_event";
+            data: components["schemas"]["ResearchRunEvent"];
         };
         /** ResearchRunStageProgress */
         ResearchRunStageProgress: {
@@ -2753,6 +3080,15 @@ export interface components {
              */
             created_at: string;
         };
+        /** ResearchRunStageProgressEvent */
+        ResearchRunStageProgressEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_progress";
+            data: components["schemas"]["ResearchRunStageProgress"];
+        };
         /** ResearchRunStopResponse */
         ResearchRunStopResponse: {
             /** Run Id */
@@ -2762,6 +3098,11 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * ResearchRunStreamEvent
+         * @description Root model for research pipeline SSE events.
+         */
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageEvent */
         ResearchRunSubstageEvent: {
             /**
@@ -2887,6 +3228,22 @@ export interface components {
             success: boolean;
             /** Message */
             message?: string | null;
+        };
+        /** RunLogEvent */
+        RunLogEvent: {
+            /** Message */
+            message: string;
+            /**
+             * Level
+             * @default info
+             */
+            level: string;
+        };
+        /** RunLogPayload */
+        RunLogPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["RunLogEvent"];
         };
         /** RunStartedPayload */
         RunStartedPayload: {
@@ -3045,6 +3402,37 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WalletCreditsData */
+        WalletCreditsData: {
+            /** Balance */
+            balance: number;
+        };
+        /** WalletCreditsEvent */
+        WalletCreditsEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "credits";
+            data: components["schemas"]["WalletCreditsData"];
+        };
+        /** WalletHeartbeatEvent */
+        WalletHeartbeatEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "heartbeat";
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * WalletStreamEvent
+         * @description Root model for wallet SSE updates.
+         */
+        WalletStreamEvent: components["schemas"]["WalletCreditsEvent"] | components["schemas"]["WalletHeartbeatEvent"];
     };
     responses: never;
     parameters: never;
@@ -3310,13 +3698,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Wallet balance updates and heartbeats */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["WalletStreamEvent"];
+                    "text/event-stream": components["schemas"]["WalletStreamEvent"];
                 };
             };
         };
@@ -3387,13 +3776,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events emitted while streaming chat responses */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ChatStreamEvent"];
+                    "text/event-stream": components["schemas"]["ChatStreamEvent"];
                 };
             };
             /** @description Validation Error */
@@ -3420,13 +3810,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events emitted while importing a conversation */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationImportStreamEvent"];
+                    "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
                 };
             };
             /** @description Validation Error */
@@ -3453,13 +3844,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Server-sent events emitted while generating an idea from manual seed data */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationImportStreamEvent"];
+                    "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
                 };
             };
             /** @description Validation Error */
@@ -4273,6 +4665,39 @@ export interface operations {
             };
         };
     };
+    ingest_run_log_api_research_pipeline_events_run_log_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunLogPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_run_started_api_research_pipeline_events_run_started_post: {
         parameters: {
             query?: never;
@@ -4675,13 +5100,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Research pipeline progress events */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ResearchRunStreamEvent"];
+                    "text/event-stream": components["schemas"]["ResearchRunStreamEvent"];
                 };
             };
             /** @description Validation Error */

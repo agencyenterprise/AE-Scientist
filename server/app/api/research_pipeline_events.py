@@ -11,7 +11,9 @@ from app.api.research_pipeline_runs import (
     REQUESTER_NAME_FALLBACK,
     IdeaPayloadSource,
     _create_and_launch_research_run,
+    _log_event_to_model,
     extract_first_name,
+    publish_run_log_event,
 )
 from app.config import settings
 from app.services import get_database
@@ -103,6 +105,16 @@ class BestNodeSelectionEvent(BaseModel):
 class BestNodeSelectionPayload(BaseModel):
     run_id: str
     event: BestNodeSelectionEvent
+
+
+class RunLogEvent(BaseModel):
+    message: str
+    level: str = "info"
+
+
+class RunLogPayload(BaseModel):
+    run_id: str
+    event: RunLogEvent
 
 
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
@@ -227,6 +239,24 @@ def ingest_best_node_selection(
         event.node_id,
         reasoning_preview,
     )
+
+
+@router.post("/run-log", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_run_log(
+    payload: RunLogPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    latest_logs = db.list_run_log_events(run_id=payload.run_id, limit=1)
+    if not latest_logs:
+        logger.warning("Received run log for run=%s but no DB record found", payload.run_id)
+        return
+    log_entry = _log_event_to_model(latest_logs[0])
+    publish_run_log_event(payload.run_id, log_entry)
+    logger.debug("RP log event received: run=%s level=%s", payload.run_id, payload.event.level)
 
 
 @router.post("/run-started", status_code=status.HTTP_204_NO_CONTENT)

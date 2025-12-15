@@ -65,10 +65,12 @@ export function useResearchRunDetails({
   const handleLog = useCallback((event: LogEntry) => {
     setDetails(prev =>
       prev
-        ? {
-            ...prev,
-            logs: [event, ...prev.logs],
-          }
+        ? prev.logs.some(log => log.id === event.id)
+          ? prev
+          : {
+              ...prev,
+              logs: [event, ...prev.logs],
+            }
         : null
     );
   }, []);
