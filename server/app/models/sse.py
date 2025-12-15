@@ -52,11 +52,6 @@ class ChatStreamIdeaUpdatedEvent(BaseModel):
     data: str
 
 
-class ChatStreamConversationLockedEvent(BaseModel):
-    type: Literal["conversation_locked"]
-    data: str
-
-
 class ChatStreamErrorEvent(BaseModel):
     type: Literal["error"]
     data: str
@@ -72,7 +67,6 @@ ChatStreamEventUnion = Annotated[
         ChatStreamStatusEvent,
         ChatStreamContentEvent,
         ChatStreamIdeaUpdatedEvent,
-        ChatStreamConversationLockedEvent,
         ChatStreamErrorEvent,
         ChatStreamDoneEvent,
     ],

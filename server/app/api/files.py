@@ -179,13 +179,6 @@ async def upload_file(
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
-        # Check if conversation is locked
-        if db.conversation_is_locked(conversation_id):
-            response.status_code = 403
-            return ErrorResponse(
-                error="Conversation locked", detail="Cannot upload files to a locked conversation"
-            )
-
         # Validate file is provided
         if not file.filename:
             response.status_code = 400

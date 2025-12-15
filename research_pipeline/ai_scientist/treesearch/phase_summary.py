@@ -2,16 +2,14 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
+from .journal import Journal
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
-
-if TYPE_CHECKING:
-    from .journal import Journal
 
 logger = logging.getLogger(__name__)
 

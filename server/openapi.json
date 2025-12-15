@@ -3184,25 +3184,6 @@
         ],
         "title": "ChatStreamContentEvent"
       },
-      "ChatStreamConversationLockedEvent": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "conversation_locked",
-            "title": "Type"
-          },
-          "data": {
-            "type": "string",
-            "title": "Data"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ChatStreamConversationLockedEvent"
-      },
       "ChatStreamDoneData": {
         "properties": {
           "idea_updated": {
@@ -3271,9 +3252,6 @@
             "$ref": "#/components/schemas/ChatStreamIdeaUpdatedEvent"
           },
           {
-            "$ref": "#/components/schemas/ChatStreamConversationLockedEvent"
-          },
-          {
             "$ref": "#/components/schemas/ChatStreamErrorEvent"
           },
           {
@@ -3286,7 +3264,6 @@
           "propertyName": "type",
           "mapping": {
             "content": "#/components/schemas/ChatStreamContentEvent",
-            "conversation_locked": "#/components/schemas/ChatStreamConversationLockedEvent",
             "done": "#/components/schemas/ChatStreamDoneEvent",
             "error": "#/components/schemas/ChatStreamErrorEvent",
             "idea_updated": "#/components/schemas/ChatStreamIdeaUpdatedEvent",

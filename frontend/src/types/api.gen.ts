@@ -1363,16 +1363,6 @@ export interface components {
             /** Data */
             data: string;
         };
-        /** ChatStreamConversationLockedEvent */
-        ChatStreamConversationLockedEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "conversation_locked";
-            /** Data */
-            data: string;
-        };
         /**
          * ChatStreamDoneData
          * @description Final payload emitted when chat streaming completes.
@@ -1406,7 +1396,7 @@ export interface components {
          * ChatStreamEvent
          * @description Root model exposed in OpenAPI for chat SSE events.
          */
-        ChatStreamEvent: components["schemas"]["ChatStreamStatusEvent"] | components["schemas"]["ChatStreamContentEvent"] | components["schemas"]["ChatStreamIdeaUpdatedEvent"] | components["schemas"]["ChatStreamConversationLockedEvent"] | components["schemas"]["ChatStreamErrorEvent"] | components["schemas"]["ChatStreamDoneEvent"];
+        ChatStreamEvent: components["schemas"]["ChatStreamStatusEvent"] | components["schemas"]["ChatStreamContentEvent"] | components["schemas"]["ChatStreamIdeaUpdatedEvent"] | components["schemas"]["ChatStreamErrorEvent"] | components["schemas"]["ChatStreamDoneEvent"];
         /** ChatStreamIdeaUpdatedEvent */
         ChatStreamIdeaUpdatedEvent: {
             /**

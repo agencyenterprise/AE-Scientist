@@ -65,17 +65,22 @@ def _emit_tree_viz_best_node_event(*, journal: Journal, node: Node) -> None:
         if node.metric is not None:
             metric_value = node.metric.value
             metric_name = node.metric.name or "value"
-        reasoning_parts = [
-            "Tree visualization metric-only selection.",
-            "Persisted to mirror tree view best node.",
-        ]
-        if metric_value is not None:
-            reasoning_parts.append(
-                f"Metric ({metric_name or 'value'}): {metric_value}",
-            )
+        reasoning_text = node.best_node_reasoning
+        if reasoning_text:
+            reasoning = reasoning_text
+        else:
+            reasoning_parts = [
+                "Tree visualization metric-only selection.",
+                "Persisted to mirror tree view best node.",
+            ]
+            if metric_value is not None:
+                reasoning_parts.append(
+                    f"Metric ({metric_name or 'value'}): {metric_value}",
+                )
+            reasoning = " ".join(reasoning_parts)
         journal.emit_best_node_reasoning(
             node=node,
-            reasoning=" ".join(reasoning_parts),
+            reasoning=reasoning,
         )
     except Exception:
         logger.exception("Failed to emit metric-best node event for stage %s", journal.stage_name)

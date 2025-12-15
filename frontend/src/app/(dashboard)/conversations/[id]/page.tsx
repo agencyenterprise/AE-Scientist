@@ -105,15 +105,6 @@ export default function ConversationPage({ params }: ConversationPageProps) {
     }
   };
 
-  const handleConversationLocked = async (): Promise<void> => {
-    // Refresh conversation data to get the updated locked state
-    if (conversationId !== null && !isNaN(conversationId)) {
-      loadConversationDetail(conversationId);
-      // Also refresh the conversation list to update the sidebar
-      await refreshConversations();
-    }
-  };
-
   return (
     <div className="p-6">
       <ConversationView
@@ -122,7 +113,6 @@ export default function ConversationPage({ params }: ConversationPageProps) {
         onConversationDeleted={handleConversationDeleted}
         onTitleUpdated={handleTitleUpdated}
         onSummaryGenerated={handleSummaryGenerated}
-        onConversationLocked={handleConversationLocked}
         expandImportedChat={expandImportedChat}
         costDetails={costDetails}
         onRefreshCostDetails={refreshCostDetails}
