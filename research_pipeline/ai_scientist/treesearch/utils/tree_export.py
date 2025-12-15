@@ -12,7 +12,7 @@ from igraph import Graph  # type: ignore[import-untyped]
 from numpy.typing import NDArray
 
 from ...tree_viz_store import TreeVizStore
-from ..journal import Journal
+from ..journal import Journal, Node
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,30 @@ def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
     for node in journal.nodes:
         for c in node.children:
             yield (node.step if node.step is not None else -1, c.step if c.step is not None else -1)
+
+
+def _emit_tree_viz_best_node_event(*, journal: Journal, node: Node) -> None:
+    """Emit a metric-only best-node event so DB mirrors the tree visualization."""
+    try:
+        metric_value = None
+        metric_name = None
+        if node.metric is not None:
+            metric_value = node.metric.value
+            metric_name = node.metric.name or "value"
+        reasoning_parts = [
+            "Tree visualization metric-only selection.",
+            "Persisted to mirror tree view best node.",
+        ]
+        if metric_value is not None:
+            reasoning_parts.append(
+                f"Metric ({metric_name or 'value'}): {metric_value}",
+            )
+        journal.emit_best_node_reasoning(
+            node=node,
+            reasoning=" ".join(reasoning_parts),
+        )
+    except Exception:
+        logger.exception("Failed to emit metric-best node event for stage %s", journal.stage_name)
 
 
 def generate_layout(n_nodes: int, edges: list[tuple[int, int]], layout_type: str) -> np.ndarray:
@@ -141,6 +165,8 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
 
     # Avoid unnecessary LLM calls during visualization; rely on metric-only selection among good nodes
     best_node = jou.get_best_node(only_good=True, use_val_metric_only=True)
+    if best_node is not None:
+        _emit_tree_viz_best_node_event(journal=jou, node=best_node)
     metrics: list[dict[str, object] | None] = []
     is_best_node = []
 
