@@ -422,6 +422,7 @@ def resume_run(
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
+            manager.register_phase_definition(stage_meta=stage1_meta)
             manager.journals[stage1_meta.name] = stage1_journal
 
         if s2 or (next_stage and next_stage > 2):
@@ -441,6 +442,7 @@ def resume_run(
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
+                manager.register_phase_definition(stage_meta=stage2_meta)
                 manager.journals[stage2_meta.name] = stage2_journal
             except FileNotFoundError:
                 pass
@@ -462,6 +464,7 @@ def resume_run(
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
+                manager.register_phase_definition(stage_meta=stage3_meta)
                 manager.journals[stage3_meta.name] = stage3_journal
             except FileNotFoundError:
                 pass
@@ -501,6 +504,7 @@ def resume_run(
             )
 
         manager.stages.append(next_meta)
+        manager.register_phase_definition(stage_meta=next_meta)
         manager.current_stage = next_meta
         manager.journals[next_meta.name] = Journal(
             summary_model=cfg_obj.report.model,

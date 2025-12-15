@@ -1,8 +1,9 @@
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
@@ -13,9 +14,26 @@ from app.api.research_pipeline_runs import (
     _create_and_launch_research_run,
     _log_event_to_model,
     extract_first_name,
-    publish_run_log_event,
 )
+from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
+from app.models.research_pipeline import ResearchRunBestNodeSelection
+from app.models.research_pipeline import ResearchRunEvent as RPEvent
+from app.models.research_pipeline import (
+    ResearchRunPaperGenerationProgress,
+    ResearchRunStageProgress,
+)
+from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
+from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunLogEvent as SSELogEvent
+from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
+from app.models.sse import ResearchRunRunEvent as SSERunEvent
+from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
+from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
+from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
@@ -60,6 +78,16 @@ class SubstageCompletedEvent(BaseModel):
 class SubstageCompletedPayload(BaseModel):
     run_id: str
     event: SubstageCompletedEvent
+
+
+class SubstageSummaryEvent(BaseModel):
+    stage: str
+    summary: Dict[str, Any]
+
+
+class SubstageSummaryPayload(BaseModel):
+    run_id: str
+    event: SubstageSummaryEvent
 
 
 class RunStartedPayload(BaseModel):
@@ -175,6 +203,10 @@ def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
     return extract_first_name(full_name=user.name)
 
 
+def _next_stream_event_id() -> int:
+    return int(time.time() * 1000)
+
+
 @router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
 def ingest_stage_progress(
     payload: StageProgressPayload,
@@ -188,6 +220,27 @@ def ingest_stage_progress(
         event.iteration,
         event.max_iterations,
         event.progress,
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    progress = ResearchRunStageProgress(
+        stage=event.stage,
+        iteration=event.iteration,
+        max_iterations=event.max_iterations,
+        progress=event.progress,
+        total_nodes=event.total_nodes,
+        buggy_nodes=event.buggy_nodes,
+        good_nodes=event.good_nodes,
+        best_metric=event.best_metric,
+        eta_s=event.eta_s,
+        latest_iteration_time_s=event.latest_iteration_time_s,
+        created_at=created_at,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEStageProgressEvent(
+            type="stage_progress",
+            data=progress,
+        ),
     )
 
 
@@ -205,6 +258,29 @@ def ingest_substage_completed(
         event.substage_name,
         event.reason,
     )
+    created_at = datetime.now(timezone.utc).isoformat()
+    summary = dict(event.summary)
+    summary.setdefault("main_stage_number", event.main_stage_number)
+    summary.setdefault("substage_number", event.substage_number)
+    summary.setdefault("substage_name", event.substage_name)
+    summary.setdefault("reason", event.reason)
+    substage_event = RPSubstageEvent(
+        id=_next_stream_event_id(),
+        stage=event.stage,
+        node_id=None,
+        summary=summary,
+        created_at=created_at,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSESubstageEvent(
+                type="substage_event",
+                data=substage_event,
+            ),
+        ),
+    )
 
 
 @router.post("/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -220,6 +296,51 @@ def ingest_paper_generation_progress(
         event.substep or "N/A",
         event.progress * 100,
         event.step_progress * 100,
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    paper_event = ResearchRunPaperGenerationProgress(
+        id=_next_stream_event_id(),
+        run_id=payload.run_id,
+        step=event.step,
+        substep=event.substep,
+        progress=event.progress,
+        step_progress=event.step_progress,
+        details=event.details,
+        created_at=created_at,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEPaperGenerationEvent(
+            type="paper_generation_progress",
+            data=paper_event,
+        ),
+    )
+
+
+@router.post("/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_substage_summary(
+    payload: SubstageSummaryPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    logger.info(
+        "RP sub-stage summary: run=%s stage=%s",
+        payload.run_id,
+        event.stage,
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    summary_model = ResearchRunSubstageSummary(
+        id=_next_stream_event_id(),
+        stage=event.stage,
+        summary=event.summary,
+        created_at=created_at,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSESubstageSummaryEvent(
+            type="substage_summary",
+            data=summary_model,
+        ),
     )
 
 
@@ -239,6 +360,21 @@ def ingest_best_node_selection(
         event.node_id,
         reasoning_preview,
     )
+    created_at = datetime.now(timezone.utc).isoformat()
+    best_node = ResearchRunBestNodeSelection(
+        id=_next_stream_event_id(),
+        stage=event.stage,
+        node_id=event.node_id,
+        reasoning=event.reasoning,
+        created_at=created_at,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEBestNodeEvent(
+            type="best_node_selection",
+            data=best_node,
+        ),
+    )
 
 
 @router.post("/run-log", status_code=status.HTTP_204_NO_CONTENT)
@@ -255,7 +391,10 @@ def ingest_run_log(
         logger.warning("Received run log for run=%s but no DB record found", payload.run_id)
         return
     log_entry = _log_event_to_model(latest_logs[0])
-    publish_run_log_event(payload.run_id, log_entry)
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSELogEvent(type="log", data=log_entry),
+    )
     logger.debug("RP log event received: run=%s level=%s", payload.run_id, payload.event.level)
 
 
@@ -287,6 +426,25 @@ def ingest_run_started(
             "start_deadline_at": new_deadline.isoformat(),
         },
         occurred_at=now,
+    )
+    run_event = RPEvent(
+        id=_next_stream_event_id(),
+        run_id=payload.run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": "running",
+            "reason": "pipeline_event_start",
+            "start_deadline_at": new_deadline.isoformat(),
+        },
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        payload.run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
     )
     logger.info("RP run started: run=%s", payload.run_id)
 
@@ -321,6 +479,37 @@ def ingest_run_finished(
             "message": payload.message,
         },
         occurred_at=now,
+    )
+    run_event = RPEvent(
+        id=_next_stream_event_id(),
+        run_id=payload.run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": new_status,
+            "reason": "pipeline_event_finish",
+            "success": payload.success,
+            "message": payload.message,
+        },
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        payload.run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
+    publish_stream_event(
+        payload.run_id,
+        SSECompleteEvent(
+            type="complete",
+            data=ResearchRunCompleteData(
+                status=new_status,  # type: ignore[arg-type]
+                success=payload.success,
+                message=payload.message,
+            ),
+        ),
     )
 
     if run.pod_id:

@@ -97,6 +97,13 @@ class ResearchRunSubstageEvent(BaseModel):
     created_at: str = Field(..., description="ISO timestamp of the event")
 
 
+class ResearchRunSubstageSummary(BaseModel):
+    id: int = Field(..., description="Unique identifier of the sub-stage summary event")
+    stage: str = Field(..., description="Stage identifier")
+    summary: dict = Field(..., description="LLM-generated summary payload")
+    created_at: str = Field(..., description="ISO timestamp when the summary was recorded")
+
+
 class ResearchRunBestNodeSelection(BaseModel):
     id: int = Field(..., description="Unique identifier of the reasoning record")
     stage: str = Field(..., description="Stage identifier where the selection happened")
@@ -164,6 +171,10 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     substage_events: List[ResearchRunSubstageEvent] = Field(
         default_factory=list, description="Sub-stage completion events"
+    )
+    substage_summaries: List[ResearchRunSubstageSummary] = Field(
+        default_factory=list,
+        description="LLM-generated summaries for completed sub-stages",
     )
     best_node_selections: List[ResearchRunBestNodeSelection] = Field(
         default_factory=list,

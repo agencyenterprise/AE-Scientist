@@ -42,6 +42,7 @@ class WebhookClient:
         "run_log": "/run-log",
         # Sub-stage completion events are also forwarded to the web server.
         "substage_completed": "/substage-completed",
+        "substage_summary": "/substage-summary",
         "paper_generation_progress": "/paper-generation-progress",
         "best_node_selection": "/best-node-selection",
     }
@@ -257,6 +258,8 @@ class EventPersistenceManager:
                 self._insert_run_log(connection=connection, payload=event.data)
             elif event.kind == "substage_completed":
                 self._insert_substage_completed(connection=connection, payload=event.data)
+            elif event.kind == "substage_summary":
+                self._insert_substage_summary(connection=connection, payload=event.data)
             elif event.kind == "paper_generation_progress":
                 self._insert_paper_generation_progress(connection=connection, payload=event.data)
             elif event.kind == "best_node_selection":
@@ -324,6 +327,27 @@ class EventPersistenceManager:
             cursor.execute(
                 """
                 INSERT INTO rp_substage_completed_events (
+                    run_id,
+                    stage,
+                    summary
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (
+                    self._run_id,
+                    payload.get("stage"),
+                    psycopg2.extras.Json(summary),
+                ),
+            )
+
+    def _insert_substage_summary(
+        self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
+    ) -> None:
+        summary = payload.get("summary") or {}
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO rp_substage_summary_events (
                     run_id,
                     stage,
                     summary

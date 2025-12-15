@@ -5,6 +5,7 @@ EventKind = Literal[
     "run_stage_progress",
     "run_log",
     "substage_completed",
+    "substage_summary",
     "paper_generation_progress",
     "best_node_selection",
 ]
@@ -128,6 +129,32 @@ class SubstageCompletedEvent(BaseEvent):
                 "substage_number": self.substage_number,
                 "substage_name": self.substage_name,
                 "reason": self.reason,
+                "summary": self.summary,
+            },
+        )
+
+
+@dataclass(frozen=True)
+class SubstageSummaryEvent(BaseEvent):
+    """Event emitted with the LLM phase summary for a sub-stage."""
+
+    stage: str
+    summary: Dict[str, Any]
+
+    def type(self) -> str:
+        return "ai.run.substage_summary"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "summary": self.summary,
+        }
+
+    def persistence_record(self) -> PersistenceRecord:
+        return (
+            "substage_summary",
+            {
+                "stage": self.stage,
                 "summary": self.summary,
             },
         )

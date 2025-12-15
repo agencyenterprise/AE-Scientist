@@ -5,6 +5,7 @@ import type {
   StageProgress,
   PaperGenerationEvent,
   BestNodeSelection,
+  SubstageSummary,
 } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
@@ -12,6 +13,7 @@ import { cn } from "@/shared/lib/utils";
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
   substageEvents: SubstageEvent[];
+  substageSummaries: SubstageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
   className?: string;
@@ -201,6 +203,54 @@ const getBestNodeForStage = (
   );
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const getLatestSummaryForStage = (
+  stageKey: string,
+  summaries: SubstageSummary[]
+): SubstageSummary | null => {
+  const matches = summaries.filter(summary => extractStageSlug(summary.stage) === stageKey);
+  if (matches.length === 0) {
+    return null;
+  }
+  return (
+    matches.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0] ?? null
+  );
+};
+
+const getSummaryText = (summary: SubstageSummary): string => {
+  if (!isRecord(summary.summary)) {
+    return JSON.stringify(summary.summary, null, 2);
+  }
+  const llmSummary = summary.summary.llm_summary;
+  if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
+    return llmSummary.trim();
+  }
+  return JSON.stringify(summary.summary, null, 2);
+};
+
+const getSummaryStatus = (summary: SubstageSummary): string | null => {
+  if (!isRecord(summary.summary)) {
+    return null;
+  }
+  const goalAssessment = summary.summary.goal_assessment;
+  if (!isRecord(goalAssessment)) {
+    return null;
+  }
+  const status = goalAssessment.status;
+  const reason = goalAssessment.reason;
+  if (typeof status !== "string" || !status) {
+    return null;
+  }
+  if (typeof reason === "string" && reason.trim()) {
+    return `Goal assessment: ${status} — ${reason}`;
+  }
+  return `Goal assessment: ${status}`;
+};
+
 // Paper generation step labels for Stage 5
 const PAPER_GENERATION_STEPS = [
   { key: "plot_aggregation", label: "Plot Aggregation" },
@@ -246,6 +296,7 @@ const getPaperGenerationSegments = (events: PaperGenerationEvent[]): Segment[] =
 export function ResearchPipelineStages({
   stageProgress,
   substageEvents,
+  substageSummaries,
   paperGenerationProgress,
   bestNodeSelections,
   className,
@@ -362,6 +413,11 @@ export function ResearchPipelineStages({
           const bestNode = isPaperGeneration
             ? null
             : getBestNodeForStage(stage.key, bestNodeSelections);
+          const latestSummary = isPaperGeneration
+            ? null
+            : getLatestSummaryForStage(stage.key, substageSummaries);
+          const summaryText = latestSummary ? getSummaryText(latestSummary) : null;
+          const summaryStatus = latestSummary ? getSummaryStatus(latestSummary) : null;
 
           const latestPaperEvent =
             isPaperGeneration && paperGenerationProgress.length > 0
@@ -428,19 +484,38 @@ export function ResearchPipelineStages({
               {/* Unified progress bar for all stages */}
               <SegmentedProgressBar segments={segments} emptyMessage={emptyMessage} />
 
-              {!isPaperGeneration && bestNode && (
-                <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Current Best Node
-                  </p>
-                  <div className="mt-1 space-y-1">
-                    <p className="text-sm font-mono text-emerald-300">
-                      {formatNodeId(bestNode.node_id)}
-                    </p>
-                    <div className="max-h-24 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
-                      {bestNode.reasoning}
+              {!isPaperGeneration && (bestNode || latestSummary) && (
+                <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3 space-y-3">
+                  {bestNode && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Current Best Node
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        <p className="text-sm font-mono text-emerald-300">
+                          {formatNodeId(bestNode.node_id)}
+                        </p>
+                        <div className="max-h-24 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                          {bestNode.reasoning}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {latestSummary && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Substage Summary
+                      </p>
+                      {summaryStatus && (
+                        <p className="text-[11px] text-slate-400">{summaryStatus}</p>
+                      )}
+                      {summaryText && (
+                        <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                          {summaryText}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

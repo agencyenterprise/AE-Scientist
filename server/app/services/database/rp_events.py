@@ -43,6 +43,14 @@ class SubstageCompletedEvent(NamedTuple):
     created_at: datetime
 
 
+class SubstageSummaryEvent(NamedTuple):
+    id: int
+    run_id: str
+    stage: str
+    summary: dict
+    created_at: datetime
+
+
 class PaperGenerationEvent(NamedTuple):
     id: int
     run_id: str
@@ -110,6 +118,41 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 cursor.execute(query, (run_id,))
                 rows = cursor.fetchall() or []
         return [SubstageCompletedEvent(**row) for row in rows]
+
+    def list_substage_summary_events(self, run_id: str) -> List[SubstageSummaryEvent]:
+        query = """
+            SELECT id,
+                   run_id,
+                   stage,
+                   summary,
+                   created_at
+            FROM rp_substage_summary_events
+            WHERE run_id = %s
+            ORDER BY created_at ASC
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                rows = cursor.fetchall() or []
+        return [SubstageSummaryEvent(**row) for row in rows]
+
+    def get_latest_substage_summary(self, run_id: str) -> Optional[SubstageSummaryEvent]:
+        query = """
+            SELECT id,
+                   run_id,
+                   stage,
+                   summary,
+                   created_at
+            FROM rp_substage_summary_events
+            WHERE run_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                row = cursor.fetchone()
+        return SubstageSummaryEvent(**row) if row else None
 
     def list_run_log_events_since(
         self, run_id: str, since: datetime, limit: int = 100

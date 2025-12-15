@@ -26,12 +26,19 @@ from ai_scientist.treesearch.events import (
     RunLogEvent,
     RunStageProgressEvent,
     SubstageCompletedEvent,
+    SubstageSummaryEvent,
 )
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent
+from .phase_summary import (
+    PhaseDefinition,
+    PhasePlanProgress,
+    build_phase_summary,
+    expected_artifacts_for_slug,
+)
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -88,6 +95,7 @@ class AgentManager:
         self._completed_stages: set[str] = set()
         self._final_progress_emitted: set[str] = set()
         self._substage_completed_emitted: set[str] = set()
+        self.phase_plan: list[PhaseDefinition] = []
         # Stage slugs/goals are defined in the stage classes
         # Create initial stage
         # Initialize the experiment with the first stage
@@ -153,6 +161,37 @@ Your research idea:\n\n
             stage_name=initial_stage.name,
             run_id=self.cfg.telemetry.run_id if self.cfg.telemetry else None,
         )
+        self.register_phase_definition(stage_meta=initial_stage)
+
+    def register_phase_definition(self, *, stage_meta: StageMeta) -> None:
+        if any(definition.phase_id == stage_meta.name for definition in self.phase_plan):
+            return
+        definition = PhaseDefinition(
+            phase_id=stage_meta.name,
+            main_stage_number=stage_meta.number,
+            substage_number=stage_meta.substage_number,
+            stage_slug=stage_meta.slug,
+            substage_name=stage_meta.substage_name,
+            goals=stage_meta.goals,
+            expected_artifacts=expected_artifacts_for_slug(stage_slug=stage_meta.slug),
+        )
+        self.phase_plan.append(definition)
+
+    def _phase_definition_for_stage(self, *, stage_id: str) -> Optional[PhaseDefinition]:
+        for definition in self.phase_plan:
+            if definition.phase_id == stage_id:
+                return definition
+        return None
+
+    def _plan_progress_for_phase(self, *, stage_id: str) -> Optional[PhasePlanProgress]:
+        for index, definition in enumerate(self.phase_plan):
+            if definition.phase_id == stage_id:
+                return PhasePlanProgress(
+                    completed_phases=index + 1,
+                    total_phases=len(self.phase_plan),
+                    current_phase_label=definition.display_name,
+                )
+        return None
 
     def _curate_task_desc(self, stage: StageMeta) -> str:
         task_desc = self._get_task_desc_str()
@@ -593,6 +632,28 @@ Your research idea:\n\n
                 "best_metric": (str(best_node.metric) if best_node and best_node.metric else None),
                 "feedback": reason,
             }
+            phase_definition = self._phase_definition_for_stage(stage_id=current_substage.name)
+            plan_progress = None
+            if phase_definition is not None:
+                plan_progress = self._plan_progress_for_phase(stage_id=current_substage.name)
+            if phase_definition is not None and plan_progress is not None:
+                try:
+                    phase_summary = build_phase_summary(
+                        journal=journal,
+                        phase=phase_definition,
+                        plan_progress=plan_progress,
+                    )
+                    summary["phase_summary"] = phase_summary.to_dict()
+                    self.event_callback(
+                        SubstageSummaryEvent(
+                            stage=current_substage.name,
+                            summary=phase_summary.to_dict(),
+                        )
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to generate phase summary for %s", current_substage.name
+                    )
             self.event_callback(
                 SubstageCompletedEvent(
                     stage=current_substage.name,
@@ -723,6 +784,7 @@ Your research idea:\n\n
 
                     # Setup new sub-stage
                     self.stages.append(next_substage)
+                    self.register_phase_definition(stage_meta=next_substage)
                     self.journals[next_substage.name] = Journal(
                         summary_model=self.cfg.report.model,
                         node_selection_model=self.cfg.agent.feedback.model,
@@ -757,6 +819,7 @@ Your research idea:\n\n
             )
 
             self.stages.append(next_main_stage)
+            self.register_phase_definition(stage_meta=next_main_stage)
             self.journals[next_main_stage.name] = Journal(
                 summary_model=self.cfg.report.model,
                 node_selection_model=self.cfg.agent.feedback.model,

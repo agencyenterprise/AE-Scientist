@@ -87,6 +87,7 @@ from app.models.research_pipeline import (
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
     ResearchRunSubstageEvent,
+    ResearchRunSubstageSummary,
     TreeVizItem,
 )
 from app.models.sse import (
@@ -107,6 +108,7 @@ __all__ = [
     "ResearchRunStageProgress",
     "ResearchRunLogEntry",
     "ResearchRunSubstageEvent",
+    "ResearchRunSubstageSummary",
     "ResearchRunPaperGenerationProgress",
     "ResearchRunBestNodeSelection",
     "ResearchRunEvent",
