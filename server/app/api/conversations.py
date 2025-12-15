@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
+    ConversationImportStreamEvent,
     ConversationResponse,
     ConversationUpdate,
     Idea,
@@ -879,7 +880,20 @@ async def _stream_manual_seed_pipeline(
         return
 
 
-@router.post("/import")
+@router.post(
+    "/import",
+    response_model=ConversationImportStreamEvent,
+    responses={
+        200: {
+            "description": "Server-sent events emitted while importing a conversation",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ConversationImportStreamEvent"}
+                }
+            },
+        }
+    },
+)
 async def import_conversation(
     import_data: ImportChatGPTConversation, request: Request
 ) -> StreamingResponse:
@@ -930,7 +944,20 @@ async def import_conversation(
     )
 
 
-@router.post("/import/manual")
+@router.post(
+    "/import/manual",
+    response_model=ConversationImportStreamEvent,
+    responses={
+        200: {
+            "description": "Server-sent events emitted while generating an idea from manual seed data",
+            "content": {
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ConversationImportStreamEvent"}
+                }
+            },
+        }
+    },
+)
 async def import_manual_seed(
     manual_data: ManualIdeaSeedRequest, request: Request
 ) -> StreamingResponse:

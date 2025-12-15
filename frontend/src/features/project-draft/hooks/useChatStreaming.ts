@@ -2,7 +2,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 import { config } from "@/shared/lib/config";
 import { isErrorResponse } from "@/shared/lib/api-adapters";
-import type { ChatMessage, ChatRequest, FileAttachment, FileMetadata, Idea } from "@/types";
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatStreamEvent,
+  FileAttachment,
+  FileMetadata,
+  Idea,
+} from "@/types";
 import type { User } from "@/types/auth";
 
 import { STATUS_MESSAGES, isChatStatus } from "../utils/chatTypes";
@@ -165,42 +172,48 @@ export function useChatStreaming({
             if (!line.trim()) continue;
 
             try {
-              const eventData = JSON.parse(line);
-              const eventType = eventData.type;
-              const data = eventData.data;
-
-              // Handle different event types
-              if (eventType === "status") {
-                const statusValue = typeof data === "string" ? data : String(data);
-
-                // Type-safe status handling with runtime validation
-                if (isChatStatus(statusValue)) {
-                  const displayMessage = STATUS_MESSAGES[statusValue];
-                  setStatusMessage(displayMessage);
-                } else {
-                  // eslint-disable-next-line no-console
-                  console.warn(`Unknown status value received: ${statusValue}`);
-                  setStatusMessage(""); // Clear status on unknown value
+              const eventData = JSON.parse(line) as ChatStreamEvent;
+              let shouldExitLineLoop = false;
+              switch (eventData.type) {
+                case "status": {
+                  const statusValue = eventData.data;
+                  if (isChatStatus(statusValue)) {
+                    const displayMessage = STATUS_MESSAGES[statusValue];
+                    setStatusMessage(displayMessage);
+                  } else {
+                    // eslint-disable-next-line no-console
+                    console.warn(`Unknown status value received: ${statusValue}`);
+                    setStatusMessage("");
+                  }
+                  break;
                 }
-              } else if (eventType === "content") {
-                const content = typeof data === "string" ? data : String(data);
-                accumulatedContent += content;
-
-                setStreamingContent(accumulatedContent);
-              } else if (eventType === "idea_updated") {
-                projectUpdated = true;
-                setStatusMessage("Idea updated!");
-              } else if (eventType === "conversation_locked") {
-                setStatusMessage("Project created successfully!");
-                // Notify parent component that conversation is locked
-                if (onConversationLocked) {
-                  onConversationLocked();
+                case "content": {
+                  const content = eventData.data;
+                  accumulatedContent += content;
+                  setStreamingContent(accumulatedContent);
+                  break;
                 }
-              } else if (eventType === "error") {
-                const errorMsg = typeof data === "string" ? data : String(data);
-
-                throw new Error(errorMsg);
-              } else if (eventType === "done") {
+                case "idea_updated": {
+                  projectUpdated = true;
+                  setStatusMessage("Idea updated!");
+                  break;
+                }
+                case "conversation_locked": {
+                  setStatusMessage("Project created successfully!");
+                  if (onConversationLocked) {
+                    onConversationLocked();
+                  }
+                  break;
+                }
+                case "error": {
+                  throw new Error(eventData.data);
+                }
+                case "done": {
+                  shouldExitLineLoop = true;
+                  break;
+                }
+              }
+              if (shouldExitLineLoop) {
                 break;
               }
             } catch (parseError) {
@@ -210,20 +223,24 @@ export function useChatStreaming({
           }
         }
 
-        // Add the final assistant message if we have content
-        if (accumulatedContent.trim()) {
-          const assistantMessage: ChatMessage = {
-            role: "assistant",
-            content: accumulatedContent.trim(),
-            sequence_number: messages.length + 2,
-            created_at: new Date().toISOString(),
-            sent_by_user_id: user.id, // User who triggered this response
-            sent_by_user_name: user.name,
-            sent_by_user_email: user.email,
-            attachments: [],
-          };
-
-          setMessages(prev => [...prev, assistantMessage]);
+        const trimmedContent = accumulatedContent.trim();
+        if (trimmedContent) {
+          setMessages(prev => {
+            if (prev.some(msg => msg.content === trimmedContent && msg.role === "assistant")) {
+              return prev;
+            }
+            const assistantMessage: ChatMessage = {
+              role: "assistant",
+              content: trimmedContent,
+              sequence_number: prev.length + 1,
+              created_at: new Date().toISOString(),
+              sent_by_user_id: user.id,
+              sent_by_user_name: user.name,
+              sent_by_user_email: user.email,
+              attachments: [],
+            };
+            return [...prev, assistantMessage];
+          });
         }
 
         // Trigger idea update if needed

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchWallet } from "@/features/billing/api";
 import { useEffect, useRef } from "react";
 import { apiStream } from "@/shared/lib/api-client";
+import type { WalletStreamEvent } from "@/types";
 
 interface WalletBalanceResult {
   balance: number;
@@ -61,9 +62,9 @@ export function useWalletBalance(): WalletBalanceResult {
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             try {
-              const evt = JSON.parse(line.slice(6));
-              if (evt.type === "credits" && evt.data && typeof evt.data.balance === "number") {
-                const balance = evt.data.balance as number;
+              const evt = JSON.parse(line.slice(6)) as WalletStreamEvent;
+              if (evt.type === "credits" && typeof evt.data.balance === "number") {
+                const balance = evt.data.balance;
                 queryClient.setQueryData<{ balance: number } | undefined>(
                   ["billing", "wallet-balance"],
                   prev => ({ ...(prev ?? {}), balance })

@@ -2,12 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  ImportState,
-  SSEEvent,
-  SSEProgress,
-  SSEState,
-} from "@/features/conversation-import/types/types";
+import { ImportState } from "@/features/conversation-import/types/types";
+import type { SSEEvent } from "@/features/conversation-import/types/types";
 import { apiStream } from "@/shared/lib/api-client";
 
 export interface UseManualIdeaImportOptions {
@@ -35,6 +31,16 @@ export interface UseManualIdeaImportReturn {
   };
   streamingRef: React.RefObject<HTMLTextAreaElement | null>;
 }
+
+const SECTION_ORDER = [
+  "title",
+  "short_hypothesis",
+  "related_work",
+  "abstract",
+  "experiments",
+  "expected_outcome",
+  "risk_factors_and_limitations",
+] as const;
 
 export function useManualIdeaImport(
   options: UseManualIdeaImportOptions = {}
@@ -107,6 +113,15 @@ export function useManualIdeaImport(
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = "";
+        const sectionMap: Record<string, string> = {};
+        const buildSectionContent = () =>
+          SECTION_ORDER.filter(key => sectionMap[key])
+            .map(key => sectionMap[key])
+            .join("\n");
+        const updateStreamingContent = () => {
+          const sectionContent = buildSectionContent();
+          setStreamingContent(sectionContent || accumulatedContent);
+        };
         let buffer = "";
 
         while (true) {
@@ -122,7 +137,7 @@ export function useManualIdeaImport(
 
             let eventData: SSEEvent;
             try {
-              eventData = JSON.parse(line);
+              eventData = JSON.parse(line) as SSEEvent;
             } catch (e) {
               // eslint-disable-next-line no-console
               console.warn("Failed to parse JSON line:", line, "Error:", e);
@@ -131,46 +146,52 @@ export function useManualIdeaImport(
 
             switch (eventData.type) {
               case "content": {
-                const content = (eventData as { type: "content"; data: string }).data;
-                accumulatedContent += content;
-                setStreamingContent(accumulatedContent);
+                accumulatedContent += eventData.data;
+                updateStreamingContent();
+                break;
+              }
+              case "section_update": {
+                const { field, data } = eventData;
+                sectionMap[field] = data;
+                updateStreamingContent();
                 break;
               }
               case "state": {
-                const stateValue = (eventData as SSEState).data;
-                setCurrentState(stateValue);
+                setCurrentState(eventData.data as ImportState);
                 break;
               }
               case "progress": {
-                const prog = (eventData as SSEProgress).data;
-                if (prog.phase === "summarizing" && prog.total > 0) {
+                if (eventData.data.phase === "summarizing" && eventData.data.total > 0) {
                   setCurrentState(ImportState.Summarizing);
                 }
                 break;
               }
               case "error": {
-                const err = eventData as { type: "error"; data: string; code?: string };
                 setIsStreaming(false);
                 onImportEnd?.();
-                throw new Error(err.data);
+                throw new Error(eventData.data);
+              }
+              case "model_limit_conflict": {
+                const message = eventData.data.message;
+                setIsStreaming(false);
+                setError(message);
+                onImportEnd?.();
+                onError?.(message);
+                return;
               }
               case "done": {
-                const doneEvt = eventData as {
-                  type: "done";
-                  data: { conversation?: { id: number }; error?: string };
-                };
-                const conv = doneEvt.data.conversation;
-                if (conv && typeof conv.id === "number") {
+                const conversation = eventData.data.conversation;
+                if (conversation && typeof conversation.id === "number") {
                   setIsStreaming(false);
                   setCurrentState("");
                   onImportEnd?.();
-                  onSuccess?.(conv.id);
+                  onSuccess?.(conversation.id);
                   if (autoRedirect) {
-                    window.location.href = `/conversations/${conv.id}`;
+                    window.location.href = `/conversations/${conversation.id}`;
                   }
                   return;
                 }
-                const errMsg = doneEvt.data.error ?? "Import failed";
+                const errMsg = eventData.data.error ?? "Import failed";
                 throw new Error(errMsg);
               }
               default:

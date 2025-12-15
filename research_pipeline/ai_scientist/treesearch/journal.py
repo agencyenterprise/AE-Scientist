@@ -356,6 +356,10 @@ class Journal:
         node.step = len(self.nodes)
         self.nodes.append(node)
 
+    def emit_best_node_reasoning(self, *, node: Node, reasoning: str) -> None:
+        """Public helper to emit persisted best-node reasoning events."""
+        self._emit_best_node_reasoning(node=node, reasoning=reasoning)
+
     def _emit_best_node_reasoning(self, *, node: Node, reasoning: str) -> None:
         """Persist LLM reasoning for the selected best node when telemetry is enabled."""
         if self.run_id is None:

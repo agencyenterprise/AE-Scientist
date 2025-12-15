@@ -2,13 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import { apiStream, ApiError } from "@/shared/lib/api-client";
-import type {
-  ImportState,
-  SSEEvent,
-  SSEState,
-  SSEProgress,
-  SSESectionUpdate,
-} from "@/features/conversation-import/types/types";
+import { ImportState } from "@/features/conversation-import/types/types";
+import type { SSEEvent } from "@/features/conversation-import/types/types";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
 
 // Order of sections as streamed from the backend
@@ -255,86 +250,68 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
 
             let eventData: SSEEvent;
             try {
-              eventData = JSON.parse(line);
+              eventData = JSON.parse(line) as SSEEvent;
             } catch {
-              // Skip unparseable lines
               continue;
             }
 
             switch (eventData.type) {
               case "section_update": {
-                const { field, data } = eventData as SSESectionUpdate;
+                const { field, data } = eventData;
                 setSections(prev => ({ ...prev, [field]: data }));
-                // Auto-scroll
                 if (streamingRef.current) {
                   streamingRef.current.scrollTop = streamingRef.current.scrollHeight;
                 }
                 break;
               }
               case "state": {
-                const stateValue = (eventData as SSEState).data;
+                const stateValue = eventData.data as ImportState;
                 setCurrentState(stateValue);
-                if (stateValue !== "summarizing") {
+                if (stateValue !== ImportState.Summarizing) {
                   setSummaryProgress(null);
                 }
                 break;
               }
               case "progress": {
-                const prog = (eventData as SSEProgress).data;
-                if (prog.phase === "summarizing" && prog.total > 0) {
+                const progress = eventData.data;
+                if (progress.phase === "summarizing" && progress.total > 0) {
                   const pct = Math.max(
                     0,
-                    Math.min(100, Math.round((prog.current / prog.total) * 100))
+                    Math.min(100, Math.round((progress.current / progress.total) * 100))
                   );
                   setSummaryProgress(pct);
-                  setCurrentState("summarizing" as ImportState);
+                  setCurrentState(ImportState.Summarizing);
                 }
                 break;
               }
               case "conflict": {
-                const conflictEvt = eventData as {
-                  type: "conflict";
-                  data: {
-                    conversations: Array<{
-                      id: number;
-                      title: string;
-                      updated_at: string;
-                      url: string;
-                    }>;
-                  };
-                };
                 setIsStreaming(false);
                 setCurrentState("");
                 onEnd?.();
                 return {
                   success: false,
                   hasConflict: true,
-                  conflicts: conflictEvt.data.conversations,
+                  conflicts: eventData.data.conversations,
                 };
               }
               case "model_limit_conflict": {
-                const mdlEvt = eventData as {
-                  type: "model_limit_conflict";
-                  data: { message: string; suggestion: string };
-                };
                 setIsStreaming(false);
                 setCurrentState("");
                 onEnd?.();
                 return {
                   success: false,
                   hasModelLimitConflict: true,
-                  modelLimitMessage: mdlEvt.data.message,
-                  modelLimitSuggestion: mdlEvt.data.suggestion,
+                  modelLimitMessage: eventData.data.message,
+                  modelLimitSuggestion: eventData.data.suggestion ?? "",
                 };
               }
               case "error": {
-                const err = eventData as { type: "error"; data: string; code?: string };
                 setIsStreaming(false);
                 onEnd?.();
                 const errorMessage =
-                  err.code === "CHAT_NOT_FOUND"
+                  eventData.code === "CHAT_NOT_FOUND"
                     ? "This conversation no longer exists or has been deleted. Please check the URL and try again."
-                    : err.data;
+                    : eventData.data;
                 onError?.(errorMessage);
                 return {
                   success: false,
@@ -342,26 +319,22 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
                 };
               }
               case "done": {
-                const doneEvt = eventData as {
-                  type: "done";
-                  data: { conversation?: { id: number }; error?: string };
-                };
-                const conv = doneEvt.data.conversation;
-                if (conv && typeof conv.id === "number") {
+                const { conversation, error } = eventData.data;
+                if (conversation && typeof conversation.id === "number") {
                   setIsStreaming(false);
                   setIsUpdateMode(false);
                   setCurrentState("");
                   onEnd?.();
-                  onSuccess?.(conv.id);
+                  onSuccess?.(conversation.id);
                   if (autoRedirect) {
-                    window.location.href = `/conversations/${conv.id}`;
+                    window.location.href = `/conversations/${conversation.id}`;
                   }
                   return {
                     success: true,
-                    conversationId: conv.id,
+                    conversationId: conversation.id,
                   };
                 }
-                const errMsg = doneEvt.data.error ?? "Import failed";
+                const errMsg = error ?? "Import failed";
                 setIsStreaming(false);
                 onEnd?.();
                 onError?.(errMsg);
