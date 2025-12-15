@@ -53,9 +53,7 @@ type SubstageSummaryStreamEvent = {
   type: "substage_summary";
   data: import("./research").SubstageSummary;
 };
-export type ResearchRunStreamEvent =
-  | ApiResearchRunStreamEvent
-  | SubstageSummaryStreamEvent;
+export type ResearchRunStreamEvent = ApiResearchRunStreamEvent | SubstageSummaryStreamEvent;
 export type WalletStreamEvent = import("./api.gen").components["schemas"]["WalletStreamEvent"];
 // Note: LLMPromptDeleteRequest does not exist in the schema; no alias exported.
 

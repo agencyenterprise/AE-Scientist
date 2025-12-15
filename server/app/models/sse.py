@@ -201,6 +201,8 @@ class ResearchRunInitialEvent(BaseModel):
 
 class ResearchRunCompleteData(BaseModel):
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    success: Optional[bool] = None
+    message: Optional[str] = None
 
 
 class ResearchRunCompleteEvent(BaseModel):
@@ -233,6 +235,11 @@ class ResearchRunPaperGenerationEvent(BaseModel):
     data: ResearchRunPaperGenerationProgress
 
 
+class ResearchRunSubstageEventStream(BaseModel):
+    type: Literal["substage_event"]
+    data: ResearchRunSubstageEvent
+
+
 class ResearchRunSubstageSummaryEvent(BaseModel):
     type: Literal["substage_summary"]
     data: ResearchRunSubstageSummary
@@ -257,6 +264,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunLogEvent,
         ResearchRunBestNodeEvent,
         ResearchRunPaperGenerationEvent,
+        ResearchRunSubstageEventStream,
         ResearchRunSubstageSummaryEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunErrorEvent,

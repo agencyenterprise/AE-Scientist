@@ -5428,6 +5428,28 @@
               "cancelled"
             ],
             "title": "Status"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
           }
         },
         "type": "object",
@@ -6379,6 +6401,9 @@
             "$ref": "#/components/schemas/ResearchRunPaperGenerationEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunSubstageEventStream"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunSubstageSummaryEvent"
           },
           {
@@ -6402,6 +6427,7 @@
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
+            "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
             "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
           }
         }
@@ -6450,6 +6476,24 @@
           "created_at"
         ],
         "title": "ResearchRunSubstageEvent"
+      },
+      "ResearchRunSubstageEventStream": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "substage_event",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunSubstageEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunSubstageEventStream"
       },
       "ResearchRunSubstageSummary": {
         "properties": {

@@ -268,6 +268,7 @@ export function useResearchRunSSE({
     onRunUpdate,
     onRunEvent,
     onBestNodeSelection,
+    onSubstageSummary,
     onPaperGenerationProgress,
     onComplete,
     onError,

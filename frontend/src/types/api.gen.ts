@@ -2614,6 +2614,10 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** Success */
+            success?: boolean | null;
+            /** Message */
+            message?: string | null;
         };
         /** ResearchRunCompleteEvent */
         ResearchRunCompleteEvent: {
@@ -3126,7 +3130,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageEvent */
         ResearchRunSubstageEvent: {
             /**
@@ -3156,6 +3160,15 @@ export interface components {
              * @description ISO timestamp of the event
              */
             created_at: string;
+        };
+        /** ResearchRunSubstageEventStream */
+        ResearchRunSubstageEventStream: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "substage_event";
+            data: components["schemas"]["ResearchRunSubstageEvent"];
         };
         /** ResearchRunSubstageSummary */
         ResearchRunSubstageSummary: {

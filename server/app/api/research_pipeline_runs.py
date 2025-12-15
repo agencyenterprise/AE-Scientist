@@ -3,15 +3,15 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Optional, Protocol, Sequence, Union, cast
+from typing import Any, AsyncGenerator, Dict, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
@@ -61,23 +61,6 @@ router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
 REQUESTER_NAME_FALLBACK = "Scientist"
-_RUN_LOG_QUEUES: dict[str, asyncio.Queue[ResearchRunLogEntry]] = {}
-
-
-def _get_run_log_queue(run_id: str) -> asyncio.Queue[ResearchRunLogEntry]:
-    queue = _RUN_LOG_QUEUES.get(run_id)
-    if queue is None:
-        queue = asyncio.Queue(maxsize=1000)
-        _RUN_LOG_QUEUES[run_id] = queue
-    return queue
-
-
-def publish_run_log_event(run_id: str, log_entry: ResearchRunLogEntry) -> None:
-    queue = _get_run_log_queue(run_id)
-    try:
-        queue.put_nowait(log_entry)
-    except asyncio.QueueFull:
-        logger.warning("Dropping run log event for run_id=%s due to full queue", run_id)
 
 
 def extract_first_name(*, full_name: str) -> str:
@@ -843,41 +826,11 @@ def get_tree_viz(
     return _tree_viz_to_model(record)
 
 
-SSE_POLL_INTERVAL_SECONDS = 2.0
 SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
 
 
-def _is_meaningful_progress_change(
-    prev: Optional[StageProgressEvent], curr: StageProgressEvent
-) -> bool:
-    """Check if the progress change is meaningful enough to emit an SSE event."""
-    if prev is None:
-        return True
-    if prev.stage != curr.stage:
-        return True
-    prev_bucket = int(prev.progress * 10)
-    curr_bucket = int(curr.progress * 10)
-    if curr_bucket > prev_bucket:
-        return True
-    if prev.best_metric != curr.best_metric and curr.best_metric is not None:
-        return True
-    return False
-
-
-@dataclass
-class ResearchRunSSEState:
-    last_progress_event: Optional[StageProgressEvent] = None
-    last_paper_gen_event: Optional[PaperGenerationEvent] = None
-    last_heartbeat: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    initial_sent: bool = False
-    last_run_event_id: Optional[int] = None
-    last_best_node_event_id: Optional[int] = None
-    last_log_event_id: Optional[int] = None
-    last_substage_summary_id: Optional[int] = None
-
-
-def _sse_payload(event_type: str, data: dict) -> str:
-    return f"data: {json.dumps({'type': event_type, 'data': data})}\n\n"
+def _format_stream_event(event: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(event)}\n\n"
 
 
 def _build_initial_stream_payload(
@@ -886,7 +839,6 @@ def _build_initial_stream_payload(
     run_id: str,
     conversation_id: int,
     current_run: ResearchPipelineRun,
-    state: ResearchRunSSEState,
 ) -> dict:
     stage_events = [
         _stage_event_to_model(event).model_dump()
@@ -895,8 +847,6 @@ def _build_initial_stream_payload(
     log_events = [
         _log_event_to_model(event).model_dump() for event in db.list_run_log_events(run_id=run_id)
     ]
-    if log_events:
-        state.last_log_event_id = max(event["id"] for event in log_events)
     substage_events = [
         _node_event_to_model(event).model_dump()
         for event in db.list_substage_completed_events(run_id=run_id)
@@ -905,11 +855,11 @@ def _build_initial_stream_payload(
     substage_summaries = [
         _substage_summary_to_model(event).model_dump() for event in substage_summary_records
     ]
-    if substage_summary_records:
-        state.last_substage_summary_id = substage_summary_records[-1].id
     artifacts = [
         _artifact_to_model(
-            artifact=artifact, conversation_id=conversation_id, run_id=run_id
+            artifact=artifact,
+            conversation_id=conversation_id,
+            run_id=run_id,
         ).model_dump()
         for artifact in db.list_run_artifacts(run_id=run_id)
     ]
@@ -921,16 +871,14 @@ def _build_initial_stream_payload(
         _paper_generation_event_to_model(event).model_dump()
         for event in db.list_paper_generation_events(run_id=run_id)
     ]
-    run_events_raw = db.list_research_pipeline_run_events(run_id=run_id)
-    run_events = [_run_event_to_model(event).model_dump() for event in run_events_raw]
-    if run_events_raw:
-        state.last_run_event_id = max(event.id for event in run_events_raw)
-    best_node_events = db.list_best_node_reasoning_events(run_id=run_id)
-    best_node_payload = [
-        _best_node_event_to_model(event).model_dump() for event in best_node_events
+    run_events = [
+        _run_event_to_model(event).model_dump()
+        for event in db.list_research_pipeline_run_events(run_id=run_id)
     ]
-    if best_node_events:
-        state.last_best_node_event_id = max(event.id for event in best_node_events)
+    best_node_payload = [
+        _best_node_event_to_model(event).model_dump()
+        for event in db.list_best_node_reasoning_events(run_id=run_id)
+    ]
 
     return {
         "run": _run_to_info(current_run).model_dump(),
@@ -944,173 +892,6 @@ def _build_initial_stream_payload(
         "paper_generation_progress": paper_gen_events,
         "best_node_selections": best_node_payload,
     }
-
-
-def _maybe_emit_stage_progress(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> Optional[str]:
-    all_progress = db.list_stage_progress_events(run_id=run_id)
-    if not all_progress:
-        return None
-    curr_progress = all_progress[-1]
-    if _is_meaningful_progress_change(state.last_progress_event, curr_progress):
-        state.last_progress_event = curr_progress
-        progress_data = _stage_event_to_model(curr_progress).model_dump()
-        return _sse_payload("stage_progress", progress_data)
-    return None
-
-
-def _maybe_emit_run_events(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> list[str]:
-    run_events_raw = db.list_research_pipeline_run_events(run_id=run_id)
-    if not run_events_raw:
-        return []
-    new_events = (
-        [
-            event
-            for event in run_events_raw
-            if state.last_run_event_id is None or event.id > state.last_run_event_id
-        ]
-        if state.last_run_event_id is not None
-        else run_events_raw
-    )
-    payloads: list[str] = []
-    for event in new_events:
-        payloads.append(_sse_payload("run_event", _run_event_to_model(event).model_dump()))
-        state.last_run_event_id = event.id
-    return payloads
-
-
-def _maybe_emit_new_logs(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> list[str]:
-    if state.last_log_event_id is None:
-        latest_log = db.list_run_log_events(run_id=run_id, limit=1)
-        if latest_log:
-            state.last_log_event_id = latest_log[0].id
-        return []
-    new_logs = db.list_run_log_events_after_id(
-        run_id=run_id, last_id=state.last_log_event_id, limit=100
-    )
-    payloads: list[str] = []
-    if not new_logs:
-        return payloads
-    for log_event in new_logs:
-        payload = _log_event_to_model(log_event).model_dump()
-        payloads.append(_sse_payload("log", payload))
-    state.last_log_event_id = new_logs[-1].id
-    return payloads
-
-
-def _drain_log_queue(
-    *,
-    queue: asyncio.Queue[ResearchRunLogEntry],
-    state: ResearchRunSSEState,
-) -> list[str]:
-    payloads: list[str] = []
-    while True:
-        try:
-            queued_log = queue.get_nowait()
-        except asyncio.QueueEmpty:
-            break
-        payload = queued_log.model_dump()
-        payloads.append(_sse_payload("log", payload))
-        if state.last_log_event_id is None or payload["id"] > state.last_log_event_id:
-            state.last_log_event_id = payload["id"]
-    return payloads
-
-
-def _maybe_emit_best_node_events(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> list[str]:
-    best_node_events = db.list_best_node_reasoning_events(run_id=run_id)
-    if not best_node_events:
-        return []
-    new_events = (
-        [
-            best_event
-            for best_event in best_node_events
-            if state.last_best_node_event_id is None
-            or best_event.id > state.last_best_node_event_id
-        ]
-        if state.last_best_node_event_id is not None
-        else best_node_events
-    )
-    payloads: list[str] = []
-    for event in new_events:
-        payloads.append(
-            _sse_payload("best_node_selection", _best_node_event_to_model(event).model_dump())
-        )
-        state.last_best_node_event_id = event.id
-    return payloads
-
-
-def _maybe_emit_paper_generation_events(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> Optional[str]:
-    all_paper_gen = db.list_paper_generation_events(run_id=run_id)
-    if not all_paper_gen:
-        return None
-    curr_paper_gen = all_paper_gen[-1]
-    if curr_paper_gen == state.last_paper_gen_event:
-        return None
-    state.last_paper_gen_event = curr_paper_gen
-    return _sse_payload(
-        "paper_generation_progress",
-        _paper_generation_event_to_model(curr_paper_gen).model_dump(),
-    )
-
-
-def _maybe_emit_substage_summary_events(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    state: ResearchRunSSEState,
-) -> list[str]:
-    substage_summary_events = db.list_substage_summary_events(run_id=run_id)
-    if not substage_summary_events:
-        return []
-    new_events = (
-        [
-            summary_event
-            for summary_event in substage_summary_events
-            if state.last_substage_summary_id is None
-            or summary_event.id > state.last_substage_summary_id
-        ]
-        if state.last_substage_summary_id is not None
-        else substage_summary_events
-    )
-    payloads: list[str] = []
-    for summary_event in new_events:
-        payloads.append(
-            _sse_payload("substage_summary", _substage_summary_to_model(summary_event).model_dump())
-        )
-        state.last_substage_summary_id = summary_event.id
-    return payloads
-
-
-def _maybe_emit_heartbeat(state: ResearchRunSSEState) -> Optional[str]:
-    now = datetime.now(timezone.utc)
-    if (now - state.last_heartbeat).total_seconds() < SSE_HEARTBEAT_INTERVAL_SECONDS:
-        return None
-    state.last_heartbeat = now
-    return _sse_payload("heartbeat", {})
 
 
 @router.get(
@@ -1149,83 +930,54 @@ async def stream_research_run_events(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    log_queue = _get_run_log_queue(run_id)
-
     async def event_generator() -> AsyncGenerator[str, None]:
-        """Generate SSE events until the run completes or client disconnects."""
-        stream_state = ResearchRunSSEState()
+        """Generate SSE events until the run completes or the client disconnects."""
+        queue = register_stream_queue(run_id)
+        initial_sent = False
 
-        while True:
-            # Check if client is still connected
-            if await request.is_disconnected():
-                logger.info("Client disconnected from SSE stream for run %s", run_id)
-                break
-
-            try:
-                # Fetch current run state
-                current_run = db.get_research_pipeline_run(run_id)
-                if current_run is None:
-                    yield f"data: {json.dumps({'type': 'error', 'data': 'Run not found'})}\n\n"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from SSE stream for run %s", run_id)
                     break
 
-                # Send initial data on first iteration
-                if not stream_state.initial_sent:
+                if not initial_sent:
+                    current_run = db.get_research_pipeline_run(run_id)
+                    if current_run is None:
+                        yield _format_stream_event({"type": "error", "data": "Run not found"})
+                        break
                     initial_data = _build_initial_stream_payload(
                         db=db,
                         run_id=run_id,
                         conversation_id=conversation_id,
                         current_run=current_run,
-                        state=stream_state,
                     )
-                    yield _sse_payload("initial", initial_data)
-                    stream_state.initial_sent = True
+                    yield _format_stream_event({"type": "initial", "data": initial_data})
+                    initial_sent = True
+                    continue
 
-                # Check if run is complete
-                if current_run.status in ("completed", "failed", "cancelled"):
-                    # Emit final status event
-                    yield f"data: {json.dumps({'type': 'complete', 'data': {'status': current_run.status}})}\n\n"
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        logger.info("Client disconnected from SSE stream for run %s", run_id)
+                        break
+                    yield _format_stream_event({"type": "heartbeat", "data": None})
+                    continue
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Error while reading stream queue for run %s", run_id)
+                    yield _format_stream_event({"type": "error", "data": str(exc)})
                     break
 
-                stage_payload = _maybe_emit_stage_progress(db=db, run_id=run_id, state=stream_state)
-                if stage_payload:
-                    yield stage_payload
+                yield _format_stream_event(event)
 
-                for payload in _maybe_emit_run_events(db=db, run_id=run_id, state=stream_state):
-                    yield payload
-
-                for payload in _maybe_emit_new_logs(db=db, run_id=run_id, state=stream_state):
-                    yield payload
-
-                for payload in _drain_log_queue(queue=log_queue, state=stream_state):
-                    yield payload
-
-                for payload in _maybe_emit_best_node_events(
-                    db=db, run_id=run_id, state=stream_state
-                ):
-                    yield payload
-
-                paper_payload = _maybe_emit_paper_generation_events(
-                    db=db, run_id=run_id, state=stream_state
-                )
-                if paper_payload:
-                    yield paper_payload
-
-                for payload in _maybe_emit_substage_summary_events(
-                    db=db, run_id=run_id, state=stream_state
-                ):
-                    yield payload
-
-                heartbeat_payload = _maybe_emit_heartbeat(stream_state)
-                if heartbeat_payload:
-                    yield heartbeat_payload
-
-                # Wait before polling again
-                await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
-
-            except Exception as exc:
-                logger.exception("Error in SSE event generation for run %s", run_id)
-                yield f"data: {json.dumps({'type': 'error', 'data': str(exc)})}\n\n"
-                break
+                if event.get("type") == "complete":
+                    break
+        finally:
+            unregister_stream_queue(run_id, queue)
 
     return StreamingResponse(
         event_generator(),
