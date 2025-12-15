@@ -62,6 +62,16 @@ class SubstageCompletedPayload(BaseModel):
     event: SubstageCompletedEvent
 
 
+class SubstageSummaryEvent(BaseModel):
+    stage: str
+    summary: Dict[str, Any]
+
+
+class SubstageSummaryPayload(BaseModel):
+    run_id: str
+    event: SubstageSummaryEvent
+
+
 class RunStartedPayload(BaseModel):
     run_id: str
 
@@ -220,6 +230,19 @@ def ingest_paper_generation_progress(
         event.substep or "N/A",
         event.progress * 100,
         event.step_progress * 100,
+    )
+
+
+@router.post("/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_substage_summary(
+    payload: SubstageSummaryPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    logger.info(
+        "RP sub-stage summary: run=%s stage=%s",
+        payload.run_id,
+        event.stage,
     )
 
 

@@ -519,6 +519,11 @@ class FakeRunner:
                 "best_metric": f"Metrics(fake metric for {stage_name})",
                 "buggy_nodes": 1,
                 "total_nodes": 3,
+                "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
+                "goal_assessment": {
+                    "status": "on_track",
+                    "reason": f"Fake summary indicates progress for {stage_name}",
+                },
             }
             logger.info("Emitting substage_completed for stage %s", stage_name)
             self._persistence.queue.put(
@@ -534,6 +539,22 @@ class FakeRunner:
                     },
                 )
             )
+            try:
+                self._store_substage_summary(stage_name=stage_name, summary=summary)
+            except Exception:
+                logger.exception("Failed to store fake substage summary for stage %s", stage_name)
+            try:
+                self._persistence.queue.put(
+                    PersistableEvent(
+                        kind="substage_summary",
+                        data={
+                            "stage": stage_name,
+                            "summary": summary,
+                        },
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
             logger.info(
                 "[FakeRunner %s] Stage %d/%d complete",
                 self._run_id[:8],
@@ -826,6 +847,21 @@ class FakeRunner:
                         VALUES (%s, %s, %s, %s)
                         """,
                         (self._run_id, stage_name, node_id, reasoning),
+                    )
+        finally:
+            conn.close()
+
+    def _store_substage_summary(self, *, stage_name: str, summary: dict) -> None:
+        conn = psycopg2.connect(self._database_url)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO rp_substage_summary_events (run_id, stage, summary)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (self._run_id, stage_name, psycopg2.extras.Json(summary)),
                     )
         finally:
             conn.close()

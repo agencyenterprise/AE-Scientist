@@ -111,6 +111,13 @@ export interface SubstageEventApi {
   created_at: string;
 }
 
+export interface SubstageSummaryApi {
+  id: number;
+  stage: string;
+  summary: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface PaperGenerationEventApi {
   id: number;
   run_id: string;
@@ -145,6 +152,7 @@ export interface ResearchRunDetailsApi {
   stage_progress: StageProgressApi[];
   logs: LogEntryApi[];
   substage_events: SubstageEventApi[];
+  substage_summaries?: SubstageSummaryApi[];
   artifacts: ArtifactMetadataApi[];
   paper_generation_progress: PaperGenerationEventApi[];
   tree_viz: TreeVizItemApi[];
@@ -199,6 +207,13 @@ export interface SubstageEvent {
   created_at: string;
 }
 
+export interface SubstageSummary {
+  id: number;
+  stage: string;
+  summary: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface PaperGenerationEvent {
   id: number;
   run_id: string;
@@ -240,6 +255,7 @@ export interface ResearchRunDetails {
   stage_progress: StageProgress[];
   logs: LogEntry[];
   substage_events: SubstageEvent[];
+  substage_summaries: SubstageSummary[];
   artifacts: ArtifactMetadata[];
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];

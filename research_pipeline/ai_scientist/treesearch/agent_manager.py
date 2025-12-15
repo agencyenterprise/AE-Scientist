@@ -26,6 +26,7 @@ from ai_scientist.treesearch.events import (
     RunLogEvent,
     RunStageProgressEvent,
     SubstageCompletedEvent,
+    SubstageSummaryEvent,
 )
 
 from .journal import Journal, Node
@@ -643,6 +644,12 @@ Your research idea:\n\n
                         plan_progress=plan_progress,
                     )
                     summary["phase_summary"] = phase_summary.to_dict()
+                    self.event_callback(
+                        SubstageSummaryEvent(
+                            stage=current_substage.name,
+                            summary=phase_summary.to_dict(),
+                        )
+                    )
                 except Exception:
                     logger.exception(
                         "Failed to generate phase summary for %s", current_substage.name

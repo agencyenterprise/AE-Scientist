@@ -1814,6 +1814,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/substage-summary": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Substage Summary",
+        "operationId": "ingest_substage_summary_api_research_pipeline_events_substage_summary_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubstageSummaryPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/best-node-selection": {
       "post": {
         "tags": [
@@ -5460,6 +5505,14 @@
             "title": "Substage Events",
             "description": "Sub-stage completion events"
           },
+          "substage_summaries": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunSubstageSummary"
+            },
+            "type": "array",
+            "title": "Substage Summaries",
+            "description": "LLM-generated summaries for completed sub-stages"
+          },
           "best_node_selections": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
@@ -5798,6 +5851,13 @@
             "type": "array",
             "title": "Substage Events"
           },
+          "substage_summaries": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunSubstageSummary"
+            },
+            "type": "array",
+            "title": "Substage Summaries"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
@@ -5840,6 +5900,7 @@
           "stage_progress",
           "logs",
           "substage_events",
+          "substage_summaries",
           "artifacts",
           "tree_viz",
           "events",
@@ -6318,6 +6379,9 @@
             "$ref": "#/components/schemas/ResearchRunPaperGenerationEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunSubstageSummaryEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
           },
           {
@@ -6337,7 +6401,8 @@
             "log": "#/components/schemas/ResearchRunLogEvent",
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
-            "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent"
+            "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
+            "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
           }
         }
       },
@@ -6385,6 +6450,57 @@
           "created_at"
         ],
         "title": "ResearchRunSubstageEvent"
+      },
+      "ResearchRunSubstageSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the sub-stage summary event"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary",
+            "description": "LLM-generated summary payload"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the summary was recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "summary",
+          "created_at"
+        ],
+        "title": "ResearchRunSubstageSummary"
+      },
+      "ResearchRunSubstageSummaryEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "substage_summary",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunSubstageSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunSubstageSummaryEvent"
       },
       "ResearchRunSummary": {
         "properties": {
@@ -6764,6 +6880,42 @@
           "event"
         ],
         "title": "SubstageCompletedPayload"
+      },
+      "SubstageSummaryEvent": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "summary"
+        ],
+        "title": "SubstageSummaryEvent"
+      },
+      "SubstageSummaryPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/SubstageSummaryEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "SubstageSummaryPayload"
       },
       "SummaryResponse": {
         "properties": {

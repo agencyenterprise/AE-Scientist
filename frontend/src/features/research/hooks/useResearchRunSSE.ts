@@ -9,6 +9,7 @@ import type {
   ResearchRunDetails,
   PaperGenerationEvent,
   BestNodeSelection,
+  SubstageSummary,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -26,6 +27,7 @@ interface UseResearchRunSSEOptions {
   onComplete: (status: string) => void;
   onRunEvent?: (event: unknown) => void;
   onBestNodeSelection?: (event: BestNodeSelection) => void;
+  onSubstageSummary?: (event: SubstageSummary) => void;
   onError?: (error: string) => void;
 }
 
@@ -91,12 +93,25 @@ function normalizePaperGenerationEvent(event: InitialPaperGenerationEvent): Pape
   };
 }
 
+function getInitialSubstageSummaries(data: InitialEventData): SubstageSummary[] {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "substage_summaries" in data &&
+    Array.isArray((data as { substage_summaries?: unknown }).substage_summaries)
+  ) {
+    return (data as { substage_summaries?: SubstageSummary[] }).substage_summaries ?? [];
+  }
+  return [];
+}
+
 function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
     logs: data.logs,
     substage_events: data.substage_events,
+    substage_summaries: getInitialSubstageSummaries(data),
     artifacts: data.artifacts,
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
@@ -117,6 +132,7 @@ export function useResearchRunSSE({
   onComplete,
   onRunEvent,
   onBestNodeSelection,
+  onSubstageSummary,
   onError,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
   void _onArtifact;
@@ -202,6 +218,9 @@ export function useResearchRunSSE({
                 break;
               case "best_node_selection":
                 onBestNodeSelection?.(event.data as BestNodeSelection);
+                break;
+              case "substage_summary":
+                onSubstageSummary?.(event.data as SubstageSummary);
                 break;
               case "paper_generation_progress":
                 onPaperGenerationProgress(event.data as PaperGenerationEvent);

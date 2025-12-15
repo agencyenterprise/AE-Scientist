@@ -740,6 +740,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/substage-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Substage Summary */
+        post: operations["ingest_substage_summary_api_research_pipeline_events_substage_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/best-node-selection": {
         parameters: {
             query?: never;
@@ -2634,6 +2651,11 @@ export interface components {
              */
             substage_events?: components["schemas"]["ResearchRunSubstageEvent"][];
             /**
+             * Substage Summaries
+             * @description LLM-generated summaries for completed sub-stages
+             */
+            substage_summaries?: components["schemas"]["ResearchRunSubstageSummary"][];
+            /**
              * Best Node Selections
              * @description Reasoning records captured whenever a best node is selected
              */
@@ -2818,6 +2840,8 @@ export interface components {
             logs: components["schemas"]["ResearchRunLogEntry"][];
             /** Substage Events */
             substage_events: components["schemas"]["ResearchRunSubstageEvent"][];
+            /** Substage Summaries */
+            substage_summaries: components["schemas"]["ResearchRunSubstageSummary"][];
             /** Artifacts */
             artifacts: components["schemas"]["ResearchRunArtifactMetadata"][];
             /** Tree Viz */
@@ -3102,7 +3126,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageEvent */
         ResearchRunSubstageEvent: {
             /**
@@ -3132,6 +3156,40 @@ export interface components {
              * @description ISO timestamp of the event
              */
             created_at: string;
+        };
+        /** ResearchRunSubstageSummary */
+        ResearchRunSubstageSummary: {
+            /**
+             * Id
+             * @description Unique identifier of the sub-stage summary event
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Summary
+             * @description LLM-generated summary payload
+             */
+            summary: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * @description ISO timestamp when the summary was recorded
+             */
+            created_at: string;
+        };
+        /** ResearchRunSubstageSummaryEvent */
+        ResearchRunSubstageSummaryEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "substage_summary";
+            data: components["schemas"]["ResearchRunSubstageSummary"];
         };
         /**
          * ResearchRunSummary
@@ -3301,6 +3359,21 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["SubstageCompletedEvent"];
+        };
+        /** SubstageSummaryEvent */
+        SubstageSummaryEvent: {
+            /** Stage */
+            stage: string;
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        /** SubstageSummaryPayload */
+        SubstageSummaryPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["SubstageSummaryEvent"];
         };
         /**
          * SummaryResponse
@@ -4611,6 +4684,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PaperGenerationProgressPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_substage_summary_api_research_pipeline_events_substage_summary_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstageSummaryPayload"];
             };
         };
         responses: {
