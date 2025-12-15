@@ -16,7 +16,6 @@ from app.models import ChatMessageData
 from app.models.llm_prompts import LLMModel
 from app.services.chat_models import (
     StreamContentEvent,
-    StreamConversationLockedEvent,
     StreamDoneEvent,
     StreamErrorEvent,
     StreamIdeaUpdateEvent,
@@ -113,7 +112,6 @@ class BaseLLMService(ABC):
         StreamContentEvent
         | StreamStatusEvent
         | StreamIdeaUpdateEvent
-        | StreamConversationLockedEvent
         | StreamErrorEvent
         | StreamDoneEvent,
         None,

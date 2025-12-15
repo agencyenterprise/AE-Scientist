@@ -13,7 +13,6 @@ interface ConversationViewProps {
   onConversationDeleted?: () => void;
   onTitleUpdated?: (updatedConversation: ConversationDetail) => void;
   onSummaryGenerated?: (summary: string) => void;
-  onConversationLocked?: () => void;
   expandImportedChat?: boolean;
   costDetails: ConversationCostResponse | null;
   onRefreshCostDetails: () => void;
@@ -24,7 +23,6 @@ export function ConversationView({
   isLoading = false,
   onConversationDeleted,
   onTitleUpdated,
-  onConversationLocked,
   expandImportedChat = false,
   costDetails,
   onRefreshCostDetails,
@@ -97,7 +95,6 @@ export function ConversationView({
             conversation={conversation}
             mobileView={mobileProjectView}
             onMobileViewChange={setMobileProjectView}
-            onConversationLocked={onConversationLocked}
             onAnswerFinish={onRefreshCostDetails}
           />
         </div>

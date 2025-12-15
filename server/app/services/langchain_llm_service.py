@@ -34,7 +34,6 @@ from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.chat_models import (
     ChatStatus,
     StreamContentEvent,
-    StreamConversationLockedEvent,
     StreamDoneData,
     StreamDoneEvent,
     StreamErrorEvent,
@@ -538,7 +537,6 @@ class LangChainLLMService(BaseLLMService, ABC):
         StreamContentEvent
         | StreamStatusEvent
         | StreamIdeaUpdateEvent
-        | StreamConversationLockedEvent
         | StreamErrorEvent
         | StreamDoneEvent,
         None,

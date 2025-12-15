@@ -6,7 +6,6 @@ from app.models import ChatMessageData, LLMModel
 from app.services.base_llm_service import BaseLLMService, FileAttachmentData, LLMIdeaGeneration
 from app.services.chat_models import (
     StreamContentEvent,
-    StreamConversationLockedEvent,
     StreamDoneEvent,
     StreamErrorEvent,
     StreamIdeaUpdateEvent,
@@ -51,7 +50,6 @@ class _StubService(BaseLLMService):
         StreamContentEvent
         | StreamStatusEvent
         | StreamIdeaUpdateEvent
-        | StreamConversationLockedEvent
         | StreamErrorEvent
         | StreamDoneEvent,
         None,

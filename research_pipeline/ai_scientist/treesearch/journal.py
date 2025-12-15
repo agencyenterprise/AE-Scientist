@@ -82,6 +82,7 @@ class Node(DataClassJsonMixin):
     # -> always True if exc_type is not None or no valid metric
     is_buggy: bool | None = field(default=None, kw_only=True)
     is_buggy_plots: bool | None = field(default=None, kw_only=True)
+    best_node_reasoning: str | None = field(default=None, kw_only=True)
 
     # ---- plotting ----
     plot_data: dict = field(default_factory=dict, kw_only=True)
@@ -365,6 +366,7 @@ class Journal:
         if self.run_id is None:
             return
         reasoning_text = reasoning if reasoning.strip() else "No reasoning provided."
+        node.best_node_reasoning = reasoning_text
         try:
             self.event_callback(
                 BestNodeSelectedEvent(

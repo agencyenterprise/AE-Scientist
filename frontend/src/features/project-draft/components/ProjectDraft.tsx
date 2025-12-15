@@ -20,14 +20,9 @@ import { ProjectDraftFooter } from "./ProjectDraftFooter";
 interface ProjectDraftProps {
   conversation: ConversationDetail;
   externalUpdate?: IdeaType | null;
-  onConversationLocked?: () => void;
 }
 
-export function ProjectDraft({
-  conversation,
-  externalUpdate,
-  onConversationLocked,
-}: ProjectDraftProps) {
+export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps) {
   // Title editing state
   const [isTitleEditOpen, setIsTitleEditOpen] = useState(false);
   const [isTitleSaving, setIsTitleSaving] = useState(false);
@@ -157,9 +152,6 @@ export function ProjectDraft({
     try {
       await projectState.handleConfirmCreateProject();
       // Notify parent component that conversation is locked
-      if (onConversationLocked) {
-        onConversationLocked();
-      }
     } catch (error) {
       // Re-throw error so the modal can display it
       throw error;
