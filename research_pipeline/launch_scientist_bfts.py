@@ -40,7 +40,7 @@ from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseReco
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
-from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent, RunStageProgressEvent
+from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
