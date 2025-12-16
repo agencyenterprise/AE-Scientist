@@ -566,11 +566,7 @@ Your research idea:\n\n
         """Ensure a single final progress=1.0 event per stage."""
         if current_substage.name in self._final_progress_emitted:
             return
-        final_iteration = (
-            current_substage.max_iterations
-            if current_substage.max_iterations > 0
-            else len(journal.nodes)
-        )
+        final_iteration = len(journal.nodes)
         try:
             self.event_callback(
                 RunStageProgressEvent(
