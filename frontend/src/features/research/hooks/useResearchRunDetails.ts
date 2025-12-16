@@ -53,15 +53,6 @@ export function useResearchRunDetails({
   }, []);
 
   const handleStageProgress = useCallback((event: StageProgress) => {
-    // console.log("[SSE] Stage progress event received:", {
-    //   stage: event.stage,
-    //   iteration: event.iteration,
-    //   max_iterations: event.max_iterations,
-    //   progress: event.progress,
-    //   good_nodes: event.good_nodes,
-    //   buggy_nodes: event.buggy_nodes,
-    //   total_nodes: event.total_nodes,
-    // });
     setDetails(prev =>
       prev
         ? {

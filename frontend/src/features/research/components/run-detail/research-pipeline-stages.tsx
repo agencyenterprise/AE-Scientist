@@ -358,14 +358,6 @@ export function ResearchPipelineStages({
     };
   };
 
-  useEffect(() => {
-    // console.log("[ResearchPipelineStages] Render state:", {
-    //   stageProgressCount: stageProgress.length,
-    //   stageProgressSample: stageProgress.slice(-3), // Last 3 events
-    //   paperGenerationCount: paperGenerationProgress.length,
-    // });
-  }, [stageProgress, paperGenerationProgress]);
-
   return (
     <div className={cn("rounded-xl border border-slate-800 bg-slate-900/50 p-6 w-full", className)}>
       <h2 className="mb-6 text-xl font-semibold text-white">Pipeline Stages</h2>
