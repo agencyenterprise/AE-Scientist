@@ -355,14 +355,32 @@ export function ResearchPipelineStages({
         details: null,
       };
     }
+
     const progressPercent = Math.round(latestProgress.progress * 100);
+    const hasCompletedEvent = substageEvents.some(event => {
+      const slug = extractStageSlug(event.stage);
+      return slug === stageKey;
+    });
+
+    // Check if this is the currently active stage by looking at the GLOBAL latest progress
+    const globalLatestProgress = stageProgress[stageProgress.length - 1];
+    const isCurrentlyActive =
+      globalLatestProgress && extractStageSlug(globalLatestProgress.stage) === stageKey;
+
+    // Check if paper generation has started (which means all stages 1-4 are complete)
+    const paperGenerationStarted = paperGenerationProgress.length > 0;
 
     // Determine status based on progress value OR good_nodes (early completion)
     // A stage is completed when:
     // 1. progress >= 1.0 (exhausted all iterations), OR
-    // 2. good_nodes >= 1 (found a successful result early - search succeeded)
+    // 2. Has substage_completed event AND is no longer the active stage, OR
+    // 3. Paper generation has started (stages 1-4 only)
     let status: "pending" | "in_progress" | "completed";
-    if (latestProgress.progress >= 1.0 || latestProgress.good_nodes >= 1) {
+    if (
+      latestProgress.progress >= 1.0 ||
+      (hasCompletedEvent && !isCurrentlyActive) ||
+      paperGenerationStarted
+    ) {
       status = "completed";
     } else if (latestProgress.progress > 0) {
       status = "in_progress";

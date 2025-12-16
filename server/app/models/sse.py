@@ -223,6 +223,10 @@ class ResearchRunBestNodeEvent(BaseModel):
     type: Literal["best_node_selection"]
     data: ResearchRunBestNodeSelection
 
+class ResearchRunSubstageCompletedEvent(BaseModel):
+    type: Literal["substage_completed"]
+    data: ResearchRunSubstageEvent
+
 
 class ResearchRunPaperGenerationEvent(BaseModel):
     type: Literal["paper_generation_progress"]
@@ -257,6 +261,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunRunEvent,
         ResearchRunLogEvent,
         ResearchRunBestNodeEvent,
+        ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,
         ResearchRunSubstageEventStream,
         ResearchRunSubstageSummaryEvent,

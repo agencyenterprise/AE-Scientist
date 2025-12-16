@@ -12,6 +12,7 @@ import type {
   TreeVizItem,
   BestNodeSelection,
   SubstageSummary,
+  SubstageEvent,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -202,6 +203,17 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  const handleSubstageCompleted = useCallback((event: SubstageEvent) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            substage_events: [...prev.substage_events, event],
+          }
+        : null
+    );
+  }, []);
+
   const handleSSEError = useCallback((errorMsg: string) => {
     // eslint-disable-next-line no-console
     console.error("SSE error:", errorMsg);
@@ -224,6 +236,7 @@ export function useResearchRunDetails({
     onRunEvent: handleRunEvent,
     onBestNodeSelection: handleBestNodeSelection,
     onSubstageSummary: handleSubstageSummary,
+    onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,
   });
 

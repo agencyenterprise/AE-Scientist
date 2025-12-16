@@ -902,6 +902,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
+
         agg_ok = run_plot_aggregation(
             writeup_cfg=writeup_cfg,
             reports_base=reports_base,

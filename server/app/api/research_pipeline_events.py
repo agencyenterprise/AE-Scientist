@@ -25,14 +25,16 @@ from app.models.research_pipeline import (
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
-from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import (
+    ResearchRunBestNodeEvent as SSEBestNodeEvent,
+    ResearchRunSubstageCompletedEvent,
+)
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
-from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -269,8 +271,8 @@ def ingest_substage_completed(
         run_id=payload.run_id,
         event=cast(
             StreamEventModel,
-            SSESubstageEvent(
-                type="substage_event",
+            ResearchRunSubstageCompletedEvent(
+                type="substage_completed",
                 data=substage_event,
             ),
         ),

@@ -6375,6 +6375,9 @@
             "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunSubstageCompletedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunPaperGenerationEvent"
           },
           {
@@ -6404,10 +6407,29 @@
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
+            "substage_completed": "#/components/schemas/ResearchRunSubstageCompletedEvent",
             "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
             "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
           }
         }
+      },
+      "ResearchRunSubstageCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "substage_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunSubstageEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunSubstageCompletedEvent"
       },
       "ResearchRunSubstageEvent": {
         "properties": {
