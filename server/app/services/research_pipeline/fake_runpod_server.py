@@ -79,10 +79,36 @@ def _require_env(name: str) -> str:
 
 def _build_pod_response(record: PodRecord) -> Dict[str, object]:
     return {
-        "id": record.id,
+        "consumerUserId": "user_2mIwrbzAHBibbeosezqlYwi7fpW",
+        "containerDiskInGb": 30,
+        "createdAt": "2025-12-16 17:44:56.726 +0000 UTC",
+        "RUN_ID": record.run_id,
+        "gpuCount": 1,
+        "imageName": "newtonsander/runpod_pytorch_texdeps:v1",
+        "lastStartedAt": "2025-12-16 17:44:56.715 +0000 UTC",
+        "lastStatusChange": "Rented by User: Tue Dec 16 2025 17:44:56 GMT+0000 (Coordinated Universal Time)",
+        "machine": {
+            "dataCenterId": "US-NC-1",
+            "diskThroughputMBps": 9912,
+            "gpuTypeId": record.gpu_type_requested,
+            "location": "US",
+            "maxDownloadSpeedMbps": 9184,
+            "maxUploadSpeedMbps": 2586,
+            "secureCloud": True,
+            "supportPublicIp": True,
+            "reservedCountVersion": 201404,
+        },
+        "machineId": "9obq8gv22tj8",
+        "memoryInGb": 141,
+        "ports": ["22/tcp"],
+        "templateId": "",
+        "vcpuCount": 16,
+        "volumeInGb": 70,
         "name": record.name,
+        "id": record.id,
+        "volumeMountPath": "/workspace",
         "desiredStatus": record.desired_status,
-        "publicIp": record.public_ip or None,
+        "publicIp": record.public_ip,
         "portMappings": record.port_mappings,
         "costPerHr": record.cost_per_hr,
         "gpu_type_requested": record.gpu_type_requested,
@@ -172,7 +198,7 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
         desired_status="PENDING",
         public_ip="",
         port_mappings={},
-        cost_per_hr=0.0,
+        cost_per_hr=0.89,
         created_at=created_at,
         ready_at=0.0,
         run_id=run_id,
@@ -208,8 +234,7 @@ def get_pod(pod_id: str) -> Dict[str, object]:
 
 @app.delete("/pods/{pod_id}")
 def delete_pod(pod_id: str) -> Dict[str, str]:
-    with _lock:
-        _pods.pop(pod_id, None)
+    logger.info("Received delete_pod request: pod_id=%s", pod_id)
     return {"status": "deleted"}
 
 
@@ -222,12 +247,15 @@ def get_billing_summary(
     with _lock:
         record = _pods.get(podId)
     if record is None:
+        logger.warning("No record found for pod %s", podId)
         return []
     return [
         {
+            "amount": 1.4341899856226519,
+            "timeBilledMs": 5707585,
+            "diskSpaceBilledGB": 600,
             "podId": record.id,
-            "amount": 0.0,
-            "timeBilledMs": 0,
+            "time": "2025-12-13 00:00:00",
         }
     ]
 
