@@ -471,7 +471,7 @@ def resume_run(
 
         if next_stage == 2:
             next_meta = StageMeta(
-                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG,
                 number=2,
                 slug=Stage2Tuning.MAIN_STAGE_SLUG,
                 substage_number=1,
@@ -482,7 +482,7 @@ def resume_run(
             )
         elif next_stage == 3:
             next_meta = StageMeta(
-                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG,
                 number=3,
                 slug=Stage3Plotting.MAIN_STAGE_SLUG,
                 substage_number=1,
@@ -493,7 +493,7 @@ def resume_run(
             )
         else:
             next_meta = StageMeta(
-                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG,
                 number=4,
                 slug=Stage4Ablation.MAIN_STAGE_SLUG,
                 substage_number=1,

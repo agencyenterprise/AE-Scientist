@@ -353,10 +353,10 @@ class FakeRunner:
         self._aws_s3_bucket_name = aws_s3_bucket_name
         self._iterations_per_stage = 3
         self._stage_plan: list[tuple[str, int]] = [
-            ("1_initial_implementation_1_preliminary", 10),
-            ("2_baseline_tuning_1_first_attempt", 5),
-            ("3_creative_research_1_first_attempt", 5),
-            ("4_ablation_studies_1_first_attempt", 5),
+            ("1_initial_implementation", 10),
+            ("2_baseline_tuning", 5),
+            ("3_creative_research", 5),
+            ("4_ablation_studies", 5),
         ]
         self._heartbeat_interval_seconds = 10
         self._periodic_log_interval_seconds = 15
@@ -520,10 +520,6 @@ class FakeRunner:
                 "buggy_nodes": 1,
                 "total_nodes": 3,
                 "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
-                "goal_assessment": {
-                    "status": "on_track",
-                    "reason": f"Fake summary indicates progress for {stage_name}",
-                },
             }
             logger.info("Emitting substage_completed for stage %s", stage_name)
             self._persistence.queue.put(

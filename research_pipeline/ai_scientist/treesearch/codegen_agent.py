@@ -382,7 +382,7 @@ class MinimalAgent:
 
     # Wrapper removed: callers should use Stage3Plotting.generate_plotting_code directly
 
-    def _generate_node_summary(self, node: Node) -> dict:
+    def generate_node_summary(self, node: Node) -> dict:
         """Generate a summary of the node's experimental findings"""
         # Build a compact summary prompt capturing key artifacts from the iteration
         summary_prompt = {
