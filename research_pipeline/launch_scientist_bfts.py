@@ -40,7 +40,7 @@ from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseReco
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
-from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent, RunStageProgressEvent
+from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
@@ -902,23 +902,6 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
-        if event_callback is not None and run_id is not None:
-            # Emit initial progress event so the UI shows the correct progress
-            logger.info("[FakeRunner %s] Emitting stage 5 start event", run_id)
-            event_callback(
-                RunStageProgressEvent(
-                    stage="5_paper_generation",
-                    iteration=0,
-                    max_iterations=1,
-                    progress=0.0,
-                    total_nodes=0,
-                    buggy_nodes=0,
-                    good_nodes=0,
-                    best_metric=None,
-                    eta_s=None,
-                    latest_iteration_time_s=None,
-                )
-            )
 
         agg_ok = run_plot_aggregation(
             writeup_cfg=writeup_cfg,

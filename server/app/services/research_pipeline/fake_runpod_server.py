@@ -586,27 +586,6 @@ class FakeRunner:
 
         # Stage 5: Paper Generation
         logger.info("[FakeRunner %s] Starting paper generation (Stage 5)", self._run_id[:8])
-
-        # Emit stage 5 start event to signal transition
-        logger.info("[FakeRunner %s] Emitting stage 5 start event", self._run_id[:8])
-        self._persistence.queue.put(
-            PersistableEvent(
-                kind="run_stage_progress",
-                data={
-                    "stage": "5_paper_generation",
-                    "iteration": 0,
-                    "max_iterations": 1,
-                    "progress": 0.0,
-                    "total_nodes": 0,
-                    "buggy_nodes": 0,
-                    "good_nodes": 0,
-                    "best_metric": None,
-                    "eta_s": None,
-                    "latest_iteration_time_s": None,
-                },
-            )
-        )
-
         self._emit_paper_generation_flow()
 
     def _emit_paper_generation_flow(self) -> None:
