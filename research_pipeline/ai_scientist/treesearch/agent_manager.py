@@ -47,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 class SubstageGoalResponse(BaseModel):
     goals: str
-    sub_stage_name: str
 
 
 class StageClass(Protocol):
@@ -138,8 +137,6 @@ Your research idea:\n\n
             name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}",
             number=self.current_stage_number,
             slug=Stage1Baseline.MAIN_STAGE_SLUG,
-            substage_number=1,
-            substage_name="preliminary",
             goals=Stage1Baseline.DEFAULT_GOALS,
             max_iterations=self.get_max_iterations(self.current_stage_number),
             num_drafts=self.cfg.agent.search.num_drafts,
@@ -164,9 +161,7 @@ Your research idea:\n\n
         definition = PhaseDefinition(
             phase_id=stage_meta.name,
             main_stage_number=stage_meta.number,
-            substage_number=stage_meta.substage_number,
             stage_slug=stage_meta.slug,
-            substage_name=stage_meta.substage_name,
             goals=stage_meta.goals,
         )
         self.phase_plan.append(definition)
@@ -249,7 +244,6 @@ Your research idea:\n\n
         task_desc = self._curate_task_desc(stage)
 
         task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
-        task_desc += f"Sub-stage: {stage.substage_number} - {stage.substage_name}\n"
         task_desc += f"Sub-stage goals: {stage.goals}"
 
         # Determine carryover best nodes based on current main stage
@@ -386,7 +380,7 @@ Your research idea:\n\n
             return copied_node
         return None
 
-    def _generate_substage_goal(self, main_stage_goal: str, journal: Journal) -> Tuple[str, str]:
+    def _generate_substage_goal(self, main_stage_goal: str, journal: Journal) -> str:
         """Generate the next sub-stage goal based on what has been done so far.
 
         Args:
@@ -445,19 +439,15 @@ Your research idea:\n\n
             {response.goals}
             """
 
-            return goal_str.strip(), str(response.sub_stage_name)
+            return goal_str.strip()
 
-        except Exception as e:
-            logger.error(f"Error generating sub-stage goals: {e}")
+        except Exception:
+            logger.exception("Error generating sub-stage goals")
             # Provide fallback goals if LLM fails
-            fallback = (
-                """
+            return """
             Sub-stage Goals:
             Continue progress on main stage objectives while addressing current issues.
-            """.strip(),
-                "first_attempt",
-            )
-            return fallback
+            """.strip()
 
     def _create_next_substage(
         self, current_substage: StageMeta, journal: Journal
@@ -467,7 +457,6 @@ Your research idea:\n\n
         """
         # Build the next substage metadata using stage class defaults and LLM goal
         main_stage_num = current_substage.number
-        sub_stage_num = current_substage.substage_number
         # Get goals and slug from the corresponding stage class
         if main_stage_num == 1:
             current_stage_cls: StageClass = Stage1Baseline
@@ -481,14 +470,12 @@ Your research idea:\n\n
             raise ValueError(f"Unknown stage number: {main_stage_num}")
         main_stage_goal = current_stage_cls.DEFAULT_GOALS
         main_stage_name = current_stage_cls.MAIN_STAGE_SLUG
-        sub_stage_goal, sub_stage_name = self._generate_substage_goal(main_stage_goal, journal)
+        sub_stage_goal = self._generate_substage_goal(main_stage_goal, journal)
 
         return StageMeta(
-            name=f"{main_stage_num}_{main_stage_name}_{sub_stage_num + 1}_{sub_stage_name}",
+            name=f"{main_stage_num}_{main_stage_name}",
             number=current_substage.number,
             slug=main_stage_name,
-            substage_number=sub_stage_num + 1,
-            substage_name=sub_stage_name,
             goals="Main stage goals:\n"
             + main_stage_goal
             + "\n\nSub-stage goals:\n"
@@ -512,18 +499,14 @@ Your research idea:\n\n
         else:
             raise ValueError(f"Unknown next stage number: {next_num}")
         next_main_stage_name = next_stage_cls.MAIN_STAGE_SLUG
-        sub_stage_num = 1
-        sub_stage_name = "first_attempt"
         num_drafts = 0
         stage_number = next_num
         main_stage_goal = next_stage_cls.DEFAULT_GOALS
 
         return StageMeta(
-            name=f"{main_stage_num + 1}_{next_main_stage_name}_{sub_stage_num}_{sub_stage_name}",
+            name=f"{main_stage_num + 1}_{next_main_stage_name}",
             number=stage_number,
             slug=next_main_stage_name,
-            substage_number=sub_stage_num,
-            substage_name=sub_stage_name,
             goals=main_stage_goal,
             max_iterations=self.get_max_iterations(main_stage_num + 1),
             num_drafts=num_drafts,
@@ -651,8 +634,6 @@ Your research idea:\n\n
                 SubstageCompletedEvent(
                     stage=current_substage.name,
                     main_stage_number=current_substage.number,
-                    substage_number=current_substage.substage_number,
-                    substage_name=current_substage.substage_name,
                     reason=reason,
                     summary=summary,
                 )

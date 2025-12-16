@@ -69,8 +69,6 @@ class StageProgressPayload(BaseModel):
 class SubstageCompletedEvent(BaseModel):
     stage: str
     main_stage_number: int
-    substage_number: int
-    substage_name: str
     reason: str
     summary: Dict[str, Any]
 
@@ -251,18 +249,14 @@ def ingest_substage_completed(
 ) -> None:
     event = payload.event
     logger.info(
-        "RP sub-stage completed: run=%s stage=%s substage=%s-%s reason=%s",
+        "RP sub-stage completed: run=%s stage=%s reason=%s",
         payload.run_id,
         event.stage,
-        f"{event.main_stage_number}.{event.substage_number}",
-        event.substage_name,
         event.reason,
     )
     created_at = datetime.now(timezone.utc).isoformat()
     summary = dict(event.summary)
     summary.setdefault("main_stage_number", event.main_stage_number)
-    summary.setdefault("substage_number", event.substage_number)
-    summary.setdefault("substage_name", event.substage_name)
     summary.setdefault("reason", event.reason)
     substage_event = RPSubstageEvent(
         id=_next_stream_event_id(),

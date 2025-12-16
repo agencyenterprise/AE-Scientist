@@ -528,8 +528,6 @@ class FakeRunner:
                     data={
                         "stage": stage_name,
                         "main_stage_number": stage_index + 1,
-                        "substage_number": 1,
-                        "substage_name": "fake-substage",
                         "reason": "completed",
                         "summary": summary,
                     },

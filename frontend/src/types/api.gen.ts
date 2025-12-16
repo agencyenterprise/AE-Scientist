@@ -3346,10 +3346,6 @@ export interface components {
             stage: string;
             /** Main Stage Number */
             main_stage_number: number;
-            /** Substage Number */
-            substage_number: number;
-            /** Substage Name */
-            substage_name: string;
             /** Reason */
             reason: string;
             /** Summary */

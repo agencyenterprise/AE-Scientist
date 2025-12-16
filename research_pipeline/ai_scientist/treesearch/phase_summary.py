@@ -20,18 +20,13 @@ PHASE_EXPERIMENT_LIMIT = 6
 class PhaseDefinition:
     phase_id: str
     main_stage_number: int
-    substage_number: int
     stage_slug: str
-    substage_name: str
     goals: str
 
     @property
     def display_name(self) -> str:
         slug_label = self.stage_slug.replace("_", " ").title()
-        return (
-            f"Stage {self.main_stage_number}: {slug_label} · "
-            f"Substage {self.substage_number} ({self.substage_name})"
-        )
+        return f"Stage {self.main_stage_number}: {slug_label} · "
 
 
 @dataclass

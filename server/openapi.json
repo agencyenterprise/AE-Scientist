@@ -6856,14 +6856,6 @@
             "type": "integer",
             "title": "Main Stage Number"
           },
-          "substage_number": {
-            "type": "integer",
-            "title": "Substage Number"
-          },
-          "substage_name": {
-            "type": "string",
-            "title": "Substage Name"
-          },
           "reason": {
             "type": "string",
             "title": "Reason"
@@ -6878,8 +6870,6 @@
         "required": [
           "stage",
           "main_stage_number",
-          "substage_number",
-          "substage_name",
           "reason",
           "summary"
         ],
