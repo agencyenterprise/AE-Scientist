@@ -99,7 +99,7 @@ class RunLogEvent(BaseEvent):
 class SubstageCompletedEvent(BaseEvent):
     """Event emitted when a sub-stage completes."""
 
-    stage: str  # Full stage identifier, e.g. "2_baseline_tuning_1_first_attempt"
+    stage: str  # Full stage identifier, e.g. "2_baseline_tuning"
     main_stage_number: int
     substage_number: int
     substage_name: str

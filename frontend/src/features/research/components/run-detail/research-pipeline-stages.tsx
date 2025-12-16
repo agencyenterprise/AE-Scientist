@@ -59,7 +59,7 @@ const PIPELINE_STAGES = [
  *
  * Backend format: {stage_number}_{stage_slug}_{substage_number}_{substage_name}
  * Examples:
- *   "1_initial_implementation_1_preliminary" → "initial_implementation"
+ *   "1_initial_implementation" → "initial_implementation"
  *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
  *   "3_creative_research_1_exploration" → "creative_research"
  */
@@ -232,25 +232,6 @@ const getSummaryText = (summary: SubstageSummary): string => {
   return JSON.stringify(summary.summary, null, 2);
 };
 
-const getSummaryStatus = (summary: SubstageSummary): string | null => {
-  if (!isRecord(summary.summary)) {
-    return null;
-  }
-  const goalAssessment = summary.summary.goal_assessment;
-  if (!isRecord(goalAssessment)) {
-    return null;
-  }
-  const status = goalAssessment.status;
-  const reason = goalAssessment.reason;
-  if (typeof status !== "string" || !status) {
-    return null;
-  }
-  if (typeof reason === "string" && reason.trim()) {
-    return `Goal assessment: ${status} — ${reason}`;
-  }
-  return `Goal assessment: ${status}`;
-};
-
 // Paper generation step labels for Stage 5
 const PAPER_GENERATION_STEPS = [
   { key: "plot_aggregation", label: "Plot Aggregation" },
@@ -417,7 +398,6 @@ export function ResearchPipelineStages({
             ? null
             : getLatestSummaryForStage(stage.key, substageSummaries);
           const summaryText = latestSummary ? getSummaryText(latestSummary) : null;
-          const summaryStatus = latestSummary ? getSummaryStatus(latestSummary) : null;
 
           const latestPaperEvent =
             isPaperGeneration && paperGenerationProgress.length > 0
@@ -506,9 +486,6 @@ export function ResearchPipelineStages({
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                         Substage Summary
                       </p>
-                      {summaryStatus && (
-                        <p className="text-[11px] text-slate-400">{summaryStatus}</p>
-                      )}
                       {summaryText && (
                         <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
                           {summaryText}

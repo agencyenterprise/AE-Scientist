@@ -33,12 +33,7 @@ from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent
-from .phase_summary import (
-    PhaseDefinition,
-    PhasePlanProgress,
-    build_phase_summary,
-    expected_artifacts_for_slug,
-)
+from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -140,7 +135,7 @@ Your research idea:\n\n
         # Seed Stage 1 (baseline) with defaults defined by the stage class
         self.current_stage_number += 1
         initial_stage = StageMeta(
-            name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}_1_preliminary",
+            name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}",
             number=self.current_stage_number,
             slug=Stage1Baseline.MAIN_STAGE_SLUG,
             substage_number=1,
@@ -173,7 +168,6 @@ Your research idea:\n\n
             stage_slug=stage_meta.slug,
             substage_name=stage_meta.substage_name,
             goals=stage_meta.goals,
-            expected_artifacts=expected_artifacts_for_slug(stage_slug=stage_meta.slug),
         )
         self.phase_plan.append(definition)
 
@@ -188,7 +182,6 @@ Your research idea:\n\n
             if definition.phase_id == stage_id:
                 return PhasePlanProgress(
                     completed_phases=index + 1,
-                    total_phases=len(self.phase_plan),
                     current_phase_label=definition.display_name,
                 )
         return None
@@ -918,14 +911,14 @@ Your research idea:\n\n
 
         # Gather individual node summaries
         for node in journal.nodes:
-            if node._agent is not None:
-                node_summary = node._agent._generate_node_summary(node)
+            if node.agent is not None:
+                node_summary = node.agent.generate_node_summary(node)
                 metrics["node_summaries"].append(node_summary)
 
         # Get VLM feedback from plot analysis
         for node in journal.good_nodes:
-            if node._vlm_feedback is not None:
-                metrics["vlm_feedback"].append(node._vlm_feedback)
+            if node.vlm_feedback is not None:
+                metrics["vlm_feedback"].append(node.vlm_feedback)
 
         best_node = journal.get_best_node()
         if best_node and best_node.metric is not None:
@@ -962,7 +955,7 @@ Your research idea:\n\n
         # Include VLM-identified systemic issues
         vlm_issues = set()  # Use set to avoid duplicate issues
         for node in journal.good_nodes:
-            vlm_feedback = node._vlm_feedback
+            vlm_feedback = node.vlm_feedback
             if isinstance(vlm_feedback, dict):
                 # Look for systemic issues identified by VLM
                 if "systemic_issues" in vlm_feedback:

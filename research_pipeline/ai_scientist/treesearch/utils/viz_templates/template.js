@@ -412,10 +412,10 @@ async function loadAllStageData(baseTreeData) {
   // Load data for each stage if available
   const stageNames = ['Stage_1', 'Stage_2', 'Stage_3', 'Stage_4'];
   const stageNames2actualNames = {
-    'Stage_1': 'stage_1_initial_implementation_1_preliminary',
-    'Stage_2': 'stage_2_baseline_tuning_1_first_attempt',
-    'Stage_3': 'stage_3_creative_research_1_first_attempt',
-    'Stage_4': 'stage_4_ablation_studies_1_first_attempt'
+    'Stage_1': 'stage_1_initial_implementation',
+    'Stage_2': 'stage_2_baseline_tuning',
+    'Stage_3': 'stage_3_creative_research',
+    'Stage_4': 'stage_4_ablation_studies'
     }
 
   for (const stage of stageNames) {
