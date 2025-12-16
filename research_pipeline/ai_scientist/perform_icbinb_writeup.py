@@ -15,7 +15,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from langchain_core.messages import BaseMessage
 
 from ai_scientist.citations_specs import CITATION_SEARCH_SCHEMA, CITATION_SELECTION_SCHEMA
-from ai_scientist.ideation.semantic_scholar import search_for_papers
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import get_response_from_llm, get_structured_response_from_llm
 from ai_scientist.perform_vlm_review import (
@@ -25,6 +24,7 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.perform_writeup import _ensure_graphicspath
+from ai_scientist.semantic_scholar import search_for_papers
 from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
