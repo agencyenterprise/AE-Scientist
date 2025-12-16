@@ -8,6 +8,7 @@ import type {
 } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { useEffect } from "react";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
@@ -323,14 +324,24 @@ export function ResearchPipelineStages({
         details: null,
       };
     }
+
     const progressPercent = Math.round(latestProgress.progress * 100);
+    const hasCompletedEvent = substageEvents.some(event => {
+      const slug = extractStageSlug(event.stage);
+      return slug === stageKey;
+    });
+
+    // Check if this is the currently active stage by looking at the GLOBAL latest progress
+    const globalLatestProgress = stageProgress[stageProgress.length - 1];
+    const isCurrentlyActive =
+      globalLatestProgress && extractStageSlug(globalLatestProgress.stage) === stageKey;
 
     // Determine status based on progress value OR good_nodes (early completion)
     // A stage is completed when:
     // 1. progress >= 1.0 (exhausted all iterations), OR
-    // 2. good_nodes >= 1 (found a successful result early - search succeeded)
+    // 2. Has substage_completed event AND is no longer the active stage
     let status: "pending" | "in_progress" | "completed";
-    if (latestProgress.progress >= 1.0 || latestProgress.good_nodes >= 1) {
+    if (latestProgress.progress >= 1.0 || (hasCompletedEvent && !isCurrentlyActive)) {
       status = "completed";
     } else if (latestProgress.progress > 0) {
       status = "in_progress";
@@ -346,6 +357,14 @@ export function ResearchPipelineStages({
       details: latestProgress,
     };
   };
+
+  useEffect(() => {
+    // console.log("[ResearchPipelineStages] Render state:", {
+    //   stageProgressCount: stageProgress.length,
+    //   stageProgressSample: stageProgress.slice(-3), // Last 3 events
+    //   paperGenerationCount: paperGenerationProgress.length,
+    // });
+  }, [stageProgress, paperGenerationProgress]);
 
   return (
     <div className={cn("rounded-xl border border-slate-800 bg-slate-900/50 p-6 w-full", className)}>

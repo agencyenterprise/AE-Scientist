@@ -892,6 +892,7 @@ async def stream_research_run_events(
         last_run_event_id: Optional[int] = None
         last_best_node_event_id: Optional[int] = None
         last_log_event_id: Optional[int] = None
+        last_substage_event_id: Optional[int] = None
 
         while True:
             # Check if client is still connected
@@ -918,10 +919,13 @@ async def stream_research_run_events(
                     ]
                     if log_events:
                         last_log_event_id = max(event["id"] for event in log_events)
+                    substage_events_raw = db.list_substage_completed_events(run_id=run_id)
                     substage_events = [
                         _node_event_to_model(e).model_dump()
-                        for e in db.list_substage_completed_events(run_id=run_id)
+                        for e in substage_events_raw
                     ]
+                    if substage_events_raw:
+                        last_substage_event_id = max(event.id for event in substage_events_raw)
                     artifacts = [
                         _artifact_to_model(a, conversation_id, run_id).model_dump()
                         for a in db.list_run_artifacts(run_id=run_id)
@@ -1028,6 +1032,19 @@ async def stream_research_run_events(
                         payload = _best_node_event_to_model(best_event).model_dump()
                         yield f"data: {json.dumps({'type': 'best_node_selection', 'data': payload})}\n\n"
                         last_best_node_event_id = best_event.id
+
+                # Check and emit substage completed events if meaningful changes
+                substage_events_raw = db.list_substage_completed_events(run_id=run_id)
+                if substage_events_raw:
+                    new_substage_events = [
+                        event
+                        for event in substage_events_raw
+                        if last_substage_event_id is None or event.id > last_substage_event_id
+                    ]
+                    for substage_event in new_substage_events:
+                        payload = _node_event_to_model(substage_event).model_dump()
+                        yield f"data: {json.dumps({'type': 'substage_completed', 'data': payload})}\n\n"
+                        last_substage_event_id = substage_event.id
 
                 # Check and emit paper generation progress events
                 all_paper_gen = db.list_paper_generation_events(run_id=run_id)

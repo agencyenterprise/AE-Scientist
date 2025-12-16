@@ -11,6 +11,7 @@ import type {
   PaperGenerationEvent,
   TreeVizItem,
   BestNodeSelection,
+  SubstageEvent,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -52,6 +53,15 @@ export function useResearchRunDetails({
   }, []);
 
   const handleStageProgress = useCallback((event: StageProgress) => {
+    // console.log("[SSE] Stage progress event received:", {
+    //   stage: event.stage,
+    //   iteration: event.iteration,
+    //   max_iterations: event.max_iterations,
+    //   progress: event.progress,
+    //   good_nodes: event.good_nodes,
+    //   buggy_nodes: event.buggy_nodes,
+    //   total_nodes: event.total_nodes,
+    // });
     setDetails(prev =>
       prev
         ? {
@@ -188,6 +198,17 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  const handleSubstageCompleted = useCallback((event: SubstageEvent) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            substage_events: [...prev.substage_events, event],
+          }
+        : null
+    );
+  }, []);
+
   const handleSSEError = useCallback((errorMsg: string) => {
     // eslint-disable-next-line no-console
     console.error("SSE error:", errorMsg);
@@ -209,6 +230,7 @@ export function useResearchRunDetails({
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
     onBestNodeSelection: handleBestNodeSelection,
+    onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,
   });
 
