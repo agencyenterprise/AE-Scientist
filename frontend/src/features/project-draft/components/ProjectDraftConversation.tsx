@@ -21,7 +21,6 @@ interface ProjectDraftConversationProps {
   currentProjectDraft?: Idea | null;
   onProjectDraftUpdate?: (updatedDraft: Idea) => void;
   onOpenPromptModal?: () => void;
-  onConversationLocked?: () => void;
   conversationCapabilities?: {
     hasImages?: boolean;
     hasPdfs?: boolean;
@@ -36,7 +35,6 @@ export function ProjectDraftConversation({
   currentProjectDraft,
   onProjectDraftUpdate,
   onOpenPromptModal,
-  onConversationLocked,
   conversationCapabilities,
   isVisible,
   onAnswerFinish,
@@ -110,7 +108,6 @@ export function ProjectDraftConversation({
     messages,
     setMessages,
     onProjectDraftUpdate,
-    onConversationLocked,
     consumePendingFiles,
     restorePendingFiles,
     inputRef,

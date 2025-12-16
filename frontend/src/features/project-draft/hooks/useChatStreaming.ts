@@ -22,7 +22,6 @@ interface UseChatStreamingOptions {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   onProjectDraftUpdate?: (updatedDraft: Idea) => void;
-  onConversationLocked?: () => void;
   consumePendingFiles: () => FileMetadata[];
   restorePendingFiles: (files: FileMetadata[]) => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -46,7 +45,6 @@ export function useChatStreaming({
   messages,
   setMessages,
   onProjectDraftUpdate,
-  onConversationLocked,
   consumePendingFiles,
   restorePendingFiles,
   inputRef,
@@ -198,13 +196,6 @@ export function useChatStreaming({
                   setStatusMessage("Idea updated!");
                   break;
                 }
-                case "conversation_locked": {
-                  setStatusMessage("Project created successfully!");
-                  if (onConversationLocked) {
-                    onConversationLocked();
-                  }
-                  break;
-                }
                 case "error": {
                   throw new Error(eventData.data);
                 }
@@ -304,7 +295,6 @@ export function useChatStreaming({
       user,
       setMessages,
       conversationId,
-      onConversationLocked,
       onProjectDraftUpdate,
       restorePendingFiles,
       onStreamEnd,

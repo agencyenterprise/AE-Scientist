@@ -20,6 +20,7 @@ from app.models.research_pipeline import (
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
     ResearchRunSubstageEvent,
+    ResearchRunSubstageSummary,
     TreeVizItem,
 )
 from app.services.chat_models import ChatStatus
@@ -51,11 +52,6 @@ class ChatStreamIdeaUpdatedEvent(BaseModel):
     data: str
 
 
-class ChatStreamConversationLockedEvent(BaseModel):
-    type: Literal["conversation_locked"]
-    data: str
-
-
 class ChatStreamErrorEvent(BaseModel):
     type: Literal["error"]
     data: str
@@ -71,7 +67,6 @@ ChatStreamEventUnion = Annotated[
         ChatStreamStatusEvent,
         ChatStreamContentEvent,
         ChatStreamIdeaUpdatedEvent,
-        ChatStreamConversationLockedEvent,
         ChatStreamErrorEvent,
         ChatStreamDoneEvent,
     ],
@@ -185,6 +180,7 @@ class ResearchRunInitialEventData(BaseModel):
     stage_progress: List[ResearchRunStageProgress]
     logs: List[ResearchRunLogEntry]
     substage_events: List[ResearchRunSubstageEvent]
+    substage_summaries: List[ResearchRunSubstageSummary]
     artifacts: List[ResearchRunArtifactMetadata]
     tree_viz: List[TreeVizItem]
     events: List[ResearchRunEvent]
@@ -199,6 +195,8 @@ class ResearchRunInitialEvent(BaseModel):
 
 class ResearchRunCompleteData(BaseModel):
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    success: Optional[bool] = None
+    message: Optional[str] = None
 
 
 class ResearchRunCompleteEvent(BaseModel):
@@ -235,6 +233,16 @@ class ResearchRunPaperGenerationEvent(BaseModel):
     data: ResearchRunPaperGenerationProgress
 
 
+class ResearchRunSubstageEventStream(BaseModel):
+    type: Literal["substage_event"]
+    data: ResearchRunSubstageEvent
+
+
+class ResearchRunSubstageSummaryEvent(BaseModel):
+    type: Literal["substage_summary"]
+    data: ResearchRunSubstageSummary
+
+
 class ResearchRunHeartbeatEvent(BaseModel):
     type: Literal["heartbeat"]
     data: Optional[dict] = None
@@ -255,6 +263,8 @@ ResearchRunEventUnion = Annotated[
         ResearchRunBestNodeEvent,
         ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,
+        ResearchRunSubstageEventStream,
+        ResearchRunSubstageSummaryEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunErrorEvent,
     ],

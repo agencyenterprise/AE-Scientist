@@ -11,7 +11,6 @@ import { PromptEditModal } from "./PromptEditModal";
 
 interface ProjectDraftTabProps {
   conversation: ConversationDetail;
-  onConversationLocked?: () => void;
   mobileView: "chat" | "draft";
   onMobileViewChange: (view: "chat" | "draft") => void;
   onAnswerFinish: () => void;
@@ -19,7 +18,6 @@ interface ProjectDraftTabProps {
 
 export function ProjectDraftTab({
   conversation,
-  onConversationLocked,
   mobileView,
   onAnswerFinish,
 }: ProjectDraftTabProps) {
@@ -56,7 +54,6 @@ export function ProjectDraftTab({
             currentProjectDraft={projectDraftState.projectDraft}
             onProjectDraftUpdate={handleProjectDraftUpdate}
             onOpenPromptModal={handleOpenPromptModal}
-            onConversationLocked={onConversationLocked}
             onAnswerFinish={onAnswerFinish}
             conversationCapabilities={{
               hasImages: Boolean(conversation.has_images ?? false),
@@ -68,11 +65,7 @@ export function ProjectDraftTab({
 
         {/* Right Panel - Project */}
         <div className={`w-full md:w-1/2 h-full overflow-y-auto`}>
-          <ProjectDraft
-            conversation={conversation}
-            externalUpdate={updatedProjectDraft}
-            onConversationLocked={onConversationLocked}
-          />
+          <ProjectDraft conversation={conversation} externalUpdate={updatedProjectDraft} />
         </div>
       </div>
 

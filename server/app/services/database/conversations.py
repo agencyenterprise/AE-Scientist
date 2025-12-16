@@ -450,11 +450,6 @@ class ConversationsMixin(ConnectionProvider):
 
         return True
 
-    def conversation_is_locked(self, _conversation_id: int) -> bool:
-        """Check if a conversation is locked (deprecated - always returns False)."""
-        # Conversations are no longer locked since Linear integration was removed
-        return False
-
     def update_conversation_status(self, conversation_id: int, status: str) -> bool:
         """
         Update conversation status to 'with_research' after research run created.

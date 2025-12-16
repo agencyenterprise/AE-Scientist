@@ -11,6 +11,7 @@ import type {
   PaperGenerationEvent,
   TreeVizItem,
   BestNodeSelection,
+  SubstageSummary,
   SubstageEvent,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
@@ -105,6 +106,19 @@ export function useResearchRunDetails({
             ...prev,
             best_node_selections: [...(prev.best_node_selections ?? []), event],
           }
+        : null
+    );
+  }, []);
+
+  const handleSubstageSummary = useCallback((event: SubstageSummary) => {
+    setDetails(prev =>
+      prev
+        ? prev.substage_summaries.some(summary => summary.id === event.id)
+          ? prev
+          : {
+              ...prev,
+              substage_summaries: [...prev.substage_summaries, event],
+            }
         : null
     );
   }, []);
@@ -221,6 +235,7 @@ export function useResearchRunDetails({
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
     onBestNodeSelection: handleBestNodeSelection,
+    onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,
   });

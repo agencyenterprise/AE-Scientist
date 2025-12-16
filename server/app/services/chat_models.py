@@ -64,13 +64,6 @@ class StreamDoneEvent(NamedTuple):
     data: StreamDoneData
 
 
-class StreamConversationLockedEvent(NamedTuple):
-    """Conversation locked event for streaming chat."""
-
-    type: Literal["conversation_locked"]
-    data: str  # Linear project URL
-
-
 class ToolCallResult(NamedTuple):
     """Result from tool call processing."""
 

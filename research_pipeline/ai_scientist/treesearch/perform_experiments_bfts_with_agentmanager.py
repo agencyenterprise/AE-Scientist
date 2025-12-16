@@ -89,8 +89,8 @@ def perform_experiments_bfts(
             latest_node = None
             if journal.nodes:
                 latest_node = journal.nodes[-1]
-                if latest_node._agent is not None:
-                    summary = latest_node._agent._generate_node_summary(latest_node)
+                if latest_node.agent is not None:
+                    summary = latest_node.agent.generate_node_summary(latest_node)
                     with open(notes_dir / f"node_{latest_node.id}_summary.json", "w") as f:
                         json.dump(summary, f, indent=2)
 

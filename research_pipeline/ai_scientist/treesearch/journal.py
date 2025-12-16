@@ -82,6 +82,7 @@ class Node(DataClassJsonMixin):
     # -> always True if exc_type is not None or no valid metric
     is_buggy: bool | None = field(default=None, kw_only=True)
     is_buggy_plots: bool | None = field(default=None, kw_only=True)
+    best_node_reasoning: str | None = field(default=None, kw_only=True)
 
     # ---- plotting ----
     plot_data: dict = field(default_factory=dict, kw_only=True)
@@ -103,13 +104,15 @@ class Node(DataClassJsonMixin):
     # ---- hyperparam tuning ----
     hyperparam_name: str | None = field(default=None, kw_only=True)
 
+    # ---- VLM feedback ----
+    vlm_feedback: dict[str, Any] | None = field(default=None, kw_only=True, repr=False)
+
     # ---- seed node ----
     is_seed_node: bool = field(default=False, kw_only=True)
     is_seed_agg_node: bool = field(default=False, kw_only=True)
 
-    # ---- internal helpers injected by agents ----
-    _agent: Any | None = field(default=None, kw_only=True, repr=False)
-    _vlm_feedback: dict[str, Any] | None = field(default=None, kw_only=True, repr=False)
+    # ---- agent ----
+    agent: Any | None = field(default=None, kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         # Ensure children is a set even if initialized with a list
@@ -365,6 +368,7 @@ class Journal:
         if self.run_id is None:
             return
         reasoning_text = reasoning if reasoning.strip() else "No reasoning provided."
+        node.best_node_reasoning = reasoning_text
         try:
             self.event_callback(
                 BestNodeSelectedEvent(

@@ -353,10 +353,10 @@ class FakeRunner:
         self._aws_s3_bucket_name = aws_s3_bucket_name
         self._iterations_per_stage = 3
         self._stage_plan: list[tuple[str, int]] = [
-            ("1_initial_implementation_1_preliminary", 10),
-            ("2_baseline_tuning_1_first_attempt", 5),
-            ("3_creative_research_1_first_attempt", 5),
-            ("4_ablation_studies_1_first_attempt", 5),
+            ("1_initial_implementation", 10),
+            ("2_baseline_tuning", 5),
+            ("3_creative_research", 5),
+            ("4_ablation_studies", 5),
         ]
         self._heartbeat_interval_seconds = 10
         self._periodic_log_interval_seconds = 15
@@ -519,6 +519,7 @@ class FakeRunner:
                 "best_metric": f"Metrics(fake metric for {stage_name})",
                 "buggy_nodes": 1,
                 "total_nodes": 3,
+                "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
             }
             logger.info("Emitting substage_completed for stage %s", stage_name)
             self._persistence.queue.put(
@@ -527,13 +528,27 @@ class FakeRunner:
                     data={
                         "stage": stage_name,
                         "main_stage_number": stage_index + 1,
-                        "substage_number": 1,
-                        "substage_name": "fake-substage",
                         "reason": "completed",
                         "summary": summary,
                     },
                 )
             )
+            try:
+                self._store_substage_summary(stage_name=stage_name, summary=summary)
+            except Exception:
+                logger.exception("Failed to store fake substage summary for stage %s", stage_name)
+            try:
+                self._persistence.queue.put(
+                    PersistableEvent(
+                        kind="substage_summary",
+                        data={
+                            "stage": stage_name,
+                            "summary": summary,
+                        },
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
             logger.info(
                 "[FakeRunner %s] Stage %d/%d complete",
                 self._run_id[:8],
@@ -826,6 +841,21 @@ class FakeRunner:
                         VALUES (%s, %s, %s, %s)
                         """,
                         (self._run_id, stage_name, node_id, reasoning),
+                    )
+        finally:
+            conn.close()
+
+    def _store_substage_summary(self, *, stage_name: str, summary: dict) -> None:
+        conn = psycopg2.connect(self._database_url)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO rp_substage_summary_events (run_id, stage, summary)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (self._run_id, stage_name, psycopg2.extras.Json(summary)),
                     )
         finally:
             conn.close()

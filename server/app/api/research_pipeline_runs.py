@@ -4,13 +4,14 @@ import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Optional, Protocol, Sequence, Union, cast
+from typing import Any, AsyncGenerator, Dict, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
@@ -27,6 +28,7 @@ from app.models import (
     ResearchRunStageProgress,
     ResearchRunStreamEvent,
     ResearchRunSubstageEvent,
+    ResearchRunSubstageSummary,
     TreeVizItem,
 )
 from app.services import get_database
@@ -44,6 +46,7 @@ from app.services.database.rp_events import (
     StageProgressEvent,
     SubstageCompletedEvent,
 )
+from app.services.database.rp_events import SubstageSummaryEvent as DbSubstageSummaryEvent
 from app.services.database.rp_tree_viz import TreeVizRecord
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
@@ -58,23 +61,6 @@ router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
 REQUESTER_NAME_FALLBACK = "Scientist"
-_RUN_LOG_QUEUES: dict[str, asyncio.Queue[ResearchRunLogEntry]] = {}
-
-
-def _get_run_log_queue(run_id: str) -> asyncio.Queue[ResearchRunLogEntry]:
-    queue = _RUN_LOG_QUEUES.get(run_id)
-    if queue is None:
-        queue = asyncio.Queue(maxsize=1000)
-        _RUN_LOG_QUEUES[run_id] = queue
-    return queue
-
-
-def publish_run_log_event(run_id: str, log_entry: ResearchRunLogEntry) -> None:
-    queue = _get_run_log_queue(run_id)
-    try:
-        queue.put_nowait(log_entry)
-    except asyncio.QueueFull:
-        logger.warning("Dropping run log event for run_id=%s due to full queue", run_id)
 
 
 def extract_first_name(*, full_name: str) -> str:
@@ -393,6 +379,17 @@ def _node_event_to_model(event: SubstageCompletedEvent) -> ResearchRunSubstageEv
     )
 
 
+def _substage_summary_to_model(
+    event: DbSubstageSummaryEvent,
+) -> ResearchRunSubstageSummary:
+    return ResearchRunSubstageSummary(
+        id=event.id,
+        stage=event.stage,
+        summary=event.summary,
+        created_at=event.created_at.isoformat(),
+    )
+
+
 def _best_node_event_to_model(
     event: BestNodeReasoningEvent,
 ) -> ResearchRunBestNodeSelection:
@@ -519,6 +516,10 @@ def get_research_run_details(
     substage_events = [
         _node_event_to_model(event) for event in db.list_substage_completed_events(run_id=run_id)
     ]
+    substage_summaries = [
+        _substage_summary_to_model(event)
+        for event in db.list_substage_summary_events(run_id=run_id)
+    ]
     best_node_selections = [
         _best_node_event_to_model(event)
         for event in db.list_best_node_reasoning_events(run_id=run_id)
@@ -545,6 +546,7 @@ def get_research_run_details(
         stage_progress=stage_events,
         logs=log_events,
         substage_events=substage_events,
+        substage_summaries=substage_summaries,
         best_node_selections=best_node_selections,
         events=run_events,
         artifacts=artifacts,
@@ -824,25 +826,72 @@ def get_tree_viz(
     return _tree_viz_to_model(record)
 
 
-SSE_POLL_INTERVAL_SECONDS = 2.0
 SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
 
 
-def _is_meaningful_progress_change(
-    prev: Optional[StageProgressEvent], curr: StageProgressEvent
-) -> bool:
-    """Check if the progress change is meaningful enough to emit an SSE event."""
-    if prev is None:
-        return True
-    if prev.stage != curr.stage:
-        return True
-    prev_bucket = int(prev.progress * 10)
-    curr_bucket = int(curr.progress * 10)
-    if curr_bucket > prev_bucket:
-        return True
-    if prev.best_metric != curr.best_metric and curr.best_metric is not None:
-        return True
-    return False
+def _format_stream_event(event: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(event)}\n\n"
+
+
+def _build_initial_stream_payload(
+    *,
+    db: DatabaseManager,
+    run_id: str,
+    conversation_id: int,
+    current_run: ResearchPipelineRun,
+) -> dict:
+    stage_events = [
+        _stage_event_to_model(event).model_dump()
+        for event in db.list_stage_progress_events(run_id=run_id)
+    ]
+    log_events = [
+        _log_event_to_model(event).model_dump() for event in db.list_run_log_events(run_id=run_id)
+    ]
+    substage_events = [
+        _node_event_to_model(event).model_dump()
+        for event in db.list_substage_completed_events(run_id=run_id)
+    ]
+    substage_summary_records = db.list_substage_summary_events(run_id=run_id)
+    substage_summaries = [
+        _substage_summary_to_model(event).model_dump() for event in substage_summary_records
+    ]
+    artifacts = [
+        _artifact_to_model(
+            artifact=artifact,
+            conversation_id=conversation_id,
+            run_id=run_id,
+        ).model_dump()
+        for artifact in db.list_run_artifacts(run_id=run_id)
+    ]
+    tree_viz = [
+        _tree_viz_to_model(record).model_dump()
+        for record in db.list_tree_viz_for_run(run_id=run_id)
+    ]
+    paper_gen_events = [
+        _paper_generation_event_to_model(event).model_dump()
+        for event in db.list_paper_generation_events(run_id=run_id)
+    ]
+    run_events = [
+        _run_event_to_model(event).model_dump()
+        for event in db.list_research_pipeline_run_events(run_id=run_id)
+    ]
+    best_node_payload = [
+        _best_node_event_to_model(event).model_dump()
+        for event in db.list_best_node_reasoning_events(run_id=run_id)
+    ]
+
+    return {
+        "run": _run_to_info(current_run).model_dump(),
+        "stage_progress": stage_events,
+        "logs": log_events,
+        "substage_events": substage_events,
+        "substage_summaries": substage_summaries,
+        "artifacts": artifacts,
+        "tree_viz": tree_viz,
+        "events": run_events,
+        "paper_generation_progress": paper_gen_events,
+        "best_node_selections": best_node_payload,
+    }
 
 
 @router.get(
@@ -881,193 +930,54 @@ async def stream_research_run_events(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    log_queue = _get_run_log_queue(run_id)
-
     async def event_generator() -> AsyncGenerator[str, None]:
-        """Generate SSE events until the run completes or client disconnects."""
-        last_progress_event: Optional[StageProgressEvent] = None
-        last_paper_gen_event: Optional[PaperGenerationEvent] = None
-        last_heartbeat = datetime.now(timezone.utc)
+        """Generate SSE events until the run completes or the client disconnects."""
+        queue = register_stream_queue(run_id)
         initial_sent = False
-        last_run_event_id: Optional[int] = None
-        last_best_node_event_id: Optional[int] = None
-        last_log_event_id: Optional[int] = None
-        last_substage_event_id: Optional[int] = None
 
-        while True:
-            # Check if client is still connected
-            if await request.is_disconnected():
-                logger.info("Client disconnected from SSE stream for run %s", run_id)
-                break
-
-            try:
-                # Fetch current run state
-                current_run = db.get_research_pipeline_run(run_id)
-                if current_run is None:
-                    yield f"data: {json.dumps({'type': 'error', 'data': 'Run not found'})}\n\n"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    logger.info("Client disconnected from SSE stream for run %s", run_id)
                     break
 
-                # Send initial data on first iteration
                 if not initial_sent:
-                    stage_events = [
-                        _stage_event_to_model(e).model_dump()
-                        for e in db.list_stage_progress_events(run_id=run_id)
-                    ]
-                    log_events = [
-                        _log_event_to_model(e).model_dump()
-                        for e in db.list_run_log_events(run_id=run_id)
-                    ]
-                    if log_events:
-                        last_log_event_id = max(event["id"] for event in log_events)
-                    substage_events_raw = db.list_substage_completed_events(run_id=run_id)
-                    substage_events = [
-                        _node_event_to_model(e).model_dump()
-                        for e in substage_events_raw
-                    ]
-                    if substage_events_raw:
-                        last_substage_event_id = max(event.id for event in substage_events_raw)
-                    artifacts = [
-                        _artifact_to_model(a, conversation_id, run_id).model_dump()
-                        for a in db.list_run_artifacts(run_id=run_id)
-                    ]
-                    tree_viz = [
-                        _tree_viz_to_model(record).model_dump()
-                        for record in db.list_tree_viz_for_run(run_id=run_id)
-                    ]
-                    paper_gen_events = [
-                        _paper_generation_event_to_model(e).model_dump()
-                        for e in db.list_paper_generation_events(run_id=run_id)
-                    ]
-                    run_events_raw = db.list_research_pipeline_run_events(run_id=run_id)
-                    run_events = [_run_event_to_model(e).model_dump() for e in run_events_raw]
-                    if run_events_raw:
-                        last_run_event_id = max(event.id for event in run_events_raw)
-                    best_node_events = db.list_best_node_reasoning_events(run_id=run_id)
-                    best_node_payload = [
-                        _best_node_event_to_model(event).model_dump() for event in best_node_events
-                    ]
-                    if best_node_events:
-                        last_best_node_event_id = max(event.id for event in best_node_events)
-                    initial_data = {
-                        "run": _run_to_info(current_run).model_dump(),
-                        "stage_progress": stage_events,
-                        "logs": log_events,
-                        "substage_events": substage_events,
-                        "artifacts": artifacts,
-                        "tree_viz": tree_viz,
-                        "events": run_events,
-                        "paper_generation_progress": paper_gen_events,
-                        "best_node_selections": best_node_payload,
-                    }
-                    yield f"data: {json.dumps({'type': 'initial', 'data': initial_data})}\n\n"
+                    current_run = db.get_research_pipeline_run(run_id)
+                    if current_run is None:
+                        yield _format_stream_event({"type": "error", "data": "Run not found"})
+                        break
+                    initial_data = _build_initial_stream_payload(
+                        db=db,
+                        run_id=run_id,
+                        conversation_id=conversation_id,
+                        current_run=current_run,
+                    )
+                    yield _format_stream_event({"type": "initial", "data": initial_data})
                     initial_sent = True
+                    continue
 
-                # Check if run is complete
-                if current_run.status in ("completed", "failed", "cancelled"):
-                    # Emit final status event
-                    yield f"data: {json.dumps({'type': 'complete', 'data': {'status': current_run.status}})}\n\n"
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        logger.info("Client disconnected from SSE stream for run %s", run_id)
+                        break
+                    yield _format_stream_event({"type": "heartbeat", "data": None})
+                    continue
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("Error while reading stream queue for run %s", run_id)
+                    yield _format_stream_event({"type": "error", "data": str(exc)})
                     break
 
-                # Check and emit progress events if meaningful changes
-                all_progress = db.list_stage_progress_events(run_id=run_id)
-                if all_progress:
-                    curr_progress = all_progress[-1]  # Get most recent (ordered ASC)
-                    if _is_meaningful_progress_change(last_progress_event, curr_progress):
-                        progress_data = _stage_event_to_model(curr_progress)
-                        yield f"data: {json.dumps({'type': 'stage_progress', 'data': progress_data.model_dump()})}\n\n"
-                        last_progress_event = curr_progress
+                yield _format_stream_event(event)
 
-                run_events_raw = db.list_research_pipeline_run_events(run_id=run_id)
-                if run_events_raw:
-                    new_events = (
-                        [
-                            e
-                            for e in run_events_raw
-                            if last_run_event_id is None or e.id > last_run_event_id
-                        ]
-                        if last_run_event_id is not None
-                        else run_events_raw
-                    )
-                    for event in new_events:
-                        yield f"data: {json.dumps({'type': 'run_event', 'data': _run_event_to_model(event).model_dump()})}\n\n"
-                        last_run_event_id = event.id
-
-                if last_log_event_id is None:
-                    latest_log = db.list_run_log_events(run_id=run_id, limit=1)
-                    if latest_log:
-                        last_log_event_id = latest_log[0].id
-                else:
-                    new_logs = db.list_run_log_events_after_id(
-                        run_id=run_id, last_id=last_log_event_id, limit=100
-                    )
-                    if new_logs:
-                        for log_event in new_logs:
-                            payload = _log_event_to_model(log_event).model_dump()
-                            yield f"data: {json.dumps({'type': 'log', 'data': payload})}\n\n"
-                        last_log_event_id = new_logs[-1].id
-
-                while True:
-                    try:
-                        queued_log = log_queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
-                    payload = queued_log.model_dump()
-                    yield f"data: {json.dumps({'type': 'log', 'data': payload})}\n\n"
-                    if last_log_event_id is None or payload["id"] > last_log_event_id:
-                        last_log_event_id = payload["id"]
-
-                best_node_events = db.list_best_node_reasoning_events(run_id=run_id)
-                if best_node_events:
-                    new_best_nodes = (
-                        [
-                            best_event
-                            for best_event in best_node_events
-                            if last_best_node_event_id is None
-                            or best_event.id > last_best_node_event_id
-                        ]
-                        if last_best_node_event_id is not None
-                        else best_node_events
-                    )
-                    for best_event in new_best_nodes:
-                        payload = _best_node_event_to_model(best_event).model_dump()
-                        yield f"data: {json.dumps({'type': 'best_node_selection', 'data': payload})}\n\n"
-                        last_best_node_event_id = best_event.id
-
-                # Check and emit substage completed events if meaningful changes
-                substage_events_raw = db.list_substage_completed_events(run_id=run_id)
-                if substage_events_raw:
-                    new_substage_events = [
-                        event
-                        for event in substage_events_raw
-                        if last_substage_event_id is None or event.id > last_substage_event_id
-                    ]
-                    for substage_event in new_substage_events:
-                        payload = _node_event_to_model(substage_event).model_dump()
-                        yield f"data: {json.dumps({'type': 'substage_completed', 'data': payload})}\n\n"
-                        last_substage_event_id = substage_event.id
-
-                # Check and emit paper generation progress events
-                all_paper_gen = db.list_paper_generation_events(run_id=run_id)
-                if all_paper_gen:
-                    curr_paper_gen = all_paper_gen[-1]  # Most recent
-                    if curr_paper_gen != last_paper_gen_event:
-                        paper_gen_data = _paper_generation_event_to_model(curr_paper_gen)
-                        yield f"data: {json.dumps({'type': 'paper_generation_progress', 'data': paper_gen_data.model_dump()})}\n\n"
-                        last_paper_gen_event = curr_paper_gen
-
-                # Emit heartbeat every SSE_HEARTBEAT_INTERVAL_SECONDS
-                now = datetime.now(timezone.utc)
-                if (now - last_heartbeat).total_seconds() >= SSE_HEARTBEAT_INTERVAL_SECONDS:
-                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                    last_heartbeat = now
-
-                # Wait before polling again
-                await asyncio.sleep(SSE_POLL_INTERVAL_SECONDS)
-
-            except Exception as exc:
-                logger.exception("Error in SSE event generation for run %s", run_id)
-                yield f"data: {json.dumps({'type': 'error', 'data': str(exc)})}\n\n"
-                break
+                if event.get("type") == "complete":
+                    break
+        finally:
+            unregister_stream_queue(run_id, queue)
 
     return StreamingResponse(
         event_generator(),

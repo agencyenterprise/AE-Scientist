@@ -5,6 +5,7 @@ import type {
   StageProgress,
   PaperGenerationEvent,
   BestNodeSelection,
+  SubstageSummary,
 } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
@@ -13,6 +14,7 @@ import { useEffect } from "react";
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
   substageEvents: SubstageEvent[];
+  substageSummaries: SubstageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
   className?: string;
@@ -56,17 +58,17 @@ const PIPELINE_STAGES = [
 /**
  * Helper function to extract stage slug from backend stage name
  *
- * Backend format: {stage_number}_{stage_slug}_{substage_number}_{substage_name}
+ * Backend format: {stage_number}_{stage_slug}
  * Examples:
- *   "1_initial_implementation_1_preliminary" → "initial_implementation"
+ *   "1_initial_implementation" → "initial_implementation"
  *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
  *   "3_creative_research_1_exploration" → "creative_research"
  */
 const extractStageSlug = (stageName: string): string | null => {
   const parts = stageName.split("_");
 
-  // Need at least 4 parts: stage_number + slug + substage_number + substage_name
-  if (parts.length < 4) return null;
+  // Need at least 2 parts: stage_number + slug
+  if (parts.length < 2) return null;
 
   // Skip first part (stage number), collect parts until we hit next number (substage number)
   const slugParts: string[] = [];
@@ -202,6 +204,35 @@ const getBestNodeForStage = (
   );
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const getLatestSummaryForStage = (
+  stageKey: string,
+  summaries: SubstageSummary[]
+): SubstageSummary | null => {
+  const matches = summaries.filter(summary => extractStageSlug(summary.stage) === stageKey);
+  if (matches.length === 0) {
+    return null;
+  }
+  return (
+    matches.sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0] ?? null
+  );
+};
+
+const getSummaryText = (summary: SubstageSummary): string => {
+  if (!isRecord(summary.summary)) {
+    return JSON.stringify(summary.summary, null, 2);
+  }
+  const llmSummary = summary.summary.llm_summary;
+  if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
+    return llmSummary.trim();
+  }
+  return JSON.stringify(summary.summary, null, 2);
+};
+
 // Paper generation step labels for Stage 5
 const PAPER_GENERATION_STEPS = [
   { key: "plot_aggregation", label: "Plot Aggregation" },
@@ -247,6 +278,7 @@ const getPaperGenerationSegments = (events: PaperGenerationEvent[]): Segment[] =
 export function ResearchPipelineStages({
   stageProgress,
   substageEvents,
+  substageSummaries,
   paperGenerationProgress,
   bestNodeSelections,
   className,
@@ -373,6 +405,10 @@ export function ResearchPipelineStages({
           const bestNode = isPaperGeneration
             ? null
             : getBestNodeForStage(stage.key, bestNodeSelections);
+          const latestSummary = isPaperGeneration
+            ? null
+            : getLatestSummaryForStage(stage.key, substageSummaries);
+          const summaryText = latestSummary ? getSummaryText(latestSummary) : null;
 
           const latestPaperEvent =
             isPaperGeneration && paperGenerationProgress.length > 0
@@ -439,19 +475,35 @@ export function ResearchPipelineStages({
               {/* Unified progress bar for all stages */}
               <SegmentedProgressBar segments={segments} emptyMessage={emptyMessage} />
 
-              {!isPaperGeneration && bestNode && (
-                <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    Current Best Node
-                  </p>
-                  <div className="mt-1 space-y-1">
-                    <p className="text-sm font-mono text-emerald-300">
-                      {formatNodeId(bestNode.node_id)}
-                    </p>
-                    <div className="max-h-24 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
-                      {bestNode.reasoning}
+              {!isPaperGeneration && (bestNode || latestSummary) && (
+                <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3 space-y-3">
+                  {bestNode && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Current Best Node
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        <p className="text-sm font-mono text-emerald-300">
+                          {formatNodeId(bestNode.node_id)}
+                        </p>
+                        <div className="max-h-24 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                          {bestNode.reasoning}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {latestSummary && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Substage Summary
+                      </p>
+                      {summaryText && (
+                        <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                          {summaryText}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

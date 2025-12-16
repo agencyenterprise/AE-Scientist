@@ -415,13 +415,12 @@ def resume_run(
                 name=stage1_name,
                 number=1,
                 slug=Stage1Baseline.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="preliminary",
                 goals=Stage1Baseline.DEFAULT_GOALS,
                 max_iterations=manager.get_max_iterations(1),
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
+            manager.register_phase_definition(stage_meta=stage1_meta)
             manager.journals[stage1_meta.name] = stage1_journal
 
         if s2 or (next_stage and next_stage > 2):
@@ -434,13 +433,12 @@ def resume_run(
                     name=stage2_name,
                     number=2,
                     slug=Stage2Tuning.MAIN_STAGE_SLUG,
-                    substage_number=1,
-                    substage_name="first_attempt",
                     goals=Stage2Tuning.DEFAULT_GOALS,
                     max_iterations=manager.get_max_iterations(2),
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
+                manager.register_phase_definition(stage_meta=stage2_meta)
                 manager.journals[stage2_meta.name] = stage2_journal
             except FileNotFoundError:
                 pass
@@ -455,52 +453,46 @@ def resume_run(
                     name=stage3_name,
                     number=3,
                     slug=Stage3Plotting.MAIN_STAGE_SLUG,
-                    substage_number=1,
-                    substage_name="first_attempt",
                     goals=Stage3Plotting.DEFAULT_GOALS,
                     max_iterations=manager.get_max_iterations(3),
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
+                manager.register_phase_definition(stage_meta=stage3_meta)
                 manager.journals[stage3_meta.name] = stage3_journal
             except FileNotFoundError:
                 pass
 
         if next_stage == 2:
             next_meta = StageMeta(
-                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG,
                 number=2,
                 slug=Stage2Tuning.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="first_attempt",
                 goals=Stage2Tuning.DEFAULT_GOALS,
                 max_iterations=manager.get_max_iterations(2),
                 num_drafts=0,
             )
         elif next_stage == 3:
             next_meta = StageMeta(
-                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG,
                 number=3,
                 slug=Stage3Plotting.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="first_attempt",
                 goals=Stage3Plotting.DEFAULT_GOALS,
                 max_iterations=manager.get_max_iterations(3),
                 num_drafts=0,
             )
         else:
             next_meta = StageMeta(
-                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG + "_1_first_attempt",
+                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG,
                 number=4,
                 slug=Stage4Ablation.MAIN_STAGE_SLUG,
-                substage_number=1,
-                substage_name="first_attempt",
                 goals=Stage4Ablation.DEFAULT_GOALS,
                 max_iterations=manager.get_max_iterations(4),
                 num_drafts=0,
             )
 
         manager.stages.append(next_meta)
+        manager.register_phase_definition(stage_meta=next_meta)
         manager.current_stage = next_meta
         manager.journals[next_meta.name] = Journal(
             summary_model=cfg_obj.report.model,

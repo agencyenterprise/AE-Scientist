@@ -12,7 +12,7 @@ interface ResearchRunStatsProps {
 
 /**
  * Extract stage slug from backend stage name format
- * Example: "1_initial_implementation_1_preliminary" → "initial_implementation"
+ * Example: "1_initial_implementation" → "initial_implementation"
  */
 const extractStageSlug = (stageName: string): string => {
   const parts = stageName.split("_");

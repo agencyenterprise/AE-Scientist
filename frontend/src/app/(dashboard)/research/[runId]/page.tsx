@@ -98,6 +98,7 @@ export default function ResearchRunDetailPage() {
     logs,
     artifacts,
     substage_events,
+    substage_summaries = [],
     paper_generation_progress,
     best_node_selections = [],
   } = details;
@@ -137,6 +138,7 @@ export default function ResearchRunDetailPage() {
             <ResearchPipelineStages
               stageProgress={stage_progress}
               substageEvents={substage_events}
+              substageSummaries={substage_summaries}
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
               className="max-h-[600px] overflow-y-auto"

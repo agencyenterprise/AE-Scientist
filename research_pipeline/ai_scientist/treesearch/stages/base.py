@@ -20,8 +20,6 @@ class StageMeta:
     name: str
     number: int
     slug: str
-    substage_number: int
-    substage_name: str
     goals: str
     max_iterations: int
     num_drafts: int

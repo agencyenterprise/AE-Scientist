@@ -26,12 +26,14 @@ from ai_scientist.treesearch.events import (
     RunLogEvent,
     RunStageProgressEvent,
     SubstageCompletedEvent,
+    SubstageSummaryEvent,
 )
 
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent
+from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -45,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 class SubstageGoalResponse(BaseModel):
     goals: str
-    sub_stage_name: str
 
 
 class StageClass(Protocol):
@@ -88,6 +89,7 @@ class AgentManager:
         self._completed_stages: set[str] = set()
         self._final_progress_emitted: set[str] = set()
         self._substage_completed_emitted: set[str] = set()
+        self.phase_plan: list[PhaseDefinition] = []
         # Stage slugs/goals are defined in the stage classes
         # Create initial stage
         # Initialize the experiment with the first stage
@@ -132,11 +134,9 @@ Your research idea:\n\n
         # Seed Stage 1 (baseline) with defaults defined by the stage class
         self.current_stage_number += 1
         initial_stage = StageMeta(
-            name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}_1_preliminary",
+            name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}",
             number=self.current_stage_number,
             slug=Stage1Baseline.MAIN_STAGE_SLUG,
-            substage_number=1,
-            substage_name="preliminary",
             goals=Stage1Baseline.DEFAULT_GOALS,
             max_iterations=self.get_max_iterations(self.current_stage_number),
             num_drafts=self.cfg.agent.search.num_drafts,
@@ -153,6 +153,33 @@ Your research idea:\n\n
             stage_name=initial_stage.name,
             run_id=self.cfg.telemetry.run_id if self.cfg.telemetry else None,
         )
+        self.register_phase_definition(stage_meta=initial_stage)
+
+    def register_phase_definition(self, *, stage_meta: StageMeta) -> None:
+        if any(definition.phase_id == stage_meta.name for definition in self.phase_plan):
+            return
+        definition = PhaseDefinition(
+            phase_id=stage_meta.name,
+            main_stage_number=stage_meta.number,
+            stage_slug=stage_meta.slug,
+            goals=stage_meta.goals,
+        )
+        self.phase_plan.append(definition)
+
+    def _phase_definition_for_stage(self, *, stage_id: str) -> Optional[PhaseDefinition]:
+        for definition in self.phase_plan:
+            if definition.phase_id == stage_id:
+                return definition
+        return None
+
+    def _plan_progress_for_phase(self, *, stage_id: str) -> Optional[PhasePlanProgress]:
+        for index, definition in enumerate(self.phase_plan):
+            if definition.phase_id == stage_id:
+                return PhasePlanProgress(
+                    completed_phases=index + 1,
+                    current_phase_label=definition.display_name,
+                )
+        return None
 
     def _curate_task_desc(self, stage: StageMeta) -> str:
         task_desc = self._get_task_desc_str()
@@ -217,7 +244,6 @@ Your research idea:\n\n
         task_desc = self._curate_task_desc(stage)
 
         task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
-        task_desc += f"Sub-stage: {stage.substage_number} - {stage.substage_name}\n"
         task_desc += f"Sub-stage goals: {stage.goals}"
 
         # Determine carryover best nodes based on current main stage
@@ -354,7 +380,7 @@ Your research idea:\n\n
             return copied_node
         return None
 
-    def _generate_substage_goal(self, main_stage_goal: str, journal: Journal) -> Tuple[str, str]:
+    def _generate_substage_goal(self, main_stage_goal: str, journal: Journal) -> str:
         """Generate the next sub-stage goal based on what has been done so far.
 
         Args:
@@ -413,19 +439,15 @@ Your research idea:\n\n
             {response.goals}
             """
 
-            return goal_str.strip(), str(response.sub_stage_name)
+            return goal_str.strip()
 
-        except Exception as e:
-            logger.error(f"Error generating sub-stage goals: {e}")
+        except Exception:
+            logger.exception("Error generating sub-stage goals")
             # Provide fallback goals if LLM fails
-            fallback = (
-                """
+            return """
             Sub-stage Goals:
             Continue progress on main stage objectives while addressing current issues.
-            """.strip(),
-                "first_attempt",
-            )
-            return fallback
+            """.strip()
 
     def _create_next_substage(
         self, current_substage: StageMeta, journal: Journal
@@ -435,7 +457,6 @@ Your research idea:\n\n
         """
         # Build the next substage metadata using stage class defaults and LLM goal
         main_stage_num = current_substage.number
-        sub_stage_num = current_substage.substage_number
         # Get goals and slug from the corresponding stage class
         if main_stage_num == 1:
             current_stage_cls: StageClass = Stage1Baseline
@@ -449,14 +470,12 @@ Your research idea:\n\n
             raise ValueError(f"Unknown stage number: {main_stage_num}")
         main_stage_goal = current_stage_cls.DEFAULT_GOALS
         main_stage_name = current_stage_cls.MAIN_STAGE_SLUG
-        sub_stage_goal, sub_stage_name = self._generate_substage_goal(main_stage_goal, journal)
+        sub_stage_goal = self._generate_substage_goal(main_stage_goal, journal)
 
         return StageMeta(
-            name=f"{main_stage_num}_{main_stage_name}_{sub_stage_num + 1}_{sub_stage_name}",
+            name=f"{main_stage_num}_{main_stage_name}",
             number=current_substage.number,
             slug=main_stage_name,
-            substage_number=sub_stage_num + 1,
-            substage_name=sub_stage_name,
             goals="Main stage goals:\n"
             + main_stage_goal
             + "\n\nSub-stage goals:\n"
@@ -480,18 +499,14 @@ Your research idea:\n\n
         else:
             raise ValueError(f"Unknown next stage number: {next_num}")
         next_main_stage_name = next_stage_cls.MAIN_STAGE_SLUG
-        sub_stage_num = 1
-        sub_stage_name = "first_attempt"
         num_drafts = 0
         stage_number = next_num
         main_stage_goal = next_stage_cls.DEFAULT_GOALS
 
         return StageMeta(
-            name=f"{main_stage_num + 1}_{next_main_stage_name}_{sub_stage_num}_{sub_stage_name}",
+            name=f"{main_stage_num + 1}_{next_main_stage_name}",
             number=stage_number,
             slug=next_main_stage_name,
-            substage_number=sub_stage_num,
-            substage_name=sub_stage_name,
             goals=main_stage_goal,
             max_iterations=self.get_max_iterations(main_stage_num + 1),
             num_drafts=num_drafts,
@@ -593,12 +608,32 @@ Your research idea:\n\n
                 "best_metric": (str(best_node.metric) if best_node and best_node.metric else None),
                 "feedback": reason,
             }
+            phase_definition = self._phase_definition_for_stage(stage_id=current_substage.name)
+            plan_progress = None
+            if phase_definition is not None:
+                plan_progress = self._plan_progress_for_phase(stage_id=current_substage.name)
+            if phase_definition is not None and plan_progress is not None:
+                try:
+                    phase_summary = build_phase_summary(
+                        journal=journal,
+                        phase=phase_definition,
+                        plan_progress=plan_progress,
+                    )
+                    summary["phase_summary"] = phase_summary.to_dict()
+                    self.event_callback(
+                        SubstageSummaryEvent(
+                            stage=current_substage.name,
+                            summary=phase_summary.to_dict(),
+                        )
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to generate phase summary for %s", current_substage.name
+                    )
             self.event_callback(
                 SubstageCompletedEvent(
                     stage=current_substage.name,
                     main_stage_number=current_substage.number,
-                    substage_number=current_substage.substage_number,
-                    substage_name=current_substage.substage_name,
                     reason=reason,
                     summary=summary,
                 )
@@ -723,6 +758,7 @@ Your research idea:\n\n
 
                     # Setup new sub-stage
                     self.stages.append(next_substage)
+                    self.register_phase_definition(stage_meta=next_substage)
                     self.journals[next_substage.name] = Journal(
                         summary_model=self.cfg.report.model,
                         node_selection_model=self.cfg.agent.feedback.model,
@@ -757,6 +793,7 @@ Your research idea:\n\n
             )
 
             self.stages.append(next_main_stage)
+            self.register_phase_definition(stage_meta=next_main_stage)
             self.journals[next_main_stage.name] = Journal(
                 summary_model=self.cfg.report.model,
                 node_selection_model=self.cfg.agent.feedback.model,
@@ -855,14 +892,14 @@ Your research idea:\n\n
 
         # Gather individual node summaries
         for node in journal.nodes:
-            if node._agent is not None:
-                node_summary = node._agent._generate_node_summary(node)
+            if node.agent is not None:
+                node_summary = node.agent.generate_node_summary(node)
                 metrics["node_summaries"].append(node_summary)
 
         # Get VLM feedback from plot analysis
         for node in journal.good_nodes:
-            if node._vlm_feedback is not None:
-                metrics["vlm_feedback"].append(node._vlm_feedback)
+            if node.vlm_feedback is not None:
+                metrics["vlm_feedback"].append(node.vlm_feedback)
 
         best_node = journal.get_best_node()
         if best_node and best_node.metric is not None:
@@ -899,7 +936,7 @@ Your research idea:\n\n
         # Include VLM-identified systemic issues
         vlm_issues = set()  # Use set to avoid duplicate issues
         for node in journal.good_nodes:
-            vlm_feedback = node._vlm_feedback
+            vlm_feedback = node.vlm_feedback
             if isinstance(vlm_feedback, dict):
                 # Look for systemic issues identified by VLM
                 if "systemic_issues" in vlm_feedback:
