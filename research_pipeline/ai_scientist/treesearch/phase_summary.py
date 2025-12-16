@@ -116,7 +116,6 @@ def _collect_phase_decisions(*, journal: Journal) -> list[dict[str, str]]:
         entry = {
             "kind": "best_node",
             "node_id": best_node.id,
-            "node_label": best_node.id[:8],
             "metric": str(best_node.metric) if best_node.metric is not None else "unknown",
             "analysis": best_node.analysis or "",
             "hyperparameter": best_node.hyperparam_name or "",
@@ -134,7 +133,6 @@ def _collect_phase_decisions(*, journal: Journal) -> list[dict[str, str]]:
                     {
                         "kind": "hyperparameter_choice",
                         "node_id": node.id,
-                        "node_label": node.id[:8],
                         "hyperparameter": node.hyperparam_name,
                         "metric": str(node.metric) if node.metric is not None else "unknown",
                         "analysis": node.analysis or "",
@@ -148,7 +146,6 @@ def _collect_phase_decisions(*, journal: Journal) -> list[dict[str, str]]:
                     {
                         "kind": "ablation_focus",
                         "node_id": node.id,
-                        "node_label": node.id[:8],
                         "ablation": node.ablation_name,
                         "metric": str(node.metric) if node.metric is not None else "unknown",
                         "analysis": node.analysis or "",
@@ -180,7 +177,6 @@ def _collect_experiment_outcomes(*, journal: Journal, limit: int) -> list[dict[s
         experiments.append(
             {
                 "node_id": node.id,
-                "node_label": node.id[:8],
                 "status": status,
                 "metric": node.metric.value if node.metric is not None else None,
                 "metric_detail": str(node.metric) if node.metric is not None else None,
@@ -283,6 +279,7 @@ def build_phase_summary(
         "(3) where the run stands relative to the plan, and "
         "(4) whether progress is on_track, at_risk, or blocked. "
         "Offer concrete steering suggestions if progress is uncertain."
+        "Don't mention any node.id"
     )
     logger.debug("System prompt: %s", system_prompt)
     llm_response = structured_query_with_schema(
