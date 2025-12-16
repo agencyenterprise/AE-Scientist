@@ -3,7 +3,7 @@
 import { UserProfileDropdown } from "@/features/user-profile/components/UserProfileDropdown";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useWalletBalance } from "@/shared/hooks/useWalletBalance";
-import { MessageSquare, FlaskConical } from "lucide-react";
+import { MessageSquare, FlaskConical, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +14,7 @@ export function Header() {
 
   const isConversationsActive = pathname.startsWith("/conversations");
   const isResearchActive = pathname.startsWith("/research");
+  const isHowItWorksActive = pathname.startsWith("/how-it-works");
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
@@ -24,6 +25,17 @@ export function Header() {
           </Link>
           {user && (
             <nav className="flex items-center gap-1">
+              <Link
+                href="/how-it-works"
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isHowItWorksActive
+                    ? "bg-violet-500/15 text-violet-300"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <BookOpen className="h-4 w-4" />
+                How it works
+              </Link>
               <Link
                 href="/conversations"
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
