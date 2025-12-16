@@ -283,6 +283,7 @@ export function ResearchPipelineStages({
   bestNodeSelections,
   className,
 }: ResearchPipelineStagesProps) {
+  console.log("global stageProgress", stageProgress[stageProgress.length - 1]);
   /**
    * Get aggregated stage information for a given main stage
    * Handles multiple substages within a main stage by using the latest progress
@@ -367,6 +368,19 @@ export function ResearchPipelineStages({
     const globalLatestProgress = stageProgress[stageProgress.length - 1];
     const isCurrentlyActive =
       globalLatestProgress && extractStageSlug(globalLatestProgress.stage) === stageKey;
+
+    console.log(
+      "stageKey",
+      stageKey,
+      "isCurrentlyActive",
+      isCurrentlyActive,
+      "hasCompletedEvent",
+      hasCompletedEvent,
+      "latestProgress",
+      latestProgress,
+      "globalLatestProgress",
+      globalLatestProgress ? extractStageSlug(globalLatestProgress.stage) : null
+    );
 
     // Determine status based on progress value OR good_nodes (early completion)
     // A stage is completed when:
