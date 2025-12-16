@@ -127,10 +127,8 @@ def perform_experiments_bfts(
 
             if stage.max_iterations > 0:
                 iteration_display = min(effective_iteration, stage.max_iterations)
-                progress = max(0.0, min(effective_iteration / stage.max_iterations, 1.0))
             else:
                 iteration_display = effective_iteration
-                progress = 0.0
 
             # Calculate smart ETA using moving average of recent iterations
             eta_s = None
