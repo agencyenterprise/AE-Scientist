@@ -113,7 +113,7 @@ This document describes the runtime architecture of the AI Scientist BFTS experi
 ### Stage System
 
 - Stage configuration is carried by `StageMeta`:
-  - `name`, `number`, `slug`, `substage_number`, `substage_name`, `goals`, `max_iterations`, `num_drafts`.
+  - `name`, `number`, `slug`, `goals`, `max_iterations`, `num_drafts`.
 - Stage behavior is implemented by concrete classes under `stages/` and accessed via static methods for:
   - Generating ideas and nodes
   - Evaluating completion (substage and main stage)

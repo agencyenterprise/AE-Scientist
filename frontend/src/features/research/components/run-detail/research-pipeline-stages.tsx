@@ -57,7 +57,7 @@ const PIPELINE_STAGES = [
 /**
  * Helper function to extract stage slug from backend stage name
  *
- * Backend format: {stage_number}_{stage_slug}_{substage_number}_{substage_name}
+ * Backend format: {stage_number}_{stage_slug}
  * Examples:
  *   "1_initial_implementation" → "initial_implementation"
  *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
@@ -66,8 +66,8 @@ const PIPELINE_STAGES = [
 const extractStageSlug = (stageName: string): string | null => {
   const parts = stageName.split("_");
 
-  // Need at least 4 parts: stage_number + slug + substage_number + substage_name
-  if (parts.length < 4) return null;
+  // Need at least 2 parts: stage_number + slug
+  if (parts.length < 2) return null;
 
   // Skip first part (stage number), collect parts until we hit next number (substage number)
   const slugParts: string[] = [];

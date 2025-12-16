@@ -101,8 +101,6 @@ class SubstageCompletedEvent(BaseEvent):
 
     stage: str  # Full stage identifier, e.g. "2_baseline_tuning"
     main_stage_number: int
-    substage_number: int
-    substage_name: str
     reason: str
     summary: Dict[str, Any]
 
@@ -113,8 +111,6 @@ class SubstageCompletedEvent(BaseEvent):
         return {
             "stage": self.stage,
             "main_stage_number": self.main_stage_number,
-            "substage_number": self.substage_number,
-            "substage_name": self.substage_name,
             "reason": self.reason,
             "summary": self.summary,
         }
@@ -126,8 +122,6 @@ class SubstageCompletedEvent(BaseEvent):
             {
                 "stage": self.stage,
                 "main_stage_number": self.main_stage_number,
-                "substage_number": self.substage_number,
-                "substage_name": self.substage_name,
                 "reason": self.reason,
                 "summary": self.summary,
             },
