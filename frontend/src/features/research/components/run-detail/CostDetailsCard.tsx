@@ -6,9 +6,18 @@ import { DollarSign, Loader2 } from "lucide-react";
 interface CostDetailsCardProps {
   cost: ResearchRunCostResponse | null;
   isLoading: boolean;
+  hwEstimatedCostCents: number | null;
+  hwCostPerHourCents: number | null;
+  hwActualCostCents: number | null;
 }
 
-export function CostDetailsCard({ cost, isLoading }: CostDetailsCardProps) {
+export function CostDetailsCard({
+  cost,
+  isLoading,
+  hwEstimatedCostCents,
+  hwCostPerHourCents,
+  hwActualCostCents,
+}: CostDetailsCardProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -17,6 +26,10 @@ export function CostDetailsCard({ cost, isLoading }: CostDetailsCardProps) {
       maximumFractionDigits: 2,
     }).format(amount);
   };
+
+  const hwEstimatedUsd =
+    typeof hwEstimatedCostCents === "number" ? hwEstimatedCostCents / 100 : null;
+  const hwRateUsdPerHour = typeof hwCostPerHourCents === "number" ? hwCostPerHourCents / 100 : null;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
@@ -34,12 +47,28 @@ export function CostDetailsCard({ cost, isLoading }: CostDetailsCardProps) {
             <dt className="text-xs text-slate-400">Total Cost</dt>
             <dd className="font-mono text-lg text-white">{formatCurrency(cost.total_cost)}</dd>
           </div>
+          <div className="sm:col-span-2">
+            <dt className="text-xs text-slate-400">HW estimated cost</dt>
+            <dd className="font-mono text-sm text-white">
+              {hwEstimatedUsd !== null
+                ? `${formatCurrency(hwEstimatedUsd)}${
+                    hwRateUsdPerHour !== null ? ` (${formatCurrency(hwRateUsdPerHour)}/hr)` : ""
+                  }`
+                : "—"}
+            </dd>
+          </div>
           {cost.cost_by_model.map((modelCost: ModelCost) => (
             <div key={modelCost.model}>
               <dt className="text-xs text-slate-400">Cost for {modelCost.model}</dt>
               <dd className="font-mono text-sm text-white">{formatCurrency(modelCost.cost)}</dd>
             </div>
           ))}
+          <div className="sm:col-span-2">
+            <dt className="text-xs text-slate-400">HW actual cost</dt>
+            <dd className="font-mono text-sm text-white">
+              {hwActualCostCents !== null ? formatCurrency(hwActualCostCents / 100) : "—"}
+            </dd>
+          </div>
         </dl>
       ) : (
         <p className="text-sm text-center text-slate-400">Could not load cost details.</p>

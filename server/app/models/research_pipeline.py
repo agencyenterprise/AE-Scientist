@@ -7,6 +7,20 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from app.models.conversations import ResearchRunSummary
+from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import (
+    ResearchPipelineRunEvent as DBResearchRunEvent,
+)
+from app.services.database.rp_artifacts import ResearchPipelineArtifact
+from app.services.database.rp_events import (
+    BestNodeReasoningEvent,
+    PaperGenerationEvent,
+    RunLogEvent,
+    StageProgressEvent,
+    SubstageCompletedEvent,
+    SubstageSummaryEvent,
+)
+from app.services.database.rp_tree_viz import TreeVizRecord
 
 # ============================================================================
 # List API Models
@@ -51,6 +65,28 @@ class ResearchRunInfo(ResearchRunSummary):
         None, description="ISO timestamp representing the start deadline window"
     )
 
+    @staticmethod
+    def from_db_record(run: ResearchPipelineRun) -> "ResearchRunInfo":
+        return ResearchRunInfo(
+            run_id=run.run_id,
+            status=run.status,
+            idea_id=run.idea_id,
+            idea_version_id=run.idea_version_id,
+            pod_id=run.pod_id,
+            pod_name=run.pod_name,
+            gpu_type=run.gpu_type,
+            cost=run.cost,
+            public_ip=run.public_ip,
+            ssh_port=run.ssh_port,
+            pod_host_id=run.pod_host_id,
+            error_message=run.error_message,
+            last_heartbeat_at=run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
+            heartbeat_failures=run.heartbeat_failures,
+            created_at=run.created_at.isoformat(),
+            updated_at=run.updated_at.isoformat(),
+            start_deadline_at=run.start_deadline_at.isoformat() if run.start_deadline_at else None,
+        )
+
 
 class ResearchRunStageProgress(BaseModel):
     stage: str = Field(..., description="Stage identifier")
@@ -67,12 +103,37 @@ class ResearchRunStageProgress(BaseModel):
     )
     created_at: str = Field(..., description="ISO timestamp when the event was recorded")
 
+    @staticmethod
+    def from_db_record(event: StageProgressEvent) -> "ResearchRunStageProgress":
+        return ResearchRunStageProgress(
+            stage=event.stage,
+            iteration=event.iteration,
+            max_iterations=event.max_iterations,
+            progress=event.progress,
+            total_nodes=event.total_nodes,
+            buggy_nodes=event.buggy_nodes,
+            good_nodes=event.good_nodes,
+            best_metric=event.best_metric,
+            eta_s=event.eta_s,
+            latest_iteration_time_s=event.latest_iteration_time_s,
+            created_at=event.created_at.isoformat(),
+        )
+
 
 class ResearchRunLogEntry(BaseModel):
     id: int = Field(..., description="Unique identifier of the log event")
     level: str = Field(..., description="Log level (info, warn, error, ...)")
     message: str = Field(..., description="Log message")
     created_at: str = Field(..., description="ISO timestamp of the log event")
+
+    @staticmethod
+    def from_db_record(event: RunLogEvent) -> "ResearchRunLogEntry":
+        return ResearchRunLogEntry(
+            id=event.id,
+            level=event.level,
+            message=event.message,
+            created_at=event.created_at.isoformat(),
+        )
 
 
 class ResearchRunEvent(BaseModel):
@@ -85,6 +146,16 @@ class ResearchRunEvent(BaseModel):
     )
     occurred_at: str = Field(..., description="ISO timestamp when the event was recorded")
 
+    @staticmethod
+    def from_db_record(event: DBResearchRunEvent) -> "ResearchRunEvent":
+        return ResearchRunEvent(
+            id=event.id,
+            run_id=event.run_id,
+            event_type=event.event_type,
+            metadata=event.metadata,
+            occurred_at=event.occurred_at.isoformat(),
+        )
+
 
 class ResearchRunSubstageEvent(BaseModel):
     id: int = Field(..., description="Unique identifier of the sub-stage completion event")
@@ -96,12 +167,31 @@ class ResearchRunSubstageEvent(BaseModel):
     summary: dict = Field(..., description="Summary payload stored for this sub-stage")
     created_at: str = Field(..., description="ISO timestamp of the event")
 
+    @staticmethod
+    def from_db_record(event: SubstageCompletedEvent) -> "ResearchRunSubstageEvent":
+        return ResearchRunSubstageEvent(
+            id=event.id,
+            stage=event.stage,
+            node_id=None,
+            summary=event.summary,
+            created_at=event.created_at.isoformat(),
+        )
+
 
 class ResearchRunSubstageSummary(BaseModel):
     id: int = Field(..., description="Unique identifier of the sub-stage summary event")
     stage: str = Field(..., description="Stage identifier")
     summary: dict = Field(..., description="LLM-generated summary payload")
     created_at: str = Field(..., description="ISO timestamp when the summary was recorded")
+
+    @staticmethod
+    def from_db_record(event: SubstageSummaryEvent) -> "ResearchRunSubstageSummary":
+        return ResearchRunSubstageSummary(
+            id=event.id,
+            stage=event.stage,
+            summary=event.summary,
+            created_at=event.created_at.isoformat(),
+        )
 
 
 class ResearchRunBestNodeSelection(BaseModel):
@@ -110,6 +200,16 @@ class ResearchRunBestNodeSelection(BaseModel):
     node_id: str = Field(..., description="Identifier of the selected node")
     reasoning: str = Field(..., description="LLM reasoning that justified the selection")
     created_at: str = Field(..., description="ISO timestamp when the reasoning was recorded")
+
+    @staticmethod
+    def from_db_record(event: BestNodeReasoningEvent) -> "ResearchRunBestNodeSelection":
+        return ResearchRunBestNodeSelection(
+            id=event.id,
+            stage=event.stage,
+            node_id=event.node_id,
+            reasoning=event.reasoning,
+            created_at=event.created_at.isoformat(),
+        )
 
 
 class ResearchRunPaperGenerationProgress(BaseModel):
@@ -129,6 +229,19 @@ class ResearchRunPaperGenerationProgress(BaseModel):
     )
     created_at: str = Field(..., description="ISO timestamp when the event was recorded")
 
+    @staticmethod
+    def from_db_record(event: PaperGenerationEvent) -> "ResearchRunPaperGenerationProgress":
+        return ResearchRunPaperGenerationProgress(
+            id=event.id,
+            run_id=event.run_id,
+            step=event.step,
+            substep=event.substep,
+            progress=event.progress,
+            step_progress=event.step_progress,
+            details=event.details,
+            created_at=event.created_at.isoformat(),
+        )
+
 
 class ResearchRunArtifactMetadata(BaseModel):
     id: int = Field(..., description="Artifact identifier")
@@ -138,6 +251,22 @@ class ResearchRunArtifactMetadata(BaseModel):
     file_type: str = Field(..., description="MIME type")
     created_at: str = Field(..., description="ISO timestamp when the artifact was recorded")
     download_path: str = Field(..., description="API path to initiate a download")
+
+    @staticmethod
+    def from_db_record(
+        artifact: ResearchPipelineArtifact, conversation_id: int, run_id: str
+    ) -> "ResearchRunArtifactMetadata":
+        return ResearchRunArtifactMetadata(
+            id=artifact.id,
+            artifact_type=artifact.artifact_type,
+            filename=artifact.filename,
+            file_size=artifact.file_size,
+            file_type=artifact.file_type,
+            created_at=artifact.created_at.isoformat(),
+            download_path=(
+                f"/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact.id}/download"
+            ),
+        )
 
 
 class ArtifactPresignedUrlResponse(BaseModel):
@@ -159,6 +288,18 @@ class TreeVizItem(BaseModel):
     viz: dict = Field(..., description="Tree visualization payload")
     created_at: str = Field(..., description="ISO timestamp when the viz was stored")
     updated_at: str = Field(..., description="ISO timestamp when the viz was last updated")
+
+    @staticmethod
+    def from_db_record(record: TreeVizRecord) -> "TreeVizItem":
+        return TreeVizItem(
+            id=record.id,
+            run_id=record.run_id,
+            stage_id=record.stage_id,
+            version=record.version,
+            viz=record.viz,
+            created_at=record.created_at.isoformat(),
+            updated_at=record.updated_at.isoformat(),
+        )
 
 
 class ResearchRunDetailsResponse(BaseModel):

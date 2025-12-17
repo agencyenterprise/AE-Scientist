@@ -1,17 +1,16 @@
-import asyncio
-import json
 import logging
 import os
 import threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncGenerator, Dict, Protocol, Sequence, Union, cast
+from typing import Any, Dict, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
+from app.api.research_pipeline_event_stream import usd_to_cents
+from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
@@ -26,28 +25,15 @@ from app.models import (
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
-    ResearchRunStreamEvent,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import (
-    ResearchPipelineRun,
-    ResearchPipelineRunEvent,
-)
-from app.services.database.rp_artifacts import ResearchPipelineArtifact
-from app.services.database.rp_events import (
-    BestNodeReasoningEvent,
-    PaperGenerationEvent,
-    RunLogEvent,
-    StageProgressEvent,
-    SubstageCompletedEvent,
-)
-from app.services.database.rp_events import SubstageSummaryEvent as DbSubstageSummaryEvent
-from app.services.database.rp_tree_viz import TreeVizRecord
+from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.research_pipeline.runpod_manager import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -59,11 +45,10 @@ from app.services.s3_service import get_s3_service
 
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
-
 REQUESTER_NAME_FALLBACK = "Scientist"
 
 
-def extract_first_name(*, full_name: str) -> str:
+def extract_user_first_name(*, full_name: str) -> str:
     """Return a cleaned first-name token suitable for pod naming."""
     stripped = full_name.strip()
     if not stripped:
@@ -106,11 +91,35 @@ def _record_pod_billing_event(
         return
     metadata = dict(summary)
     metadata["context"] = context
+    actual_cost_cents: int | None = None
+    amount = metadata.get("amount")
+    if amount is not None:
+        try:
+            actual_cost_cents = usd_to_cents(value_usd=float(amount))
+        except (TypeError, ValueError):
+            pass
+    if actual_cost_cents is not None:
+        metadata["actual_cost_cents"] = actual_cost_cents
+    now = datetime.now(timezone.utc)
     db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_billing_summary",
         metadata=metadata,
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type="pod_billing_summary",
+        metadata=metadata,
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
     )
 
 
@@ -120,10 +129,7 @@ def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    try:
-        upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
+    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 class IdeaPayloadSource(Protocol):
@@ -269,10 +275,11 @@ def _launch_research_pipeline_job(
                     )
             return
 
+        cost_per_hour = _extract_cost_per_hour(pod_info, run_id)
         db.update_research_pipeline_run(
             run_id=run_id,
             pod_info=pod_info,
-            cost=_extract_cost_per_hour(pod_info, run_id),
+            cost=cost_per_hour,
         )
         db.insert_research_pipeline_run_event(
             run_id=run_id,
@@ -283,7 +290,7 @@ def _launch_research_pipeline_job(
                 "gpu_type": pod_info.get("gpu_type"),
                 "public_ip": pod_info.get("public_ip"),
                 "ssh_port": pod_info.get("ssh_port"),
-                "cost_per_hr": pod_info.get("costPerHr"),
+                "cost_per_hr": cost_per_hour,
             },
             occurred_at=datetime.now(timezone.utc),
         )
@@ -310,139 +317,6 @@ def _launch_research_pipeline_job(
                 existing = _launch_cancel_events.get(run_id)
                 if existing is cancel_event:
                     _launch_cancel_events.pop(run_id, None)
-
-
-def _run_to_info(run: ResearchPipelineRun) -> ResearchRunInfo:
-    return ResearchRunInfo(
-        run_id=run.run_id,
-        status=run.status,
-        idea_id=run.idea_id,
-        idea_version_id=run.idea_version_id,
-        pod_id=run.pod_id,
-        pod_name=run.pod_name,
-        gpu_type=run.gpu_type,
-        cost=run.cost,
-        public_ip=run.public_ip,
-        ssh_port=run.ssh_port,
-        pod_host_id=run.pod_host_id,
-        error_message=run.error_message,
-        last_heartbeat_at=run.last_heartbeat_at.isoformat() if run.last_heartbeat_at else None,
-        heartbeat_failures=run.heartbeat_failures,
-        created_at=run.created_at.isoformat(),
-        updated_at=run.updated_at.isoformat(),
-        start_deadline_at=run.start_deadline_at.isoformat() if run.start_deadline_at else None,
-    )
-
-
-def _stage_event_to_model(event: StageProgressEvent) -> ResearchRunStageProgress:
-    return ResearchRunStageProgress(
-        stage=event.stage,
-        iteration=event.iteration,
-        max_iterations=event.max_iterations,
-        progress=event.progress,
-        total_nodes=event.total_nodes,
-        buggy_nodes=event.buggy_nodes,
-        good_nodes=event.good_nodes,
-        best_metric=event.best_metric,
-        eta_s=event.eta_s,
-        latest_iteration_time_s=event.latest_iteration_time_s,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _log_event_to_model(event: RunLogEvent) -> ResearchRunLogEntry:
-    return ResearchRunLogEntry(
-        id=event.id,
-        level=event.level,
-        message=event.message,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _run_event_to_model(event: ResearchPipelineRunEvent) -> ResearchRunEvent:
-    return ResearchRunEvent(
-        id=event.id,
-        run_id=event.run_id,
-        event_type=event.event_type,
-        metadata=event.metadata,
-        occurred_at=event.occurred_at.isoformat(),
-    )
-
-
-def _node_event_to_model(event: SubstageCompletedEvent) -> ResearchRunSubstageEvent:
-    return ResearchRunSubstageEvent(
-        id=event.id,
-        stage=event.stage,
-        node_id=None,
-        summary=event.summary,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _substage_summary_to_model(
-    event: DbSubstageSummaryEvent,
-) -> ResearchRunSubstageSummary:
-    return ResearchRunSubstageSummary(
-        id=event.id,
-        stage=event.stage,
-        summary=event.summary,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _best_node_event_to_model(
-    event: BestNodeReasoningEvent,
-) -> ResearchRunBestNodeSelection:
-    return ResearchRunBestNodeSelection(
-        id=event.id,
-        stage=event.stage,
-        node_id=event.node_id,
-        reasoning=event.reasoning,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _paper_generation_event_to_model(
-    event: PaperGenerationEvent,
-) -> ResearchRunPaperGenerationProgress:
-    return ResearchRunPaperGenerationProgress(
-        id=event.id,
-        run_id=event.run_id,
-        step=event.step,
-        substep=event.substep,
-        progress=event.progress,
-        step_progress=event.step_progress,
-        details=event.details,
-        created_at=event.created_at.isoformat(),
-    )
-
-
-def _artifact_to_model(
-    artifact: ResearchPipelineArtifact, conversation_id: int, run_id: str
-) -> ResearchRunArtifactMetadata:
-    return ResearchRunArtifactMetadata(
-        id=artifact.id,
-        artifact_type=artifact.artifact_type,
-        filename=artifact.filename,
-        file_size=artifact.file_size,
-        file_type=artifact.file_type,
-        created_at=artifact.created_at.isoformat(),
-        download_path=(
-            f"/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact.id}/download"
-        ),
-    )
-
-
-def _tree_viz_to_model(record: TreeVizRecord) -> TreeVizItem:
-    return TreeVizItem(
-        id=record.id,
-        run_id=record.run_id,
-        stage_id=record.stage_id,
-        version=record.version,
-        viz=record.viz,
-        created_at=record.created_at.isoformat(),
-        updated_at=record.updated_at.isoformat(),
-    )
 
 
 @router.post(
@@ -477,7 +351,7 @@ def submit_idea_for_research(
         action="research_pipeline",
     )
 
-    requester_first_name = extract_first_name(full_name=user.name)
+    requester_first_name = extract_user_first_name(full_name=user.name)
     run_id = _create_and_launch_research_run(
         idea_data=cast(IdeaPayloadSource, idea_data),
         requested_by_first_name=requester_first_name,
@@ -510,22 +384,26 @@ def get_research_run_details(
         raise HTTPException(status_code=404, detail="Research run not found")
 
     stage_events = [
-        _stage_event_to_model(event) for event in db.list_stage_progress_events(run_id=run_id)
+        ResearchRunStageProgress.from_db_record(event)
+        for event in db.list_stage_progress_events(run_id=run_id)
     ]
-    log_events = [_log_event_to_model(event) for event in db.list_run_log_events(run_id=run_id)]
+    log_events = [
+        ResearchRunLogEntry.from_db_record(event) for event in db.list_run_log_events(run_id=run_id)
+    ]
     substage_events = [
-        _node_event_to_model(event) for event in db.list_substage_completed_events(run_id=run_id)
+        ResearchRunSubstageEvent.from_db_record(event)
+        for event in db.list_substage_completed_events(run_id=run_id)
     ]
     substage_summaries = [
-        _substage_summary_to_model(event)
+        ResearchRunSubstageSummary.from_db_record(event)
         for event in db.list_substage_summary_events(run_id=run_id)
     ]
     best_node_selections = [
-        _best_node_event_to_model(event)
+        ResearchRunBestNodeSelection.from_db_record(event)
         for event in db.list_best_node_reasoning_events(run_id=run_id)
     ]
     artifacts = [
-        _artifact_to_model(
+        ResearchRunArtifactMetadata.from_db_record(
             artifact=artifact,
             conversation_id=conversation_id,
             run_id=run_id,
@@ -533,16 +411,19 @@ def get_research_run_details(
         for artifact in db.list_run_artifacts(run_id=run_id)
     ]
     run_events = [
-        _run_event_to_model(event) for event in db.list_research_pipeline_run_events(run_id=run_id)
+        ResearchRunEvent.from_db_record(event)
+        for event in db.list_research_pipeline_run_events(run_id=run_id)
     ]
-    tree_viz = [_tree_viz_to_model(record) for record in db.list_tree_viz_for_run(run_id=run_id)]
+    tree_viz = [
+        TreeVizItem.from_db_record(record) for record in db.list_tree_viz_for_run(run_id=run_id)
+    ]
     paper_gen_events = [
-        _paper_generation_event_to_model(event)
+        ResearchRunPaperGenerationProgress.from_db_record(event)
         for event in db.list_paper_generation_events(run_id=run_id)
     ]
 
     return ResearchRunDetailsResponse(
-        run=_run_to_info(run),
+        run=ResearchRunInfo.from_db_record(run),
         stage_progress=stage_events,
         logs=log_events,
         substage_events=substage_events,
@@ -794,7 +675,7 @@ def list_tree_viz(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
     records = db.list_tree_viz_for_run(run_id=run_id)
-    return [_tree_viz_to_model(record) for record in records]
+    return [TreeVizItem.from_db_record(record) for record in records]
 
 
 @router.get(
@@ -823,168 +704,4 @@ def get_tree_viz(
     record = db.get_tree_viz(run_id=run_id, stage_id=stage_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Tree viz not found")
-    return _tree_viz_to_model(record)
-
-
-SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
-
-
-def _format_stream_event(event: Dict[str, Any]) -> str:
-    return f"data: {json.dumps(event)}\n\n"
-
-
-def _build_initial_stream_payload(
-    *,
-    db: DatabaseManager,
-    run_id: str,
-    conversation_id: int,
-    current_run: ResearchPipelineRun,
-) -> dict:
-    stage_events = [
-        _stage_event_to_model(event).model_dump()
-        for event in db.list_stage_progress_events(run_id=run_id)
-    ]
-    log_events = [
-        _log_event_to_model(event).model_dump() for event in db.list_run_log_events(run_id=run_id)
-    ]
-    substage_events = [
-        _node_event_to_model(event).model_dump()
-        for event in db.list_substage_completed_events(run_id=run_id)
-    ]
-    substage_summary_records = db.list_substage_summary_events(run_id=run_id)
-    substage_summaries = [
-        _substage_summary_to_model(event).model_dump() for event in substage_summary_records
-    ]
-    artifacts = [
-        _artifact_to_model(
-            artifact=artifact,
-            conversation_id=conversation_id,
-            run_id=run_id,
-        ).model_dump()
-        for artifact in db.list_run_artifacts(run_id=run_id)
-    ]
-    tree_viz = [
-        _tree_viz_to_model(record).model_dump()
-        for record in db.list_tree_viz_for_run(run_id=run_id)
-    ]
-    paper_gen_events = [
-        _paper_generation_event_to_model(event).model_dump()
-        for event in db.list_paper_generation_events(run_id=run_id)
-    ]
-    run_events = [
-        _run_event_to_model(event).model_dump()
-        for event in db.list_research_pipeline_run_events(run_id=run_id)
-    ]
-    best_node_payload = [
-        _best_node_event_to_model(event).model_dump()
-        for event in db.list_best_node_reasoning_events(run_id=run_id)
-    ]
-
-    return {
-        "run": _run_to_info(current_run).model_dump(),
-        "stage_progress": stage_events,
-        "logs": log_events,
-        "substage_events": substage_events,
-        "substage_summaries": substage_summaries,
-        "artifacts": artifacts,
-        "tree_viz": tree_viz,
-        "events": run_events,
-        "paper_generation_progress": paper_gen_events,
-        "best_node_selections": best_node_payload,
-    }
-
-
-@router.get(
-    "/{conversation_id}/idea/research-run/{run_id}/events",
-    response_model=ResearchRunStreamEvent,
-    responses={
-        200: {
-            "description": "Research pipeline progress events",
-            "content": {
-                "text/event-stream": {
-                    "schema": {"$ref": "#/components/schemas/ResearchRunStreamEvent"}
-                }
-            },
-        }
-    },
-)
-async def stream_research_run_events(
-    conversation_id: int,
-    run_id: str,
-    request: Request,
-) -> StreamingResponse:
-    """Stream server-sent events for research run progress."""
-    if conversation_id <= 0:
-        raise HTTPException(status_code=400, detail="conversation_id must be positive")
-
-    user = get_current_user(request)
-    db = get_database()
-
-    conversation = db.get_conversation_by_id(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if conversation.user_id != user.id:
-        raise HTTPException(status_code=403, detail="You do not own this conversation")
-
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Research run not found")
-
-    async def event_generator() -> AsyncGenerator[str, None]:
-        """Generate SSE events until the run completes or the client disconnects."""
-        queue = register_stream_queue(run_id)
-        initial_sent = False
-
-        try:
-            while True:
-                if await request.is_disconnected():
-                    logger.info("Client disconnected from SSE stream for run %s", run_id)
-                    break
-
-                if not initial_sent:
-                    current_run = db.get_research_pipeline_run(run_id)
-                    if current_run is None:
-                        yield _format_stream_event({"type": "error", "data": "Run not found"})
-                        break
-                    initial_data = _build_initial_stream_payload(
-                        db=db,
-                        run_id=run_id,
-                        conversation_id=conversation_id,
-                        current_run=current_run,
-                    )
-                    yield _format_stream_event({"type": "initial", "data": initial_data})
-                    initial_sent = True
-                    continue
-
-                try:
-                    event = await asyncio.wait_for(
-                        queue.get(),
-                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        logger.info("Client disconnected from SSE stream for run %s", run_id)
-                        break
-                    yield _format_stream_event({"type": "heartbeat", "data": None})
-                    continue
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("Error while reading stream queue for run %s", run_id)
-                    yield _format_stream_event({"type": "error", "data": str(exc)})
-                    break
-
-                yield _format_stream_event(event)
-
-                if event.get("type") == "complete":
-                    break
-        finally:
-            unregister_stream_queue(run_id, queue)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
-    )
+    return TreeVizItem.from_db_record(record)

@@ -11,6 +11,7 @@ import type {
   BestNodeSelection,
   SubstageSummary,
   SubstageEvent,
+  HwCostEstimateData,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -31,6 +32,7 @@ interface UseResearchRunSSEOptions {
   onSubstageSummary?: (event: SubstageSummary) => void;
   onSubstageCompleted?: (event: SubstageEvent) => void;
   onError?: (error: string) => void;
+  onHwCostEstimate?: (event: HwCostEstimateData) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -108,6 +110,10 @@ function getInitialSubstageSummaries(data: InitialEventData): SubstageSummary[] 
 }
 
 function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
+  const initialHwCost: HwCostEstimateData | null =
+    "hw_cost_estimate" in data && data.hw_cost_estimate
+      ? (data.hw_cost_estimate as HwCostEstimateData)
+      : null;
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
@@ -118,6 +124,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
     best_node_selections: data.best_node_selections ?? [],
+    hw_cost_estimate: initialHwCost,
   };
 }
 
@@ -133,6 +140,7 @@ export function useResearchRunSSE({
   onPaperGenerationProgress,
   onComplete,
   onRunEvent,
+  onHwCostEstimate,
   onBestNodeSelection,
   onSubstageSummary,
   onSubstageCompleted,
@@ -231,6 +239,9 @@ export function useResearchRunSSE({
               case "paper_generation_progress":
                 onPaperGenerationProgress(event.data as PaperGenerationEvent);
                 break;
+              case "hw_cost_estimate":
+                onHwCostEstimate?.(event.data as HwCostEstimateData);
+                break;
               case "complete":
                 onComplete(event.data.status);
                 setIsConnected(false);
@@ -278,6 +289,7 @@ export function useResearchRunSSE({
     onSubstageSummary,
     onPaperGenerationProgress,
     onComplete,
+    onHwCostEstimate,
     onError,
   ]);
 

@@ -175,6 +175,26 @@ class ConversationImportStreamEvent(RootModel[ConversationImportEventUnion]):
 # ----------------------------------------------------------------------------
 
 
+class ResearchRunHwCostEstimateData(BaseModel):
+    hw_estimated_cost_cents: int = Field(
+        ...,
+        description="Estimated hardware cost in cents since the run started running.",
+    )
+    hw_cost_per_hour_cents: int = Field(
+        ...,
+        description="RunPod hourly cost in cents recorded at launch.",
+    )
+    hw_started_running_at: Optional[str] = Field(
+        None,
+        description="ISO timestamp when the run transitioned from pending to running.",
+    )
+
+
+class ResearchRunHwCostEstimateEvent(BaseModel):
+    type: Literal["hw_cost_estimate"]
+    data: ResearchRunHwCostEstimateData
+
+
 class ResearchRunInitialEventData(BaseModel):
     run: ResearchRunInfo
     stage_progress: List[ResearchRunStageProgress]
@@ -186,6 +206,10 @@ class ResearchRunInitialEventData(BaseModel):
     events: List[ResearchRunEvent]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
     best_node_selections: List[ResearchRunBestNodeSelection]
+    hw_cost_estimate: ResearchRunHwCostEstimateData | None = Field(
+        None,
+        description="Hardware cost estimate available when the initial snapshot was emitted.",
+    )
 
 
 class ResearchRunInitialEvent(BaseModel):
@@ -222,6 +246,7 @@ class ResearchRunLogEvent(BaseModel):
 class ResearchRunBestNodeEvent(BaseModel):
     type: Literal["best_node_selection"]
     data: ResearchRunBestNodeSelection
+
 
 class ResearchRunSubstageCompletedEvent(BaseModel):
     type: Literal["substage_completed"]
@@ -266,6 +291,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunSubstageEventStream,
         ResearchRunSubstageSummaryEvent,
         ResearchRunHeartbeatEvent,
+        ResearchRunHwCostEstimateEvent,
         ResearchRunErrorEvent,
     ],
     Field(discriminator="type"),

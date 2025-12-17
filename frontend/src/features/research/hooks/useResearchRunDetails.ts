@@ -13,6 +13,7 @@ import type {
   BestNodeSelection,
   SubstageSummary,
   SubstageEvent,
+  HwCostEstimateData,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -27,6 +28,9 @@ interface UseResearchRunDetailsReturn {
   conversationId: number | null;
   isConnected: boolean;
   connectionError: string | null;
+  hwEstimatedCostCents: number | null;
+  hwActualCostCents: number | null;
+  hwCostPerHourCents: number | null;
   stopPending: boolean;
   stopError: string | null;
   handleStopRun: () => Promise<void>;
@@ -43,6 +47,9 @@ export function useResearchRunDetails({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [hwEstimatedCostCents, setHwEstimatedCostCents] = useState<number | null>(null);
+  const [hwActualCostCents, setHwActualCostCents] = useState<number | null>(null);
+  const [hwCostPerHourCents, setHwCostPerHourCents] = useState<number | null>(null);
   const [stopPending, setStopPending] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
 
@@ -51,6 +58,10 @@ export function useResearchRunDetails({
     setDetails(data);
     setLoading(false);
     setError(null);
+    if (data.hw_cost_estimate) {
+      setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
+      setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
+    }
   }, []);
 
   const handleStageProgress = useCallback((event: StageProgress) => {
@@ -128,45 +139,71 @@ export function useResearchRunDetails({
   }, []);
 
   const handleRunEvent = useCallback(
-    async (event: { event_type?: string } | unknown) => {
-      if (
-        !conversationId ||
-        !event ||
-        typeof event !== "object" ||
-        (event as { event_type?: string }).event_type !== "tree_viz_stored"
-      ) {
+    async (event: { event_type?: string; metadata?: Record<string, unknown> } | unknown) => {
+      if (!event || typeof event !== "object") {
         return;
       }
-      try {
-        const treeViz = await apiFetch<TreeVizItem[]>(
-          `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
-        );
-        let artifacts: ArtifactMetadata[] | null = null;
-        try {
-          artifacts = await apiFetch<ArtifactMetadata[]>(
-            `/conversations/${conversationId}/idea/research-run/${runId}/artifacts`
-          );
-        } catch (artifactErr) {
-          // Ignore artifact fetch failures (e.g., 404 when not yet available)
-          // eslint-disable-next-line no-console
-          console.warn("Artifacts not refreshed after tree viz SSE:", artifactErr);
+      const eventType = (event as { event_type?: string }).event_type;
+
+      if (eventType === "tree_viz_stored") {
+        if (!conversationId) {
+          return;
         }
-        setDetails(prev =>
-          prev
-            ? {
-                ...prev,
-                tree_viz: treeViz,
-                artifacts: artifacts ?? prev.artifacts,
-              }
-            : prev
-        );
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to refresh tree viz", err);
+        try {
+          const treeViz = await apiFetch<TreeVizItem[]>(
+            `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
+          );
+          let artifacts: ArtifactMetadata[] | null = null;
+          try {
+            artifacts = await apiFetch<ArtifactMetadata[]>(
+              `/conversations/${conversationId}/idea/research-run/${runId}/artifacts`
+            );
+          } catch (artifactErr) {
+            // Ignore artifact fetch failures (e.g., 404 when not yet available)
+            // eslint-disable-next-line no-console
+            console.warn("Artifacts not refreshed after tree viz SSE:", artifactErr);
+          }
+          setDetails(prev =>
+            prev
+              ? {
+                  ...prev,
+                  tree_viz: treeViz,
+                  artifacts: artifacts ?? prev.artifacts,
+                }
+              : prev
+          );
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to refresh tree viz", err);
+        }
+        return;
+      }
+
+      if (eventType === "pod_billing_summary") {
+        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
+        let cents: number | null = null;
+        if (typeof metadata.actual_cost_cents === "number") {
+          cents = metadata.actual_cost_cents;
+        } else if (typeof metadata.amount === "number") {
+          cents = Math.round(metadata.amount * 100);
+        } else if (typeof metadata.amount === "string") {
+          const numeric = Number(metadata.amount);
+          if (!Number.isNaN(numeric)) {
+            cents = Math.round(numeric * 100);
+          }
+        }
+        if (cents !== null) {
+          setHwActualCostCents(cents);
+        }
       }
     },
     [conversationId, runId]
   );
+
+  const handleHwCostEstimate = useCallback((event: HwCostEstimateData) => {
+    setHwEstimatedCostCents(event.hw_estimated_cost_cents);
+    setHwCostPerHourCents(event.hw_cost_per_hour_cents);
+  }, []);
 
   // Ensure tree viz is loaded when details are present but tree_viz is missing/empty
   const treeVizFetchAttempted = useRef(false);
@@ -234,6 +271,7 @@ export function useResearchRunDetails({
     onRunUpdate: handleRunUpdate,
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
+    onHwCostEstimate: handleHwCostEstimate,
     onBestNodeSelection: handleBestNodeSelection,
     onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
@@ -281,6 +319,9 @@ export function useResearchRunDetails({
     conversationId,
     isConnected,
     connectionError,
+    hwEstimatedCostCents,
+    hwActualCostCents,
+    hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
