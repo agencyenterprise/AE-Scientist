@@ -19,8 +19,7 @@ class SupportsPlottingAgent(Protocol):
     stage_name: str
     cfg: AppConfig
 
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int) -> Tuple[str, str]:
-        pass
+    def plan_and_code_query(self, *, prompt: PromptType, retries: int) -> Tuple[str, str]: ...
 
 
 def generate_plotting_code(

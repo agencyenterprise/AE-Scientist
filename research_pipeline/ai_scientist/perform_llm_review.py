@@ -387,7 +387,7 @@ def load_paper(pdf_path: str, num_pages: int | None = None, min_size: int = 100)
                 doc = doc[:num_pages]
             text = ""
             for page in doc:
-                text += page.get_text()
+                text += str(page.get_text())
             if len(text) < min_size:
                 raise Exception("Text too short")
         except Exception as e:

@@ -417,7 +417,7 @@ async def _generate_idea(
     idea_stream = service.generate_idea(
         llm_model=llm_model,
         conversation_text=imported_conversation,
-        _user_id=user_id,
+        user_id=user_id,
         conversation_id=conversation_id,
     )
     async for chunk in _stream_structured_idea(

@@ -75,6 +75,9 @@ async def process_attachment_background(
 ) -> None:
     try:
         service: BaseLLMService = get_llm_service_by_provider(llm_provider)
+        model_obj = get_llm_model_by_id(llm_provider, llm_model)
+        if not model_obj:
+            raise ValueError(f"Unknown LLM model: {llm_model}")
 
         extracted_text = ""
         if file_type == "application/pdf":
@@ -82,10 +85,6 @@ async def process_attachment_background(
         elif file_type.startswith("image/"):
             # Generate a detailed caption using the selected provider's model if it supports images
             image_url = s3_service.generate_download_url(s3_key=s3_key)
-
-            model_obj = get_llm_model_by_id(llm_provider, llm_model)
-            if not model_obj:
-                raise ValueError(f"Unknown LLM model: {llm_model}")
 
             try:
                 # If the selected model isn't vision, we still attempt; service will fail gracefully if unsupported

@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 
 from ai_scientist.llm import structured_query_with_schema
 
@@ -12,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 class Stage1Baseline(Stage):
-    MAIN_STAGE_SLUG = "initial_implementation"
-    DEFAULT_GOALS = (
+    MAIN_STAGE_SLUG: ClassVar[str] = "initial_implementation"
+    DEFAULT_GOALS: ClassVar[str] = (
         "- Focus on getting basic working implementation\n"
         "- Use a dataset appropriate to the experiment\n"
         "- Aim for basic functional correctness\n"

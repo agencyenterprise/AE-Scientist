@@ -9,9 +9,10 @@ Provides dual authentication support:
 import logging
 from typing import Callable, Optional
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from app.services.auth_service import AuthService
 from app.services.database.users import UserData
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     """Middleware for handling authentication."""
 
-    def __init__(self, app: FastAPI, exclude_paths: Optional[list[str]] = None) -> None:
+    def __init__(self, app: ASGIApp, exclude_paths: Optional[list[str]] = None) -> None:
         """
         Initialize authentication middleware.
 

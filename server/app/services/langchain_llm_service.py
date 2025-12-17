@@ -278,8 +278,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         return self._message_to_text(message=response)
 
     async def generate_idea(
-        self, llm_model: str, conversation_text: str, _user_id: int, conversation_id: int
+        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
+        del user_id
         db = get_database()
         system_prompt = get_idea_generation_prompt(db=db)
         user_prompt = (

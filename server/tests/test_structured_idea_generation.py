@@ -256,7 +256,7 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
             async for content_chunk in service.generate_idea(
                 llm_model=config.model.id,
                 conversation_text=SMOKE_CONVERSATION,
-                _user_id=123,
+                user_id=123,
                 conversation_id=123,
             ):
                 if not content_chunk:

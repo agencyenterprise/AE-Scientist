@@ -1,5 +1,5 @@
 import logging
-from typing import List, Protocol, Tuple
+from typing import ClassVar, List, Protocol, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -30,13 +30,12 @@ class HyperparamTuningIdea(BaseModel):
 
 
 class SupportsStage2Agent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]:
-        pass
+    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
 
 
 class Stage2Tuning(Stage):
-    MAIN_STAGE_SLUG = "baseline_tuning"
-    DEFAULT_GOALS = (
+    MAIN_STAGE_SLUG: ClassVar[str] = "baseline_tuning"
+    DEFAULT_GOALS: ClassVar[str] = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"
         "- Introduce additional datasets from HuggingFace to test the model. Use dataset sizes appropriate to the experiment. Use streaming=True for very large datasets."

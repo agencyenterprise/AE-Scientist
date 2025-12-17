@@ -1126,7 +1126,12 @@ def perform_writeup(
         _ensure_graphicspath(
             writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
         )
+        with open(writeup_file, "r") as f:
+            current_latex = f.read()
 
+        reflection_pdf = osp.join(run_out_dir, "paper_reflection_initial.pdf")
+        logger.info("Compiling PDF for reflection baseline...")
+        compile_latex(latex_folder, reflection_pdf)
         # Multiple reflection loops on the final LaTeX
         for i in range(n_writeup_reflections):
             with open(writeup_file, "r") as f:
@@ -1337,11 +1342,14 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
             msg_history=msg_history[-1:],
         )
 
+        with open(writeup_file, "r") as f:
+            current_latex = f.read()
+
         reflection_pdf = osp.join(run_out_dir, "paper_reflection_final_page_limit.pdf")
         # Compile current version before reflection
         logger.info("Compiling PDF for reflection final page limit...")
 
-        logger.debug(f"reflection step {i + 1}")
+        logger.debug("Final page-limit reflection step")
 
         reflection_code_match = re.search(r"```latex(.*?)```", reflection_response, re.DOTALL)
         if reflection_code_match:

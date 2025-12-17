@@ -1,4 +1,5 @@
 import logging
+from typing import ClassVar
 
 from ai_scientist.llm import structured_query_with_schema
 
@@ -10,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class Stage3Plotting(Stage):
-    MAIN_STAGE_SLUG = "creative_research"
-    DEFAULT_GOALS = (
+    MAIN_STAGE_SLUG: ClassVar[str] = "creative_research"
+    DEFAULT_GOALS: ClassVar[str] = (
         "- Explore novel improvements\n"
         "- Come up with experiments to reveal new insights\n"
         "- Be creative and think outside the box\n"

@@ -11,6 +11,7 @@ lint:
 	VIRTUAL_ENV= uv run isort . --skip-glob 'workspaces/*' --skip-glob '.venv/*'
 	VIRTUAL_ENV= uv run ruff check . --exclude workspaces,.venv
 	VIRTUAL_ENV= uv run mypy . --exclude '^(workspaces|\.venv|ai_scientist/example_code.py)'
+	VIRTUAL_ENV= uv run pyright --project pyproject.toml
 	VIRTUAL_ENV= uv run python ../linter/check_inline_imports.py --target-dir . --exclude workspaces
 	@echo "✅ Linting complete"
 
