@@ -187,7 +187,10 @@ def exception_summary(
     """
     if format_tb_ipython:
         tb = IPython.core.ultratb.VerboseTB(tb_offset=1, color_scheme="NoColor")
-        tb_str = str(tb.text(*sys.exc_info()))
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        safe_exc_type = exc_type or e.__class__
+        safe_exc_value = exc_value or e
+        tb_str = str(tb.text(safe_exc_type, safe_exc_value, exc_traceback))
     else:
         tb_lines = traceback.format_exception(e)
         # skip parts of stack trace in weflow code

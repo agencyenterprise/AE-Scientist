@@ -17,9 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 def on_backoff(details: Details) -> None:
+    wait_time = details.get("wait")
+    wait_display = f"{float(wait_time):0.1f}" if wait_time is not None else "?"
+    tries = details.get("tries", "?")
+    target = details.get("target")
     logger.debug(
-        f"Backing off {details['wait']:0.1f} seconds after {details['tries']} tries "
-        f"calling function {details['target'].__name__} at {time.strftime('%X')}"
+        f"Backing off {wait_display} seconds after {tries} tries "
+        f"calling function {target.__name__ if target else 'unknown'} at {time.strftime('%X')}"
     )
 
 

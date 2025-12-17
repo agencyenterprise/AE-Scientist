@@ -169,8 +169,8 @@ async def logout(
     Returns:
         Success message
     """
+    samesite: Literal["lax", "strict", "none"] = "lax"
     try:
-        samesite: Literal["lax", "strict", "none"] = "lax"
         if settings.is_production:
             samesite = "none"
 

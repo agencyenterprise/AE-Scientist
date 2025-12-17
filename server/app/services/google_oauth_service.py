@@ -92,8 +92,12 @@ class GoogleOAuthService:
             flow.fetch_token(code=authorization_code)
 
             # Get user info from ID token
+            credentials = flow.credentials
+            token_value = getattr(credentials, "id_token", None)
+            if not token_value:
+                raise ValueError("No ID token returned from Google OAuth flow")
             id_info = id_token.verify_oauth2_token(
-                flow.credentials.id_token, requests.Request(), settings.GOOGLE_CLIENT_ID
+                token_value, requests.Request(), settings.GOOGLE_CLIENT_ID
             )
 
             # Domain validation is handled by Google OAuth configuration

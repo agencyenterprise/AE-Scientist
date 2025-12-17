@@ -316,8 +316,8 @@ class ParallelAgent:
             # Debugging phase (probabilistic)
             if random.random() < search_cfg.debug_prob:
                 logger.debug("Checking debuggable nodes")
+                debuggable_nodes: list[Node] = []
                 try:
-                    debuggable_nodes = None
                     logger.debug("Checking buggy nodes...")
                     buggy_nodes = self.journal.buggy_nodes
                     logger.debug(f"Type of buggy_nodes: {type(buggy_nodes)}")

@@ -1,5 +1,5 @@
 import logging
-from typing import List, Protocol, Tuple
+from typing import ClassVar, List, Protocol, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -30,13 +30,12 @@ class AblationIdea(BaseModel):
 
 
 class SupportsStage4Agent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]:
-        pass
+    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
 
 
 class Stage4Ablation(Stage):
-    MAIN_STAGE_SLUG = "ablation_studies"
-    DEFAULT_GOALS = (
+    MAIN_STAGE_SLUG: ClassVar[str] = "ablation_studies"
+    DEFAULT_GOALS: ClassVar[str] = (
         "- Conduct systematic component analysis that reveals the contribution of each part\n"
         "- Use the same datasets you used from the previous stage"
     )

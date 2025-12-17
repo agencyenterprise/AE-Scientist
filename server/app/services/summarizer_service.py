@@ -6,10 +6,10 @@ maintain conversation summaries for imported conversations and live chats.
 """
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
 from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import SummarizationMiddleware, after_model
+from langchain.agents.middleware import AgentMiddleware, SummarizationMiddleware, after_model
 from langchain.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -354,12 +354,13 @@ class SummarizerService:
                     # we don't need the answer, so we set a small max tokens
                     temp_max_tokens = self.model.max_tokens  # type: ignore[attr-defined]
                     self.model.max_tokens = 10  # type: ignore[attr-defined]
+                    middleware_sequence: Sequence[AgentMiddleware[AgentState, None]] = [
+                        self._get_summarizer(conversation_id),
+                        cast(AgentMiddleware[AgentState, None], remove_after_empty_message),
+                    ]
                     agent: CompiledStateGraph = create_agent(
                         model=self.model,
-                        middleware=[
-                            self._get_summarizer(conversation_id),
-                            remove_after_empty_message,
-                        ],
+                        middleware=middleware_sequence,
                         checkpointer=checkpointer,
                     )
                     # Add a blank human message to trigger summarization of the entire conversation history

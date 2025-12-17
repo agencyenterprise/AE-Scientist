@@ -3,7 +3,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Sequence, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
@@ -689,9 +689,9 @@ class RetryIdeaPayload(IdeaPayloadSource):
     short_hypothesis: str
     related_work: str
     abstract: str
-    experiments: List[Any]
+    experiments: Sequence[Any]
     expected_outcome: str
-    risk_factors_and_limitations: List[Any]
+    risk_factors_and_limitations: Sequence[Any]
 
 
 def _coerce_list(value: object) -> List[object]:

@@ -23,7 +23,7 @@ import threading
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, NamedTuple, Optional, cast
+from typing import Callable, NamedTuple, Optional, Protocol, cast
 
 from omegaconf import OmegaConf
 
@@ -71,7 +71,8 @@ class TelemetryHooks(NamedTuple):
     webhook: Optional[WebhookClient]
 
 
-ArtifactCallback = Callable[[ArtifactSpec], None]
+class ArtifactCallback(Protocol):
+    def __call__(self, spec: ArtifactSpec) -> None: ...
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -845,6 +846,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
         telemetry_hooks.event_callback,
         webhook_client=webhook_client,
     )
+    artifact_callback: ArtifactCallback
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
             telemetry_cfg=base_cfg.telemetry
@@ -852,8 +854,11 @@ def execute_launcher(args: argparse.Namespace) -> None:
     else:
         artifact_publisher = None
 
-        def artifact_callback(_spec: ArtifactSpec) -> None:
+        def _noop_artifact_callback(spec: ArtifactSpec) -> None:
+            del spec
             return
+
+        artifact_callback = _noop_artifact_callback
 
     heartbeat_thread: threading.Thread | None = None
     heartbeat_stop: threading.Event | None = None

@@ -221,7 +221,7 @@ class WorstMetricValue(MetricValue):
     Always compares worse than any valid metric value.
     """
 
-    value: None = None
+    value: float | int | np.number | np.floating | dict | None = None
 
     def __repr__(self) -> str:
         return super().__repr__()

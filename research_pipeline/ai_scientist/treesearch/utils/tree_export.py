@@ -242,7 +242,6 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         ]
     except Exception as e:
         logger.error(f"Error setting term_out: {e}")
-        logger.debug(f"n.term_out: {n._term_out}")
         raise
 
     try:

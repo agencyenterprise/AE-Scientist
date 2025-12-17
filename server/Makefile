@@ -11,6 +11,7 @@ lint:
 	VIRTUAL_ENV= uv run isort . --skip-glob '.venv/*'
 	VIRTUAL_ENV= uv run ruff check . --exclude .venv
 	VIRTUAL_ENV= uv run mypy . --exclude '^(\.venv|playground)'
+	VIRTUAL_ENV= uv run pyright --project pyproject.toml
 	VIRTUAL_ENV= uv run python ../linter/check_inline_imports.py --target-dir . --exclude playground
 	@echo "✅ Linting complete"
 

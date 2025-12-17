@@ -89,6 +89,7 @@ class AgentManager:
         self._completed_stages: set[str] = set()
         self._final_progress_emitted: set[str] = set()
         self._substage_completed_emitted: set[str] = set()
+        self._journal_history: Dict[str, List[Journal]] = {}
         self.phase_plan: list[PhaseDefinition] = []
         # Stage slugs/goals are defined in the stage classes
         # Create initial stage

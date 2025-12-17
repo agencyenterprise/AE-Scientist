@@ -16,8 +16,7 @@ from .utils.config import Config as AppConfig
 
 
 class SupportsSeedAgent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]:
-        pass
+    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
 
     @property
     def cfg(
@@ -119,6 +118,7 @@ def run_plot_aggregation(*, agent: SupportsSeedAgent, node: Node, seed_nodes: Li
             process_interpreter.cleanup_session()
             # Save aggregated plots
             plots_dir = Path(working_dir) / "working"
+            exp_results_dir: Path | None = None
             if plots_dir.exists():
                 base_dir = Path(agent.cfg.workspace_dir).parent
                 run_name = Path(agent.cfg.workspace_dir).name
@@ -144,7 +144,8 @@ def run_plot_aggregation(*, agent: SupportsSeedAgent, node: Node, seed_nodes: Li
                     agg_node.plot_paths.append(str(final_path.absolute()))
 
             agg_node.is_buggy = False
-            agg_node.exp_results_dir = str(exp_results_dir)
+            if exp_results_dir is not None:
+                agg_node.exp_results_dir = str(exp_results_dir)
             return agg_node
         finally:
             if process_interpreter:

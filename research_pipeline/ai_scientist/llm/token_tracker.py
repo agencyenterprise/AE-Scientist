@@ -192,12 +192,12 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
 def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
     """Extract the model name and provider from a model."""
     if isinstance(model, BaseChatModel):
-        if hasattr(model, "model"):
-            model_name = model.model
-        elif hasattr(model, "model_name"):
-            model_name = model.model_name
-        else:
+        model_attr = getattr(model, "model", None)
+        if model_attr is None:
+            model_attr = getattr(model, "model_name", None)
+        if model_attr is None:
             raise ValueError(f"Model {model} has no model or model_name attribute")
+        model_name = str(model_attr)
     else:
         model_name = model
     return _parse_model(model_name, None)

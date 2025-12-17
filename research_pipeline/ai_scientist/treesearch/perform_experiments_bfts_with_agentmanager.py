@@ -164,10 +164,11 @@ def perform_experiments_bfts(
             should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
             if should_emit and not stage_completed:
                 last_reported_iteration_by_stage[stage.name] = iteration_display
+                final_iteration = iteration_display
+                final_progress = min(iteration_display / stage.max_iterations, 1.0)
                 # When stage completes, ensure progress is exactly 1.0 and iteration equals current iteration
-                if stage_complete and stage.max_iterations > 0:
+                if stage_complete:
                     final_progress = 1.0
-                    final_iteration = iteration_display
 
                 event_callback(
                     RunStageProgressEvent(
