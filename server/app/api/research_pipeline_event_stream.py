@@ -6,7 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, AsyncGenerator, Dict
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import ORJSONResponse, StreamingResponse
 
 from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
 from app.middleware.auth import get_current_user
@@ -23,6 +23,7 @@ from app.models import (
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.sse import ResearchRunInitialEventData
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
@@ -31,6 +32,30 @@ router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
 SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
+
+
+def _get_authorized_run_context(
+    *,
+    conversation_id: int,
+    run_id: str,
+    request: Request,
+) -> tuple[DatabaseManager, ResearchPipelineRun]:
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    user = get_current_user(request)
+    db = get_database()
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    return db, run
 
 
 def _format_stream_event(event: Dict[str, Any]) -> str:
@@ -183,26 +208,17 @@ async def stream_research_run_events(
     run_id: str,
     request: Request,
 ) -> StreamingResponse:
-    if conversation_id <= 0:
-        raise HTTPException(status_code=400, detail="conversation_id must be positive")
-    user = get_current_user(request)
-    db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if conversation.user_id != user.id:
-        raise HTTPException(status_code=403, detail="You do not own this conversation")
-
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Research run not found")
+    db, run = _get_authorized_run_context(
+        conversation_id=conversation_id,
+        run_id=run_id,
+        request=request,
+    )
     hw_started_running_at = run.started_running_at
     hw_cost_per_hour_cents = run.cost_per_hour_cents
 
     async def event_generator() -> AsyncGenerator[str, None]:
         nonlocal hw_started_running_at, hw_cost_per_hour_cents
         queue = register_stream_queue(run_id=run_id)
-        initial_sent = False
         current_run = db.get_research_pipeline_run(run_id)
         if current_run is None:
             yield _format_stream_event(event={"type": "error", "data": "Run not found"})
@@ -214,27 +230,14 @@ async def stream_research_run_events(
                     logger.info("Client disconnected from SSE stream for run %s", run_id)
                     break
 
-                if not initial_sent:
-                    initial_data = _build_initial_stream_payload(
-                        db=db,
-                        run_id=run_id,
-                        conversation_id=conversation_id,
-                        current_run=current_run,
-                        started_running_at=hw_started_running_at,
-                        cost_per_hour_cents=hw_cost_per_hour_cents,
-                    )
-                    yield _format_stream_event(event={"type": "initial", "data": initial_data})
-                    initial_sent = True
-                    continue
-
                 if hw_started_running_at is None:
-                    run = db.get_research_pipeline_run(run_id=run_id)
-                    if run is not None:
-                        hw_started_running_at = run.started_running_at
+                    refreshed_run = db.get_research_pipeline_run(run_id=run_id)
+                    if refreshed_run is not None:
+                        hw_started_running_at = refreshed_run.started_running_at
                 if hw_cost_per_hour_cents is None or hw_cost_per_hour_cents <= 0:
-                    run = db.get_research_pipeline_run(run_id=run_id)
-                    if run is not None:
-                        hw_cost_per_hour_cents = run.cost_per_hour_cents
+                    refreshed_run = db.get_research_pipeline_run(run_id=run_id)
+                    if refreshed_run is not None:
+                        hw_cost_per_hour_cents = refreshed_run.cost_per_hour_cents
 
                 try:
                     event = await asyncio.wait_for(
@@ -281,3 +284,32 @@ async def stream_research_run_events(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.get(
+    "/{conversation_id}/idea/research-run/{run_id}/snapshot",
+    response_model=ResearchRunInitialEventData,
+)
+def get_research_run_snapshot(
+    conversation_id: int,
+    run_id: str,
+    request: Request,
+) -> ORJSONResponse:
+    db, run = _get_authorized_run_context(
+        conversation_id=conversation_id,
+        run_id=run_id,
+        request=request,
+    )
+    current_run = db.get_research_pipeline_run(run_id=run_id)
+    if current_run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    initial_payload = _build_initial_stream_payload(
+        db=db,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        current_run=current_run,
+        started_running_at=run.started_running_at,
+        cost_per_hour_cents=run.cost_per_hour_cents,
+    )
+    return ORJSONResponse(content=initial_payload)

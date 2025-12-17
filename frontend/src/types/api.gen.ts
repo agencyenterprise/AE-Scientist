@@ -876,6 +876,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Research Run Snapshot */
+        get: operations["get_research_run_snapshot_api_conversations__conversation_id__idea_research_run__run_id__snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run": {
         parameters: {
             query?: never;
@@ -4990,6 +5007,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ResearchRunStreamEvent"];
                     "text/event-stream": components["schemas"]["ResearchRunStreamEvent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_research_run_snapshot_api_conversations__conversation_id__idea_research_run__run_id__snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunInitialEventData"];
                 };
             };
             /** @description Validation Error */

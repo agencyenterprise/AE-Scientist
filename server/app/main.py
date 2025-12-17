@@ -5,6 +5,7 @@ from typing import AsyncIterator, Dict
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
@@ -89,6 +90,9 @@ app.add_middleware(
     allow_methods=settings.CORS_METHODS,
     allow_headers=settings.CORS_HEADERS,
 )
+
+# Enable gzip compression for large JSON payloads while keeping SSE uncompressed
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include API routes
 app.include_router(api_router)

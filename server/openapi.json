@@ -2185,6 +2185,57 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/snapshot": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Research Run Snapshot",
+        "operationId": "get_research_run_snapshot_api_conversations__conversation_id__idea_research_run__run_id__snapshot_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunInitialEventData"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [

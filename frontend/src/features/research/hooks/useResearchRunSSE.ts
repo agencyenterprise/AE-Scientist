@@ -152,7 +152,37 @@ export function useResearchRunSSE({
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const initialSnapshotFetchedRef = useRef(false);
   const maxReconnectAttempts = 5;
+
+  const ensureInitialSnapshot = useCallback(async () => {
+    if (!enabled || !conversationId || initialSnapshotFetchedRef.current) {
+      return;
+    }
+
+    const snapshotResponse = await fetch(
+      `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/snapshot`,
+      {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      }
+    );
+
+    if (!snapshotResponse.ok) {
+      if (snapshotResponse.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
+      throw new Error(`Snapshot HTTP ${snapshotResponse.status}`);
+    }
+
+    const snapshotData = (await snapshotResponse.json()) as InitialEventData;
+    const details = mapInitialEventToDetails(snapshotData);
+    onInitialData(details);
+    onRunUpdate(details.run);
+    setConnectionError(null);
+    initialSnapshotFetchedRef.current = true;
+  }, [conversationId, runId, enabled, onInitialData, onRunUpdate]);
 
   const connect = useCallback(async () => {
     if (!enabled || !conversationId) return;
@@ -168,6 +198,12 @@ export function useResearchRunSSE({
     abortControllerRef.current = controller;
 
     try {
+      await ensureInitialSnapshot();
+      if (!initialSnapshotFetchedRef.current) {
+        // ensureInitialSnapshot might early-return after redirect
+        return;
+      }
+
       const response = await fetch(
         `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/events`,
         {
@@ -212,12 +248,6 @@ export function useResearchRunSSE({
             const event = JSON.parse(line.slice(6)) as ResearchRunStreamEvent;
 
             switch (event.type) {
-              case "initial": {
-                const details = mapInitialEventToDetails(event.data);
-                onInitialData(details);
-                onRunUpdate(details.run);
-                break;
-              }
               case "stage_progress":
                 onStageProgress(event.data as StageProgress);
                 break;
@@ -279,10 +309,9 @@ export function useResearchRunSSE({
     enabled,
     conversationId,
     runId,
-    onInitialData,
+    ensureInitialSnapshot,
     onStageProgress,
     onLog,
-    onRunUpdate,
     onSubstageCompleted,
     onRunEvent,
     onBestNodeSelection,
@@ -317,6 +346,10 @@ export function useResearchRunSSE({
     }
     setIsConnected(false);
   }, []);
+
+  useEffect(() => {
+    initialSnapshotFetchedRef.current = false;
+  }, [runId, conversationId]);
 
   return {
     isConnected,
