@@ -30,6 +30,10 @@ export function CostDetailsCard({
   const hwEstimatedUsd =
     typeof hwEstimatedCostCents === "number" ? hwEstimatedCostCents / 100 : null;
   const hwRateUsdPerHour = typeof hwCostPerHourCents === "number" ? hwCostPerHourCents / 100 : null;
+  const hwActualUsd = typeof hwActualCostCents === "number" ? hwActualCostCents / 100 : null;
+  const hwCostUsd = hwActualUsd ?? hwEstimatedUsd;
+  const totalCostWithHw = cost ? cost.total_cost + (hwCostUsd ?? 0) : null;
+  const totalIsEstimated = hwActualUsd === null && hwEstimatedUsd !== null;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
@@ -45,7 +49,11 @@ export function CostDetailsCard({
         <dl className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <dt className="text-xs text-slate-400">Total Cost</dt>
-            <dd className="font-mono text-lg text-white">{formatCurrency(cost.total_cost)}</dd>
+            <dd className="font-mono text-lg text-white">
+              {totalCostWithHw !== null
+                ? `${formatCurrency(totalCostWithHw)}${totalIsEstimated ? " (estimated)" : ""}`
+                : formatCurrency(cost.total_cost)}
+            </dd>
           </div>
           <div className="sm:col-span-2">
             <dt className="text-xs text-slate-400">HW estimated cost</dt>
