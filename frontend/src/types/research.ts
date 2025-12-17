@@ -179,6 +179,17 @@ export interface ResearchRunInfo {
   start_deadline_at: string | null;
 }
 
+export interface HwCostEstimateData {
+  hw_estimated_cost_cents: number;
+  hw_cost_per_hour_cents: number;
+  hw_started_running_at: string;
+}
+
+export interface HwCostEstimateEvent {
+  type: "hw_cost_estimate";
+  data: HwCostEstimateData;
+}
+
 export interface StageProgress {
   stage: string;
   iteration: number;
@@ -260,6 +271,7 @@ export interface ResearchRunDetails {
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];
   best_node_selections?: BestNodeSelection[];
+  hw_cost_estimate?: HwCostEstimateData | null;
 }
 
 export interface TreeVizItemApi {

@@ -4,8 +4,7 @@ import { AlertTriangle, BarChart3, Clock4, DollarSign, FileText, GitBranch } fro
 const FLOW_STEPS = [
   {
     title: "Design experiments in code",
-    detail:
-      "Writes training scripts and evaluation loops that can run end-to-end.",
+    detail: "Writes training scripts and evaluation loops that can run end-to-end.",
   },
   {
     title: "Agentic tree search",
@@ -130,4 +129,3 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
     </div>
   );
 }
-

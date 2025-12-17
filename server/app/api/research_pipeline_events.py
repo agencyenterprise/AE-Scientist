@@ -12,29 +12,27 @@ from app.api.research_pipeline_runs import (
     REQUESTER_NAME_FALLBACK,
     IdeaPayloadSource,
     _create_and_launch_research_run,
-    _log_event_to_model,
-    extract_first_name,
+    extract_user_first_name,
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
 from app.models.research_pipeline import ResearchRunBestNodeSelection
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
+    ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
-from app.models.sse import (
-    ResearchRunBestNodeEvent as SSEBestNodeEvent,
-    ResearchRunSubstageCompletedEvent,
-)
+from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
+from app.models.sse import ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -200,7 +198,7 @@ def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
     user = db.get_user_by_id(user_id=owner_id)
     if user is None:
         return REQUESTER_NAME_FALLBACK
-    return extract_first_name(full_name=user.name)
+    return extract_user_first_name(full_name=user.name)
 
 
 def _next_stream_event_id() -> int:
@@ -382,16 +380,25 @@ def ingest_run_log(
     run = db.get_research_pipeline_run(payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-    latest_logs = db.list_run_log_events(run_id=payload.run_id, limit=1)
-    if not latest_logs:
-        logger.warning("Received run log for run=%s but no DB record found", payload.run_id)
-        return
-    log_entry = _log_event_to_model(latest_logs[0])
+
+    logger.debug(
+        "RP log event received: run=%s level=%s message=%s",
+        payload.run_id,
+        payload.event.level,
+        payload.event.message,
+    )
     publish_stream_event(
         run_id=payload.run_id,
-        event=SSELogEvent(type="log", data=log_entry),
+        event=SSELogEvent(
+            type="log",
+            data=ResearchRunLogEntry(
+                id=_next_stream_event_id(),
+                level=payload.event.level,
+                message=payload.event.message,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            ),
+        ),
     )
-    logger.debug("RP log event received: run=%s level=%s", payload.run_id, payload.event.level)
 
 
 @router.post("/run-started", status_code=status.HTTP_204_NO_CONTENT)
@@ -411,6 +418,7 @@ def ingest_run_started(
         last_heartbeat_at=now,
         heartbeat_failures=0,
         start_deadline_at=new_deadline,
+        started_running_at=now,
     )
     db.insert_research_pipeline_run_event(
         run_id=payload.run_id,

@@ -38,6 +38,9 @@ export default function ResearchRunDetailPage() {
     conversationId,
     isConnected,
     connectionError,
+    hwEstimatedCostCents,
+    hwActualCostCents,
+    hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
@@ -148,7 +151,13 @@ export default function ResearchRunDetailPage() {
             <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
 
             <div className="mt-4">
-              <CostDetailsCard cost={costDetails ?? null} isLoading={isLoadingCost} />
+              <CostDetailsCard
+                cost={costDetails ?? null}
+                isLoading={isLoadingCost}
+                hwEstimatedCostCents={hwEstimatedCostCents}
+                hwCostPerHourCents={hwCostPerHourCents}
+                hwActualCostCents={hwActualCostCents}
+              />
             </div>
 
             {/* Auto Evaluation Card */}

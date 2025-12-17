@@ -1,6 +1,6 @@
 import logging
-import os
 from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING, List, NamedTuple, Optional
 
 import psycopg2
@@ -14,18 +14,12 @@ logger = logging.getLogger(__name__)
 PIPELINE_RUN_STATUSES = ("pending", "running", "failed", "completed")
 
 
-def _startup_grace_seconds() -> int:
-    value = os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
-    if not value:
-        raise RuntimeError(
-            "PIPELINE_MONITOR_STARTUP_GRACE_SECONDS is required to create pipeline runs."
-        )
-    try:
-        return int(value)
-    except ValueError as exc:
-        raise RuntimeError(
-            "PIPELINE_MONITOR_STARTUP_GRACE_SECONDS must be an integer number of seconds."
-        ) from exc
+def _usd_to_cents(*, value_usd: float) -> int:
+    cents = (Decimal(str(value_usd)) * Decimal("100")).quantize(
+        Decimal("1"),
+        rounding=ROUND_HALF_UP,
+    )
+    return int(cents)
 
 
 class ResearchPipelineRun(NamedTuple):
@@ -42,6 +36,8 @@ class ResearchPipelineRun(NamedTuple):
     pod_host_id: Optional[str]
     error_message: Optional[str]
     cost: float
+    cost_per_hour_cents: int
+    started_running_at: Optional[datetime]
     start_deadline_at: Optional[datetime]
     last_heartbeat_at: Optional[datetime]
     heartbeat_failures: int
@@ -65,7 +61,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             self, cursor: PsycopgCursor, conversation_id: int, status: str
         ) -> None:
             """Update conversation status within existing transaction."""
-            ...
+            del cursor, conversation_id, status
+            raise NotImplementedError
 
     def create_research_pipeline_run(
         self,
@@ -77,11 +74,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         start_deadline_at: Optional[datetime],
         cost: float,
         last_billed_at: datetime,
+        started_running_at: Optional[datetime] = None,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
             raise ValueError(f"Invalid status '{status}'")
         now = datetime.now(timezone.utc)
         deadline = start_deadline_at
+        cost_per_hour_cents = _usd_to_cents(value_usd=cost)
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -92,12 +91,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         idea_version_id,
                         status,
                         cost,
+                        cost_per_hour_cents,
                         start_deadline_at,
                         last_billed_at,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -106,6 +106,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         idea_version_id,
                         status,
                         cost,
+                        cost_per_hour_cents,
                         deadline,
                         last_billed_at,
                         now,
@@ -125,7 +126,11 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         "idea_id": idea_id,
                         "idea_version_id": idea_version_id,
                         "cost": cost,
+                        "cost_per_hour_cents": cost_per_hour_cents,
                         "start_deadline_at": deadline.isoformat() if deadline else None,
+                        "started_running_at": (
+                            started_running_at.isoformat() if started_running_at else None
+                        ),
                     },
                     occurred_at=now,
                 )
@@ -160,6 +165,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         start_deadline_at: Optional[datetime] = None,
         cost: Optional[float] = None,
         last_billed_at: Optional[datetime] = None,
+        started_running_at: Optional[datetime] = None,
     ) -> None:
         fields = []
         values: list[object] = []
@@ -195,9 +201,14 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         if cost is not None:
             fields.append("cost = %s")
             values.append(cost)
+            fields.append("cost_per_hour_cents = %s")
+            values.append(_usd_to_cents(value_usd=cost))
         if last_billed_at is not None:
             fields.append("last_billed_at = %s")
             values.append(last_billed_at)
+        if started_running_at is not None:
+            fields.append("started_running_at = %s")
+            values.append(started_running_at)
         fields.append("updated_at = %s")
         values.append(datetime.now())
         values.append(run_id)
@@ -380,6 +391,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             pod_host_id=row.get("pod_host_id"),
             error_message=row.get("error_message"),
             cost=float(row.get("cost", 0)),
+            cost_per_hour_cents=int(row.get("cost_per_hour_cents") or 0),
+            started_running_at=row.get("started_running_at"),
             start_deadline_at=row.get("start_deadline_at"),
             last_heartbeat_at=row.get("last_heartbeat_at"),
             heartbeat_failures=row.get("heartbeat_failures", 0),

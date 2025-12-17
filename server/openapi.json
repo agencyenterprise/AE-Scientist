@@ -2129,6 +2129,62 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Stream Research Run Events",
+        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research pipeline progress events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [
@@ -2552,63 +2608,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TreeVizItem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
-      "get": {
-        "tags": [
-          "research-pipeline"
-        ],
-        "summary": "Stream Research Run Events",
-        "description": "Stream server-sent events for research run progress.",
-        "operationId": "stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          },
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Run Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Research pipeline progress events",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
-                }
-              },
-              "text/event-stream": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResearchRunStreamEvent"
                 }
               }
             }
@@ -5642,6 +5641,56 @@
         ],
         "title": "ResearchRunHeartbeatEvent"
       },
+      "ResearchRunHwCostEstimateData": {
+        "properties": {
+          "hw_estimated_cost_cents": {
+            "type": "integer",
+            "title": "Hw Estimated Cost Cents",
+            "description": "Estimated hardware cost in cents since the run started running."
+          },
+          "hw_cost_per_hour_cents": {
+            "type": "integer",
+            "title": "Hw Cost Per Hour Cents",
+            "description": "RunPod hourly cost in cents recorded at launch."
+          },
+          "hw_started_running_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hw Started Running At",
+            "description": "ISO timestamp when the run transitioned from pending to running."
+          }
+        },
+        "type": "object",
+        "required": [
+          "hw_estimated_cost_cents",
+          "hw_cost_per_hour_cents"
+        ],
+        "title": "ResearchRunHwCostEstimateData"
+      },
+      "ResearchRunHwCostEstimateEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "hw_cost_estimate",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunHwCostEstimateData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunHwCostEstimateEvent"
+      },
       "ResearchRunInfo": {
         "properties": {
           "run_id": {
@@ -5891,6 +5940,17 @@
             },
             "type": "array",
             "title": "Best Node Selections"
+          },
+          "hw_cost_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchRunHwCostEstimateData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hardware cost estimate available when the initial snapshot was emitted."
           }
         },
         "type": "object",
@@ -6390,6 +6450,9 @@
             "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunHwCostEstimateEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunErrorEvent"
           }
         ],
@@ -6402,6 +6465,7 @@
             "complete": "#/components/schemas/ResearchRunCompleteEvent",
             "error": "#/components/schemas/ResearchRunErrorEvent",
             "heartbeat": "#/components/schemas/ResearchRunHeartbeatEvent",
+            "hw_cost_estimate": "#/components/schemas/ResearchRunHwCostEstimateEvent",
             "initial": "#/components/schemas/ResearchRunInitialEvent",
             "log": "#/components/schemas/ResearchRunLogEvent",
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",

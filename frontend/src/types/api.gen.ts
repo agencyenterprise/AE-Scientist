@@ -859,6 +859,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Research Run Events */
+        get: operations["stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run": {
         parameters: {
             query?: never;
@@ -999,26 +1016,6 @@ export interface paths {
          * @description Fetch tree viz payload for a specific stage.
          */
         get: operations["get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Stream Research Run Events
-         * @description Stream server-sent events for research run progress.
-         */
-        get: operations["stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2727,6 +2724,33 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ResearchRunHwCostEstimateData */
+        ResearchRunHwCostEstimateData: {
+            /**
+             * Hw Estimated Cost Cents
+             * @description Estimated hardware cost in cents since the run started running.
+             */
+            hw_estimated_cost_cents: number;
+            /**
+             * Hw Cost Per Hour Cents
+             * @description RunPod hourly cost in cents recorded at launch.
+             */
+            hw_cost_per_hour_cents: number;
+            /**
+             * Hw Started Running At
+             * @description ISO timestamp when the run transitioned from pending to running.
+             */
+            hw_started_running_at?: string | null;
+        };
+        /** ResearchRunHwCostEstimateEvent */
+        ResearchRunHwCostEstimateEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hw_cost_estimate";
+            data: components["schemas"]["ResearchRunHwCostEstimateData"];
+        };
         /** ResearchRunInfo */
         ResearchRunInfo: {
             /**
@@ -2846,6 +2870,8 @@ export interface components {
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
             /** Best Node Selections */
             best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
+            /** @description Hardware cost estimate available when the initial snapshot was emitted. */
+            hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
         };
         /**
          * ResearchRunListItem
@@ -3120,7 +3146,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -4944,6 +4970,39 @@ export interface operations {
             };
         };
     };
+    stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Research pipeline progress events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunStreamEvent"];
+                    "text/event-stream": components["schemas"]["ResearchRunStreamEvent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post: {
         parameters: {
             query?: never;
@@ -5189,39 +5248,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TreeVizItem"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    stream_research_run_events_api_conversations__conversation_id__idea_research_run__run_id__events_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Research pipeline progress events */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResearchRunStreamEvent"];
-                    "text/event-stream": components["schemas"]["ResearchRunStreamEvent"];
                 };
             };
             /** @description Validation Error */
