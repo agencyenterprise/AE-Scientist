@@ -369,16 +369,23 @@ Your research idea:\n\n
 
     def _get_best_implementation(self, stage_name: str) -> Optional[Node]:
         """Get the best implementation from a completed stage"""
-        if stage_name not in self.journals:
-            return None
-        best_node = self.journals[stage_name].get_best_node()
-        if best_node:
-            # Create a clean copy of the node for the next stage
-            copied_node = copy.deepcopy(best_node)
-            # Reset parent relationship and children
-            copied_node.parent = None
-            copied_node.children = set()
-            return copied_node
+        candidates: List[Journal] = []
+        current_journal = self.journals.get(stage_name)
+        if current_journal is not None:
+            candidates.append(current_journal)
+        history = self._journal_history.get(stage_name, [])
+        if history:
+            candidates.extend(reversed(history))
+
+        for journal in candidates:
+            best_node = journal.get_best_node()
+            if best_node:
+                # Create a clean copy of the node for the next stage
+                copied_node = copy.deepcopy(best_node)
+                # Reset parent relationship and children
+                copied_node.parent = None
+                copied_node.children = set()
+                return copied_node
         return None
 
     def _generate_substage_goal(self, main_stage_goal: str, journal: Journal) -> str:
@@ -484,6 +491,13 @@ Your research idea:\n\n
             max_iterations=self.get_max_iterations(main_stage_num),
             num_drafts=0,
         )
+
+    def _stash_current_journal(self, *, stage_name: str) -> None:
+        """Preserve the current journal before overwriting it for a new sub-stage."""
+        journal = self.journals.get(stage_name)
+        if journal is None:
+            return
+        self._journal_history.setdefault(stage_name, []).append(journal)
 
     def _create_next_main_stage(self, current_substage: StageMeta) -> Optional[StageMeta]:
         main_stage_num = current_substage.number
@@ -754,6 +768,7 @@ Your research idea:\n\n
                     )
 
                     # Setup new sub-stage
+                    self._stash_current_journal(stage_name=current_substage.name)
                     self.stages.append(next_substage)
                     self.register_phase_definition(stage_meta=next_substage)
                     self.journals[next_substage.name] = Journal(
