@@ -10,7 +10,7 @@ import logging
 from typing import List, Optional, Union
 
 from fastapi import APIRouter, File, Form, Request, Response, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.api.llm_providers import get_llm_model_by_id, get_llm_service_by_provider
@@ -250,7 +250,9 @@ async def upload_file(
 
 
 @router.get("/files/{file_id}/download", response_model=None)
-async def download_file(file_id: int, response: Response) -> Union[RedirectResponse, ErrorResponse]:
+async def download_file(
+    file_id: int, response: Response, request: Request
+) -> Union[Response, ErrorResponse]:
     """
     Download a file attachment via temporary signed URL.
 
@@ -293,9 +295,14 @@ async def download_file(file_id: int, response: Response) -> Union[RedirectRespo
             s3_key=file_attachment.s3_key, expires_in=3600
         )
 
-        logger.info(f"Generated download URL for file {file_id}: {file_attachment.filename}")
+        logger.info("Generated download URL for file %s: %s", file_id, file_attachment.filename)
 
-        # Redirect user to the signed URL
+        # Allow JSON clients to fetch the presigned URL directly (used by SPA token auth)
+        accept_header = request.headers.get("accept", "")
+        if "application/json" in accept_header.lower():
+            return JSONResponse({"url": download_url})
+
+        # Redirect user to the signed URL for browser downloads
         return RedirectResponse(url=download_url, status_code=302)
 
     except Exception as e:

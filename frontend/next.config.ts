@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
         hostname: "*.railway.app",
         pathname: "/conversations/files/**",
       },
+      {
+        protocol: "https",
+        hostname: "*.amazonaws.com",
+        pathname: "/**",
+      },
     ],
   },
 };

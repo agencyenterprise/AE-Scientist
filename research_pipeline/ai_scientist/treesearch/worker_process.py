@@ -638,7 +638,7 @@ def parse_and_assign_metrics(
 
         # Emit validation outcome
         if child_node.is_buggy:
-            bug_summary = (child_node.analysis or "Unknown error")
+            bug_summary = child_node.analysis or "Unknown error"
             event_callback(
                 RunLogEvent(message=f"Implementation has bugs: {bug_summary}", level="warn")
             )

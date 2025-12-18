@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.api.research_pipeline_event_stream import usd_to_cents
@@ -576,7 +576,7 @@ def download_research_run_artifact(
     run_id: str,
     artifact_id: int,
     request: Request,
-) -> RedirectResponse:
+) -> Response:
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
@@ -598,6 +598,10 @@ def download_research_run_artifact(
     except Exception as exc:  # pragma: no cover - S3 errors already logged upstream
         logger.exception("Failed to generate download URL for artifact %s", artifact_id)
         raise HTTPException(status_code=500, detail="Failed to generate download URL") from exc
+    accept_header = request.headers.get("accept", "")
+    if "application/json" in accept_header.lower():
+        return JSONResponse({"url": download_url})
+
     return RedirectResponse(url=download_url)
 
 

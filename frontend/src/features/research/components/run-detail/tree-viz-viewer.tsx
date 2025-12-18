@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ArtifactMetadata, TreeVizItem } from "@/types/research";
-import { config } from "@/shared/lib/config";
+import { fetchDownloadUrl } from "@/shared/lib/downloads";
 
 type MetricName = {
   metric_name: string;
@@ -87,30 +87,53 @@ export function TreeVizViewer({ viz, artifacts }: Props) {
     return [];
   }, [payload, selected, selectedNode]);
 
-  const plotUrls = useMemo(() => {
-    const baseUrl = config.apiUrl.replace(/\/$/, "");
-    return plotList
-      .map(p => {
-        if (!p) return null;
-        const asString = p.toString();
-        if (asString.startsWith("http://") || asString.startsWith("https://")) {
-          return asString;
-        }
-        const filename = asString.split("/").pop();
-        const artifact =
-          artifacts.find(a => a.filename === filename) ||
-          artifacts.find(a => a.download_path && a.download_path.endsWith(asString));
-        if (artifact) {
-          const downloadPath = artifact.download_path || "";
-          const normalizedPath =
-            downloadPath.startsWith("/api") && baseUrl.endsWith("/api")
-              ? downloadPath.slice(4)
-              : downloadPath;
-          return `${baseUrl}${normalizedPath}`;
-        }
-        return null;
-      })
-      .filter((u): u is string => Boolean(u));
+  const [plotUrls, setPlotUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const loadPlotUrls = async () => {
+      if (!plotList.length) {
+        setPlotUrls([]);
+        return;
+      }
+
+      const resolved = await Promise.all(
+        plotList.map(async p => {
+          if (!p) return null;
+          const asString = p.toString();
+          if (asString.startsWith("http://") || asString.startsWith("https://")) {
+            return asString;
+          }
+          const filename = asString.split("/").pop();
+          const artifact =
+            artifacts.find(a => a.filename === filename) ||
+            artifacts.find(a => a.download_path && a.download_path.endsWith(asString));
+          if (artifact?.download_path) {
+            try {
+              return await fetchDownloadUrl(artifact.download_path);
+            } catch {
+              return null;
+            }
+          }
+          return null;
+        })
+      );
+
+      if (!canceled) {
+        setPlotUrls(resolved.filter((url): url is string => Boolean(url)));
+      }
+    };
+
+    loadPlotUrls().catch(() => {
+      if (!canceled) {
+        setPlotUrls([]);
+      }
+    });
+
+    return () => {
+      canceled = true;
+    };
   }, [artifacts, plotList]);
 
   return (

@@ -3,7 +3,7 @@ Authentication middleware.
 
 Provides dual authentication support:
 1. Service-to-service authentication via X-API-Key header
-2. User authentication via session cookie
+2. User authentication via bearer tokens
 """
 
 import logging
@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from app.auth.tokens import extract_bearer_token
 from app.services.auth_service import AuthService
 from app.services.database.users import UserData
 
@@ -68,10 +69,11 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         if self._should_skip_auth(request):
             return await call_next(request)  # type: ignore[no-any-return]
 
-        # Try user session authentication (cookie)
-        session_token = request.cookies.get("session_token")
+        # Try user session authentication using bearer tokens first, then cookies for legacy flows
+        authorization_header = request.headers.get("authorization")
+        session_token = extract_bearer_token(authorization_header)
         if session_token:
-            user = self.auth_service.get_user_by_session(session_token)
+            user = self.auth_service.get_user_by_session(session_token=session_token)
             if user:
                 request.state.auth_type = "user"
                 request.state.user = user

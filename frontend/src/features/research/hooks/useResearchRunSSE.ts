@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { config } from "@/shared/lib/config";
+import { withAuthHeaders } from "@/shared/lib/session-token";
 import type { ResearchRunStreamEvent } from "@/types";
 import type {
   ResearchRunInfo,
@@ -171,8 +172,7 @@ export function useResearchRunSSE({
     const snapshotResponse = await fetch(
       `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/snapshot`,
       {
-        credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: withAuthHeaders(new Headers({ Accept: "application/json" })),
       }
     );
 
@@ -215,8 +215,7 @@ export function useResearchRunSSE({
       const response = await fetch(
         `${config.apiUrl}/conversations/${conversationId}/idea/research-run/${runId}/events`,
         {
-          credentials: "include",
-          headers: { Accept: "text/event-stream" },
+          headers: withAuthHeaders(new Headers({ Accept: "text/event-stream" })),
           signal: controller.signal,
         }
       );

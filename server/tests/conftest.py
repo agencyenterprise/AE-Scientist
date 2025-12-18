@@ -38,7 +38,7 @@ def app_client() -> TestClient:
 
 @pytest.fixture
 def authed_client(app_client: TestClient) -> TestClient:
-    app_client.cookies.set("session_token", "fake-session")
+    app_client.headers.update({"Authorization": "Bearer fake-session"})
     return app_client
 
 
