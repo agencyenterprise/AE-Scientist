@@ -190,6 +190,17 @@ export interface HwCostEstimateEvent {
   data: HwCostEstimateData;
 }
 
+export interface HwCostActualData {
+  hw_actual_cost_cents: number;
+  hw_actual_cost_updated_at: string;
+  billing_summary: Record<string, unknown>;
+}
+
+export interface HwCostActualEvent {
+  type: "hw_cost_actual";
+  data: HwCostActualData;
+}
+
 export interface StageProgress {
   stage: string;
   iteration: number;
@@ -272,6 +283,7 @@ export interface ResearchRunDetails {
   tree_viz: TreeVizItem[];
   best_node_selections?: BestNodeSelection[];
   hw_cost_estimate?: HwCostEstimateData | null;
+  hw_cost_actual?: HwCostActualData | null;
 }
 
 export interface TreeVizItemApi {

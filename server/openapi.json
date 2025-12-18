@@ -5692,6 +5692,50 @@
         ],
         "title": "ResearchRunHeartbeatEvent"
       },
+      "ResearchRunHwCostActualData": {
+        "properties": {
+          "hw_actual_cost_cents": {
+            "type": "integer",
+            "title": "Hw Actual Cost Cents",
+            "description": "Actual hardware cost in cents as billed by RunPod."
+          },
+          "hw_actual_cost_updated_at": {
+            "type": "string",
+            "title": "Hw Actual Cost Updated At",
+            "description": "ISO timestamp when the billing summary was recorded."
+          },
+          "billing_summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Billing Summary",
+            "description": "Raw billing summary metadata returned by RunPod."
+          }
+        },
+        "type": "object",
+        "required": [
+          "hw_actual_cost_cents",
+          "hw_actual_cost_updated_at"
+        ],
+        "title": "ResearchRunHwCostActualData"
+      },
+      "ResearchRunHwCostActualEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "hw_cost_actual",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunHwCostActualData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunHwCostActualEvent"
+      },
       "ResearchRunHwCostEstimateData": {
         "properties": {
           "hw_estimated_cost_cents": {
@@ -6002,6 +6046,17 @@
               }
             ],
             "description": "Hardware cost estimate available when the initial snapshot was emitted."
+          },
+          "hw_cost_actual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchRunHwCostActualData"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hardware cost billed so far, if available."
           }
         },
         "type": "object",
@@ -6504,6 +6559,9 @@
             "$ref": "#/components/schemas/ResearchRunHwCostEstimateEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunHwCostActualEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunErrorEvent"
           }
         ],
@@ -6516,6 +6574,7 @@
             "complete": "#/components/schemas/ResearchRunCompleteEvent",
             "error": "#/components/schemas/ResearchRunErrorEvent",
             "heartbeat": "#/components/schemas/ResearchRunHeartbeatEvent",
+            "hw_cost_actual": "#/components/schemas/ResearchRunHwCostActualEvent",
             "hw_cost_estimate": "#/components/schemas/ResearchRunHwCostEstimateEvent",
             "initial": "#/components/schemas/ResearchRunInitialEvent",
             "log": "#/components/schemas/ResearchRunLogEvent",

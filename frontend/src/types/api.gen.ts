@@ -2741,6 +2741,35 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ResearchRunHwCostActualData */
+        ResearchRunHwCostActualData: {
+            /**
+             * Hw Actual Cost Cents
+             * @description Actual hardware cost in cents as billed by RunPod.
+             */
+            hw_actual_cost_cents: number;
+            /**
+             * Hw Actual Cost Updated At
+             * @description ISO timestamp when the billing summary was recorded.
+             */
+            hw_actual_cost_updated_at: string;
+            /**
+             * Billing Summary
+             * @description Raw billing summary metadata returned by RunPod.
+             */
+            billing_summary?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ResearchRunHwCostActualEvent */
+        ResearchRunHwCostActualEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hw_cost_actual";
+            data: components["schemas"]["ResearchRunHwCostActualData"];
+        };
         /** ResearchRunHwCostEstimateData */
         ResearchRunHwCostEstimateData: {
             /**
@@ -2889,6 +2918,8 @@ export interface components {
             best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
             /** @description Hardware cost estimate available when the initial snapshot was emitted. */
             hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
+            /** @description Hardware cost billed so far, if available. */
+            hw_cost_actual?: components["schemas"]["ResearchRunHwCostActualData"] | null;
         };
         /**
          * ResearchRunListItem
@@ -3163,7 +3194,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**

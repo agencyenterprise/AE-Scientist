@@ -14,6 +14,7 @@ import type {
   SubstageSummary,
   SubstageEvent,
   HwCostEstimateData,
+  HwCostActualData,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -61,6 +62,9 @@ export function useResearchRunDetails({
     if (data.hw_cost_estimate) {
       setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
       setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
+    }
+    if (data.hw_cost_actual) {
+      setHwActualCostCents(data.hw_cost_actual.hw_actual_cost_cents);
     }
   }, []);
 
@@ -205,6 +209,11 @@ export function useResearchRunDetails({
     setHwCostPerHourCents(event.hw_cost_per_hour_cents);
   }, []);
 
+  const handleHwCostActual = useCallback((event: HwCostActualData) => {
+    setHwActualCostCents(event.hw_actual_cost_cents);
+    setDetails(prev => (prev ? { ...prev, hw_cost_actual: event } : prev));
+  }, []);
+
   // Ensure tree viz is loaded when details are present but tree_viz is missing/empty
   const treeVizFetchAttempted = useRef(false);
   useEffect(() => {
@@ -272,6 +281,7 @@ export function useResearchRunDetails({
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
     onHwCostEstimate: handleHwCostEstimate,
+    onHwCostActual: handleHwCostActual,
     onBestNodeSelection: handleBestNodeSelection,
     onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
