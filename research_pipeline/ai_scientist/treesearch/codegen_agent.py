@@ -346,8 +346,9 @@ class MinimalAgent:
                 "before any CUDA work when torch.cuda.is_available() is True.",
                 f"Define device = torch.device('cuda:{self.gpu_id}') (or equivalent) "
                 "and reuse it everywhere CUDA is available.",
-                "Allow a CPU fallback only when torch.cuda.is_available() returns False; "
-                "otherwise every operation must stay on the specified GPU.",
+                "GPU usage is mandatory whenever torch.cuda.is_available() is True. "
+                "CPU fallback logic is optional; if present, it must only trigger when "
+                "CUDA is unavailable.",
                 "Move every model, tensor, optimizer state, and batch to the device. "
                 "Partial usage (some steps on GPU, others on CPU) is non-compliant.",
                 "Training loops, evaluation loops, inference, and dataloaders must keep "
