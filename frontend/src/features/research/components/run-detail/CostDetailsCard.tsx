@@ -32,6 +32,7 @@ export function CostDetailsCard({
   const hwRateUsdPerHour = typeof hwCostPerHourCents === "number" ? hwCostPerHourCents / 100 : null;
   const hwActualUsd = typeof hwActualCostCents === "number" ? hwActualCostCents / 100 : null;
   const hwCostUsd = hwActualUsd ?? hwEstimatedUsd;
+  const hasActualHwCost = hwActualUsd !== null;
   const totalCostWithHw = cost ? cost.total_cost + (hwCostUsd ?? 0) : null;
   const totalIsEstimated = hwActualUsd === null && hwEstimatedUsd !== null;
 
@@ -56,8 +57,14 @@ export function CostDetailsCard({
             </dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-xs text-slate-400">HW estimated cost</dt>
+            <dt className="text-xs text-slate-400">HW actual cost</dt>
             <dd className="font-mono text-sm text-white">
+              {hwActualCostCents !== null ? formatCurrency(hwActualCostCents / 100) : "—"}
+            </dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-xs text-slate-400">HW estimated cost</dt>
+            <dd className={`font-mono text-white ${hasActualHwCost ? "text-xs" : "text-sm"}`}>
               {hwEstimatedUsd !== null
                 ? `${formatCurrency(hwEstimatedUsd)}${
                     hwRateUsdPerHour !== null ? ` (${formatCurrency(hwRateUsdPerHour)}/hr)` : ""
@@ -71,12 +78,6 @@ export function CostDetailsCard({
               <dd className="font-mono text-sm text-white">{formatCurrency(modelCost.cost)}</dd>
             </div>
           ))}
-          <div className="sm:col-span-2">
-            <dt className="text-xs text-slate-400">HW actual cost</dt>
-            <dd className="font-mono text-sm text-white">
-              {hwActualCostCents !== null ? formatCurrency(hwActualCostCents / 100) : "—"}
-            </dd>
-          </div>
         </dl>
       ) : (
         <p className="text-sm text-center text-slate-400">Could not load cost details.</p>
