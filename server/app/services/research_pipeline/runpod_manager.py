@@ -496,11 +496,12 @@ def launch_research_pipeline_run(
         "DATABASE_PUBLIC_URL": env.database_public_url,
     }
     gpu_types = [
-        "NVIDIA GeForce RTX 5090",
-        "NVIDIA GeForce RTX 3090",
-        "NVIDIA RTX A4000",
-        "NVIDIA RTX A4500",
-        "NVIDIA RTX A5000",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+        # "NVIDIA GeForce RTX 5090",
+        # "NVIDIA GeForce RTX 3090",
+        # "NVIDIA RTX A4000",
+        # "NVIDIA RTX A4500",
+        # "NVIDIA RTX A5000",
     ]
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
     pod_name = f"{POD_NAME_PREFIX}-{user_component}-{int(time.time())}"

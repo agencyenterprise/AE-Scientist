@@ -43,12 +43,12 @@ agent:
   type: parallel
   num_workers: 1
   stages:
-    stage1_max_iters: 10
-    stage2_max_iters: 5
-    stage3_max_iters: 5
-    stage4_max_iters: 5
+    stage1_max_iters: 20
+    stage2_max_iters: 10
+    stage3_max_iters: 10
+    stage4_max_iters: 10
   # how many improvement iterations to run
-  steps: 5 # if stage-specific max_iters are not provided, the agent will use this value for all stages
+  steps: 10 # if stage-specific max_iters are not provided, the agent will use this value for all stages
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 1
   multi_seed_eval:
