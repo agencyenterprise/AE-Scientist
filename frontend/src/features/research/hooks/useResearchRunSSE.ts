@@ -12,6 +12,7 @@ import type {
   SubstageSummary,
   SubstageEvent,
   HwCostEstimateData,
+  HwCostActualData,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -33,6 +34,7 @@ interface UseResearchRunSSEOptions {
   onSubstageCompleted?: (event: SubstageEvent) => void;
   onError?: (error: string) => void;
   onHwCostEstimate?: (event: HwCostEstimateData) => void;
+  onHwCostActual?: (event: HwCostActualData) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -114,6 +116,10 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     "hw_cost_estimate" in data && data.hw_cost_estimate
       ? (data.hw_cost_estimate as HwCostEstimateData)
       : null;
+  const initialHwCostActual: HwCostActualData | null =
+    "hw_cost_actual" in data && data.hw_cost_actual
+      ? (data.hw_cost_actual as HwCostActualData)
+      : null;
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
@@ -125,6 +131,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     tree_viz: data.tree_viz,
     best_node_selections: data.best_node_selections ?? [],
     hw_cost_estimate: initialHwCost,
+    hw_cost_actual: initialHwCostActual,
   };
 }
 
@@ -141,6 +148,7 @@ export function useResearchRunSSE({
   onComplete,
   onRunEvent,
   onHwCostEstimate,
+  onHwCostActual,
   onBestNodeSelection,
   onSubstageSummary,
   onSubstageCompleted,
@@ -272,6 +280,9 @@ export function useResearchRunSSE({
               case "hw_cost_estimate":
                 onHwCostEstimate?.(event.data as HwCostEstimateData);
                 break;
+              case "hw_cost_actual":
+                onHwCostActual?.(event.data as HwCostActualData);
+                break;
               case "complete":
                 onComplete(event.data.status);
                 setIsConnected(false);
@@ -319,6 +330,7 @@ export function useResearchRunSSE({
     onPaperGenerationProgress,
     onComplete,
     onHwCostEstimate,
+    onHwCostActual,
     onError,
   ]);
 

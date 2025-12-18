@@ -195,6 +195,26 @@ class ResearchRunHwCostEstimateEvent(BaseModel):
     data: ResearchRunHwCostEstimateData
 
 
+class ResearchRunHwCostActualData(BaseModel):
+    hw_actual_cost_cents: int = Field(
+        ...,
+        description="Actual hardware cost in cents as billed by RunPod.",
+    )
+    hw_actual_cost_updated_at: str = Field(
+        ...,
+        description="ISO timestamp when the billing summary was recorded.",
+    )
+    billing_summary: dict = Field(
+        default_factory=dict,
+        description="Raw billing summary metadata returned by RunPod.",
+    )
+
+
+class ResearchRunHwCostActualEvent(BaseModel):
+    type: Literal["hw_cost_actual"]
+    data: ResearchRunHwCostActualData
+
+
 class ResearchRunInitialEventData(BaseModel):
     run: ResearchRunInfo
     stage_progress: List[ResearchRunStageProgress]
@@ -209,6 +229,10 @@ class ResearchRunInitialEventData(BaseModel):
     hw_cost_estimate: ResearchRunHwCostEstimateData | None = Field(
         None,
         description="Hardware cost estimate available when the initial snapshot was emitted.",
+    )
+    hw_cost_actual: ResearchRunHwCostActualData | None = Field(
+        None,
+        description="Hardware cost billed so far, if available.",
     )
 
 
@@ -292,6 +316,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunSubstageSummaryEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunHwCostEstimateEvent,
+        ResearchRunHwCostActualEvent,
         ResearchRunErrorEvent,
     ],
     Field(discriminator="type"),
