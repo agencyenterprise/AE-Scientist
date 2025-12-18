@@ -363,6 +363,7 @@ class MinimalAgent:
             "Code under review": wrap_code(code=code),
         }
         try:
+            logger.debug("GPU enforcement validation prompt payload: %s", validation_prompt)
             validation = structured_query_with_schema(
                 system_message=validation_prompt,
                 user_message=None,
