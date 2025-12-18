@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 import { config } from "@/shared/lib/config";
+import { withAuthHeaders } from "@/shared/lib/session-token";
 import { isErrorResponse } from "@/shared/lib/api-adapters";
 import type {
   ChatMessage,
@@ -128,11 +129,12 @@ export function useChatStreaming({
           `${config.apiUrl}/conversations/${conversationId}/idea/chat/stream`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "text/event-stream",
-            },
-            credentials: "include",
+            headers: withAuthHeaders(
+              new Headers({
+                "Content-Type": "application/json",
+                Accept: "text/event-stream",
+              })
+            ),
             body: JSON.stringify({
               message: userMessage,
               llm_model: currentModel,
@@ -241,7 +243,7 @@ export function useChatStreaming({
             const ideaResponse = await fetch(
               `${config.apiUrl}/conversations/${conversationId}/idea`,
               {
-                credentials: "include",
+                headers: withAuthHeaders(),
               }
             );
             if (ideaResponse.ok) {

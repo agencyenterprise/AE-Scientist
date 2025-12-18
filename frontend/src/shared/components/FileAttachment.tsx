@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 
-import { config } from "@/shared/lib/config";
 import {
   formatFileSize,
   getDisplayFileName,
   getFileIcon,
   isImageFile,
 } from "@/shared/lib/fileUtils";
+import { fetchDownloadUrl } from "@/shared/lib/downloads";
 import type { FileAttachment as FileAttachmentType } from "@/types";
 
 interface FileAttachmentProps {
@@ -27,6 +27,13 @@ export function FileAttachment({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const {
+    downloadUrl,
+    ensureDownloadUrl,
+    error: downloadUrlFetchError,
+    isFetching,
+  } = useAttachmentDownloadUrl(attachment.id);
+  const effectiveDownloadError = downloadError || downloadUrlFetchError;
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -48,16 +55,16 @@ export function FileAttachment({
     };
   }, [showImageModal]);
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (isDownloading) return;
 
     setIsDownloading(true);
     setDownloadError(null);
 
     try {
-      // Create a direct link to the backend endpoint, letting the browser handle the redirect
+      const url = await ensureDownloadUrl();
       const link = document.createElement("a");
-      link.href = `${config.apiUrl}/conversations/files/${attachment.id}/download`;
+      link.href = url;
       link.download = attachment.filename;
       link.target = "_blank";
       document.body.appendChild(link);
@@ -91,10 +98,10 @@ export function FileAttachment({
       className={`inline-block max-w-xs bg-card border border-border rounded-lg overflow-hidden shadow-sm ${className}`}
     >
       {/* Image Preview */}
-      {isImage && showPreview && !imageError && (
+      {isImage && showPreview && !imageError && downloadUrl && (
         <div className="relative">
           <Image
-            src={`${config.apiUrl}/conversations/files/${attachment.id}/download`}
+            src={downloadUrl}
             alt={attachment.filename}
             width={320}
             height={128}
@@ -150,17 +157,17 @@ export function FileAttachment({
           {/* Right side: Download button */}
           <button
             onClick={handleDownload}
-            disabled={isDownloading}
+            disabled={isDownloading || isFetching}
             className={`
                 flex items-center space-x-1 px-2 py-1 text-xs font-medium rounded transition-colors
                 ${
-                  isDownloading
+                  isDownloading || isFetching
                     ? "bg-muted text-muted-foreground cursor-not-allowed"
                     : "bg-primary text-primary-foreground hover:bg-primary/90"
                 }
               `}
           >
-            {isDownloading ? (
+            {isDownloading || isFetching ? (
               <>
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-muted-foreground"></div>
                 <span>...</span>
@@ -182,11 +189,13 @@ export function FileAttachment({
         </div>
 
         {/* Download Error */}
-        {downloadError && <p className="mt-1 text-xs text-destructive">{downloadError}</p>}
+        {effectiveDownloadError && (
+          <p className="mt-1 text-xs text-destructive">{effectiveDownloadError}</p>
+        )}
       </div>
 
       {/* Image Modal */}
-      {showImageModal && isImage && (
+      {showImageModal && isImage && downloadUrl && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
           onClick={() => setShowImageModal(false)}
@@ -210,7 +219,7 @@ export function FileAttachment({
 
             {/* Image */}
             <Image
-              src={`${config.apiUrl}/conversations/files/${attachment.id}/download`}
+              src={downloadUrl}
               alt={attachment.filename}
               width={800}
               height={600}
@@ -247,16 +256,19 @@ export function FileAttachmentCompact({
   className = "",
 }: FileAttachmentCompactProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const { ensureDownloadUrl, isFetching: isDownloadUrlFetching } = useAttachmentDownloadUrl(
+    attachment.id
+  );
 
-  const handleDownload = () => {
-    if (isDownloading) return;
+  const handleDownload = async () => {
+    if (isDownloading || isDownloadUrlFetching) return;
 
     setIsDownloading(true);
 
     try {
-      // Create a direct link to the backend endpoint, letting the browser handle the redirect
+      const url = await ensureDownloadUrl();
       const link = document.createElement("a");
-      link.href = `${config.apiUrl}/conversations/files/${attachment.id}/download`;
+      link.href = url;
       link.download = attachment.filename;
       link.target = "_blank";
       document.body.appendChild(link);
@@ -279,11 +291,11 @@ export function FileAttachmentCompact({
   return (
     <button
       onClick={handleDownload}
-      disabled={isDownloading}
+      disabled={isDownloading || isDownloadUrlFetching}
       className={`
         inline-flex items-center space-x-2 px-3 py-2 bg-muted hover:bg-muted/80
         border border-border rounded-lg text-sm transition-colors
-        ${isDownloading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+        ${isDownloading || isDownloadUrlFetching ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
         ${className}
       `}
       title={`Download ${attachment.filename}`}
@@ -293,7 +305,7 @@ export function FileAttachmentCompact({
         <span className="font-medium text-foreground truncate">{displayName}</span>
         <span className="text-xs text-muted-foreground">{formattedSize}</span>
       </div>
-      {isDownloading ? (
+      {isDownloading || isDownloadUrlFetching ? (
         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground"></div>
       ) : (
         <svg
@@ -366,4 +378,63 @@ export function FileAttachmentList({
       )}
     </div>
   );
+}
+
+function useAttachmentDownloadUrl(attachmentId: number) {
+  const downloadPath = `/conversations/files/${attachmentId}/download`;
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  useEffect(() => {
+    let canceled = false;
+    setDownloadUrl(null);
+    setError(null);
+    setIsFetching(true);
+
+    fetchDownloadUrl(downloadPath)
+      .then(url => {
+        if (!canceled) {
+          setDownloadUrl(url);
+          setError(null);
+        }
+      })
+      .catch(err => {
+        if (!canceled) {
+          const message = err instanceof Error ? err.message : "Failed to fetch download URL";
+          setError(message);
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setIsFetching(false);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [downloadPath]);
+
+  const ensureDownloadUrl = useCallback(async (): Promise<string> => {
+    if (downloadUrl) {
+      return downloadUrl;
+    }
+
+    setIsFetching(true);
+    setError(null);
+    try {
+      const url = await fetchDownloadUrl(downloadPath);
+      setDownloadUrl(url);
+      return url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch download URL";
+      setError(message);
+      throw err;
+    } finally {
+      setIsFetching(false);
+    }
+  }, [downloadUrl, downloadPath]);
+
+  return { downloadUrl, ensureDownloadUrl, error, isFetching };
 }

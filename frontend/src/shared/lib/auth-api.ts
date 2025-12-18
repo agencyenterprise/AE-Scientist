@@ -5,6 +5,7 @@
  */
 
 import { config } from "./config";
+import { getSessionToken, withAuthHeaders } from "./session-token";
 import type { AuthStatus, User } from "@/types/auth";
 
 /**
@@ -21,13 +22,10 @@ export async function logout(): Promise<boolean> {
   try {
     const response = await fetch(`${config.apiUrl}/auth/logout`, {
       method: "POST",
-      credentials: "include", // Include cookies
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
     });
 
-    if (response.ok) {
+    if (response.ok || response.status === 401) {
       return true;
     } else {
       return false;
@@ -41,12 +39,13 @@ export async function logout(): Promise<boolean> {
  * Get current user information.
  */
 export async function getCurrentUser(): Promise<User | null> {
+  if (!getSessionToken()) {
+    return null;
+  }
+
   try {
     const response = await fetch(`${config.apiUrl}/auth/me`, {
-      credentials: "include", // Include cookies
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
     });
 
     if (response.ok) {
@@ -67,12 +66,13 @@ export async function getCurrentUser(): Promise<User | null> {
  * Check authentication status.
  */
 export async function checkAuthStatus(): Promise<AuthStatus> {
+  if (!getSessionToken()) {
+    return { authenticated: false };
+  }
+
   try {
     const response = await fetch(`${config.apiUrl}/auth/status`, {
-      credentials: "include", // Include cookies
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
     });
 
     if (response.ok) {

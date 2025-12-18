@@ -119,19 +119,8 @@
           "authentication"
         ],
         "summary": "Get Auth Status",
-        "description": "Check authentication status.\n\nArgs:\n    request: Current request\n    session_token: Session token from cookie\n\nReturns:\n    Authentication status and user info if authenticated",
+        "description": "Check authentication status.\n\nArgs:\n    request: Current request (provides Authorization header)\n\nReturns:\n    Authentication status and user info if authenticated",
         "operationId": "get_auth_status_api_auth_status_get",
-        "parameters": [
-          {
-            "name": "session_token",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "title": "Session Token"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -139,16 +128,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AuthStatus"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -162,40 +141,19 @@
           "authentication"
         ],
         "summary": "Logout",
-        "description": "Log out current user.\n\nArgs:\n    response: FastAPI response object\n    session_token: Session token from cookie\n\nReturns:\n    Success message",
+        "description": "Log out current user.\n\nArgs:\n    request: FastAPI request object\n    response: FastAPI response object\n\nReturns:\n    Success message",
         "operationId": "logout_api_auth_logout_post",
-        "parameters": [
-          {
-            "name": "session_token",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "title": "Session Token"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": "string"
                   },
+                  "type": "object",
                   "title": "Response Logout Api Auth Logout Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

@@ -6,11 +6,13 @@ Handles user authentication via Google OAuth 2.0.
 
 import logging
 import secrets
-from typing import Dict, Literal
+from typing import Dict
+from urllib.parse import quote
 
-from fastapi import APIRouter, Cookie, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
+from app.auth.tokens import extract_bearer_token
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models.auth import AuthStatus, AuthUser
@@ -49,7 +51,6 @@ async def login(_request: Request) -> RedirectResponse:
 
 @router.get("/callback")
 async def auth_callback(
-    response: Response,
     code: str = Query(None, description="Authorization code from Google"),
     state: str = Query(None, description="State parameter for security"),
     error: str = Query(None, description="Error from OAuth provider"),
@@ -89,23 +90,11 @@ async def auth_callback(
         user = auth_result["user"]
         session_token = auth_result["session_token"]
 
-        # Set secure HTTP-only cookie
-        samesite: Literal["lax", "strict", "none"] = "lax"
-        if settings.is_production:
-            samesite = "none"
-
-        response = RedirectResponse(url=f"{settings.FRONTEND_URL}/", status_code=302)
-        response.set_cookie(
-            key="session_token",
-            value=session_token,
-            max_age=settings.SESSION_EXPIRE_HOURS * 3600,
-            httponly=True,
-            secure=settings.is_production,
-            samesite=samesite,
-        )
-
-        logger.info(f"User authenticated successfully: {user.email}")
-        return response
+        # Redirect back to the SPA with the bearer token encoded in the hash fragment
+        encoded_token = quote(session_token, safe="")
+        success_url = f"{settings.FRONTEND_URL}/login#token={encoded_token}"
+        logger.info("User authenticated successfully: %s", user.email)
+        return RedirectResponse(url=success_url, status_code=302)
 
     except Exception as e:
         logger.exception(f"Error handling auth callback: {e}")
@@ -130,23 +119,25 @@ async def get_current_user_info(request: Request) -> AuthUser:
 
 
 @router.get("/status", response_model=AuthStatus)
-async def get_auth_status(
-    _request: Request, session_token: str = Cookie(None, alias="session_token")
-) -> AuthStatus:
+async def get_auth_status(request: Request) -> AuthStatus:
     """
     Check authentication status.
 
     Args:
-        request: Current request
-        session_token: Session token from cookie
+        request: Current request (provides Authorization header)
 
     Returns:
         Authentication status and user info if authenticated
     """
+    authorization_header = request.headers.get("authorization")
+    session_token = extract_bearer_token(authorization_header)
+    if not session_token:
+        session_token = request.cookies.get("session_token")
+
     if not session_token:
         return AuthStatus(authenticated=False, user=None)
 
-    user = auth_service.get_user_by_session(session_token)
+    user = auth_service.get_user_by_session(session_token=session_token)
     if not user:
         return AuthStatus(authenticated=False, user=None)
 
@@ -156,44 +147,32 @@ async def get_auth_status(
 
 
 @router.post("/logout")
-async def logout(
-    response: Response, session_token: str = Cookie(None, alias="session_token")
-) -> Dict[str, str]:
+async def logout(request: Request) -> Dict[str, str]:
     """
     Log out current user.
 
     Args:
+        request: FastAPI request object
         response: FastAPI response object
-        session_token: Session token from cookie
 
     Returns:
         Success message
     """
-    samesite: Literal["lax", "strict", "none"] = "lax"
     try:
-        if settings.is_production:
-            samesite = "none"
+        authorization_header = request.headers.get("authorization")
+        session_token = extract_bearer_token(authorization_header)
 
         if session_token:
-            success = auth_service.logout_user(session_token)
+            success = auth_service.logout_user(session_token=session_token)
             if success:
                 logger.info("User logged out successfully")
             else:
                 logger.warning("Failed to invalidate session during logout")
 
-        # Clear the session cookie
-        response.delete_cookie(
-            key="session_token", httponly=True, secure=settings.is_production, samesite=samesite
-        )
-
         return {"message": "Logged out successfully"}
 
     except Exception as e:
         logger.exception(f"Error during logout: {e}")
-        # Still clear the cookie even if database logout fails
-        response.delete_cookie(
-            key="session_token", httponly=True, secure=settings.is_production, samesite=samesite
-        )
         return {"message": "Logged out successfully"}
 
 

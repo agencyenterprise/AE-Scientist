@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { Idea, IdeaVersion, IdeaVersionsResponse } from "@/types";
-import { config } from "@/shared/lib/config";
+import { apiFetch } from "@/shared/lib/api-client";
 import {
   getComparisonVersion,
   getNextVersion,
@@ -72,16 +72,10 @@ export function useVersionManagement({
   // Load idea versions
   const loadVersions = useCallback(async (): Promise<void> => {
     try {
-      const response = await fetch(
-        `${config.apiUrl}/conversations/${conversationId}/idea/versions`,
-        {
-          credentials: "include",
-        }
+      const result = await apiFetch<IdeaVersionsResponse>(
+        `/conversations/${conversationId}/idea/versions`
       );
-      if (response.ok) {
-        const result: IdeaVersionsResponse = await response.json();
-        setAllVersions(result.versions);
-      }
+      setAllVersions(result.versions);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to load versions:", error);

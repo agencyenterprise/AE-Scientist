@@ -6,6 +6,7 @@
  */
 
 import { config } from "./config";
+import { withAuthHeaders } from "./session-token";
 
 /**
  * Custom error class that carries HTTP status codes.
@@ -32,7 +33,7 @@ interface ApiFetchOptions extends Omit<RequestInit, "body"> {
 /**
  * Type-safe fetch wrapper for API requests.
  *
- * - Automatically includes credentials for cookie-based auth
+ * - Automatically attaches bearer tokens for auth when available
  * - Sets Content-Type header for JSON requests
  * - Throws ApiError with status code on non-ok responses
  *
@@ -61,13 +62,13 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
 
   // For FormData, don't set Content-Type (let browser set it with boundary)
   const isFormData = body instanceof FormData;
-  const headers: HeadersInit = isFormData
-    ? { ...fetchOptions.headers }
-    : { "Content-Type": "application/json", ...fetchOptions.headers };
+  const baseHeaders = isFormData
+    ? new Headers(fetchOptions.headers || undefined)
+    : new Headers({ "Content-Type": "application/json", ...fetchOptions.headers });
+  const headers = withAuthHeaders(baseHeaders);
 
   const response = await fetch(buildRequestUrl(path), {
     ...fetchOptions,
-    credentials: "include",
     headers,
     body:
       body && typeof body === "object" && !isFormData
@@ -113,13 +114,16 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
  * ```
  */
 export async function apiStream(path: string, options?: RequestInit): Promise<Response> {
-  const response = await fetch(buildRequestUrl(path), {
-    ...options,
-    credentials: "include",
-    headers: {
+  const headers = withAuthHeaders(
+    new Headers({
       "Content-Type": "application/json",
       ...options?.headers,
-    },
+    })
+  );
+
+  const response = await fetch(buildRequestUrl(path), {
+    ...options,
+    headers,
   });
 
   if (!response.ok) {

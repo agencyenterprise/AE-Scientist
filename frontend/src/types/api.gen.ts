@@ -94,8 +94,7 @@ export interface paths {
          * @description Check authentication status.
          *
          *     Args:
-         *         request: Current request
-         *         session_token: Session token from cookie
+         *         request: Current request (provides Authorization header)
          *
          *     Returns:
          *         Authentication status and user info if authenticated
@@ -123,8 +122,8 @@ export interface paths {
          * @description Log out current user.
          *
          *     Args:
+         *         request: FastAPI request object
          *         response: FastAPI response object
-         *         session_token: Session token from cookie
          *
          *     Returns:
          *         Success message
@@ -3678,9 +3677,7 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: {
-                session_token?: string;
-            };
+            cookie?: never;
         };
         requestBody?: never;
         responses: {
@@ -3693,15 +3690,6 @@ export interface operations {
                     "application/json": components["schemas"]["AuthStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
     logout_api_auth_logout_post: {
@@ -3709,9 +3697,7 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: {
-                session_token?: string;
-            };
+            cookie?: never;
         };
         requestBody?: never;
         responses: {
@@ -3724,15 +3710,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
