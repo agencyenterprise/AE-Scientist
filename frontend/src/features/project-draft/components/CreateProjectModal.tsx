@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, AlertTriangle, Loader2, Plus } from "lucide-react";
+import { X, Loader2, Plus } from "lucide-react";
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -58,25 +58,6 @@ export function CreateProjectModal({
             <p className="text-sm text-muted-foreground mb-4">
               This will launch a new research run based on your current work.
             </p>
-
-            {/* Warning */}
-            <div className="bg-[color-mix(in_srgb,var(--warning),transparent_90%)] border border-[var(--warning)] rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <AlertTriangle className="w-5 h-5 text-[var(--warning)]" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-foreground">Important</h3>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    <p>
-                      Once launched, this conversation will be locked and you won&apos;t be able to
-                      modify the research idea or continue the AI chat. This action cannot be
-                      undone.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Error Message */}
