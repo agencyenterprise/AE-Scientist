@@ -13,7 +13,6 @@ Scope:
 
 import logging
 import random
-import re
 
 import humanize
 from pydantic import BaseModel, Field
@@ -44,6 +43,21 @@ class PlanAndCodeSchema(BaseModel):
             "The full Python implementation of the solution for the current task as plain executable code. "
             "Do not include markdown code fences or extra commentary; provide only code that can be run directly "
             "in the described environment (e.g., it should compute metrics, parse metrics, or implement the bugfix/tuning as required)."
+        ),
+    )
+
+
+class GPUUsageValidationSchema(BaseModel):
+    is_gpu_enforced: bool = Field(
+        description=(
+            "Return true if the script enforces the configured GPU index and keeps every "
+            "CUDA-capable section on that device whenever CUDA is available."
+        ),
+    )
+    reasoning: str = Field(
+        description=(
+            "Detailed explanation citing any missing device configuration or CPU-only "
+            "sections. Mention every step that fails to use the GPU consistently."
         ),
     )
 
@@ -316,37 +330,62 @@ class MinimalAgent:
         return "", last_completion
 
     def _validate_code_uses_gpu_id(self, code: str) -> tuple[bool, str]:
-        """Ensure the generated code explicitly targets the configured GPU index.
-
-        Requirements:
-        - Must set the CUDA device index via torch.cuda.set_device({gpu_id}) when CUDA is available
-        - Must create a torch.device(...) that refers to 'cuda:{gpu_id}' when CUDA is available
-        - It is allowed to fall back to CPU when CUDA is not available
-        """
+        """Use an LLM review to ensure the code enforces the configured GPU index."""
         assert self.gpu_id is not None
-        gpu_id_str = str(self.gpu_id)
-        # Accept alias imports and varying whitespace:
-        # - torch.cuda.set_device(<id>) OR cuda.set_device(<id>) OR set_device(<id>)
-        pattern_set_device = (
-            rf"\b(?:(?:torch\.)?cuda\.)?set_device\(\s*{re.escape(gpu_id_str)}\s*\)"
-        )
-        # - torch.device('cuda:<id>') OR device('cuda:<id>') with either quote
-        pattern_device_ctor = (
-            rf"\b(?:(?:torch\.)?)device\([^)]*['\"]cuda:{re.escape(gpu_id_str)}['\"][^)]*\)"
-        )
-        has_set_device = re.search(pattern_set_device, code) is not None
-        has_device_ctor = re.search(pattern_device_ctor, code) is not None
-        if has_set_device and has_device_ctor:
+        validation_prompt: PromptType = {
+            "Role": (
+                "You review machine learning scripts to verify that they fully enforce "
+                "GPU usage."
+            ),
+            "GPU context": (
+                f"There is exactly one CUDA device available and it must be accessed via "
+                f"index {self.gpu_id} (torch.cuda.set_device({self.gpu_id}))."
+            ),
+            "Validation checklist": [
+                f"Call torch.cuda.set_device({self.gpu_id}) (or an equivalent alias) "
+                "before any CUDA work when torch.cuda.is_available() is True.",
+                f"Define device = torch.device('cuda:{self.gpu_id}') (or equivalent) "
+                "and reuse it everywhere CUDA is available.",
+                "Allow a CPU fallback only when torch.cuda.is_available() returns False; "
+                "otherwise every operation must stay on the specified GPU.",
+                "Move every model, tensor, optimizer state, and batch to the device. "
+                "Partial usage (some steps on GPU, others on CPU) is non-compliant.",
+                "Training loops, evaluation loops, inference, and dataloaders must keep "
+                "tensors on the same device as the model.",
+            ],
+            "Review instructions": [
+                "Read the entire script, not just the header.",
+                "Identify sections that instantiate models, tensors, optimizers, or "
+                "dataloaders on CPU while CUDA is available.",
+                "If any part of the code omits device handling or mixes CPU/GPU, mark "
+                "the script as failing and describe every missing fix.",
+            ],
+            "Code under review": wrap_code(code=code),
+        }
+        try:
+            logger.debug("GPU enforcement validation prompt payload: %s", validation_prompt)
+            validation = structured_query_with_schema(
+                system_message=validation_prompt,
+                user_message=None,
+                model=self.cfg.agent.feedback.model,
+                temperature=self.cfg.agent.feedback.temperature,
+                schema_class=GPUUsageValidationSchema,
+            )
+        except Exception as exc:
+            logger.warning("GPU enforcement LLM validation failed: %s", exc)
+            return False, (
+                "GPU enforcement validation failed to run. Ensure your code explicitly "
+                f"sets torch.cuda.set_device({self.gpu_id}) and uses device "
+                "consistently."
+            )
+
+        if validation.is_gpu_enforced:
             return True, ""
-        missing_parts: list[str] = []
-        if not has_set_device:
-            missing_parts.append(f"Add: torch.cuda.set_device({gpu_id_str})")
-        if not has_device_ctor:
-            missing_parts.append(f"Add: device = torch.device('cuda:{gpu_id_str}')")
+
         feedback = (
-            "You must enforce using the specified GPU index when CUDA is available. "
-            + " ".join(missing_parts)
-            + " CPU fallback via torch.cuda.is_available() checks is allowed."
+            "You must enforce using GPU index "
+            f"{self.gpu_id} for every CUDA-eligible step. "
+            f"{validation.reasoning.strip()}"
         )
         return False, feedback
 
