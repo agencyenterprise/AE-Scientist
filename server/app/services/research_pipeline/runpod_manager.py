@@ -11,7 +11,6 @@ import re
 import shlex
 import subprocess
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, NamedTuple, cast
@@ -566,7 +565,7 @@ async def launch_research_pipeline_run(
         # "NVIDIA RTX A5000",
     ]
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
-    pod_name = f"{POD_NAME_PREFIX}-{user_component}-{int(time.time())}"
+    pod_name = f"{POD_NAME_PREFIX}-{user_component}-{run_id}"
     pod = await creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1",
