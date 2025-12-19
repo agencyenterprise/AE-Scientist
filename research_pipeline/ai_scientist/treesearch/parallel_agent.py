@@ -90,10 +90,8 @@ class ParallelAgent:
 
         # Create process pool for parallel execution
         self.timeout = self.cfg.exec.timeout
-        mp_context = multiprocessing.get_context("spawn")
-        self.executor: ProcessPoolExecutor = ProcessPoolExecutor(
-            max_workers=self.num_workers, mp_context=mp_context
-        )
+        self._mp_context = multiprocessing.get_context("spawn")
+        self.executor: ProcessPoolExecutor | None = self._create_executor()
         self._is_shutdown = False
         # Define the evaluation metric once at initialization
         self.evaluation_metrics = self._define_global_metrics()
@@ -203,6 +201,7 @@ class ParallelAgent:
         seed_nodes: List[Node] = []
         futures: list = []
         seed_process_ids: list[str | None] = []  # Track process IDs for GPU release
+        executor = self._ensure_executor()
         for seed in range(self.cfg.agent.multi_seed_eval["num_seeds"]):
             gpu_id = None
             process_id = f"seed_{seed}_worker"
@@ -228,7 +227,7 @@ class ParallelAgent:
             memory_summary = ""
             logger.info("Starting multi-seed eval...")
             futures.append(
-                self.executor.submit(
+                executor.submit(
                     process_node,
                     node_data=node_data,
                     task_desc=self.task_desc,
@@ -465,6 +464,7 @@ class ParallelAgent:
         # Submit tasks to process pool
         logger.debug("Submitting tasks to process pool")
 
+        executor = self._ensure_executor()
         futures: list[Future] = []
         for node_data in node_data_list:
             gpu_id = None
@@ -513,7 +513,7 @@ class ParallelAgent:
             )
             seed_eval = False
             futures.append(
-                self.executor.submit(
+                executor.submit(
                     process_node,
                     node_data=node_data,
                     task_desc=self.task_desc,
@@ -587,6 +587,7 @@ class ParallelAgent:
                         level="warn",
                     )
                 )
+                self._handle_worker_timeout(future=future)
             except Exception as e:
                 logger.exception(f"Error processing node: {str(e)}")
 
@@ -613,19 +614,7 @@ class ParallelAgent:
                     for process_id in list(self.gpu_manager.gpu_assignments.keys()):
                         self.gpu_manager.release_gpu(process_id)
 
-                # Shutdown executor first
-                self.executor.shutdown(wait=False, cancel_futures=True)
-
-                # Force terminate all worker processes
-                if self.executor._processes:
-                    # Get copy of processes
-                    processes = list(self.executor._processes.values())
-
-                    # Then terminate processes if they're still alive
-                    for process in processes:
-                        if process.is_alive():
-                            process.terminate()
-                            process.join(timeout=1)
+                self._shutdown_executor()
 
                 logger.info("Executor shutdown complete")
 
@@ -641,3 +630,39 @@ class ParallelAgent:
         exc_tb: TracebackType | None,
     ) -> None:
         self.cleanup()
+
+    def _create_executor(self) -> ProcessPoolExecutor:
+        return ProcessPoolExecutor(
+            max_workers=self.num_workers,
+            mp_context=self._mp_context,
+        )
+
+    def _shutdown_executor(self) -> None:
+        executor = self.executor
+        if executor is None:
+            return
+        try:
+            executor.shutdown(wait=False, cancel_futures=True)
+            processes = []
+            if getattr(executor, "_processes", None):
+                processes = list(executor._processes.values())
+            for process in processes:
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=1)
+        finally:
+            self.executor = None
+
+    def _restart_executor(self) -> None:
+        logger.warning("Restarting process pool executor after worker timeout")
+        self._shutdown_executor()
+        self.executor = self._create_executor()
+
+    def _handle_worker_timeout(self, *, future: Future) -> None:
+        future.cancel()
+        self._restart_executor()
+
+    def _ensure_executor(self) -> ProcessPoolExecutor:
+        if self.executor is None:
+            self.executor = self._create_executor()
+        return self.executor
