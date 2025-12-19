@@ -123,7 +123,10 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             Cost
           </div>
           <p className="mt-2 text-lg font-semibold text-white">~$20 USD</p>
-          <p className="text-slate-400 text-sm">Charged per research run. The actual cost is based on the actual runtime of the experiment.</p>
+          <p className="text-slate-400 text-sm">
+            Charged per research run. The actual cost is based on the actual runtime of the
+            experiment.
+          </p>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
@@ -132,7 +135,8 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
           </div>
           <p className="mt-2 text-lg font-semibold text-white">Final Paper + Code + Plots</p>
           <p className="text-slate-400 text-sm">
-            All relevant artifacts including the full log of the experiment will be available for download once complete.
+            All relevant artifacts including the full log of the experiment will be available for
+            download once complete.
           </p>
         </div>
       </section>

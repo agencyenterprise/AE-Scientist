@@ -13,15 +13,15 @@ export function BetaBanner() {
               AE Scientist is currently in Beta testing
             </p>
             <p className="mt-1 text-sm text-amber-100/90">
-              Output quality and research completion reliability may be inconsistent. We&apos;d love to hear
-              from you—{" "}
+              Output quality and research completion reliability may be inconsistent. We&apos;d love
+              to hear from you—{" "}
               <a
                 href="mailto:james.bowler@ae.studio?subject=AE%20Scientist%20Feedback"
                 className="font-semibold underline hover:text-amber-50 transition-colors"
               >
                 send feedback
-              </a>
-              {" "}or report issues.
+              </a>{" "}
+              or report issues.
             </p>
           </div>
         </div>
