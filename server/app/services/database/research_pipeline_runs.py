@@ -417,15 +417,20 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                     COALESCE(pp.run_id, sp.run_id) AS run_id,
                     COALESCE(pp.stage, sp.stage) AS stage,
                     sp.best_metric,
-                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
-                    -- For stages 1-4: show fixed percentage based on stage number
-                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
-                    CASE 
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
+                    -- Calculate overall progress as completed-stages-only buckets.
+                    -- If the *current* stage is incomplete, the displayed progress reflects
+                    -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+                    CASE
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.2 ELSE 0.0 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.4 ELSE 0.2 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.6 ELSE 0.4 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.8 ELSE 0.6 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN
+                            CASE WHEN COALESCE(pp.progress, 0) >= 1 THEN 1.0 ELSE 0.8 END
                         ELSE COALESCE(pp.progress, sp.progress)
                     END AS overall_progress
                 FROM latest_stage_progress sp
@@ -553,15 +558,20 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                     COALESCE(pp.run_id, sp.run_id) AS run_id,
                     COALESCE(pp.stage, sp.stage) AS stage,
                     sp.best_metric,
-                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
-                    -- For stages 1-4: show fixed percentage based on stage number
-                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
-                    CASE 
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
+                    -- Calculate overall progress as completed-stages-only buckets.
+                    -- If the *current* stage is incomplete, the displayed progress reflects
+                    -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+                    CASE
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.2 ELSE 0.0 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.4 ELSE 0.2 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.6 ELSE 0.4 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN
+                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.8 ELSE 0.6 END
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN
+                            CASE WHEN COALESCE(pp.progress, 0) >= 1 THEN 1.0 ELSE 0.8 END
                         ELSE COALESCE(pp.progress, sp.progress)
                     END AS overall_progress
                 FROM latest_stage_progress sp

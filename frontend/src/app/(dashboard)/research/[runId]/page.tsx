@@ -156,7 +156,8 @@ export default function ResearchRunDetailPage() {
         )}
 
         <ResearchRunStats
-          stageProgress={stage_progress}
+          currentStage={runMeta?.current_stage ?? null}
+          progress={runMeta?.progress ?? null}
           gpuType={run.gpu_type}
           artifactsCount={artifacts.length}
         />
