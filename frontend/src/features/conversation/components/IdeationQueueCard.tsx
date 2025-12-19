@@ -6,12 +6,10 @@ import { Clock, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/components/ui/button";
-import { apiFetch, ApiError } from "@/shared/lib/api-client";
-import { parseInsufficientCreditsError } from "@/shared/utils/credits";
-import { CreateProjectModal } from "@/features/project-draft/components/CreateProjectModal";
 import type { IdeationQueueCardProps } from "@/features/conversation";
 import { ConversationStatusBadge } from "./ConversationStatusBadge";
 import { IdeationQueueRunsList } from "./IdeationQueueRunsList";
+import { LaunchResearchButton } from "./LaunchResearchButton";
 
 /**
  * Card component for displaying a single idea in the Ideation Queue
@@ -31,8 +29,6 @@ function IdeationQueueCardComponent({
   onSelect,
 }: IdeationQueueCardProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
-  const [isLaunching, setIsLaunching] = useState(false);
   const router = useRouter();
   const canLaunchResearch = status !== "no_idea";
 
@@ -50,50 +46,9 @@ function IdeationQueueCardComponent({
     setIsExpanded(prev => !prev);
   };
 
-  const handleLaunchClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsLaunchModalOpen(true);
-  };
-
   const handleEditClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     router.push(`/conversations/${id}`);
-  };
-
-  const handleConfirmLaunch = async (): Promise<void> => {
-    setIsLaunching(true);
-    try {
-      await apiFetch(`/conversations/${id}/idea/research-run`, {
-        method: "POST",
-      });
-      setIsLaunchModalOpen(false);
-      router.push("/research");
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 402) {
-          const info = parseInsufficientCreditsError(error.data);
-          const message =
-            info?.message ||
-            (info?.required
-              ? `You need at least ${info.required} credits to launch research.`
-              : "Insufficient credits to launch research.");
-          throw new Error(message);
-        }
-        if (error.status === 400) {
-          const detailValue =
-            error.data &&
-            typeof error.data === "object" &&
-            typeof (error.data as { detail?: unknown }).detail === "string"
-              ? (error.data as { detail: string }).detail
-              : undefined;
-          const message = detailValue ?? "Failed to launch research run.";
-          throw new Error(message);
-        }
-      }
-      throw error;
-    } finally {
-      setIsLaunching(false);
-    }
   };
 
   return (
@@ -158,25 +113,10 @@ function IdeationQueueCardComponent({
 
         {canLaunchResearch && (
           <div className="mt-4 flex items-center justify-end">
-            <Button
-              onClick={handleLaunchClick}
-              size="sm"
-              type="button"
-              className="text-[10px] uppercase tracking-wide"
-              disabled={isLaunching}
-            >
-              Launch Research
-            </Button>
+            <LaunchResearchButton conversationId={id} />
           </div>
         )}
       </article>
-
-      <CreateProjectModal
-        isOpen={isLaunchModalOpen}
-        onClose={() => setIsLaunchModalOpen(false)}
-        onConfirm={handleConfirmLaunch}
-        isLoading={isLaunching}
-      />
     </>
   );
 }
