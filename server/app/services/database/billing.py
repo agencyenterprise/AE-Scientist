@@ -49,9 +49,9 @@ class StripeCheckoutSession(NamedTuple):
 class BillingDatabaseMixin(ConnectionProvider):
     """Mixin providing billing-specific persistence helpers."""
 
-    def ensure_user_wallet(self, user_id: int, is_ae_user: bool) -> None:
+    def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
         """Create a wallet row for the user if one does not yet exist."""
-        balance = 10_000 if is_ae_user else 10
+        balance = 10_000 if has_free_credits else 10
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(

@@ -5,14 +5,21 @@ Provides CRUD operations for users and user sessions.
 """
 
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, NamedTuple, Optional
 
 import psycopg2.extras
+from dotenv import load_dotenv
 
 from .base import ConnectionProvider
 from .billing import BillingDatabaseMixin
+
+# .env path: server/.env
+# our path: server/app/services/database/users.py
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +34,20 @@ class UserData(NamedTuple):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+def should_give_free_credits(email: str) -> bool:
+    """
+    Determine if the user should be given free credits.
+    """
+    if email.endswith("@ae.studio") or email.endswith("@agencyenterprise.com"):
+        logger.info(f"Giving free credits to {email}")
+        return True
+    whitelist_emails = os.getenv("WHITELIST_EMAILS_FREE_CREDIT", "").split(",")
+    if email in whitelist_emails:
+        logger.info(f"Giving free credits to {email}")
+        return True
+    return False
 
 
 class UsersDatabaseMixin(ConnectionProvider):
@@ -55,16 +76,15 @@ class UsersDatabaseMixin(ConnectionProvider):
                         """,
                         (google_id, email, name),
                     )
-                    if email.endswith("@ae.studio") or email.endswith("@agencyenterprise.com"):
-                        is_ae_user = True
-                    else:
-                        is_ae_user = False
+                    has_free_credits = should_give_free_credits(email)
                     result = cursor.fetchone()
                     conn.commit()
                     if result:
                         try:
                             if isinstance(self, BillingDatabaseMixin):
-                                self.ensure_user_wallet(int(result["id"]), is_ae_user=is_ae_user)
+                                self.ensure_user_wallet(
+                                    int(result["id"]), has_free_credits=has_free_credits
+                                )
                         except Exception as wallet_error:  # noqa: BLE001
                             logger.exception(
                                 "Failed to initialize wallet for user %s: %s",
