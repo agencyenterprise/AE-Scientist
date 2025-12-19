@@ -235,6 +235,8 @@ export function useResearchRunSSE({
       setIsConnected(true);
       setConnectionError(null);
       reconnectAttemptsRef.current = 0;
+      // eslint-disable-next-line no-console
+      console.debug("[Research Run SSE] Connection established");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -310,8 +312,14 @@ export function useResearchRunSSE({
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[Research Run SSE] Connection failed: ${errorMessage}. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
+        );
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
+        // eslint-disable-next-line no-console
+        console.error("[Research Run SSE] Max reconnection attempts reached. Connection permanently lost.");
         onError?.("Max reconnection attempts reached. Please refresh the page.");
       }
     }

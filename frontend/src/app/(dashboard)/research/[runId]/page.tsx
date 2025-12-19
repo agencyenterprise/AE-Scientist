@@ -38,15 +38,12 @@ export default function ResearchRunDetailPage() {
     loading,
     error,
     conversationId,
-    isConnected,
-    connectionError,
     hwEstimatedCostCents,
     hwActualCostCents,
     hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
-    reconnect,
   } = useResearchRunDetails({ runId });
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
@@ -140,13 +137,10 @@ export default function ResearchRunDetailPage() {
           runNumber={runNumber}
           status={run.status}
           createdAt={run.created_at}
-          isConnected={isConnected}
-          connectionError={connectionError}
           canStopRun={canStopRun}
           stopPending={stopPending}
           stopError={stopError}
           onStopRun={handleStopRun}
-          onReconnect={reconnect}
         />
 
         {run.error_message && <ResearchRunError message={run.error_message} />}
