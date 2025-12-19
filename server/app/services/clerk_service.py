@@ -9,7 +9,7 @@ from typing import Optional
 
 import jwt
 from jwt import PyJWKClient
-
+import base64
 from clerk_backend_api import Clerk
 
 from app.config import settings
@@ -33,7 +33,6 @@ class ClerkService:
             # Extract domain from publishable key
             # Example: pk_test_ZG9taW5hbnQtZHJhZ29uLTg4LmNsZXJrLmFjY291bnRzLmRldg==
             # The key is base64 encoded and contains the domain
-            import base64
             try:
                 # Get the part after pk_test_ or pk_live_
                 key_parts = settings.CLERK_PUBLISHABLE_KEY.split('_')
