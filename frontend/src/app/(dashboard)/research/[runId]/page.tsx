@@ -105,6 +105,15 @@ export default function ResearchRunDetailPage() {
     paper_generation_progress,
     best_node_selections = [],
   } = details;
+  
+  console.log('[ResearchRunDetailPage] Details loaded:', {
+    runId: run.run_id,
+    hasBestNodeSelections: !!best_node_selections,
+    bestNodeSelectionsLength: best_node_selections?.length,
+    bestNodeSelections: best_node_selections,
+    hasTreeViz: !!details.tree_viz,
+    treeVizLength: details.tree_viz?.length
+  });
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 

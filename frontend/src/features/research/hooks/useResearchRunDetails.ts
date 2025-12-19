@@ -144,19 +144,28 @@ export function useResearchRunDetails({
 
   const handleRunEvent = useCallback(
     async (event: { event_type?: string; metadata?: Record<string, unknown> } | unknown) => {
+      console.log('[useResearchRunDetails] Received run_event:', event);
+      
       if (!event || typeof event !== "object") {
         return;
       }
       const eventType = (event as { event_type?: string }).event_type;
+      console.log('[useResearchRunDetails] Event type:', eventType);
 
       if (eventType === "tree_viz_stored") {
+        console.log('[useResearchRunDetails] tree_viz_stored event received!', event);
+        
         if (!conversationId) {
+          console.log('[useResearchRunDetails] No conversationId, skipping tree viz refresh');
           return;
         }
         try {
+          console.log('[useResearchRunDetails] Fetching updated tree viz...');
           const treeViz = await apiFetch<TreeVizItem[]>(
             `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
           );
+          console.log('[useResearchRunDetails] Tree viz fetched:', treeViz.length, 'stages');
+          
           let artifacts: ArtifactMetadata[] | null = null;
           try {
             artifacts = await apiFetch<ArtifactMetadata[]>(
@@ -176,6 +185,7 @@ export function useResearchRunDetails({
                 }
               : prev
           );
+          console.log('[useResearchRunDetails] Tree viz state updated successfully');
         } catch (err) {
           // eslint-disable-next-line no-console
           console.error("Failed to refresh tree viz", err);
