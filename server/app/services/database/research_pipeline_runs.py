@@ -392,14 +392,44 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         or None if not found.
         """
         query = """
-            WITH latest_progress AS (
+            WITH latest_stage_progress AS (
                 SELECT DISTINCT ON (run_id)
                     run_id,
                     stage,
                     progress,
-                    best_metric
+                    best_metric,
+                    created_at
                 FROM rp_run_stage_progress_events
                 ORDER BY run_id, created_at DESC
+            ),
+            latest_paper_progress AS (
+                SELECT DISTINCT ON (run_id)
+                    run_id,
+                    '5_paper_generation' AS stage,
+                    progress,
+                    NULL::text AS best_metric,
+                    created_at
+                FROM rp_paper_generation_events
+                ORDER BY run_id, created_at DESC
+            ),
+            latest_progress AS (
+                SELECT
+                    COALESCE(pp.run_id, sp.run_id) AS run_id,
+                    COALESCE(pp.stage, sp.stage) AS stage,
+                    sp.best_metric,
+                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
+                    -- For stages 1-4: show fixed percentage based on stage number
+                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
+                    CASE 
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
+                        ELSE COALESCE(pp.progress, sp.progress)
+                    END AS overall_progress
+                FROM latest_stage_progress sp
+                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
             ),
             artifact_counts AS (
                 SELECT run_id, COUNT(*) as count
@@ -419,7 +449,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
                 lp.stage AS current_stage,
-                lp.progress,
+                lp.overall_progress AS progress,
                 lp.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id
@@ -463,7 +493,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         - run_id, status, gpu_type, cost, error_message, created_at, updated_at
         - idea_title, idea_hypothesis from idea_versions
         - created_by_name from users
-        - current_stage, progress, best_metric from latest rp_run_stage_progress_events
+        - current_stage from latest stage/paper generation event (stages 1-5)
+        - progress as overall pipeline progress (0.0-1.0, calculated based on stage)
+        - best_metric from latest rp_run_stage_progress_events
         - artifacts_count from rp_artifacts
         - conversation_id from ideas
         """
@@ -496,14 +528,44 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
         query = f"""
-            WITH latest_progress AS (
+            WITH latest_stage_progress AS (
                 SELECT DISTINCT ON (run_id)
                     run_id,
                     stage,
                     progress,
-                    best_metric
+                    best_metric,
+                    created_at
                 FROM rp_run_stage_progress_events
                 ORDER BY run_id, created_at DESC
+            ),
+            latest_paper_progress AS (
+                SELECT DISTINCT ON (run_id)
+                    run_id,
+                    '5_paper_generation' AS stage,
+                    progress,
+                    NULL::text AS best_metric,
+                    created_at
+                FROM rp_paper_generation_events
+                ORDER BY run_id, created_at DESC
+            ),
+            latest_progress AS (
+                SELECT
+                    COALESCE(pp.run_id, sp.run_id) AS run_id,
+                    COALESCE(pp.stage, sp.stage) AS stage,
+                    sp.best_metric,
+                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
+                    -- For stages 1-4: show fixed percentage based on stage number
+                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
+                    CASE 
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
+                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
+                        ELSE COALESCE(pp.progress, sp.progress)
+                    END AS overall_progress
+                FROM latest_stage_progress sp
+                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
             ),
             artifact_counts AS (
                 SELECT run_id, COUNT(*) as count
@@ -523,7 +585,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
                 lp.stage AS current_stage,
-                lp.progress,
+                lp.overall_progress AS progress,
                 lp.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id
