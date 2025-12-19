@@ -2,7 +2,7 @@ import { Header } from "@/shared/components/Header";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "AI Scientist Orchestrator",
+  title: "AE Scientist",
   description:
     "Monitor AI scientist hypotheses, runs, validations, and artifacts powered by MongoDB state.",
 };
