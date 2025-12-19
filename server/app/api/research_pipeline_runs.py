@@ -1,11 +1,11 @@
+import asyncio
 import logging
 import os
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -33,10 +33,12 @@ from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.research_pipeline.runpod_manager import (
+    PodLaunchInfo,
     RunPodError,
     fetch_pod_billing_summary,
+    fetch_pod_ready_metadata,
     launch_research_pipeline_run,
     terminate_pod,
     upload_runpod_log_via_ssh,
@@ -46,6 +48,42 @@ from app.services.s3_service import get_s3_service
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 REQUESTER_NAME_FALLBACK = "Scientist"
+
+
+class PodLaunchError(Exception):
+    """Error launching pod"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+class ResearchRunAcceptedResponse(BaseModel):
+    status: str = "ok"
+    run_id: str
+    pod_id: str
+    pod_name: str
+    gpu_type: str
+    cost: float
+
+
+class ResearchRunStopResponse(BaseModel):
+    run_id: str
+    status: str
+    message: str
+
+
+class IdeaPayloadSource(Protocol):
+    idea_id: int
+    version_id: int
+    version_number: int
+    title: str
+    short_hypothesis: str
+    related_work: str
+    abstract: str
+    experiments: Sequence[Any]
+    expected_outcome: str
+    risk_factors_and_limitations: Sequence[Any]
 
 
 def extract_user_first_name(*, full_name: str) -> str:
@@ -60,21 +98,6 @@ def extract_user_first_name(*, full_name: str) -> str:
     return f"{alnum_only[0].upper()}{alnum_only[1:]}"
 
 
-_launch_cancel_events: dict[str, threading.Event] = {}
-_launch_cancel_lock = threading.Lock()
-
-
-class ResearchRunAcceptedResponse(BaseModel):
-    run_id: str
-    status: str = "ok"
-
-
-class ResearchRunStopResponse(BaseModel):
-    run_id: str
-    status: str
-    message: str
-
-
 def _record_pod_billing_event(
     db: DatabaseManager,
     *,
@@ -84,20 +107,21 @@ def _record_pod_billing_event(
 ) -> None:
     try:
         summary = fetch_pod_billing_summary(pod_id=pod_id)
-    except (RuntimeError, RunPodError) as exc:
-        logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
+    except (RuntimeError, RunPodError):
+        logger.exception("Failed to fetch billing summary for pod %s", pod_id)
         return
     if summary is None:
         return
-    metadata = dict(summary)
+    metadata = summary._asdict()
+    metadata["records"] = [record._asdict() for record in summary.records]
     metadata["context"] = context
     actual_cost_cents: int | None = None
-    amount = metadata.get("amount")
-    if amount is not None:
-        try:
-            actual_cost_cents = usd_to_cents(value_usd=float(amount))
-        except (TypeError, ValueError):
-            pass
+    total_amount = summary.total_amount_usd
+
+    try:
+        actual_cost_cents = usd_to_cents(value_usd=float(total_amount))
+    except (TypeError, ValueError):
+        pass
     if actual_cost_cents is not None:
         metadata["actual_cost_cents"] = actual_cost_cents
     now = datetime.now(timezone.utc)
@@ -132,19 +156,6 @@ def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
     upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
-class IdeaPayloadSource(Protocol):
-    idea_id: int
-    version_id: int
-    version_number: int
-    title: str
-    short_hypothesis: str
-    related_work: str
-    abstract: str
-    experiments: Sequence[Any]
-    expected_outcome: str
-    risk_factors_and_limitations: Sequence[Any]
-
-
 def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
     experiments = idea_data.experiments or []
     risks = idea_data.risk_factors_and_limitations or []
@@ -160,12 +171,29 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
     }
 
 
-def _create_and_launch_research_run(
+async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_id: str) -> None:
+    ready_metadata = await fetch_pod_ready_metadata(pod_id=pod_info.pod_id)
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="pod_info_updated",
+        metadata={
+            "pod_id": pod_info.pod_id,
+            "pod_name": pod_info.pod_name,
+            "gpu_type": pod_info.gpu_type,
+            "cost_per_hr": pod_info.cost,
+            "public_ip": ready_metadata.public_ip,
+            "ssh_port": ready_metadata.ssh_port,
+            "pod_host_id": ready_metadata.pod_host_id,
+        },
+        occurred_at=datetime.now(timezone.utc),
+    )
+
+
+async def create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
     requested_by_first_name: str,
-    background_tasks: BackgroundTasks | None = None,
-) -> str:
+) -> tuple[str, PodLaunchInfo]:
     db = get_database()
     run_id = f"rp-{uuid4().hex[:10]}"
     db.create_research_pipeline_run(
@@ -178,71 +206,10 @@ def _create_and_launch_research_run(
         last_billed_at=datetime.now(timezone.utc),
     )
     idea_payload = _idea_version_to_payload(idea_data)
-    cancel_event = threading.Event()
-    with _launch_cancel_lock:
-        _launch_cancel_events[run_id] = cancel_event
 
-    if background_tasks is not None:
-        background_tasks.add_task(
-            _launch_research_pipeline_job,
-            run_id=run_id,
-            idea_payload=idea_payload,
-            requested_by_first_name=requested_by_first_name,
-            cancel_event=cancel_event,
-        )
-    else:
-        thread = threading.Thread(
-            target=_launch_research_pipeline_job,
-            kwargs={
-                "run_id": run_id,
-                "idea_payload": idea_payload,
-                "requested_by_first_name": requested_by_first_name,
-                "cancel_event": cancel_event,
-            },
-            daemon=True,
-        )
-        thread.start()
-    return run_id
-
-
-def _extract_cost_per_hour(pod_info: Dict[str, Any], run_id: str) -> float:
-    try:
-        value = pod_info["costPerHr"]
-    except KeyError:
-        logger.warning(
-            "Run %s pod response missing costPerHr. Full payload: %s",
-            run_id,
-            pod_info,
-        )
-        return 0.0
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        logger.warning(
-            "Run %s pod response costPerHr is invalid (%s); payload=%s",
-            run_id,
-            value,
-            pod_info,
-        )
-        return 0.0
-
-
-def _launch_research_pipeline_job(
-    *,
-    run_id: str,
-    idea_payload: Dict[str, object],
-    requested_by_first_name: str,
-    cancel_event: threading.Event | None = None,
-) -> None:
-    """Background task that launches the RunPod job and updates DB state."""
-    db = get_database()
     config_name = f"{run_id}_config.yaml"
     try:
         logger.info("Launching research pipeline job in background for run_id=%s", run_id)
-
-        if cancel_event and cancel_event.is_set():
-            logger.info("Launch for run_id=%s cancelled before contacting RunPod.", run_id)
-            return
 
         startup_grace_seconds = int(os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS", "600"))
         db.update_research_pipeline_run(
@@ -250,50 +217,27 @@ def _launch_research_pipeline_job(
             start_deadline_at=datetime.now(timezone.utc) + timedelta(seconds=startup_grace_seconds),
         )
 
-        pod_info = launch_research_pipeline_run(
+        pod_info = await launch_research_pipeline_run(
             idea=idea_payload,
             config_name=config_name,
             run_id=run_id,
             requested_by_first_name=requested_by_first_name,
         )
-
-        if cancel_event and cancel_event.is_set():
-            logger.info(
-                "Launch for run_id=%s cancelled after pod creation; terminating pod.",
-                run_id,
-            )
-            pod_id = pod_info.get("pod_id")
-            if pod_id:
-                try:
-                    terminate_pod(pod_id=pod_id)
-                except RuntimeError as exc:
-                    logger.warning(
-                        "Failed to terminate pod %s for cancelled run %s: %s",
-                        pod_id,
-                        run_id,
-                        exc,
-                    )
-            return
-
-        cost_per_hour = _extract_cost_per_hour(pod_info, run_id)
         db.update_research_pipeline_run(
             run_id=run_id,
-            pod_info=pod_info,
-            cost=cost_per_hour,
+            pod_update_info=PodUpdateInfo(
+                pod_id=pod_info.pod_id,
+                pod_name=pod_info.pod_name,
+                gpu_type=pod_info.gpu_type,
+                cost=pod_info.cost,
+                public_ip=None,
+                ssh_port=None,
+                pod_host_id=None,
+            ),
         )
-        db.insert_research_pipeline_run_event(
-            run_id=run_id,
-            event_type="pod_info_updated",
-            metadata={
-                "pod_id": pod_info.get("pod_id"),
-                "pod_name": pod_info.get("pod_name"),
-                "gpu_type": pod_info.get("gpu_type"),
-                "public_ip": pod_info.get("public_ip"),
-                "ssh_port": pod_info.get("ssh_port"),
-                "cost_per_hr": cost_per_hour,
-            },
-            occurred_at=datetime.now(timezone.utc),
-        )
+        asyncio.create_task(_wait_for_pod_ready(db=db, pod_info=pod_info, run_id=run_id))
+        return run_id, pod_info
+
     except (RunPodError, FileNotFoundError, ValueError, RuntimeError) as exc:
         logger.exception("Failed to launch research pipeline run.")
         run_before = db.get_research_pipeline_run(run_id)
@@ -309,14 +253,7 @@ def _launch_research_pipeline_job(
             },
             occurred_at=datetime.now(timezone.utc),
         )
-    else:
-        logger.info("Background launch complete for run_id=%s", run_id)
-    finally:
-        if cancel_event:
-            with _launch_cancel_lock:
-                existing = _launch_cancel_events.get(run_id)
-                if existing is cancel_event:
-                    _launch_cancel_events.pop(run_id, None)
+        raise PodLaunchError(str(exc)) from None
 
 
 @router.post(
@@ -324,10 +261,9 @@ def _launch_research_pipeline_job(
     response_model=ResearchRunAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def submit_idea_for_research(
+async def submit_idea_for_research(
     conversation_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
 ) -> ResearchRunAcceptedResponse:
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
@@ -352,12 +288,20 @@ def submit_idea_for_research(
     )
 
     requester_first_name = extract_user_first_name(full_name=user.name)
-    run_id = _create_and_launch_research_run(
-        idea_data=cast(IdeaPayloadSource, idea_data),
-        requested_by_first_name=requester_first_name,
-        background_tasks=background_tasks,
-    )
-    return ResearchRunAcceptedResponse(run_id=run_id)
+    try:
+        run_id, pod_info = await create_and_launch_research_run(
+            idea_data=cast(IdeaPayloadSource, idea_data),
+            requested_by_first_name=requester_first_name,
+        )
+        return ResearchRunAcceptedResponse(
+            run_id=run_id,
+            pod_id=pod_info.pod_id,
+            pod_name=pod_info.pod_name,
+            gpu_type=pod_info.gpu_type,
+            cost=pod_info.cost,
+        )
+    except PodLaunchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get(
@@ -516,11 +460,6 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
             status_code=409,
             detail=f"Research run is already {run.status}; cannot stop.",
         )
-
-    with _launch_cancel_lock:
-        cancel_event = _launch_cancel_events.get(run_id)
-        if cancel_event:
-            cancel_event.set()
 
     pod_id = run.pod_id
     if pod_id:

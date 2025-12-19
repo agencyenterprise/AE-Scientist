@@ -235,6 +235,18 @@ def usd_to_cents(*, value_usd: float) -> int:
     return int(cents)
 
 
+def _run_cost_per_hour_cents(run: ResearchPipelineRun | None) -> int:
+    if run is None:
+        return 0
+    cost = getattr(run, "cost", None)
+    if cost is None:
+        return 0
+    try:
+        return usd_to_cents(value_usd=float(cost))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _build_hw_cost_estimate_event_data(
     *,
     now: datetime,
@@ -323,7 +335,7 @@ def _build_initial_stream_payload(
         "best_node_selections": best_node_payload,
         "hw_cost_estimate": _build_hw_cost_event_payload(
             started_running_at=current_run.started_running_at,
-            cost_per_hour_cents=current_run.cost_per_hour_cents,
+            cost_per_hour_cents=_run_cost_per_hour_cents(current_run),
             stopped_running_at=_extract_terminal_transition_time_from_events(
                 events=raw_run_events,
             ),
@@ -394,7 +406,7 @@ async def stream_research_run_events(
         request=request,
     )
     hw_started_running_at = run.started_running_at
-    hw_cost_per_hour_cents = run.cost_per_hour_cents
+    hw_cost_per_hour_cents = _run_cost_per_hour_cents(run)
     hw_stopped_running_at: datetime | None = None
     hw_cost_actual_payload: dict[str, object] | None = None
     hw_cost_actual_dirty = False
@@ -438,7 +450,7 @@ async def stream_research_run_events(
                 if hw_cost_per_hour_cents is None or hw_cost_per_hour_cents <= 0:
                     refreshed_run = db.get_research_pipeline_run(run_id=run_id)
                     if refreshed_run is not None:
-                        hw_cost_per_hour_cents = refreshed_run.cost_per_hour_cents
+                        hw_cost_per_hour_cents = _run_cost_per_hour_cents(refreshed_run)
 
                 try:
                     event = await asyncio.wait_for(

@@ -5279,19 +5279,39 @@
       },
       "ResearchRunAcceptedResponse": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "status": {
             "type": "string",
             "title": "Status",
             "default": "ok"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "pod_id": {
+            "type": "string",
+            "title": "Pod Id"
+          },
+          "pod_name": {
+            "type": "string",
+            "title": "Pod Name"
+          },
+          "gpu_type": {
+            "type": "string",
+            "title": "Gpu Type"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
           }
         },
         "type": "object",
         "required": [
-          "run_id"
+          "run_id",
+          "pod_id",
+          "pod_name",
+          "gpu_type",
+          "cost"
         ],
         "title": "ResearchRunAcceptedResponse"
       },

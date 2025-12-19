@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import os
-import threading
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -33,37 +34,52 @@ class ResearchPipelineMonitor:
         self._max_missed_heartbeats = max_missed_heartbeats
         self._startup_grace = timedelta(seconds=startup_grace_seconds)
         self._max_runtime = timedelta(hours=max_runtime_hours)
-        self._thread: Optional[threading.Thread] = None
-        self._stop_event = threading.Event()
+        self._task: Optional[asyncio.Task[None]] = None
+        self._stop_event: Optional[asyncio.Event] = None
         api_key = os.environ.get("RUNPOD_API_KEY")
         if not api_key:
             raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
         self._runpod_manager: RunPodManager = RunPodManager(api_key=api_key)
 
     async def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        if self._task is not None and not self._task.done():
             return
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name="PipelineMonitor", daemon=True)
-        self._thread.start()
+        self._stop_event = asyncio.Event()
+        self._task = asyncio.create_task(self._run(), name="PipelineMonitor")
         logger.info("Research pipeline monitor started.")
 
     async def stop(self) -> None:
-        self._stop_event.set()
-        if self._thread is not None:
-            self._thread.join(timeout=self._poll_interval + 1)
-            self._thread = None
+        if self._task is None:
+            return
+        if self._stop_event is not None:
+            self._stop_event.set()
+        try:
+            await asyncio.wait_for(self._task, timeout=self._poll_interval + 1)
+        except asyncio.TimeoutError:
+            self._task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._task
+        finally:
+            self._task = None
+            self._stop_event = None
         logger.info("Research pipeline monitor stopped.")
 
-    def _run(self) -> None:
-        while not self._stop_event.is_set():
+    async def _run(self) -> None:
+        stop_event = self._stop_event
+        if stop_event is None:
+            stop_event = asyncio.Event()
+            self._stop_event = stop_event
+        while not stop_event.is_set():
             try:
-                self._check_runs()
+                await self._check_runs()
             except PipelineMonitorError:
                 logger.exception("Pipeline monitor encountered an error.")
-            self._stop_event.wait(timeout=self._poll_interval)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
+            except asyncio.TimeoutError:
+                continue
 
-    def _check_runs(self) -> None:
+    async def _check_runs(self) -> None:
         try:
             db = get_database()
             runs = db.list_active_research_pipeline_runs()
@@ -78,13 +94,13 @@ class ResearchPipelineMonitor:
             now = datetime.now(timezone.utc)
             for run in runs:
                 if run.status == "pending":
-                    self._handle_pending_run(db, run, now)
+                    await self._handle_pending_run(db, run, now)
                 elif run.status == "running":
-                    self._handle_running_run(db, run, now)
+                    await self._handle_running_run(db, run, now)
         except Exception as exc:  # noqa: BLE001
             raise PipelineMonitorError from exc
 
-    def _handle_pending_run(
+    async def _handle_pending_run(
         self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
     ) -> None:
         deadline = run.start_deadline_at
@@ -103,19 +119,19 @@ class ResearchPipelineMonitor:
                     remaining,
                 )
         if deadline and now > deadline:
-            self._fail_run(
+            await self._fail_run(
                 db,
                 run,
                 "Pipeline did not start within the grace period.",
                 "pipeline_monitor",
             )
 
-    def _handle_running_run(
+    async def _handle_running_run(
         self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
     ) -> None:
         runtime = now - run.created_at
         if runtime > self._max_runtime:
-            self._fail_run(
+            await self._fail_run(
                 db,
                 run,
                 f"Pipeline exceeded maximum runtime of {self._max_runtime.total_seconds() / 3600:.1f} hours.",
@@ -139,7 +155,7 @@ class ResearchPipelineMonitor:
                     max(0, remaining),
                 )
             if deadline and now > deadline:
-                self._fail_run(
+                await self._fail_run(
                     db,
                     run,
                     "Pipeline failed to send an initial heartbeat.",
@@ -159,7 +175,7 @@ class ResearchPipelineMonitor:
                 self._max_missed_heartbeats,
             )
             if failures >= self._max_missed_heartbeats:
-                self._fail_run(
+                await self._fail_run(
                     db,
                     run,
                     "Pipeline heartbeats exceeded failure threshold.",
@@ -172,7 +188,7 @@ class ResearchPipelineMonitor:
 
         if run.pod_id:
             try:
-                pod = self._runpod_manager.get_pod(run.pod_id)
+                pod = await self._runpod_manager.get_pod(run.pod_id)
                 status = pod.get("desiredStatus")
                 if status == "PENDING":
                     logger.info(
@@ -187,7 +203,7 @@ class ResearchPipelineMonitor:
                         run.pod_id,
                         status,
                     )
-                    self._fail_run(
+                    await self._fail_run(
                         db,
                         run,
                         f"Pod status is {status}; terminating run.",
@@ -196,9 +212,9 @@ class ResearchPipelineMonitor:
             except RunPodError as exc:
                 logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
 
-        self._bill_run_if_needed(db, run, now)
+        await self._bill_run_if_needed(db, run, now)
 
-    def _fail_run(
+    async def _fail_run(
         self,
         db: "DatabaseManager",
         run: ResearchPipelineRun,
@@ -228,14 +244,14 @@ class ResearchPipelineMonitor:
                 terminate_pod(pod_id=run.pod_id)
             except RuntimeError as exc:
                 logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
-            self._record_pod_billing_event(
+            await self._record_pod_billing_event(
                 db=db,
                 run_id=run.run_id,
                 pod_id=run.pod_id,
                 context=f"{reason}_failure",
             )
 
-    def _bill_run_if_needed(
+    async def _bill_run_if_needed(
         self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
     ) -> None:
         rate = max(0, settings.RESEARCH_RUN_CREDITS_PER_MINUTE)
@@ -254,7 +270,7 @@ class ResearchPipelineMonitor:
 
         available = db.get_user_wallet_balance(user_id)
         if available < rate:
-            self._fail_run(
+            await self._fail_run(
                 db,
                 run,
                 "Insufficient credits to continue research run.",
@@ -264,7 +280,7 @@ class ResearchPipelineMonitor:
 
         billable_minutes = min(elapsed_minutes, available // rate)
         if billable_minutes <= 0:
-            self._fail_run(
+            await self._fail_run(
                 db,
                 run,
                 "Insufficient credits to continue research run.",
@@ -298,14 +314,14 @@ class ResearchPipelineMonitor:
         )
 
         if billable_minutes < elapsed_minutes:
-            self._fail_run(
+            await self._fail_run(
                 db,
                 run,
                 "Credits exhausted during research run.",
                 "insufficient_credits",
             )
 
-    def _record_pod_billing_event(
+    async def _record_pod_billing_event(
         self,
         db: "DatabaseManager",
         *,
@@ -314,13 +330,14 @@ class ResearchPipelineMonitor:
         context: str,
     ) -> None:
         try:
-            summary = self._runpod_manager.get_pod_billing_summary(pod_id=pod_id)
+            summary = await self._runpod_manager.get_pod_billing_summary(pod_id=pod_id)
         except RunPodError as exc:
             logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
             return
         if summary is None:
             return
-        metadata = dict(summary)
+        metadata = summary._asdict()
+        metadata["records"] = [record._asdict() for record in summary.records]
         metadata["context"] = context
         db.insert_research_pipeline_run_event(
             run_id=run_id,

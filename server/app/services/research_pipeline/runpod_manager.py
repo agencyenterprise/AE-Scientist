@@ -2,6 +2,7 @@
 Launches the research pipeline on RunPod and injects refined ideas/configurations.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -13,10 +14,43 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, cast
+from typing import Any, Dict, NamedTuple, cast
 
-import requests
+import httpx
 from omegaconf import OmegaConf
+
+logger = logging.getLogger(__name__)
+
+POD_NAME_PREFIX = "aeScientist"
+_POD_USER_FALLBACK = "Scientist"
+_POD_USER_MAX_LEN = 24
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
+RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
+RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
+
+
+_LOG_UPLOAD_REQUIRED_ENVS = [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION",
+    "AWS_S3_BUCKET_NAME",
+]
+
+
+@dataclass
+class RunPodEnvironment:
+    git_deploy_key: str
+    openai_api_key: str
+    hf_token: str
+    database_public_url: str
+    telemetry_webhook_url: str
+    telemetry_webhook_token: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_region: str
+    aws_s3_bucket_name: str
 
 
 class RunPodError(Exception):
@@ -27,6 +61,35 @@ class RunPodError(Exception):
         self.status = status
 
 
+class PodLaunchInfo(NamedTuple):
+    pod_id: str
+    pod_name: str
+    gpu_type: str
+    cost: float
+
+
+class PodReadyMetadata(NamedTuple):
+    public_ip: str
+    ssh_port: str
+    pod_host_id: str
+
+
+class PodBillingRecord(NamedTuple):
+    amount: float | None
+    timeBilledMs: int | None
+    diskSpaceBilledGB: int | None
+    podId: str | None
+    time: str | None
+
+
+class PodBillingSummary(NamedTuple):
+    pod_id: str
+    total_amount_usd: float
+    time_billed_ms: int
+    record_count: int
+    records: list[PodBillingRecord]
+
+
 class RunPodManager:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -34,9 +97,8 @@ class RunPodManager:
         graphql_url_override = os.environ.get("FAKE_RUNPOD_GRAPHQL_URL")
         self.base_url = base_url_override or "https://rest.runpod.io/v1"
         self.graphql_url = graphql_url_override or "https://api.runpod.io/graphql"
-        self._session = requests.Session()
 
-    def _make_request(
+    async def _make_request(
         self,
         endpoint: str,
         method: str = "GET",
@@ -49,50 +111,50 @@ class RunPodManager:
             "Content-Type": "application/json",
         }
 
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            json=data,
-            timeout=60,
-        )
-        if not response.ok:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=params,
+                json=data,
+            )
+            if response.is_error:
+                raise RunPodError(
+                    f"RunPod API error ({response.status_code}): {response.text}",
+                    status=response.status_code,
+                )
+            if response.status_code == 204 or not response.content:
+                return {}
+            payload = response.json()
+            if isinstance(payload, dict):
+                return cast(dict[str, Any], payload)
+            if isinstance(payload, list):
+                return [cast(dict[str, Any], item) for item in payload]
             raise RunPodError(
-                f"RunPod API error ({response.status_code}): {response.text}",
+                f"Unexpected RunPod response format for {endpoint}: {payload}",
                 status=response.status_code,
             )
-        if response.status_code == 204 or not response.content:
-            return {}
-        payload = response.json()
-        if isinstance(payload, dict):
-            return cast(dict[str, Any], payload)
-        if isinstance(payload, list):
-            return [cast(dict[str, Any], item) for item in payload]
-        raise RunPodError(
-            f"Unexpected RunPod response format for {endpoint}: {payload}",
-            status=response.status_code,
-        )
 
-    def _graphql_request(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    async def _graphql_request(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(
-            self.graphql_url,
-            headers=headers,
-            json={"query": query, "variables": variables},
-            timeout=60,
-        )
-        if not response.ok:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                self.graphql_url,
+                headers=headers,
+                json={"query": query, "variables": variables},
+            )
+        if response.is_error:
             raise RunPodError(
                 f"GraphQL error ({response.status_code}): {response.text}",
                 status=response.status_code,
             )
         return cast(dict[str, Any], response.json())
 
-    def get_pod_host_id(self, pod_id: str) -> str | None:
+    async def get_pod_host_id(self, pod_id: str) -> str | None:
         query = """
             query pod($input: PodFilter!) {
                 pod(input: $input) {
@@ -104,13 +166,13 @@ class RunPodManager:
         """
         variables = {"input": {"podId": pod_id}}
         try:
-            result = self._graphql_request(query=query, variables=variables)
+            result = await self._graphql_request(query=query, variables=variables)
             machine = cast(dict[str, Any], result.get("data", {}).get("pod", {}).get("machine", {}))
             return machine.get("podHostId")
-        except (RunPodError, requests.RequestException, ValueError):
+        except (RunPodError, httpx.HTTPError, ValueError):
             return None
 
-    def _attempt_create_pod(
+    async def _attempt_create_pod(
         self,
         *,
         name: str,
@@ -131,12 +193,12 @@ class RunPodManager:
             "ports": ["22/tcp"],
             "dockerStartCmd": ["bash", "-c", docker_cmd],
         }
-        response = self._make_request(endpoint="/pods", method="POST", data=payload)
+        response = await self._make_request(endpoint="/pods", method="POST", data=payload)
         if not isinstance(response, dict):
             raise RunPodError("Unexpected response while creating pod.", status=0)
         return response
 
-    def create_pod(
+    async def create_pod(
         self,
         *,
         name: str,
@@ -155,14 +217,13 @@ class RunPodManager:
         for i in range(max_attempts):
             gpu_type = gpu_types[i % len(gpu_types)]
             try:
-                pod = self._attempt_create_pod(
+                pod = await self._attempt_create_pod(
                     name=name,
                     image=image,
                     gpu_type=gpu_type,
                     env=env,
                     docker_cmd=docker_cmd,
                 )
-                pod["gpu_type_requested"] = gpu_type
                 return pod
             except RunPodError as error:
                 last_error = error
@@ -171,91 +232,98 @@ class RunPodManager:
                 )
                 if not unavailable or i == max_attempts - 1:
                     raise
-                time.sleep(1)
+                await asyncio.sleep(1)
         raise RunPodError(
             f"Failed to create pod after {max_attempts} attempts. "
             f"Tried GPU types: {', '.join(gpu_types)}. "
             f"Last error: {last_error}"
         )
 
-    def get_pod(self, pod_id: str) -> dict[str, Any]:
-        response = self._make_request(endpoint=f"/pods/{pod_id}")
+    async def get_pod(self, pod_id: str) -> dict[str, Any]:
+        response = await self._make_request(endpoint=f"/pods/{pod_id}")
         if not isinstance(response, dict):
             raise RunPodError("Unexpected response while retrieving pod.", status=0)
         return response
 
-    def delete_pod(self, pod_id: str) -> None:
-        self._make_request(endpoint=f"/pods/{pod_id}", method="DELETE", data=None)
+    async def delete_pod(self, pod_id: str) -> None:
+        await self._make_request(endpoint=f"/pods/{pod_id}", method="DELETE", data=None)
 
-    def get_pod_billing_summary(self, pod_id: str) -> dict[str, Any] | None:
+    async def get_pod_billing_summary(self, pod_id: str) -> PodBillingSummary | None:
         params = {"podId": pod_id, "grouping": "podId"}
-        response = self._make_request(endpoint="/billing/pods", method="GET", params=params)
+        response = await self._make_request(endpoint="/billing/pods", method="GET", params=params)
         if not isinstance(response, list):
             raise RunPodError("Unexpected billing response format.", status=0)
         logger.debug("Billing response: %s", response)
         if not response:
             logger.info("No billing records returned for pod %s; skipping summary.", pod_id)
             return None
+        records_raw = response
         total_amount = 0.0
         total_ms = 0
-        filtered_records: list[dict[str, Any]] = []
-        for record in response:
-            if record.get("podId") and record.get("podId") != pod_id:
-                continue
-            filtered_records.append(record)
-            amount = record.get("amount")
-            if amount is not None:
-                try:
-                    total_amount += float(amount)
-                except (TypeError, ValueError):
-                    logger.debug("Skipping invalid amount in billing record: %s", record)
-            ms = record.get("timeBilledMs")
-            if ms is not None:
-                try:
-                    total_ms += int(ms)
-                except (TypeError, ValueError):
-                    logger.debug("Skipping invalid timeBilledMs in billing record: %s", record)
-        return {
-            "pod_id": pod_id,
-            "total_amount_usd": round(total_amount, 6),
-            "time_billed_ms": total_ms,
-            "record_count": len(filtered_records),
-            "records": filtered_records,
-        }
+        filtered_records: list[PodBillingRecord] = []
 
-    def wait_for_pod_ready(
+        def _safe_float(value: float | int | str | None) -> float | None:
+            if isinstance(value, (int, float, str)):
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        def _safe_int(value: int | float | str | None) -> int | None:
+            if isinstance(value, (int, float, str)):
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        for record in records_raw:
+            record_pod_id = cast(str | None, record.get("podId"))
+            if record_pod_id and record_pod_id != pod_id:
+                continue
+
+            amount_raw = cast(float | int | str | None, record.get("amount"))
+            amount_value = _safe_float(amount_raw)
+            if amount_value is not None:
+                total_amount += amount_value
+
+            billed_ms_raw = cast(int | float | str | None, record.get("timeBilledMs"))
+            billed_ms = _safe_int(billed_ms_raw)
+            if billed_ms is not None:
+                total_ms += billed_ms
+
+            filtered_records.append(
+                PodBillingRecord(
+                    amount=amount_value,
+                    timeBilledMs=billed_ms,
+                    diskSpaceBilledGB=_safe_int(
+                        cast(int | float | str | None, record.get("diskSpaceBilledGB"))
+                    ),
+                    podId=record_pod_id,
+                    time=cast(str | None, record.get("time")),
+                )
+            )
+        return PodBillingSummary(
+            pod_id=pod_id,
+            total_amount_usd=round(total_amount, 6),
+            time_billed_ms=total_ms,
+            record_count=len(filtered_records),
+            records=filtered_records,
+        )
+
+    async def wait_for_pod_ready(
         self, *, pod_id: str, poll_interval: int = 5, max_attempts: int = 60
     ) -> dict[str, Any]:
         for _ in range(max_attempts):
-            time.sleep(poll_interval)
-            pod = self.get_pod(pod_id=pod_id)
+            await asyncio.sleep(poll_interval)
+            pod = await self.get_pod(pod_id=pod_id)
             is_running = pod.get("desiredStatus") == "RUNNING"
             has_public_ip = pod.get("publicIp") is not None
             has_port_mappings = bool(pod.get("portMappings", {}))
             if is_running and has_public_ip and has_port_mappings:
                 return pod
         raise RunPodError("Pod did not become ready in time")
-
-
-@dataclass
-class RunPodEnvironment:
-    git_deploy_key: str
-    openai_api_key: str
-    hf_token: str
-    database_public_url: str
-    telemetry_webhook_url: str
-    telemetry_webhook_token: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    aws_region: str
-    aws_s3_bucket_name: str
-
-
-logger = logging.getLogger(__name__)
-
-POD_NAME_PREFIX = "aeScientist"
-_POD_USER_FALLBACK = "Scientist"
-_POD_USER_MAX_LEN = 24
 
 
 def _sanitize_pod_user_component(*, value: str) -> str:
@@ -267,12 +335,6 @@ def _sanitize_pod_user_component(*, value: str) -> str:
         return _POD_USER_FALLBACK
     truncated = sanitized[:_POD_USER_MAX_LEN]
     return f"{truncated[0].upper()}{truncated[1:]}"
-
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
-RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
-RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 
 
 def _load_repo_setup_script() -> str:
@@ -438,13 +500,13 @@ def _build_remote_script(
     return "\n".join(script_parts).strip()
 
 
-def launch_research_pipeline_run(
+async def launch_research_pipeline_run(
     *,
     idea: Dict[str, Any],
     config_name: str,
     run_id: str,
     requested_by_first_name: str,
-) -> Dict[str, Any]:
+) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
@@ -505,7 +567,7 @@ def launch_research_pipeline_run(
     ]
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
     pod_name = f"{POD_NAME_PREFIX}-{user_component}-{int(time.time())}"
-    pod = creator.create_pod(
+    pod = await creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1",
         gpu_types=gpu_types,
@@ -513,18 +575,26 @@ def launch_research_pipeline_run(
         docker_cmd=docker_cmd,
     )
     logger.debug("Pod created: %s", pod)
-    pod_id = pod["id"]
-    ready_pod = creator.wait_for_pod_ready(pod_id=pod_id)
-    pod_host_id = creator.get_pod_host_id(pod_id=pod_id)
-    return {
-        "pod_id": pod_id,
-        "pod_name": pod.get("name"),
-        "gpu_type": pod.get("gpu_type_requested"),
-        "costPerHr": pod.get("costPerHr"),
-        "public_ip": ready_pod.get("publicIp"),
-        "ssh_port": ready_pod.get("portMappings", {}).get("22"),
-        "pod_host_id": pod_host_id,
-    }
+    return PodLaunchInfo(
+        pod_id=pod["id"],
+        pod_name=cast(str, pod.get("name")),
+        gpu_type=cast(str, pod.get("machine", {}).get("gpuTypeId")),
+        cost=cast(float, pod.get("costPerHr")),
+    )
+
+
+async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
+    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
+    if not runpod_api_key:
+        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
+    manager = RunPodManager(api_key=runpod_api_key)
+    ready_pod = await manager.wait_for_pod_ready(pod_id=pod_id)
+    pod_host_id = await manager.get_pod_host_id(pod_id=pod_id)
+    return PodReadyMetadata(
+        public_ip=cast(str, ready_pod.get("publicIp")),
+        ssh_port=cast(str, ready_pod.get("portMappings", {}).get("22")),
+        pod_host_id=cast(str, pod_host_id),
+    )
 
 
 def terminate_pod(*, pod_id: str) -> None:
@@ -533,25 +603,17 @@ def terminate_pod(*, pod_id: str) -> None:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     creator = RunPodManager(api_key=runpod_api_key)
     try:
-        creator.delete_pod(pod_id=pod_id)
+        asyncio.run(creator.delete_pod(pod_id=pod_id))
     except RunPodError as exc:
         raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc
 
 
-def fetch_pod_billing_summary(*, pod_id: str) -> dict[str, Any] | None:
+def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
-    return manager.get_pod_billing_summary(pod_id=pod_id)
-
-
-_LOG_UPLOAD_REQUIRED_ENVS = [
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_REGION",
-    "AWS_S3_BUCKET_NAME",
-]
+    return asyncio.run(manager.get_pod_billing_summary(pod_id=pod_id))
 
 
 def _gather_log_env(run_id: str) -> dict[str, str] | None:

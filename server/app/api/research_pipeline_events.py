@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from app.api.research_pipeline_runs import (
     REQUESTER_NAME_FALLBACK,
     IdeaPayloadSource,
-    _create_and_launch_research_run,
+    PodLaunchError,
+    create_and_launch_research_run,
     extract_user_first_name,
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
@@ -172,7 +173,8 @@ def _record_pod_billing_event(
         return
     if summary is None:
         return
-    metadata = dict(summary)
+    metadata = summary._asdict()
+    metadata["records"] = [record._asdict() for record in summary.records]
     metadata["context"] = context
     db.insert_research_pipeline_run_event(
         run_id=run_id,
@@ -562,7 +564,7 @@ def ingest_heartbeat(
 
 
 @router.post("/gpu-shortage", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_gpu_shortage(
+async def ingest_gpu_shortage(
     payload: GPUShortagePayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -629,7 +631,7 @@ def ingest_gpu_shortage(
                 context="gpu_shortage",
             )
     try:
-        _retry_run_after_gpu_shortage(db=db, failed_run=run)
+        await _retry_run_after_gpu_shortage(db=db, failed_run=run)
     except Exception:  # noqa: BLE001
         logger.exception(
             "Failed to schedule retry run after GPU shortage for run %s",
@@ -637,7 +639,9 @@ def ingest_gpu_shortage(
         )
 
 
-def _retry_run_after_gpu_shortage(*, db: DatabaseManager, failed_run: ResearchPipelineRun) -> None:
+async def _retry_run_after_gpu_shortage(
+    *, db: DatabaseManager, failed_run: ResearchPipelineRun
+) -> None:
     version_id = failed_run.idea_version_id
     idea_version = db.get_idea_version_by_id(version_id)
     if idea_version is None:
@@ -660,24 +664,30 @@ def _retry_run_after_gpu_shortage(*, db: DatabaseManager, failed_run: ResearchPi
         risk_factors_and_limitations=_coerce_list(idea_version.risk_factors_and_limitations),
     )
     requester_first_name = _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
-    new_run_id = _create_and_launch_research_run(
-        idea_data=idea_payload,
-        requested_by_first_name=requester_first_name,
-    )
-    logger.info(
-        "Scheduled retry run %s after GPU shortage on run %s.",
-        new_run_id,
-        failed_run.run_id,
-    )
-    db.insert_research_pipeline_run_event(
-        run_id=failed_run.run_id,
-        event_type="gpu_shortage_retry",
-        metadata={
-            "retry_run_id": new_run_id,
-            "reason": "gpu_shortage",
-        },
-        occurred_at=datetime.now(timezone.utc),
-    )
+    try:
+        new_run_id, _pod_info = await create_and_launch_research_run(
+            idea_data=idea_payload,
+            requested_by_first_name=requester_first_name,
+        )
+        logger.info(
+            "Scheduled retry run %s after GPU shortage on run %s.",
+            new_run_id,
+            failed_run.run_id,
+        )
+        db.insert_research_pipeline_run_event(
+            run_id=failed_run.run_id,
+            event_type="gpu_shortage_retry",
+            metadata={
+                "retry_run_id": new_run_id,
+                "reason": "gpu_shortage",
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
+    except PodLaunchError:
+        logger.exception(
+            "Failed to schedule retry run after GPU shortage for run %s", failed_run.run_id
+        )
+        return
 
 
 @dataclass(frozen=True)
