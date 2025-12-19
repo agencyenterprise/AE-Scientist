@@ -43,7 +43,7 @@ export function HypothesisForm({
         </label>
         <textarea
           id="idea"
-          placeholder="Explain the objective, expected insight, and why it matters. The more detail you include, the more context the AI Scientist has to work with."
+          placeholder="Explain the objective, expected insight, and why it matters. The more detail you include, the more context the AE Scientist has to work with."
           className="w-full min-h-[220px] resize-none rounded-3xl border border-slate-800 bg-slate-950/70 px-5 py-4 text-base leading-relaxed text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-sky-500/50 focus:ring-2 focus:ring-sky-400/20 disabled:opacity-50 md:min-h-[260px]"
           rows={8}
           value={idea}

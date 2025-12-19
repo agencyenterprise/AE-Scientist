@@ -148,7 +148,6 @@ export function useResearchRunDetails({
         return;
       }
       const eventType = (event as { event_type?: string }).event_type;
-
       if (eventType === "tree_viz_stored") {
         if (!conversationId) {
           return;

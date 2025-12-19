@@ -6,7 +6,8 @@ import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
 
 interface ResearchRunHeaderProps {
-  runId: string;
+  title: string;
+  runNumber: number | null;
   status: string;
   createdAt: string;
   isConnected: boolean;
@@ -22,7 +23,8 @@ interface ResearchRunHeaderProps {
  * Header component for research run detail page
  */
 export function ResearchRunHeader({
-  runId,
+  title,
+  runNumber,
   status,
   createdAt,
   isConnected,
@@ -46,7 +48,7 @@ export function ResearchRunHeader({
       </button>
       <div className="flex-1">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-white">{runId}</h1>
+          <h1 className="text-2xl font-semibold text-white">{title}</h1>
           {getStatusBadge(status, "lg")}
           {canStopRun && (
             <button
@@ -86,7 +88,10 @@ export function ResearchRunHeader({
             </>
           )}
         </div>
-        <p className="mt-1 text-sm text-slate-400">Created {formatRelativeTime(createdAt)}</p>
+        <p className="mt-1 text-sm text-slate-400">
+          {runNumber ? `Run ${runNumber} • ` : ""}
+          Created {formatRelativeTime(createdAt)}
+        </p>
         {stopError && (
           <p className="mt-2 text-sm text-red-400" role="alert">
             {stopError}

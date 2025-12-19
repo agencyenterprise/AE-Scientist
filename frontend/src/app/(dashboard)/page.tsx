@@ -16,7 +16,7 @@ export default async function HomePage() {
               Submit a hypothesis
             </span>
             <h1 className="text-balance text-4xl font-semibold text-white sm:text-5xl">
-              What should the AI Scientist run next?
+              What should the AE Scientist run next?
             </h1>
             <p className="max-w-2xl text-pretty text-base text-slate-300 sm:text-lg">
               Promote a favorite ideation outcome or craft a brand new research direction. We’ll run

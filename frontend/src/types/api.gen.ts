@@ -717,6 +717,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Config */
+        get: operations["get_public_config_api_public_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/stage-progress": {
         parameters: {
             query?: never;
@@ -796,6 +813,23 @@ export interface paths {
         put?: never;
         /** Ingest Best Node Selection */
         post: operations["ingest_best_node_selection_api_research_pipeline_events_best_node_selection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/tree-viz-stored": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Tree Viz Stored */
+        post: operations["ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3525,6 +3559,21 @@ export interface components {
              */
             updated_at: string;
         };
+        /** TreeVizStoredEvent */
+        TreeVizStoredEvent: {
+            /** Stage Id */
+            stage_id: string;
+            /** Tree Viz Id */
+            tree_viz_id: number;
+            /** Version */
+            version: number;
+        };
+        /** TreeVizStoredPayload */
+        TreeVizStoredPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["TreeVizStoredEvent"];
+        };
         /**
          * UserListItem
          * @description User item for list responses.
@@ -4698,6 +4747,28 @@ export interface operations {
             };
         };
     };
+    get_public_config_api_public_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
     ingest_stage_progress_api_research_pipeline_events_stage_progress_post: {
         parameters: {
             query?: never;
@@ -4842,6 +4913,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BestNodeSelectionPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreeVizStoredPayload"];
             };
         };
         responses: {

@@ -42,15 +42,31 @@ type TreeVizPayload = TreeVizItem["viz"] & {
 interface Props {
   viz: TreeVizItem;
   artifacts: ArtifactMetadata[];
+  bestNodeId?: number | null;
 }
 
 const NODE_SIZE = 14;
 const BLUE = "#1a73e8";
 const GRAY = "#6b7280";
 
-export function TreeVizViewer({ viz, artifacts }: Props) {
+export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
-  const [selected, setSelected] = useState<number>(0);
+  
+  // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
+  const initialSelection = useMemo(() => {
+    if (bestNodeId !== null && bestNodeId !== undefined && bestNodeId >= 0) {
+      return bestNodeId;
+    }
+    
+    return 0;
+  }, [bestNodeId]);
+  
+  const [selected, setSelected] = useState<number>(initialSelection);
+  
+  // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
+  useEffect(() => {
+    setSelected(initialSelection);
+  }, [initialSelection]);
 
   const nodes = useMemo(() => {
     return (payload.layout || []).map((coords, idx) => ({

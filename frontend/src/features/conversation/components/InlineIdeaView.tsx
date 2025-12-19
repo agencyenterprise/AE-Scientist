@@ -7,6 +7,7 @@ import { ProjectDraftContent } from "@/features/project-draft/components/Project
 import { ProjectDraftSkeleton } from "@/features/project-draft/components/ProjectDraftSkeleton";
 import { useSelectedIdeaData } from "../hooks/useSelectedIdeaData";
 import { useConversationResearchRuns } from "../hooks/useConversationResearchRuns";
+import { LaunchResearchButton } from "./LaunchResearchButton";
 import type { InlineIdeaViewProps } from "../types/ideation-queue.types";
 
 /**
@@ -26,6 +27,9 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
       router.push(`/conversations/${conversationId}`);
     }
   };
+
+  // Determine if research can be launched (need both title and abstract)
+  const canLaunchResearch = idea?.active_version?.title && idea?.active_version?.abstract;
 
   // Empty state - no selection
   if (conversationId === null) {
@@ -104,17 +108,19 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
             </div>
           )}
 
-          {/* Edit button */}
-          <Button
-            onClick={handleEditClick}
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            aria-label="Edit research idea"
-          >
-            <Pencil className="h-3 w-3 mr-1.5" />
-            Edit
-          </Button>
+          {/* Action buttons */}
+          <div className="ml-auto flex items-center gap-2">
+            <LaunchResearchButton conversationId={conversationId} disabled={!canLaunchResearch} />
+            <Button
+              onClick={handleEditClick}
+              variant="outline"
+              size="sm"
+              aria-label="Edit research idea"
+            >
+              <Pencil className="h-3 w-3 mr-1.5" />
+              Edit
+            </Button>
+          </div>
         </div>
       </div>
 

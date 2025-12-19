@@ -17,9 +17,11 @@ import {
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
+import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
 import { PageCard } from "@/shared/components/PageCard";
 import { apiFetch } from "@/shared/lib/api-client";
 import type { ResearchRunCostResponse } from "@/types";
+import type { ResearchRunListItemApi } from "@/types/research";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -46,6 +48,15 @@ export default function ResearchRunDetailPage() {
     handleStopRun,
     reconnect,
   } = useResearchRunDetails({ runId });
+
+  const { data: runMeta } = useQuery<ResearchRunListItemApi>({
+    queryKey: ["researchRunMeta", runId],
+    queryFn: () => apiFetch(`/research-runs/${runId}/`),
+    enabled: !!runId,
+    staleTime: 60 * 1000,
+  });
+
+  const { runs: conversationRuns } = useConversationResearchRuns(conversationId ?? 0);
 
   const {
     review,
@@ -108,11 +119,25 @@ export default function ResearchRunDetailPage() {
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 
+  const runNumber = (() => {
+    if (!conversationId || !conversationRuns.length) return null;
+    const ideaId = run.idea_id;
+    const sameIdeaRuns = conversationRuns
+      .filter(r => r.idea_id === ideaId)
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const idx = sameIdeaRuns.findIndex(r => r.run_id === runId);
+    return idx >= 0 ? idx + 1 : null;
+  })();
+
+  const title = runMeta?.idea_title?.trim() || "Untitled";
+
   return (
     <PageCard>
       <div className="flex flex-col gap-6 p-6">
         <ResearchRunHeader
-          runId={run.run_id}
+          title={title}
+          runNumber={runNumber}
           status={run.status}
           createdAt={run.created_at}
           isConnected={isConnected}
