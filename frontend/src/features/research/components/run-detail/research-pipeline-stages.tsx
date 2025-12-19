@@ -438,7 +438,9 @@ export function ResearchPipelineStages({
                       !isPaperGeneration &&
                       info.iteration !== null && (
                         <span className="ml-2 text-slate-400">
-                          — Iteration {info.iteration} of {info.maxIterations}
+                          — Iteration{" "}
+                          {Math.min(info.iteration + 1, info.maxIterations ?? info.iteration + 1)}{" "}
+                          of {info.maxIterations}
                         </span>
                       )}
                     {/* Stages 1-4: Show completion iteration count for completed */}
@@ -446,7 +448,9 @@ export function ResearchPipelineStages({
                       !isPaperGeneration &&
                       info.iteration !== null && (
                         <span className="ml-2 text-slate-400">
-                          — Completed in {info.iteration} iterations
+                          — Completed in{" "}
+                          {Math.min(info.iteration + 1, info.maxIterations ?? info.iteration + 1)}{" "}
+                          iterations
                         </span>
                       )}
                     {/* Stage 5: Show step name + step count for in_progress */}

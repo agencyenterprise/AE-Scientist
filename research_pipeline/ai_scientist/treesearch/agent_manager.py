@@ -294,7 +294,8 @@ Your research idea:\n\n
     ) -> Tuple[bool, str]:
         """Check if the current sub-stage is complete"""
         # Terminate if max iterations reached
-        if len(journal.nodes) >= current_substage.max_iterations:
+        limit = current_substage.max_iterations
+        if len(journal.nodes) >= limit:
             logger.info(f"Stage {current_substage.name} completed: reached max iterations")
             return True, "Reached max iterations"
         main_stage_num = current_substage.number
@@ -326,16 +327,17 @@ Your research idea:\n\n
         """Check if current stage is complete based on criteria"""
         journal = self.journals[stage.name]
         # Terminate if max iterations reached
-        if len(journal.nodes) >= stage.max_iterations:
+        limit = stage.max_iterations
+        if len(journal.nodes) >= limit:
             logger.info(f"Stage {stage.name} completed: reached max iterations")
             if stage.number == 1:
                 # For initial stage, if it didn't even find a working implementation until max iterations,
                 # end gracefully and stop the experiment.
                 logger.error(
-                    f"Initial stage {stage.name} did not find a working implementation after {stage.max_iterations} iterations. Consider increasing the max iterations or reducing the complexity of the research idea."
+                    f"Initial stage {stage.name} did not find a working implementation after {limit} iterations. Consider increasing the max iterations or reducing the complexity of the research idea."
                 )
                 logger.error(
-                    f"Experiment ended: Could not find working implementation in initial stage after {stage.max_iterations} iterations"
+                    f"Experiment ended: Could not find working implementation in initial stage after {limit} iterations"
                 )
                 self.current_stage = None  # This will cause the run loop to exit
                 return True, "Failed to find working implementation"
