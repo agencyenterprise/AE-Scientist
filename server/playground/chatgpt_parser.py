@@ -11,16 +11,17 @@ This script implements multiple techniques to bypass ChatGPT's bot detection:
 """
 
 import argparse
+import asyncio
 import json
 import random
 import re
 import sys
-import time
 import traceback
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
-from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 from pydantic import BaseModel, Field
 
 
@@ -86,26 +87,24 @@ def get_random_viewport() -> dict[str, int]:
     return random.choice(viewports)
 
 
-def human_delay(min_ms: int = 100, max_ms: int = 300) -> None:
+async def human_delay(min_ms: int, max_ms: int) -> None:
     """Add a human-like random delay."""
-    delay = random.uniform(min_ms / 1000, max_ms / 1000)
-    time.sleep(delay)
+    delay_seconds = random.uniform(a=min_ms / 1000, b=max_ms / 1000)
+    await asyncio.sleep(delay=delay_seconds)
 
 
-def setup_stealth_page(
+async def setup_stealth_page(
     browser: Browser, user_agent: str, viewport: dict[str, int]
 ) -> tuple[BrowserContext, Page]:
     """Setup a stealth browser context and page."""
-    context = browser.new_context(
+    context = await browser.new_context(
         user_agent=user_agent,
         viewport=viewport,  # type: ignore
         locale="en-US",
         timezone_id="America/New_York",
-        # Simulate a real device
         device_scale_factor=1,
         is_mobile=False,
         has_touch=False,
-        # Additional stealth options
         extra_http_headers={
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
@@ -121,12 +120,12 @@ def setup_stealth_page(
         },
     )
 
-    page = context.new_page()
+    page = await context.new_page()
 
     # Apply manual stealth techniques
     # 1. Override webdriver property
-    page.add_init_script(
-        """
+    await page.add_init_script(
+        script="""
         Object.defineProperty(navigator, 'webdriver', {
             get: () => undefined,
         });
@@ -134,8 +133,8 @@ def setup_stealth_page(
     )
 
     # 2. Override plugins array to look realistic
-    page.add_init_script(
-        """
+    await page.add_init_script(
+        script="""
         Object.defineProperty(navigator, 'plugins', {
             get: () => [1, 2, 3, 4, 5],
         });
@@ -143,8 +142,8 @@ def setup_stealth_page(
     )
 
     # 3. Override languages
-    page.add_init_script(
-        """
+    await page.add_init_script(
+        script="""
         Object.defineProperty(navigator, 'languages', {
             get: () => ['en-US', 'en'],
         });
@@ -152,8 +151,8 @@ def setup_stealth_page(
     )
 
     # 4. Override WebGL fingerprinting
-    page.add_init_script(
-        """
+    await page.add_init_script(
+        script="""
         const getParameter = WebGLRenderingContext.getParameter;
         WebGLRenderingContext.prototype.getParameter = function(parameter) {
             if (parameter === 37445) return 'Intel Inc.';
@@ -166,7 +165,7 @@ def setup_stealth_page(
     return context, page
 
 
-def extract_conversation_data_v2(page: Page) -> ParseResult:
+async def extract_conversation_data_v2(page: Page) -> ParseResult:
     """
     Enhanced conversation data extraction with multiple strategies.
     """
@@ -174,16 +173,16 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
         print("🔍 Extracting conversation data...")
 
         # Wait for page to be fully loaded
-        page.wait_for_load_state("domcontentloaded", timeout=15000)
-        human_delay(1000, 2000)
+        await page.wait_for_load_state(state="domcontentloaded", timeout=15000)
+        await human_delay(min_ms=1000, max_ms=2000)
 
         # Try to wait for conversation content
         try:
-            page.wait_for_selector("main", timeout=10000)
+            await page.wait_for_selector(selector="main", timeout=10000)
         except Exception:
             print("Warning: Main content selector not found, continuing...")
 
-        human_delay(500, 1000)
+        await human_delay(min_ms=500, max_ms=1000)
 
         # Extract title
         title = None
@@ -199,9 +198,10 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
 
         for selector in title_selectors:
             try:
-                element = page.query_selector(selector)
+                element = await page.query_selector(selector=selector)
                 if element:
-                    text = element.inner_text().strip()
+                    element_text = await element.inner_text()
+                    text = element_text.strip() if element_text else ""
                     if text and text.lower() != "chatgpt" and len(text) > 1:
                         title = text
                         print(f"✓ Found title: {title}")
@@ -225,7 +225,7 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
 
         for selector in conversation_selectors:
             try:
-                elements = page.query_selector_all(selector)
+                elements = await page.query_selector_all(selector=selector)
                 print(f"🔍 Trying selector '{selector}': found {len(elements)} elements")
 
                 if elements and len(elements) > 1:  # We expect multiple messages
@@ -237,13 +237,14 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
                             role = "user"  # default
 
                             # Check for role indicators
-                            role_attr = element.get_attribute("data-message-author-role")
+                            role_attr = await element.get_attribute(name="data-message-author-role")
                             if role_attr:
                                 role = "assistant" if role_attr == "assistant" else "user"
                             else:
                                 # Check for text patterns or class names
-                                element_html = element.inner_html().lower()
-                                element_classes = element.get_attribute("class") or ""
+                                element_html_raw = await element.inner_html()
+                                element_html = (element_html_raw or "").lower()
+                                element_classes = await element.get_attribute(name="class") or ""
 
                                 if (
                                     "assistant" in element_html
@@ -255,7 +256,8 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
                                     role = "user"
 
                             # Extract content
-                            content = element.inner_text().strip()
+                            inner_text_raw = await element.inner_text()
+                            content = inner_text_raw.strip() if inner_text_raw else ""
 
                             # Filter valid messages
                             if (
@@ -286,7 +288,7 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
         if not messages:
             print("🔍 Trying text-based parsing...")
             try:
-                body_text = page.inner_text("body")
+                body_text = await page.inner_text(selector="body")
                 print(f"📄 Body text length: {len(body_text)}")
 
                 if body_text and len(body_text) > 100:
@@ -335,7 +337,7 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
             print("🔍 Using fallback content extraction...")
             try:
                 # Get all text and create a single assistant message
-                all_text = page.inner_text("body")
+                all_text = await page.inner_text(selector="body")
                 if all_text and len(all_text) > 50:
                     # Clean up the text
                     cleaned_text = all_text.replace("ChatGPT", "").strip()
@@ -377,78 +379,70 @@ def extract_conversation_data_v2(page: Page) -> ParseResult:
         )
 
 
-def parse_chatgpt_conversation_v2(
-    url: str, headless: bool = True, max_retries: int = 3
-) -> ParseResult:
+async def parse_chatgpt_conversation_v2(url: str, headless: bool, max_retries: int) -> ParseResult:
     """
     Enhanced ChatGPT conversation parser with multiple browser engines and retry logic.
     """
-    if not validate_chatgpt_url(url):
+    if not validate_chatgpt_url(url=url):
         return ParseResult(success=False, data=None, error=f"Invalid ChatGPT share URL: {url}")
 
     print(f"🤖 Parsing ChatGPT conversation from: {url}")
 
     browsers_to_try = ["chromium", "firefox", "webkit"]
 
-    for attempt in range(max_retries):
-        for browser_name in browsers_to_try:
-            try:
-                print(f"🔄 Attempt {attempt + 1}/{max_retries} with {browser_name}")
+    async with async_playwright() as playwright:
+        for attempt in range(max_retries):
+            for browser_name in browsers_to_try:
+                browser: Browser | None = None
+                try:
+                    print(f"🔄 Attempt {attempt + 1}/{max_retries} with {browser_name}")
 
-                with sync_playwright() as p:
-                    # Get browser
                     if browser_name == "chromium":
-                        browser = p.chromium.launch(headless=headless)
+                        browser = await playwright.chromium.launch(headless=headless)
                     elif browser_name == "firefox":
-                        browser = p.firefox.launch(headless=headless)
-                    else:  # webkit
-                        browser = p.webkit.launch(headless=headless)
+                        browser = await playwright.firefox.launch(headless=headless)
+                    else:
+                        browser = await playwright.webkit.launch(headless=headless)
 
-                    # Setup stealth page
                     user_agent = get_random_user_agent()
                     viewport = get_random_viewport()
-                    context, page = setup_stealth_page(browser, user_agent, viewport)
+                    _context, page = await setup_stealth_page(
+                        browser=browser, user_agent=user_agent, viewport=viewport
+                    )
 
                     print(
                         f"📱 Using {browser_name} with viewport {viewport['width']}x{viewport['height']}"
                     )
 
-                    # Random delay before navigation
-                    human_delay(500, 1500)
+                    await human_delay(min_ms=500, max_ms=1500)
 
-                    # Navigate to URL
                     print("🌐 Navigating to URL...")
-                    response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    response = await page.goto(
+                        url=url, wait_until="domcontentloaded", timeout=30000
+                    )
 
                     if not response:
                         print("❌ No response received")
-                        browser.close()
                         continue
 
                     if response.status != 200:
                         print(f"❌ HTTP {response.status}: {response.status_text}")
-                        browser.close()
                         continue
 
                     print(f"✅ Page loaded successfully (HTTP {response.status})")
 
-                    # Random delay after page load
-                    human_delay(1000, 3000)
+                    await human_delay(min_ms=1000, max_ms=3000)
 
-                    # Take screenshot for debugging
                     try:
                         screenshot_path = (
                             f"backend/playground/debug_screenshot_{browser_name}_{attempt}.png"
                         )
-                        page.screenshot(path=screenshot_path)
+                        await page.screenshot(path=screenshot_path)
                         print(f"📸 Screenshot saved: {screenshot_path}")
                     except Exception:
                         pass
 
-                    # Extract data
-                    result = extract_conversation_data_v2(page)
-
-                    browser.close()
+                    result = await extract_conversation_data_v2(page=page)
 
                     if result.success:
                         print(f"✅ Successfully extracted conversation with {browser_name}")
@@ -458,22 +452,68 @@ def parse_chatgpt_conversation_v2(
                     else:
                         print(f"❌ Extraction failed with {browser_name}: {result.error}")
 
-            except Exception as e:
-                print(f"❌ Error with {browser_name} (attempt {attempt + 1}): {e}")
-                traceback.print_exc()
-                continue
+                except Exception as e:
+                    print(f"❌ Error with {browser_name} (attempt {attempt + 1}): {e}")
+                    traceback.print_exc()
+                finally:
+                    if browser and browser.is_connected():
+                        await browser.close()
 
-        # Delay between retry attempts
-        if attempt < max_retries - 1:
-            delay = random.uniform(2, 5)
-            print(f"⏰ Waiting {delay:.1f}s before retry...")
-            time.sleep(delay)
+            if attempt < max_retries - 1:
+                delay = random.uniform(a=2, b=5)
+                print(f"⏰ Waiting {delay:.1f}s before retry...")
+                await asyncio.sleep(delay=delay)
 
     return ParseResult(
         success=False,
         data=None,
         error=f"Failed to parse conversation after {max_retries} attempts with all browsers",
     )
+
+
+async def run_cli(args: argparse.Namespace) -> None:
+    print("🚀 Enhanced ChatGPT Parser")
+    print("=" * 40)
+
+    result = await parse_chatgpt_conversation_v2(
+        url=args.url, headless=not args.no_headless, max_retries=args.retries
+    )
+
+    if result.success and result.data:
+        print("\n✅ Successfully parsed conversation!")
+        print(f"Title: {result.data.title}")
+        print(f"Author: {result.data.author}")
+        print(f"Messages: {result.data.message_count}")
+        print(f"Import Date: {result.data.import_date}")
+
+        print("\n📝 Content Preview:")
+        for msg in result.data.content[:3]:
+            role_emoji = "🤖" if msg.role == "assistant" else "👤"
+            content_preview = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
+            print(f"{role_emoji} {msg.role.title()}: {content_preview}")
+
+        if len(result.data.content) > 3:
+            remaining = len(result.data.content) - 3
+            print(f"... and {remaining} more messages")
+
+        if args.output:
+            output_path = Path(args.output)
+            output_path.write_text(
+                data=json.dumps(
+                    obj=result.data.model_dump(),
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            print(f"\n💾 Data saved to: {output_path}")
+        else:
+            print("\n📄 Full JSON output:")
+            print(result.data.model_dump_json(indent=2))
+
+    else:
+        print(f"\n❌ Failed to parse conversation: {result.error}")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -490,43 +530,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-
-    print("🚀 Enhanced ChatGPT Parser")
-    print("=" * 40)
-
-    # Parse the conversation
-    result = parse_chatgpt_conversation_v2(
-        args.url, headless=not args.no_headless, max_retries=args.retries
-    )
-
-    if result.success and result.data:
-        print("\n✅ Successfully parsed conversation!")
-        print(f"Title: {result.data.title}")
-        print(f"Author: {result.data.author}")
-        print(f"Messages: {result.data.message_count}")
-        print(f"Import Date: {result.data.import_date}")
-
-        print("\n📝 Content Preview:")
-        for i, msg in enumerate(result.data.content[:3]):  # Show first 3 messages
-            role_emoji = "🤖" if msg.role == "assistant" else "👤"
-            content_preview = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
-            print(f"{role_emoji} {msg.role.title()}: {content_preview}")
-
-        if len(result.data.content) > 3:
-            print(f"... and {len(result.data.content) - 3} more messages")
-
-        # Save to file if requested
-        if args.output:
-            with open(args.output, "w", encoding="utf-8") as f:
-                json.dump(result.data.model_dump(), f, indent=2, ensure_ascii=False)
-            print(f"\n💾 Data saved to: {args.output}")
-        else:
-            print("\n📄 Full JSON output:")
-            print(result.data.model_dump_json(indent=2))
-
-    else:
-        print(f"\n❌ Failed to parse conversation: {result.error}")
-        sys.exit(1)
+    asyncio.run(main=run_cli(args=args))
 
 
 if __name__ == "__main__":
