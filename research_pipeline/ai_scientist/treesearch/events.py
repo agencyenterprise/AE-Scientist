@@ -8,6 +8,7 @@ EventKind = Literal[
     "substage_summary",
     "paper_generation_progress",
     "best_node_selection",
+    "tree_viz_stored",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 

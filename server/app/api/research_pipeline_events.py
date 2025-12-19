@@ -134,6 +134,17 @@ class BestNodeSelectionPayload(BaseModel):
     event: BestNodeSelectionEvent
 
 
+class TreeVizStoredEvent(BaseModel):
+    stage_id: str
+    tree_viz_id: int
+    version: int
+
+
+class TreeVizStoredPayload(BaseModel):
+    run_id: str
+    event: TreeVizStoredEvent
+
+
 class RunLogEvent(BaseModel):
     message: str
     level: str = "info"
@@ -369,6 +380,44 @@ def ingest_best_node_selection(
         event=SSEBestNodeEvent(
             type="best_node_selection",
             data=best_node,
+        ),
+    )
+
+
+@router.post("/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_tree_viz_stored(
+    payload: "TreeVizStoredPayload",
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    logger.info(
+        "Tree viz stored: run=%s stage=%s tree_viz_id=%s version=%s",
+        payload.run_id,
+        event.stage_id,
+        event.tree_viz_id,
+        event.version,
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    
+    # Create run event for SSE streaming
+    run_event = RPEvent(
+        id=_next_stream_event_id(),
+        run_id=payload.run_id,
+        event_type="tree_viz_stored",
+        metadata={
+            "stage_id": event.stage_id,
+            "tree_viz_id": event.tree_viz_id,
+            "version": event.version,
+        },
+        occurred_at=created_at,
+    )
+    
+    # Publish to SSE stream
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSERunEvent(
+            type="run_event",
+            data=run_event,
         ),
     )
 

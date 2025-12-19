@@ -9,7 +9,7 @@ from typing import Any
 import psycopg2
 import psycopg2.extras
 
-from ai_scientist.telemetry.event_persistence import _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient, _parse_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class TreeVizStore:
     database_url: str
+    webhook_url: str | None = None
+    webhook_token: str | None = None
+    run_id: str | None = None
+    
+    def _get_webhook_client(self) -> WebhookClient | None:
+        """Create webhook client if configured."""
+        if self.webhook_url and self.webhook_token and self.run_id:
+            return WebhookClient(
+                base_url=self.webhook_url,
+                token=self.webhook_token,
+                run_id=self.run_id,
+            )
+        return None
 
     def upsert(
         self,
@@ -71,6 +84,32 @@ class TreeVizStore:
                         ),
                     )
                 conn.commit()
+            
+            # Publish webhook event using WebhookClient if configured
+            webhook_client = self._get_webhook_client()
+            if webhook_client is not None:
+                try:
+                    webhook_client.publish(
+                        kind="tree_viz_stored",
+                        payload={
+                            "stage_id": stage_id,
+                            "tree_viz_id": tree_viz_id,
+                            "version": version,
+                        }
+                    )
+                    logger.info(
+                        "Published tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
+                        run_id,
+                        stage_id,
+                        tree_viz_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to publish tree_viz_stored webhook for run=%s stage=%s",
+                        run_id,
+                        stage_id,
+                    )
+            
             return tree_viz_id
         except Exception:
             logger.exception(

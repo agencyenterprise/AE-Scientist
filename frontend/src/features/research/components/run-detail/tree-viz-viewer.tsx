@@ -52,33 +52,19 @@ const GRAY = "#6b7280";
 export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
   
-  console.log('[TreeVizViewer] Received props:', {
-    bestNodeId,
-    stageId: viz.stage_id,
-    hasPayload: !!payload,
-    layoutLength: payload?.layout?.length
-  });
-  
   // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
   const initialSelection = useMemo(() => {
-    console.log('[TreeVizViewer] Computing initialSelection with bestNodeId:', bestNodeId);
-    
     if (bestNodeId !== null && bestNodeId !== undefined && bestNodeId >= 0) {
-      console.log('[TreeVizViewer] Using bestNodeId:', bestNodeId);
       return bestNodeId;
     }
     
-    console.log('[TreeVizViewer] Defaulting to node 0');
     return 0;
   }, [bestNodeId]);
   
   const [selected, setSelected] = useState<number>(initialSelection);
   
-  console.log('[TreeVizViewer] Current selected node:', selected, 'initialSelection:', initialSelection);
-  
   // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
   useEffect(() => {
-    console.log('[TreeVizViewer] Effect triggered - setting selected to:', initialSelection);
     setSelected(initialSelection);
   }, [initialSelection]);
 
