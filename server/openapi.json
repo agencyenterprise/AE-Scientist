@@ -1637,6 +1637,31 @@
         }
       }
     },
+    "/api/public-config": {
+      "get": {
+        "tags": [
+          "public-config"
+        ],
+        "summary": "Get Public Config",
+        "operationId": "get_public_config_api_public_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object",
+                  "title": "Response Get Public Config Api Public Config Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/stage-progress": {
       "post": {
         "tags": [

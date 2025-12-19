@@ -2,12 +2,28 @@
 
 import { useMemo, useState } from "react";
 import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
+import { formatDateTime } from "@/shared/lib/date-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
 
 interface Props {
   treeViz?: TreeVizItem[] | null;
   conversationId: number | null;
   artifacts: ArtifactMetadata[];
+}
+
+const STAGE_SUMMARIES: Record<string, string> = {
+  Stage_1:
+    "Goal: Develop functional code which can produce a runnable result. The tree represents attempts and fixes needed to reach this state.",
+  Stage_2:
+    "Goal: Improve the baseline through tuning and small changes to the code while keeping the overall approach fixed. The scientist tries to improve the metrics which quantify the quality of the research.",
+  Stage_3:
+    "Goal: Explore higher-leverage variants and research directions, supported by plots and analyses to understand what is driving performance. The scientist tries to find and validate meaningful improvements worth writing up.",
+  Stage_4:
+    "Goal: Run controlled ablations and robustness checks to isolate which components matter and why. The scientist tries to attribute gains and strengthen the evidence for the final claims.",
+};
+
+function stageLabel(stageId: string): string {
+  return stageId.replace("Stage_", "Stage ");
 }
 
 export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
@@ -82,14 +98,21 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
                     : "bg-slate-800 text-slate-200 hover:bg-slate-700"
                 }`}
               >
-                {viz.stage_id.replace("Stage_", "Stage ")}
+                {stageLabel(viz.stage_id)}
               </button>
             ))}
           </div>
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+          <p className="mb-2 text-xs text-slate-300">
+            {STAGE_SUMMARIES[selectedViz.stage_id] ??
+              "Explore and evaluate candidate solutions for this stage. The tree shows how the run iterates on ideas, tests changes, and selects better-performing nodes."}
+          </p>
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
             <span>
-              Stage {selectedViz.stage_id} • Version {selectedViz.version} •{" "}
-              {new Date(selectedViz.updated_at).toLocaleString()}
+              <span className="text-slate-500">Start:</span>{" "}
+              {formatDateTime(selectedViz.created_at)}
+            </span>
+            <span>
+              <span className="text-slate-500">End:</span> {formatDateTime(selectedViz.updated_at)}
             </span>
           </div>
           <TreeVizViewer

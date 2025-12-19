@@ -1,5 +1,14 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { apiFetch } from "@/shared/lib/api-client";
 import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, BarChart3, Clock4, DollarSign, FileText, GitBranch } from "lucide-react";
+
+type PublicConfigResponse = {
+  pipeline_monitor_max_runtime_hours: number;
+};
 
 const FLOW_STEPS = [
   {
@@ -38,6 +47,29 @@ interface HowItWorksPanelProps {
 }
 
 export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
+  const [maxRuntimeHours, setMaxRuntimeHours] = useState<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    apiFetch<PublicConfigResponse>("/public-config")
+      .then(data => {
+        if (isMounted) {
+          setMaxRuntimeHours(data.pipeline_monitor_max_runtime_hours);
+        }
+      })
+      .catch(() => {
+        // Non-blocking: keep UI usable even if config endpoint is unavailable.
+        if (isMounted) {
+          setMaxRuntimeHours(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className={cn("space-y-6 text-sm text-slate-100", className)}>
       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -77,25 +109,34 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             <Clock4 className="h-4 w-4 text-amber-300" />
             Runtime
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">~3 hours</p>
-          <p className="text-slate-400 text-sm">Includes queueing, execution, and analysis.</p>
+          <p className="mt-2 text-lg font-semibold text-white">
+            3-{maxRuntimeHours === null ? "…" : maxRuntimeHours} hours
+          </p>
+          <p className="text-slate-400 text-sm">
+            This depends on the complexity of the experiment. A maximum time limit is set at{" "}
+            {maxRuntimeHours === null ? "…" : maxRuntimeHours} hours to prevent excessive cost.
+          </p>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
             <DollarSign className="h-4 w-4 text-emerald-300" />
             Cost
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">$20 USD</p>
-          <p className="text-slate-400 text-sm">Charged per research run.</p>
+          <p className="mt-2 text-lg font-semibold text-white">~$20 USD</p>
+          <p className="text-slate-400 text-sm">
+            Charged per research run. The actual cost is based on the actual runtime of the
+            experiment.
+          </p>
         </div>
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
             <FileText className="h-4 w-4 text-sky-300" />
             Deliverables
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">PDF + Code + Plots</p>
+          <p className="mt-2 text-lg font-semibold text-white">Final Paper + Code + Plots</p>
           <p className="text-slate-400 text-sm">
-            Final manuscript, executable notebooks/configs, and generated visualizations.
+            All relevant artifacts including the full log of the experiment will be available for
+            download once complete.
           </p>
         </div>
       </section>
