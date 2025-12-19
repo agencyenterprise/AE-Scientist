@@ -319,7 +319,9 @@ export function useResearchRunSSE({
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
         // eslint-disable-next-line no-console
-        console.error("[Research Run SSE] Max reconnection attempts reached. Connection permanently lost.");
+        console.error(
+          "[Research Run SSE] Max reconnection attempts reached. Connection permanently lost."
+        );
         onError?.("Max reconnection attempts reached. Please refresh the page.");
       }
     }
