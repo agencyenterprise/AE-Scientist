@@ -111,7 +111,6 @@ def _build_pod_response(record: PodRecord) -> Dict[str, object]:
         "publicIp": record.public_ip,
         "portMappings": record.port_mappings,
         "costPerHr": record.cost_per_hr,
-        "gpu_type_requested": record.gpu_type_requested,
     }
 
 

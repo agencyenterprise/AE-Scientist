@@ -2527,13 +2527,21 @@ export interface components {
         };
         /** ResearchRunAcceptedResponse */
         ResearchRunAcceptedResponse: {
-            /** Run Id */
-            run_id: string;
             /**
              * Status
              * @default ok
              */
             status: string;
+            /** Run Id */
+            run_id: string;
+            /** Pod Id */
+            pod_id: string;
+            /** Pod Name */
+            pod_name: string;
+            /** Gpu Type */
+            gpu_type: string;
+            /** Cost */
+            cost: number;
         };
         /** ResearchRunArtifactMetadata */
         ResearchRunArtifactMetadata: {

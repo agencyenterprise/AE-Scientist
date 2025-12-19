@@ -83,6 +83,10 @@ environment variables in `server/.env` to enable Stripe-powered top-ups:
 | `STRIPE_WEBHOOK_SECRET` | Secret used to validate `checkout.session.*` events |
 | `STRIPE_CHECKOUT_SUCCESS_URL` | Optional default success redirect (defaults to `/billing?success=1`) |
 | `STRIPE_PRICE_TO_CREDITS` | JSON map of `price_id -> credits`, e.g. `{"price_small":100,"price_large":800}` |
+| `JSON_MODEL_PRICE_PER_MILLION_IN_CENTS` | JSON map of model pricing per million tokens (input/output in cents), e.g. `{"anthropic":{"claude-3-opus-20240229":{"input":1500,"output":7500}},...}` |
+| `WHITELIST_EMAILS_FREE_CREDIT` | Comma-separated list of email addresses that receive free credits upon registration |
+| `RESEARCH_RUN_CREDITS_PER_MINUTE` | Credits charged per minute for research pipeline runs |
+| `CHAT_MESSAGE_CREDIT_COST` | Credits charged per chat message |
 
 The backend exposes:
 

@@ -123,14 +123,26 @@ export function useProjectDraftState({
       setIsCreateModalOpen(false);
       router.push("/research");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 402) {
-        const info = parseInsufficientCreditsError(error.data);
-        const message =
-          info?.message ||
-          (info?.required
-            ? `You need at least ${info.required} credits to launch research.`
-            : "Insufficient credits to launch research.");
-        throw new Error(message);
+      if (error instanceof ApiError) {
+        if (error.status === 402) {
+          const info = parseInsufficientCreditsError(error.data);
+          const message =
+            info?.message ||
+            (info?.required
+              ? `You need at least ${info.required} credits to launch research.`
+              : "Insufficient credits to launch research.");
+          throw new Error(message);
+        }
+        if (error.status === 400) {
+          const detailValue =
+            error.data &&
+            typeof error.data === "object" &&
+            typeof (error.data as { detail?: unknown }).detail === "string"
+              ? (error.data as { detail: string }).detail
+              : undefined;
+          const message = detailValue ?? "Failed to launch research run.";
+          throw new Error(message);
+        }
       }
       throw error;
     } finally {
