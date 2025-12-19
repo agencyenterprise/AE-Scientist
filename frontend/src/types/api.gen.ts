@@ -2977,7 +2977,7 @@ export interface components {
             current_stage?: string | null;
             /**
              * Progress
-             * @description Progress percentage (0-1) from latest event
+             * @description Overall pipeline progress (0-1) computed as completed-stages-only buckets (0.0, 0.2, 0.4, 0.6, 0.8, 1.0).
              */
             progress?: number | null;
             /**
