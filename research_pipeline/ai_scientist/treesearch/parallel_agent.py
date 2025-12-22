@@ -37,12 +37,20 @@ from .worker_process import process_node
 
 logger = logging.getLogger("ai-scientist")
 
-_EXECUTOR_SHARED_PID_STATE: DictProxy | None = None
+
+def _executor_initializer(shared_state: DictProxy | None) -> None:
+    if shared_state is None:
+        logger.warning("Executor initializer received no shared_state; PID tracking disabled.")
+        return
+    execution_registry.setup_shared_pid_state(shared_state)
+    logger.info("Worker process configured shared PID state (id=%s)", id(shared_state))
 
 
-def _executor_initializer() -> None:
-    if _EXECUTOR_SHARED_PID_STATE is not None:
-        execution_registry.setup_shared_pid_state(_EXECUTOR_SHARED_PID_STATE)
+def _make_executor_initializer(shared_state: DictProxy | None) -> Callable[[], None]:
+    def _init() -> None:
+        _executor_initializer(shared_state)
+
+    return _init
 
 
 def _safe_pickle_test(obj: object, name: str = "object") -> bool:
@@ -696,10 +704,12 @@ class ParallelAgent:
         self.cleanup()
 
     def _create_executor(self) -> ProcessPoolExecutor:
-        global _EXECUTOR_SHARED_PID_STATE
         shared_state = execution_registry.get_shared_pid_state()
-        _EXECUTOR_SHARED_PID_STATE = shared_state
-        initializer = _executor_initializer if shared_state is not None else None
+        initializer = _make_executor_initializer(shared_state) if shared_state is not None else None
+        if shared_state is None:
+            logger.warning(
+                "Shared PID state missing; executor will start without termination support."
+            )
         return ProcessPoolExecutor(
             max_workers=self.num_workers,
             mp_context=self._mp_context,
