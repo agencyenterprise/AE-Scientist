@@ -13,6 +13,7 @@ from app.middleware.auth import get_current_user
 from app.models import (
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
+    ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
@@ -321,6 +322,12 @@ def _build_initial_stream_payload(
         ResearchRunBestNodeSelection.from_db_record(event).model_dump()
         for event in db.list_best_node_reasoning_events(run_id=run_id)
     ]
+    latest_code_execution = db.get_latest_code_execution_event(run_id=run_id)
+    code_execution_snapshot = (
+        ResearchRunCodeExecution.from_db_record(latest_code_execution).model_dump()
+        if latest_code_execution
+        else None
+    )
 
     return {
         "run": ResearchRunInfo.from_db_record(current_run).model_dump(),
@@ -333,6 +340,7 @@ def _build_initial_stream_payload(
         "events": run_events,
         "paper_generation_progress": paper_gen_events,
         "best_node_selections": best_node_payload,
+        "code_execution": code_execution_snapshot,
         "hw_cost_estimate": _build_hw_cost_event_payload(
             started_running_at=current_run.started_running_at,
             cost_per_hour_cents=_run_cost_per_hour_cents(current_run),

@@ -2,16 +2,18 @@ import logging
 import multiprocessing
 import os
 import pickle
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Literal, Optional, TypeVar
 
 from ai_scientist.llm import structured_query_with_schema
 
 from .codegen_agent import MinimalAgent
-from .events import BaseEvent, RunLogEvent
+from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .interpreter import ExecutionResult, Interpreter
 from .journal import Node
@@ -251,16 +253,53 @@ def _execute_experiment(
     cfg: AppConfig,
     process_interpreter: Interpreter,
     event_callback: Callable[[BaseEvent], None],
+    stage_name: str,
 ) -> ExecutionResult:
     logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
     logger.debug("Starting first interpreter: executing experiment code")
     event_callback(RunLogEvent(message="Executing experiment code on GPU...", level="info"))
-    exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
+    started_at = datetime.now(timezone.utc)
+    event_callback(
+        RunningCodeEvent(
+            execution_id=child_node.id,
+            stage_name=stage_name,
+            code=child_node.code,
+            started_at=started_at,
+        )
+    )
+    timer_start = time.monotonic()
+    try:
+        exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
+    except Exception:
+        process_interpreter.cleanup_session()
+        completed_at = datetime.now(timezone.utc)
+        duration = time.monotonic() - timer_start
+        event_callback(
+            RunCompletedEvent(
+                execution_id=child_node.id,
+                stage_name=stage_name,
+                status="failed",
+                exec_time=duration,
+                completed_at=completed_at,
+            )
+        )
+        raise
     process_interpreter.cleanup_session()
     logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
     event_callback(
         RunLogEvent(
             message=f"Code execution completed ({exec_result.exec_time:.1f}s)", level="info"
+        )
+    )
+    completed_at = datetime.now(timezone.utc)
+    status: Literal["success", "failed"] = "success" if exec_result.exc_type is None else "failed"
+    event_callback(
+        RunCompletedEvent(
+            execution_id=child_node.id,
+            stage_name=stage_name,
+            status=status,
+            exec_time=exec_result.exec_time,
+            completed_at=completed_at,
         )
     )
     return exec_result
@@ -745,6 +784,7 @@ def process_node(
             cfg=cfg,
             process_interpreter=process_interpreter,
             event_callback=event_callback,
+            stage_name=stage_name,
         )
 
         _analyze_results_and_metrics(

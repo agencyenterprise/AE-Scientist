@@ -14,6 +14,7 @@ from app.services.database.research_pipeline_runs import (
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import (
     BestNodeReasoningEvent,
+    CodeExecutionEvent,
     PaperGenerationEvent,
     RunLogEvent,
     StageProgressEvent,
@@ -244,6 +245,32 @@ class ResearchRunPaperGenerationProgress(BaseModel):
             step_progress=event.step_progress,
             details=event.details,
             created_at=event.created_at.isoformat(),
+        )
+
+
+class ResearchRunCodeExecution(BaseModel):
+    """Latest code execution snapshot for a run."""
+
+    execution_id: str = Field(..., description="Unique identifier for the code execution attempt")
+    stage_name: str = Field(..., description="Stage name reported by the research pipeline")
+    run_type: str = Field(..., description="Type of execution (e.g., main_execution)")
+    code: str = Field(..., description="Python source code submitted for execution")
+    status: str = Field(..., description="Execution status reported by the worker")
+    started_at: str = Field(..., description="ISO timestamp when execution began")
+    completed_at: Optional[str] = Field(None, description="ISO timestamp when execution ended")
+    exec_time: Optional[float] = Field(None, description="Execution time reported by the worker")
+
+    @staticmethod
+    def from_db_record(record: "CodeExecutionEvent") -> "ResearchRunCodeExecution":
+        return ResearchRunCodeExecution(
+            execution_id=record.execution_id,
+            stage_name=record.stage_name,
+            run_type=record.run_type,
+            code=record.code,
+            status=record.status,
+            started_at=record.started_at.isoformat(),
+            completed_at=record.completed_at.isoformat() if record.completed_at else None,
+            exec_time=record.exec_time,
         )
 
 

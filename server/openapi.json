@@ -1977,6 +1977,96 @@
         }
       }
     },
+    "/api/research-pipeline/events/running-code": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Running Code",
+        "operationId": "ingest_running_code_api_research_pipeline_events_running_code_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunningCodePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/run-completed": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Run Completed",
+        "operationId": "ingest_run_completed_api_research_pipeline_events_run_completed_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCompletedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/run-started": {
       "post": {
         "tags": [
@@ -5491,6 +5581,186 @@
         ],
         "title": "ResearchRunBestNodeSelection"
       },
+      "ResearchRunCodeExecution": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id",
+            "description": "Unique identifier for the code execution attempt"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name",
+            "description": "Stage name reported by the research pipeline"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "description": "Type of execution (e.g., main_execution)"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Python source code submitted for execution"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Execution status reported by the worker"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At",
+            "description": "ISO timestamp when execution began"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "ISO timestamp when execution ended"
+          },
+          "exec_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exec Time",
+            "description": "Execution time reported by the worker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "code",
+          "status",
+          "started_at"
+        ],
+        "title": "ResearchRunCodeExecution",
+        "description": "Latest code execution snapshot for a run."
+      },
+      "ResearchRunCodeExecutionCompletedData": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "exec_time": {
+            "type": "number",
+            "title": "Exec Time"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "status",
+          "exec_time",
+          "completed_at"
+        ],
+        "title": "ResearchRunCodeExecutionCompletedData"
+      },
+      "ResearchRunCodeExecutionCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "code_execution_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionCompletedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunCodeExecutionCompletedEvent"
+      },
+      "ResearchRunCodeExecutionStartedData": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "code",
+          "started_at"
+        ],
+        "title": "ResearchRunCodeExecutionStartedData"
+      },
+      "ResearchRunCodeExecutionStartedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "code_execution_started",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionStartedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunCodeExecutionStartedEvent"
+      },
       "ResearchRunCompleteData": {
         "properties": {
           "status": {
@@ -6105,6 +6375,17 @@
               }
             ],
             "description": "Hardware cost billed so far, if available."
+          },
+          "code_execution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchRunCodeExecution"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest code execution snapshot available for the run."
           }
         },
         "type": "object",
@@ -6601,6 +6882,12 @@
             "$ref": "#/components/schemas/ResearchRunSubstageSummaryEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionStartedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
           },
           {
@@ -6619,6 +6906,8 @@
           "propertyName": "type",
           "mapping": {
             "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
+            "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
+            "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
             "complete": "#/components/schemas/ResearchRunCompleteEvent",
             "error": "#/components/schemas/ResearchRunErrorEvent",
             "heartbeat": "#/components/schemas/ResearchRunHeartbeatEvent",
@@ -6920,6 +7209,65 @@
         "title": "ResearchRunSummary",
         "description": "Lightweight overview of a research pipeline run."
       },
+      "RunCompletedEventPayload": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "exec_time": {
+            "type": "number",
+            "title": "Exec Time"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "status",
+          "exec_time",
+          "completed_at"
+        ],
+        "title": "RunCompletedEventPayload"
+      },
+      "RunCompletedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/RunCompletedEventPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "RunCompletedPayload"
+      },
       "RunFinishedPayload": {
         "properties": {
           "run_id": {
@@ -6996,6 +7344,56 @@
           "run_id"
         ],
         "title": "RunStartedPayload"
+      },
+      "RunningCodeEventPayload": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "code",
+          "started_at"
+        ],
+        "title": "RunningCodeEventPayload"
+      },
+      "RunningCodePayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/RunningCodeEventPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "RunningCodePayload"
       },
       "StageProgressEvent": {
         "properties": {

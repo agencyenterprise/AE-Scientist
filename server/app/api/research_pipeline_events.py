@@ -3,7 +3,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
@@ -27,6 +27,10 @@ from app.models.research_pipeline import (
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCodeExecutionCompletedData
+from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
+from app.models.sse import ResearchRunCodeExecutionStartedData
+from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
@@ -153,6 +157,33 @@ class RunLogEvent(BaseModel):
 class RunLogPayload(BaseModel):
     run_id: str
     event: RunLogEvent
+
+
+class RunningCodeEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    code: str
+    started_at: str
+    run_type: str = "main_execution"
+
+
+class RunningCodePayload(BaseModel):
+    run_id: str
+    event: RunningCodeEventPayload
+
+
+class RunCompletedEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: str
+    run_type: str = "main_execution"
+
+
+class RunCompletedPayload(BaseModel):
+    run_id: str
+    event: RunCompletedEventPayload
 
 
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
@@ -398,7 +429,7 @@ def ingest_tree_viz_stored(
         event.version,
     )
     created_at = datetime.now(timezone.utc).isoformat()
-    
+
     # Create run event for SSE streaming
     run_event = RPEvent(
         id=_next_stream_event_id(),
@@ -411,7 +442,7 @@ def ingest_tree_viz_stored(
         },
         occurred_at=created_at,
     )
-    
+
     # Publish to SSE stream
     publish_stream_event(
         run_id=payload.run_id,
@@ -447,6 +478,65 @@ def ingest_run_log(
                 level=payload.event.level,
                 message=payload.event.message,
                 created_at=datetime.now(timezone.utc).isoformat(),
+            ),
+        ),
+    )
+
+
+@router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_running_code(
+    payload: RunningCodePayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionStartedEvent(
+                type="code_execution_started",
+                data=ResearchRunCodeExecutionStartedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    code=event.code,
+                    started_at=event.started_at,
+                ),
+            ),
+        ),
+    )
+
+
+@router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_run_completed(
+    payload: RunCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionCompletedEvent(
+                type="code_execution_completed",
+                data=ResearchRunCodeExecutionCompletedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    status=event.status,
+                    exec_time=event.exec_time,
+                    completed_at=event.completed_at,
+                ),
             ),
         ),
     )

@@ -15,6 +15,7 @@ import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is 
 import queue
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -46,6 +47,8 @@ class WebhookClient:
         "paper_generation_progress": "/paper-generation-progress",
         "best_node_selection": "/best-node-selection",
         "tree_viz_stored": "/tree-viz-stored",
+        "running_code": "/running-code",
+        "run_completed": "/run-completed",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
@@ -265,8 +268,98 @@ class EventPersistenceManager:
                 self._insert_paper_generation_progress(connection=connection, payload=event.data)
             elif event.kind == "best_node_selection":
                 self._insert_best_node_reasoning(connection=connection, payload=event.data)
+            elif event.kind == "running_code":
+                self._upsert_code_execution_event(
+                    connection=connection,
+                    payload=event.data,
+                    is_completion=False,
+                )
+            elif event.kind == "run_completed":
+                self._upsert_code_execution_event(
+                    connection=connection,
+                    payload=event.data,
+                    is_completion=True,
+                )
         if self._webhook_client is not None:
             self._webhook_client.publish(kind=event.kind, payload=event.data)
+
+    @staticmethod
+    def _coerce_timestamp(*, value: str | None) -> Optional[datetime]:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    def _upsert_code_execution_event(
+        self,
+        *,
+        connection: psycopg2.extensions.connection,
+        payload: dict[str, Any],
+        is_completion: bool,
+    ) -> None:
+        execution_id = payload.get("execution_id")
+        stage_name = payload.get("stage_name")
+        run_type = payload.get("run_type") or "main_execution"
+        code = payload.get("code")
+        started_at = self._coerce_timestamp(value=payload.get("started_at"))
+        completed_at = self._coerce_timestamp(value=payload.get("completed_at"))
+        status = payload.get("status") if is_completion else "running"
+        exec_time = payload.get("exec_time")
+
+        upsert_code = code if not is_completion else None
+        upsert_started_at = started_at if not is_completion else None
+        upsert_completed_at = completed_at if is_completion else None
+        upsert_exec_time = exec_time if is_completion else None
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO rp_code_execution_events (
+                    run_id,
+                    execution_id,
+                    stage_name,
+                    run_type,
+                    code,
+                    started_at,
+                    status,
+                    completed_at,
+                    exec_time,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                ON CONFLICT (run_id, execution_id, run_type)
+                DO UPDATE SET
+                    stage_name = COALESCE(EXCLUDED.stage_name, rp_code_execution_events.stage_name),
+                    code = COALESCE(EXCLUDED.code, rp_code_execution_events.code),
+                    started_at = COALESCE(EXCLUDED.started_at, rp_code_execution_events.started_at),
+                    status = EXCLUDED.status,
+                    completed_at = COALESCE(EXCLUDED.completed_at, rp_code_execution_events.completed_at),
+                    exec_time = COALESCE(EXCLUDED.exec_time, rp_code_execution_events.exec_time),
+                    updated_at = now()
+                """,
+                (
+                    self._run_id,
+                    execution_id,
+                    stage_name,
+                    run_type,
+                    upsert_code,
+                    upsert_started_at,
+                    status,
+                    upsert_completed_at,
+                    upsert_exec_time,
+                ),
+            )
 
     def _insert_stage_progress(
         self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]

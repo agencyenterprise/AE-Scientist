@@ -824,6 +824,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/running-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Running Code */
+        post: operations["ingest_running_code_api_research_pipeline_events_running_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/run-completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Run Completed */
+        post: operations["ingest_run_completed_api_research_pipeline_events_run_completed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/run-started": {
         parameters: {
             query?: never;
@@ -2652,6 +2686,101 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * ResearchRunCodeExecution
+         * @description Latest code execution snapshot for a run.
+         */
+        ResearchRunCodeExecution: {
+            /**
+             * Execution Id
+             * @description Unique identifier for the code execution attempt
+             */
+            execution_id: string;
+            /**
+             * Stage Name
+             * @description Stage name reported by the research pipeline
+             */
+            stage_name: string;
+            /**
+             * Run Type
+             * @description Type of execution (e.g., main_execution)
+             */
+            run_type: string;
+            /**
+             * Code
+             * @description Python source code submitted for execution
+             */
+            code: string;
+            /**
+             * Status
+             * @description Execution status reported by the worker
+             */
+            status: string;
+            /**
+             * Started At
+             * @description ISO timestamp when execution began
+             */
+            started_at: string;
+            /**
+             * Completed At
+             * @description ISO timestamp when execution ended
+             */
+            completed_at?: string | null;
+            /**
+             * Exec Time
+             * @description Execution time reported by the worker
+             */
+            exec_time?: number | null;
+        };
+        /** ResearchRunCodeExecutionCompletedData */
+        ResearchRunCodeExecutionCompletedData: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Run Type */
+            run_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Exec Time */
+            exec_time: number;
+            /** Completed At */
+            completed_at: string;
+        };
+        /** ResearchRunCodeExecutionCompletedEvent */
+        ResearchRunCodeExecutionCompletedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "code_execution_completed";
+            data: components["schemas"]["ResearchRunCodeExecutionCompletedData"];
+        };
+        /** ResearchRunCodeExecutionStartedData */
+        ResearchRunCodeExecutionStartedData: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Run Type */
+            run_type: string;
+            /** Code */
+            code: string;
+            /** Started At */
+            started_at: string;
+        };
+        /** ResearchRunCodeExecutionStartedEvent */
+        ResearchRunCodeExecutionStartedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "code_execution_started";
+            data: components["schemas"]["ResearchRunCodeExecutionStartedData"];
+        };
         /** ResearchRunCompleteData */
         ResearchRunCompleteData: {
             /**
@@ -2961,6 +3090,8 @@ export interface components {
             hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
             /** @description Hardware cost billed so far, if available. */
             hw_cost_actual?: components["schemas"]["ResearchRunHwCostActualData"] | null;
+            /** @description Latest code execution snapshot available for the run. */
+            code_execution?: components["schemas"]["ResearchRunCodeExecution"] | null;
         };
         /**
          * ResearchRunListItem
@@ -3235,7 +3366,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -3405,6 +3536,33 @@ export interface components {
              */
             updated_at: string;
         };
+        /** RunCompletedEventPayload */
+        RunCompletedEventPayload: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Exec Time */
+            exec_time: number;
+            /** Completed At */
+            completed_at: string;
+            /**
+             * Run Type
+             * @default main_execution
+             */
+            run_type: string;
+        };
+        /** RunCompletedPayload */
+        RunCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["RunCompletedEventPayload"];
+        };
         /** RunFinishedPayload */
         RunFinishedPayload: {
             /** Run Id */
@@ -3434,6 +3592,28 @@ export interface components {
         RunStartedPayload: {
             /** Run Id */
             run_id: string;
+        };
+        /** RunningCodeEventPayload */
+        RunningCodeEventPayload: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Code */
+            code: string;
+            /** Started At */
+            started_at: string;
+            /**
+             * Run Type
+             * @default main_execution
+             */
+            run_type: string;
+        };
+        /** RunningCodePayload */
+        RunningCodePayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["RunningCodeEventPayload"];
         };
         /** StageProgressEvent */
         StageProgressEvent: {
@@ -4954,6 +5134,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunLogPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_running_code_api_research_pipeline_events_running_code_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunningCodePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_run_completed_api_research_pipeline_events_run_completed_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCompletedPayload"];
             };
         };
         responses: {
