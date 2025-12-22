@@ -310,6 +310,7 @@ def _execute_experiment(
         process_interpreter.cleanup_session()
         completed_at = datetime.now(timezone.utc)
         duration = time.monotonic() - timer_start
+        terminated = execution_registry.is_terminated(execution_id)
         event_callback(
             RunCompletedEvent(
                 execution_id=child_node.id,
@@ -323,7 +324,7 @@ def _execute_experiment(
             "Clearing PID reference for execution_id=%s due to execution failure.", execution_id
         )
         execution_registry.clear_pid(execution_id)
-        if execution_registry.is_terminated(execution_id):
+        if terminated:
             logger.info(
                 "Execution %s was intentionally terminated; skipping further processing.",
                 execution_id,

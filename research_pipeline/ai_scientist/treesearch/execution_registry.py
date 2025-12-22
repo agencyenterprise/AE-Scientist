@@ -67,7 +67,16 @@ def attach_node(*, execution_id: str, node: "Node") -> None:
             return
         entry.node = node
         entry.node_id = node.id
-        logger.debug("Attached node %s to execution_id=%s", node.id, execution_id)
+        logger.debug("Attached node %s to execution_id=%s, payload=%s", node.id, execution_id, entry.payload)
+        if entry.payload:
+            node.is_user_feedback = True
+            node.user_feedback_payload = entry.payload
+            node.user_feedback_pending = True
+            logger.info(
+                "Propagated stored user feedback (%s chars) to node %s after attachment.",
+                len(entry.payload),
+                node.id,
+            )
 
 
 def update_pid(*, execution_id: str, pid: int) -> None:
