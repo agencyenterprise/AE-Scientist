@@ -142,7 +142,6 @@ def _create_worker_agent(
     memory_summary: str,
     evaluation_metrics: str,
     stage_name: str,
-    user_feedback: str | None = None,
 ) -> MinimalAgent:
     return MinimalAgent(
         task_desc=task_desc,
@@ -152,7 +151,6 @@ def _create_worker_agent(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_name=stage_name,
-        user_feedback=user_feedback,
     )
 
 
@@ -244,15 +242,23 @@ def _improve_existing_implementation(
     parent_node: Node,
 ) -> Node:
     """Improve an existing implementation based on the current experimental stage."""
+    user_feedback = parent_node.user_feedback_payload
+    introduction = (
+        "You are an experienced AI researcher. You are provided with a previously developed "
+        "implementation. Your task is to improve it based on the current experimental stage."
+    )
+    if user_feedback:
+        introduction = (
+            "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
+            "Based on the user feedback, you should revise it to satisfy that request."
+        )
     prompt: PromptType = {
-        "Introduction": (
-            "You are an experienced AI researcher. You are provided with a previously developed "
-            "implementation. Your task is to improve it based on the current experimental stage."
-        ),
+        "Introduction": introduction,
         "Research idea": worker_agent.task_desc,
         "Memory": worker_agent.memory_summary if worker_agent.memory_summary else "",
         "Feedback based on generated plots": parent_node.vlm_feedback_summary,
         "Feedback about execution time": parent_node.exec_time_feedback,
+        "User feedback": user_feedback,
         "Instructions": {},
     }
     prompt["Previous solution"] = {
@@ -263,7 +269,7 @@ def _improve_existing_implementation(
     improve_instructions |= worker_agent.prompt_impl_guideline
     prompt["Instructions"] = improve_instructions
 
-    worker_agent.apply_user_feedback(prompt)
+    logger.debug("Improve prompt for stage=%s: %s", worker_agent.stage_name, prompt)
     plan, code = worker_agent.plan_and_code_query(prompt=prompt)
     logger.debug("----- LLM code start (improve) -----")
     logger.debug(code)
@@ -832,18 +838,18 @@ def process_node(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_name=stage_name,
-        user_feedback=(parent_node.user_feedback_payload if parent_node else None),
     )
+    parent_feedback = parent_node.user_feedback_payload if parent_node else None
     logger.info(
         "Worker agent ready for execution_id=%s. User feedback present=%s",
         execution_id,
-        bool(worker_agent.user_feedback),
+        bool(parent_feedback),
     )
-    if worker_agent.user_feedback:
+    if parent_feedback:
         logger.debug(
             "User feedback payload for execution_id=%s:\n%s",
             execution_id,
-            worker_agent.user_feedback,
+            parent_feedback,
         )
 
     process_interpreter = _create_interpreter(cfg=cfg, workspace=workspace)

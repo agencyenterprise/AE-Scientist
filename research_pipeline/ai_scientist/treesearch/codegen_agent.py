@@ -74,7 +74,6 @@ class MinimalAgent:
         gpu_spec: GPUSpec | None = None,
         memory_summary: str | None = None,
         evaluation_metrics: str | list[str] | None = None,
-        user_feedback: str | None = None,
     ) -> None:
         self.task_desc = task_desc
         self.memory_summary = memory_summary
@@ -83,7 +82,6 @@ class MinimalAgent:
         self.gpu_spec = gpu_spec
         self.evaluation_metrics = evaluation_metrics
         self.stage_name = stage_name
-        self.user_feedback = user_feedback
 
     @property
     def _prompt_environment(self) -> dict[str, str]:
@@ -249,33 +247,27 @@ class MinimalAgent:
 
         return {"Implementation guideline": impl_guideline}
 
-        # Response format is fully specified by the PlanAndCodeSchema Pydantic model
-
-    # schemas used elsewhere; no additional response-format helpers are needed here.
-
-    def apply_user_feedback(self, prompt: PromptType) -> None:
-        if self.user_feedback:
-            prompt["User feedback"] = self.user_feedback
-            preview = self.user_feedback[:200].replace("\n", " ")
-            logger.info(
-                "Injected user feedback into prompt for stage=%s (len=%s, preview=%s)",
-                self.stage_name,
-                len(self.user_feedback),
-                preview,
-            )
-            logger.debug("Prompt after feedback injection: %s", prompt)
-
     def debug(self, parent_node: Node) -> Node:
         # Build a debugging prompt combining previous code, outputs, and feedback
-        prompt: PromptType = {
-            "Introduction": (
-                "You are an experienced AI researcher. Your previous code for research experiment had a bug, so based on the information below, you should revise it in order to fix this bug. "
+        feedback = parent_node.user_feedback_payload
+        introduction = (
+            "You are an experienced AI researcher. Your previous code for research experiment had a bug, so based on the information below, you should revise it in order to fix this bug. "
+            "Your response should be an implementation outline in natural language,"
+            " followed by a single markdown code block which implements the bugfix/solution."
+        )
+        if feedback:
+            introduction = (
+                "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
+                "Based on the user feedback, you should revise it in order to address that request."
                 "Your response should be an implementation outline in natural language,"
-                " followed by a single markdown code block which implements the bugfix/solution."
-            ),
+                " followed by a single markdown code block."
+            )
+        prompt: PromptType = {
+            "Introduction": introduction,
             "Research idea": self.task_desc,
             "Previous (buggy) implementation": wrap_code(parent_node.code),
             "Execution output": wrap_code(parent_node.term_out, lang=""),
+            "User feedback": feedback,
             "Feedback based on generated plots": parent_node.vlm_feedback_summary,
             "Feedback about execution time": parent_node.exec_time_feedback,
             "Instructions": {},
@@ -289,8 +281,11 @@ class MinimalAgent:
         }
         debug_instructions |= self.prompt_impl_guideline
         prompt["Instructions"] = debug_instructions
-        self.apply_user_feedback(prompt)
+        logger.debug("Debugging prompt for stage=%s: %s", self.stage_name, prompt)
         plan, code = self.plan_and_code_query(prompt)
+        logger.debug("----- LLM code start (debug) -----")
+        logger.debug(code)
+        logger.debug("----- LLM code end (debug) -----")
         return Node(plan=plan, code=code, parent=parent_node)
 
     def generate_seed_node(self, parent_node: Node) -> Node:

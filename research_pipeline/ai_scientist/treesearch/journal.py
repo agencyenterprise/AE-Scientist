@@ -782,6 +782,8 @@ class Journal:
             failure_info += (
                 f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n"
             )
+            if node.user_feedback_payload:
+                failure_info += f"User Feedback: {node.user_feedback_payload}\n"
             failure_info += f"Debug Depth: {node.debug_depth}\n"
             if include_code:
                 failure_info += f"Code: {node.code}\n"

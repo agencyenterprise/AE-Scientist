@@ -40,8 +40,6 @@ class Stage1Baseline(Stage):
             "Instructions": {},
         }
 
-        agent.apply_user_feedback(prompt)
-
         instructions: dict[str, str | list[str]] = {}
         instructions |= {
             "Experiment design sketch guideline": [
