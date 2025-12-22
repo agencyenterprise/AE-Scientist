@@ -838,6 +838,12 @@ def process_node(
         execution_id,
         bool(worker_agent.user_feedback),
     )
+    if worker_agent.user_feedback:
+        logger.debug(
+            "User feedback payload for execution_id=%s:\n%s",
+            execution_id,
+            worker_agent.user_feedback,
+        )
 
     process_interpreter = _create_interpreter(cfg=cfg, workspace=workspace)
 
@@ -857,6 +863,7 @@ def process_node(
             event_callback=event_callback,
             execution_id=execution_id,
         )
+        execution_registry.attach_node(execution_id=execution_id, node=child_node)
         logger.info(
             "Child node %s prepared (feedback=%s)",
             child_node.id,

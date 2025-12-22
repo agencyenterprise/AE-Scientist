@@ -304,6 +304,7 @@ class MinimalAgent:
     def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
+        logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):
             logger.debug(
                 "Calling code-generation LLM with gpu_id=%s, gpu_spec=%s",

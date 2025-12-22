@@ -56,6 +56,20 @@ def register_execution(*, execution_id: str, node: Optional["Node"]) -> None:
     )
 
 
+def attach_node(*, execution_id: str, node: "Node") -> None:
+    """Attach a Node reference to an existing execution entry (used for draft nodes)."""
+    with _lock:
+        entry = _entries.get(execution_id)
+        if entry is None:
+            logger.warning(
+                "attach_node called for unknown execution_id=%s; ignoring.", execution_id
+            )
+            return
+        entry.node = node
+        entry.node_id = node.id
+        logger.debug("Attached node %s to execution_id=%s", node.id, execution_id)
+
+
 def update_pid(*, execution_id: str, pid: int) -> None:
     """Update the interpreter PID for a running execution."""
     shared = _shared_pid_state
