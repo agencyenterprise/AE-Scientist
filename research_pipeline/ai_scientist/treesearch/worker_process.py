@@ -35,6 +35,24 @@ logger = logging.getLogger("ai-scientist")
 _LLM_PARSE_TIMEOUT_SECONDS = 300
 
 
+class ExecutionTerminatedError(RuntimeError):
+    """Raised when the execution was intentionally terminated via user action."""
+
+    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+        super().__init__(f"Execution {execution_id} terminated intentionally")
+        self.execution_id = execution_id
+        self.exec_time = exec_time
+
+
+class ExecutionCrashedError(RuntimeError):
+    """Raised when the interpreter process died unexpectedly."""
+
+    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+        super().__init__(f"Execution {execution_id} crashed unexpectedly")
+        self.execution_id = execution_id
+        self.exec_time = exec_time
+
+
 def _call_with_timeout(
     *,
     func: Callable[..., T],
@@ -287,7 +305,7 @@ def _execute_experiment(
     process_interpreter.set_pid_callback(_pid_tracker)
     try:
         exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
-    except Exception:
+    except Exception as exc:
         process_interpreter.set_pid_callback(None)
         process_interpreter.cleanup_session()
         completed_at = datetime.now(timezone.utc)
@@ -305,7 +323,20 @@ def _execute_experiment(
             "Clearing PID reference for execution_id=%s due to execution failure.", execution_id
         )
         execution_registry.clear_pid(execution_id)
-        raise
+        if execution_registry.is_terminated(execution_id):
+            logger.info(
+                "Execution %s was intentionally terminated; skipping further processing.",
+                execution_id,
+            )
+            raise ExecutionTerminatedError(
+                execution_id=execution_id,
+                exec_time=duration,
+            ) from exc
+        logger.error("Execution %s crashed unexpectedly; propagating failure.", execution_id)
+        raise ExecutionCrashedError(
+            execution_id=execution_id,
+            exec_time=duration,
+        ) from exc
     finally:
         process_interpreter.set_pid_callback(None)
     process_interpreter.cleanup_session()
@@ -832,43 +863,86 @@ def process_node(
             child_node.is_user_feedback,
         )
 
-        exec_result = _execute_experiment(
-            child_node=child_node,
-            cfg=cfg,
-            process_interpreter=process_interpreter,
-            event_callback=event_callback,
-            stage_name=stage_name,
-            execution_id=execution_id,
-        )
+        exec_result: ExecutionResult | None = None
+        exec_failed = False
+        terminated_by_user = False
+        failure_reason: str | None = None
+        try:
+            exec_result = _execute_experiment(
+                child_node=child_node,
+                cfg=cfg,
+                process_interpreter=process_interpreter,
+                event_callback=event_callback,
+                stage_name=stage_name,
+                execution_id=execution_id,
+            )
+        except ExecutionTerminatedError as term_exc:
+            exec_failed = True
+            terminated_by_user = True
+            failure_reason = "Execution terminated by user request."
+            exec_result = ExecutionResult(
+                term_out=[],
+                exec_time=term_exc.exec_time or 0.0,
+                exc_type="Terminated",
+            )
+        except ExecutionCrashedError as crash_exc:
+            exec_failed = True
+            failure_reason = "Execution process crashed unexpectedly."
+            exec_result = ExecutionResult(
+                term_out=[],
+                exec_time=crash_exc.exec_time or 0.0,
+                exc_type="Crashed",
+            )
 
-        _analyze_results_and_metrics(
-            worker_agent=worker_agent,
-            child_node=child_node,
-            parent_node=parent_node,
-            cfg=cfg,
-            working_dir=working_dir,
-            process_interpreter=process_interpreter,
-            seed_eval=seed_eval,
-            exec_result=exec_result,
-            event_callback=event_callback,
-        )
+        if exec_failed or exec_result is None:
+            logger.warning(
+                "Skipping result analysis for execution_id=%s (terminated=%s).",
+                execution_id,
+                terminated_by_user,
+            )
+            child_node.metric = WorstMetricValue()
+            child_node.is_buggy = True
+            child_node.analysis = (
+                failure_reason
+                if failure_reason
+                else "Execution failed before metrics could be collected."
+            )
+            child_node.exec_time = exec_result.exec_time if exec_result else None
+            child_node.exc_type = exec_result.exc_type if exec_result else "Unknown"
+            if exec_result:
+                child_node._term_out = exec_result.term_out
+            child_node.exc_info = {}
+            child_node.exc_stack = []
+            child_node.is_buggy_plots = True
+        else:
+            _analyze_results_and_metrics(
+                worker_agent=worker_agent,
+                child_node=child_node,
+                parent_node=parent_node,
+                cfg=cfg,
+                working_dir=working_dir,
+                process_interpreter=process_interpreter,
+                seed_eval=seed_eval,
+                exec_result=exec_result,
+                event_callback=event_callback,
+            )
 
-        if not child_node.is_buggy:
-            if _should_run_plotting_and_vlm(stage_name=worker_agent.stage_name):
-                _run_plotting_and_vlm(
-                    worker_agent=worker_agent,
-                    child_node=child_node,
-                    parent_node=parent_node,
-                    cfg=cfg,
-                    working_dir=working_dir,
-                    process_interpreter=process_interpreter,
-                    seed_eval=seed_eval,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    event_callback=event_callback,
-                )
-            elif child_node.is_buggy_plots is None:
-                # If plotting/VLM is skipped (e.g., Stage 1), treat plots as non-buggy
-                child_node.is_buggy_plots = False
+            if not child_node.is_buggy:
+                if _should_run_plotting_and_vlm(stage_name=worker_agent.stage_name):
+                    _run_plotting_and_vlm(
+                        worker_agent=worker_agent,
+                        child_node=child_node,
+                        parent_node=parent_node,
+                        cfg=cfg,
+                        working_dir=working_dir,
+                        process_interpreter=process_interpreter,
+                        seed_eval=seed_eval,
+                        best_stage3_plot_code=best_stage3_plot_code,
+                        event_callback=event_callback,
+                    )
+                elif child_node.is_buggy_plots is None:
+                    # If plotting/VLM is skipped (e.g., Stage 1), treat plots as non-buggy
+                    child_node.is_buggy_plots = False
 
         result_data = child_node.to_dict()
         # sanity pickle

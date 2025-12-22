@@ -34,7 +34,7 @@ from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .worker_process import process_node
+from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, process_node
 
 logger = logging.getLogger("ai-scientist")
 
@@ -283,6 +283,17 @@ class ParallelAgent:
                 if node_found is not None:
                     seed_nodes.append(node_found)
                 logger.debug("Added result node to journal")
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Multi-seed execution %s was terminated intentionally; skipping result.",
+                    execution_id,
+                )
+            except ExecutionCrashedError as exc:
+                logger.error(
+                    "Multi-seed execution %s crashed unexpectedly: %s",
+                    execution_id,
+                    exc,
+                )
             except Exception as e:
                 logger.error(f"Error in multi-seed evaluation: {str(e)}")
             finally:
@@ -648,6 +659,38 @@ class ParallelAgent:
                     )
                 )
                 self._handle_worker_timeout(future=future)
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Execution %s was terminated intentionally; deferring node re-run.",
+                    current_execution_id,
+                )
+                self.event_callback(
+                    RunLogEvent(
+                        message=f"Node {i + 1}/{len(futures)} was terminated intentionally",
+                        level="info",
+                    )
+                )
+                continue
+            except ExecutionCrashedError as exc:
+                logger.error(
+                    "Execution %s crashed unexpectedly: %s",
+                    current_execution_id,
+                    exc,
+                )
+                self.event_callback(
+                    RunLogEvent(
+                        message=(
+                            f"Node {i + 1}/{len(futures)} crashed unexpectedly: {exc}. "
+                            "Marking as buggy."
+                        ),
+                        level="error",
+                    )
+                )
+                if current_execution_id is not None:
+                    entry = execution_registry.get_entry(current_execution_id)
+                    if entry and entry.node is not None:
+                        entry.node.is_buggy = True
+                continue
             except Exception as e:
                 logger.exception(f"Error processing node: {str(e)}")
 
