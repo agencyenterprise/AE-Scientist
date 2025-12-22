@@ -392,49 +392,38 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         or None if not found.
         """
         query = """
-            WITH latest_stage_progress AS (
+            WITH all_progress AS (
+                SELECT run_id, stage, progress, best_metric, created_at
+                FROM rp_run_stage_progress_events
+                UNION ALL
+                SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
+                FROM rp_paper_generation_events
+            ),
+            latest_progress AS (
                 SELECT DISTINCT ON (run_id)
                     run_id,
                     stage,
                     progress,
                     best_metric,
                     created_at
-                FROM rp_run_stage_progress_events
+                FROM all_progress
                 ORDER BY run_id, created_at DESC
             ),
-            latest_paper_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    '5_paper_generation' AS stage,
-                    progress,
-                    NULL::text AS best_metric,
-                    created_at
-                FROM rp_paper_generation_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_progress AS (
+            progress_with_calculations AS (
                 SELECT
-                    COALESCE(pp.run_id, sp.run_id) AS run_id,
-                    COALESCE(pp.stage, sp.stage) AS stage,
-                    sp.best_metric,
+                    run_id,
+                    stage,
+                    best_metric,
                     -- Calculate overall progress as completed-stages-only buckets.
                     -- If the *current* stage is incomplete, the displayed progress reflects
                     -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
                     CASE
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.2 ELSE 0.0 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.4 ELSE 0.2 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.6 ELSE 0.4 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.8 ELSE 0.6 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN
-                            CASE WHEN COALESCE(pp.progress, 0) >= 1 THEN 1.0 ELSE 0.8 END
-                        ELSE COALESCE(pp.progress, sp.progress)
+                        WHEN stage ~ '^[1-5]_' THEN
+                            CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
+                            CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
+                        ELSE progress
                     END AS overall_progress
-                FROM latest_stage_progress sp
-                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
+                FROM latest_progress
             ),
             artifact_counts AS (
                 SELECT run_id, COUNT(*) as count
@@ -453,16 +442,16 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 iv.short_hypothesis AS idea_hypothesis,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
-                lp.stage AS current_stage,
-                lp.overall_progress AS progress,
-                lp.best_metric,
+                pc.stage AS current_stage,
+                pc.overall_progress AS progress,
+                pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
-            LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
+            LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             WHERE r.run_id = %s
         """
@@ -533,49 +522,38 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
         query = f"""
-            WITH latest_stage_progress AS (
+            WITH all_progress AS (
+                SELECT run_id, stage, progress, best_metric, created_at
+                FROM rp_run_stage_progress_events
+                UNION ALL
+                SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
+                FROM rp_paper_generation_events
+            ),
+            latest_progress AS (
                 SELECT DISTINCT ON (run_id)
                     run_id,
                     stage,
                     progress,
                     best_metric,
                     created_at
-                FROM rp_run_stage_progress_events
+                FROM all_progress
                 ORDER BY run_id, created_at DESC
             ),
-            latest_paper_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    '5_paper_generation' AS stage,
-                    progress,
-                    NULL::text AS best_metric,
-                    created_at
-                FROM rp_paper_generation_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_progress AS (
+            progress_with_calculations AS (
                 SELECT
-                    COALESCE(pp.run_id, sp.run_id) AS run_id,
-                    COALESCE(pp.stage, sp.stage) AS stage,
-                    sp.best_metric,
+                    run_id,
+                    stage,
+                    best_metric,
                     -- Calculate overall progress as completed-stages-only buckets.
                     -- If the *current* stage is incomplete, the displayed progress reflects
                     -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
                     CASE
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.2 ELSE 0.0 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.4 ELSE 0.2 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.6 ELSE 0.4 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN
-                            CASE WHEN COALESCE(sp.progress, 0) >= 1 THEN 0.8 ELSE 0.6 END
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN
-                            CASE WHEN COALESCE(pp.progress, 0) >= 1 THEN 1.0 ELSE 0.8 END
-                        ELSE COALESCE(pp.progress, sp.progress)
+                        WHEN stage ~ '^[1-5]_' THEN
+                            CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
+                            CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
+                        ELSE progress
                     END AS overall_progress
-                FROM latest_stage_progress sp
-                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
+                FROM latest_progress
             ),
             artifact_counts AS (
                 SELECT run_id, COUNT(*) as count
@@ -594,16 +572,16 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 iv.short_hypothesis AS idea_hypothesis,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
-                lp.stage AS current_stage,
-                lp.overall_progress AS progress,
-                lp.best_metric,
+                pc.stage AS current_stage,
+                pc.overall_progress AS progress,
+                pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
-            LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
+            LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             {where_sql}
             ORDER BY r.created_at DESC
