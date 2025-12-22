@@ -27,15 +27,12 @@ interface UseResearchRunDetailsReturn {
   loading: boolean;
   error: string | null;
   conversationId: number | null;
-  isConnected: boolean;
-  connectionError: string | null;
   hwEstimatedCostCents: number | null;
   hwActualCostCents: number | null;
   hwCostPerHourCents: number | null;
   stopPending: boolean;
   stopError: string | null;
   handleStopRun: () => Promise<void>;
-  reconnect: () => void;
 }
 
 /**
@@ -266,7 +263,7 @@ export function useResearchRunDetails({
   }, []);
 
   // Use SSE for real-time updates
-  const { isConnected, connectionError, reconnect } = useResearchRunSSE({
+  useResearchRunSSE({
     runId,
     conversationId,
     enabled:
@@ -327,14 +324,11 @@ export function useResearchRunDetails({
     loading,
     error,
     conversationId,
-    isConnected,
-    connectionError,
     hwEstimatedCostCents,
     hwActualCostCents,
     hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
-    reconnect,
   };
 }
