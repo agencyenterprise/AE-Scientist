@@ -12,6 +12,7 @@ import {
   BorderStyle,
 } from "@/shared/lib/tree-colors";
 import { NodeTypesLegend } from "./NodeTypesLegend";
+import { NodeStrategyGuide } from "./NodeStrategyGuide";
 
 type MetricName = {
   metric_name: string;
@@ -205,8 +206,9 @@ export function TreeVizViewer({ viz, artifacts, stageId }: Props) {
             })}
           </svg>
         </div>
-        <div className="mt-2">
+        <div className="mt-2 flex gap-2">
           <NodeTypesLegend stageId={stageId} />
+          <NodeStrategyGuide stageId={stageId} />
         </div>
       </div>
       <div className="w-1/2 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 max-h-[600px] overflow-y-auto">

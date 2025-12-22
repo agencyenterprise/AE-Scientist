@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useIsClient } from "@/shared/hooks/use-is-client";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -21,6 +21,19 @@ const CIRCLE_RADIUS = 8;
 export function NodeTypesLegend({ stageId }: Props) {
   const isClient = useIsClient();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [open]);
 
   if (!isClient) return null;
 
