@@ -281,6 +281,9 @@ class Node(DataClassJsonMixin):
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
             "exec_time_feedback": self.exec_time_feedback,
+            "is_user_feedback": self.is_user_feedback,
+            "user_feedback_payload": self.user_feedback_payload,
+            "user_feedback_pending": self.user_feedback_pending,
         }
 
     @classmethod
