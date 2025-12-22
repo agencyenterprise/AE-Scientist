@@ -252,15 +252,15 @@ class MinimalAgent:
         feedback = parent_node.user_feedback_payload
         introduction = (
             "You are an experienced AI researcher. Your previous code for research experiment had a bug, so based on the information below, you should revise it in order to fix this bug. "
-            "Your response should be an implementation outline in natural language,"
-            " followed by a single markdown code block which implements the bugfix/solution."
+            "Your response should be an implementation outline in natural language, "
+            " followed by a single markdown code block which implements the bugfix/solution. "
         )
         if feedback:
             introduction = (
                 "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
-                "Based on the user feedback, you should revise it in order to address that request."
-                "Your response should be an implementation outline in natural language,"
-                " followed by a single markdown code block."
+                "Based on the user feedback, you should revise it in order to address that request. "
+                "Your response should be an implementation outline in natural language, "
+                " followed by a single markdown code block. "
             )
         prompt: PromptType = {
             "Introduction": introduction,

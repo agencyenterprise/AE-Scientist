@@ -778,15 +778,15 @@ class Journal:
 
         for node in self.buggy_nodes:
             failure_info = f"Design: {node.plan}\n  "
-            failure_info += f"Error Analysis: {node.analysis}\n"
+            failure_info += f"Error Analysis: {node.analysis}\n  "
             failure_info += (
-                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n"
+                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n  "
             )
             if node.user_feedback_payload:
-                failure_info += f"User Feedback: {node.user_feedback_payload}\n"
-            failure_info += f"Debug Depth: {node.debug_depth}\n"
+                failure_info += f"User killed the execution and provided the following feedback: {node.user_feedback_payload}\n  "
+            failure_info += f"Debug Depth: {node.debug_depth}\n  "
             if include_code:
-                failure_info += f"Code: {node.code}\n"
+                failure_info += f"Code: {node.code}\n  "
             prompt["Failed Experiments"] += failure_info
 
         summary_resp = query(
