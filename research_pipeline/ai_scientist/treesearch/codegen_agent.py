@@ -74,6 +74,7 @@ class MinimalAgent:
         gpu_spec: GPUSpec | None = None,
         memory_summary: str | None = None,
         evaluation_metrics: str | list[str] | None = None,
+        user_feedback: str | None = None,
     ) -> None:
         self.task_desc = task_desc
         self.memory_summary = memory_summary
@@ -82,6 +83,7 @@ class MinimalAgent:
         self.gpu_spec = gpu_spec
         self.evaluation_metrics = evaluation_metrics
         self.stage_name = stage_name
+        self.user_feedback = user_feedback
 
     @property
     def _prompt_environment(self) -> dict[str, str]:
@@ -251,6 +253,18 @@ class MinimalAgent:
 
     # schemas used elsewhere; no additional response-format helpers are needed here.
 
+    def apply_user_feedback(self, prompt: PromptType) -> None:
+        if self.user_feedback:
+            prompt["User feedback"] = self.user_feedback
+            preview = self.user_feedback[:200].replace("\n", " ")
+            logger.info(
+                "Injected user feedback into prompt for stage=%s (len=%s, preview=%s)",
+                self.stage_name,
+                len(self.user_feedback),
+                preview,
+            )
+            logger.debug("Prompt after feedback injection: %s", prompt)
+
     def debug(self, parent_node: Node) -> Node:
         # Build a debugging prompt combining previous code, outputs, and feedback
         prompt: PromptType = {
@@ -275,6 +289,7 @@ class MinimalAgent:
         }
         debug_instructions |= self.prompt_impl_guideline
         prompt["Instructions"] = debug_instructions
+        self.apply_user_feedback(prompt)
         plan, code = self.plan_and_code_query(prompt)
         return Node(plan=plan, code=code, parent=parent_node)
 

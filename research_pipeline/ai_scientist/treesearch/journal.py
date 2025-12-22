@@ -114,6 +114,11 @@ class Node(DataClassJsonMixin):
     # ---- agent ----
     agent: Any | None = field(default=None, kw_only=True, repr=False)
 
+    # ---- user feedback ----
+    is_user_feedback: bool = field(default=False, kw_only=True)
+    user_feedback_payload: str | None = field(default=None, kw_only=True)
+    user_feedback_pending: bool = field(default=False, kw_only=True)
+
     def __post_init__(self) -> None:
         # Ensure children is a set even if initialized with a list
         if isinstance(cast(Any, self.children), list):

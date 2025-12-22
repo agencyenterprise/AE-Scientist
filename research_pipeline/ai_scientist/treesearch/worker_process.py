@@ -12,6 +12,7 @@ from typing import Callable, Literal, Optional, TypeVar
 
 from ai_scientist.llm import structured_query_with_schema
 
+from . import execution_registry
 from .codegen_agent import MinimalAgent
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
@@ -123,6 +124,7 @@ def _create_worker_agent(
     memory_summary: str,
     evaluation_metrics: str,
     stage_name: str,
+    user_feedback: str | None = None,
 ) -> MinimalAgent:
     return MinimalAgent(
         task_desc=task_desc,
@@ -132,6 +134,7 @@ def _create_worker_agent(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_name=stage_name,
+        user_feedback=user_feedback,
     )
 
 
@@ -158,6 +161,7 @@ def _create_child_node(
     new_ablation_idea: AblationIdea | None,
     new_hyperparam_idea: HyperparamTuningIdea | None,
     event_callback: Callable[[BaseEvent], None],
+    execution_id: str,
 ) -> Node:
     if seed_eval:
         assert parent_node is not None, "parent_node must be provided for seed evaluation"
@@ -171,6 +175,7 @@ def _create_child_node(
         event_callback(RunLogEvent(message="Generating new implementation code", level="info"))
         child_node = Stage1Baseline.draft(worker_agent)
         event_callback(RunLogEvent(message="Code generation complete", level="info"))
+        child_node.id = execution_id
         return child_node
 
     if parent_node.is_buggy:
@@ -180,6 +185,7 @@ def _create_child_node(
         child_node = worker_agent.debug(parent_node)
         child_node.parent = parent_node
         event_callback(RunLogEvent(message="Fix attempt generated", level="info"))
+        child_node.id = execution_id
         return child_node
 
     if new_hyperparam_idea is not None and new_ablation_idea is None:
@@ -190,6 +196,7 @@ def _create_child_node(
             hyperparam_idea=new_hyperparam_idea,
         )
         child_node.parent = parent_node
+        child_node.id = execution_id
         return child_node
 
     if new_ablation_idea is not None and new_hyperparam_idea is None:
@@ -200,6 +207,7 @@ def _create_child_node(
             ablation_idea=new_ablation_idea,
         )
         child_node.parent = parent_node
+        child_node.id = execution_id
         return child_node
 
     logger.info(f"Improving node {parent_node.id}")
@@ -208,6 +216,7 @@ def _create_child_node(
         parent_node=parent_node,
     )
     child_node.parent = parent_node
+    child_node.id = execution_id
     return child_node
 
 
@@ -236,6 +245,7 @@ def _improve_existing_implementation(
     improve_instructions |= worker_agent.prompt_impl_guideline
     prompt["Instructions"] = improve_instructions
 
+    worker_agent.apply_user_feedback(prompt)
     plan, code = worker_agent.plan_and_code_query(prompt=prompt)
     logger.debug("----- LLM code start (improve) -----")
     logger.debug(code)
@@ -254,6 +264,7 @@ def _execute_experiment(
     process_interpreter: Interpreter,
     event_callback: Callable[[BaseEvent], None],
     stage_name: str,
+    execution_id: str,
 ) -> ExecutionResult:
     logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
     logger.debug("Starting first interpreter: executing experiment code")
@@ -268,9 +279,16 @@ def _execute_experiment(
         )
     )
     timer_start = time.monotonic()
+
+    def _pid_tracker(pid: int) -> None:
+        logger.info("Worker recorded pid=%s for execution_id=%s", pid, execution_id)
+        execution_registry.update_pid(execution_id=execution_id, pid=pid)
+
+    process_interpreter.set_pid_callback(_pid_tracker)
     try:
         exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
     except Exception:
+        process_interpreter.set_pid_callback(None)
         process_interpreter.cleanup_session()
         completed_at = datetime.now(timezone.utc)
         duration = time.monotonic() - timer_start
@@ -283,7 +301,13 @@ def _execute_experiment(
                 completed_at=completed_at,
             )
         )
+        logger.info(
+            "Clearing PID reference for execution_id=%s due to execution failure.", execution_id
+        )
+        execution_registry.clear_pid(execution_id)
         raise
+    finally:
+        process_interpreter.set_pid_callback(None)
     process_interpreter.cleanup_session()
     logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
     event_callback(
@@ -302,6 +326,8 @@ def _execute_experiment(
             completed_at=completed_at,
         )
     )
+    logger.info("Marking execution_id=%s as completed in registry.", execution_id)
+    execution_registry.mark_completed(execution_id)
     return exec_result
 
 
@@ -747,6 +773,7 @@ def process_node(
     new_ablation_idea: Optional[AblationIdea] = None,
     new_hyperparam_idea: Optional[HyperparamTuningIdea] = None,
     best_stage3_plot_code: Optional[str] = None,
+    execution_id: str,
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
 
@@ -754,6 +781,16 @@ def process_node(
     workspace, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
 
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
+
+    parent_node = _load_parent_node(node_data=node_data)
+    logger.info(
+        "Worker process %s handling execution_id=%s stage=%s (parent_node=%s, user_feedback=%s)",
+        process_id,
+        execution_id,
+        stage_name,
+        parent_node.id if parent_node else "draft",
+        bool(parent_node.user_feedback_payload) if parent_node else False,
+    )
 
     worker_agent = _create_worker_agent(
         task_desc=task_desc,
@@ -763,13 +800,23 @@ def process_node(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_name=stage_name,
+        user_feedback=(parent_node.user_feedback_payload if parent_node else None),
+    )
+    logger.info(
+        "Worker agent ready for execution_id=%s. User feedback present=%s",
+        execution_id,
+        bool(worker_agent.user_feedback),
     )
 
     process_interpreter = _create_interpreter(cfg=cfg, workspace=workspace)
 
     try:
-        parent_node = _load_parent_node(node_data=node_data)
-
+        logger.info(
+            "Building child node for execution_id=%s (seed_eval=%s, stage=%s)",
+            execution_id,
+            seed_eval,
+            stage_name,
+        )
         child_node = _create_child_node(
             worker_agent=worker_agent,
             parent_node=parent_node,
@@ -777,6 +824,12 @@ def process_node(
             new_ablation_idea=new_ablation_idea,
             new_hyperparam_idea=new_hyperparam_idea,
             event_callback=event_callback,
+            execution_id=execution_id,
+        )
+        logger.info(
+            "Child node %s prepared (feedback=%s)",
+            child_node.id,
+            child_node.is_user_feedback,
         )
 
         exec_result = _execute_experiment(
@@ -785,6 +838,7 @@ def process_node(
             process_interpreter=process_interpreter,
             event_callback=event_callback,
             stage_name=stage_name,
+            execution_id=execution_id,
         )
 
         _analyze_results_and_metrics(
