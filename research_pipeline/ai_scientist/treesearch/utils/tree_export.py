@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 class TelemetryLike(Protocol):
     database_url: str
     run_id: str
+    webhook_url: str | None
+    webhook_token: str | None
 
 
 def _normalize_stage_id(stage_name: str) -> str:
@@ -488,7 +490,12 @@ def generate(
     # Persist tree visualization payload directly from research_pipeline
     try:
         if telemetry_cfg is not None:
-            store = TreeVizStore(database_url=telemetry_cfg.database_url)
+            store = TreeVizStore(
+                database_url=telemetry_cfg.database_url,
+                webhook_url=telemetry_cfg.webhook_url,
+                webhook_token=telemetry_cfg.webhook_token,
+                run_id=telemetry_cfg.run_id,
+            )
             store.upsert(
                 run_id=telemetry_cfg.run_id,
                 stage_id=_normalize_stage_id(stage_name),

@@ -98,10 +98,15 @@ class AgentManager:
         # Track last iteration logs per stage to avoid duplicate spam when a stage stalls
         self._last_logged_iteration_by_stage: Dict[str, int] = {}
         self._last_logged_node_count_by_stage: Dict[str, int] = {}
+        self._attempt_iteration_by_stage: Dict[str, int] = {}
 
     def get_max_iterations(self, stage_number: int) -> int:
         """Get max iterations for a stage from config or default"""
         return self.cfg.agent.stages.get(f"stage{stage_number}_max_iters", self.cfg.agent.steps)
+
+    def get_attempt_iteration(self, stage_name: str) -> int:
+        """Return how many iterations have been attempted for a stage."""
+        return self._attempt_iteration_by_stage.get(stage_name, 0)
 
     def _get_task_desc_str(self) -> str:
         task_desc = """You are an ambitious AI researcher who is looking to publish a paper that will contribute significantly to the field.
@@ -677,7 +682,8 @@ Your research idea:\n\n
             journal = self.journals[stage_name]
             max_iters = current_substage.max_iterations
             node_count = len(journal.nodes)
-            current_iter = node_count + 1
+            current_iter = self._attempt_iteration_by_stage.get(stage_name, 0) + 1
+            self._attempt_iteration_by_stage[stage_name] = current_iter
             logger.debug(f"Stage {stage_name}: Iteration {current_iter}/{max_iters}")
 
             last_node_count = self._last_logged_node_count_by_stage.get(stage_name)

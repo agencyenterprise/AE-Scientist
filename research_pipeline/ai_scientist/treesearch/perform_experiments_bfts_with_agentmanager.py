@@ -68,7 +68,6 @@ def perform_experiments_bfts(
     # Track per-stage iteration state to avoid duplicate progress events and
     # to ensure iteration counts start from 1 for each main stage.
     last_reported_iteration_by_stage: dict[str, int] = {}
-    baseline_nodes_by_stage: dict[str, int] = {}
 
     def step_callback(stage: StageMeta, journal: Journal) -> None:
         # Persist progress snapshot and emit progress events after each step
@@ -117,18 +116,14 @@ def perform_experiments_bfts(
             # ALWAYS emit progress - show actual work being done.
             # Derive an effective iteration count for this stage that:
             # - Ignores seed nodes (multi-seed eval and aggregation nodes)
-            # - For stages > 1, treats the single carried-over best node from the
-            #   previous stage as baseline (not counted as a new iteration).
-            non_seed_nodes = [n for n in journal.nodes if not n.is_seed_node]
-            if stage.name not in baseline_nodes_by_stage:
-                baseline_nodes_by_stage[stage.name] = 0 if stage.number == 1 else 1
-            baseline = baseline_nodes_by_stage[stage.name]
-            effective_iteration = max(len(non_seed_nodes) - baseline, 0)
-
+            # Track attempts (including retries/timeouts) so UI/DB stay in sync with logs.
+            attempt_iteration = manager.get_attempt_iteration(stage.name)
+            if attempt_iteration == 0:
+                return
             if stage.max_iterations > 0:
-                iteration_display = min(effective_iteration, stage.max_iterations)
+                iteration_display = min(attempt_iteration, stage.max_iterations)
             else:
-                iteration_display = effective_iteration
+                iteration_display = attempt_iteration
 
             # Calculate smart ETA using moving average of recent iterations
             eta_s = None
@@ -136,8 +131,13 @@ def perform_experiments_bfts(
                 # Use last 5 iterations (or fewer if not enough data)
                 recent_durations = iteration_durations[-5:]
                 avg_duration = sum(recent_durations) / len(recent_durations)
-                remaining_iterations = max(stage.max_iterations - effective_iteration, 0)
-                eta_s = int(remaining_iterations * avg_duration)
+                remaining_iterations = (
+                    max(stage.max_iterations - attempt_iteration, 0)
+                    if stage.max_iterations > 0
+                    else None
+                )
+                if remaining_iterations is not None:
+                    eta_s = int(remaining_iterations * avg_duration)
 
             # Get latest node execution time for display
             latest_exec_time_s = None
@@ -151,7 +151,7 @@ def perform_experiments_bfts(
             # Also emit when stage completes (reaches max_iterations) to ensure final progress=1.0 is recorded.
             stage_completed = manager.has_stage_completed(stage.name)
             previous_iteration = last_reported_iteration_by_stage.get(stage.name)
-            stage_complete = stage.max_iterations > 0 and len(journal.nodes) >= stage.max_iterations
+            stage_complete = stage.max_iterations > 0 and attempt_iteration >= stage.max_iterations
             # Emit if iteration increased, or if stage completed and we haven't emitted the final event yet
             iteration_increased = (
                 previous_iteration is None or iteration_display > previous_iteration

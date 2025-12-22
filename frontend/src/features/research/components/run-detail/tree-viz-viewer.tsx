@@ -57,13 +57,29 @@ interface Props {
   viz: TreeVizItem;
   artifacts: ArtifactMetadata[];
   stageId: string;
+  bestNodeId?: number | null;
 }
 
 const NODE_SIZE = 18;
 
-export function TreeVizViewer({ viz, artifacts, stageId }: Props) {
+export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
-  const [selected, setSelected] = useState<number>(0);
+
+  // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
+  const initialSelection = useMemo(() => {
+    if (bestNodeId !== null && bestNodeId !== undefined && bestNodeId >= 0) {
+      return bestNodeId;
+    }
+
+    return 0;
+  }, [bestNodeId]);
+
+  const [selected, setSelected] = useState<number>(initialSelection);
+
+  // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
+  useEffect(() => {
+    setSelected(initialSelection);
+  }, [initialSelection]);
 
   const nodes = useMemo(() => {
     return (payload.layout || []).map((coords, idx) => ({

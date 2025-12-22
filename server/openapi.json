@@ -1887,6 +1887,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/tree-viz-stored": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Tree Viz Stored",
+        "operationId": "ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TreeVizStoredPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/run-log": {
       "post": {
         "tags": [
@@ -7193,6 +7238,46 @@
         ],
         "title": "TreeVizItem",
         "description": "Stored tree visualization payload for a run stage."
+      },
+      "TreeVizStoredEvent": {
+        "properties": {
+          "stage_id": {
+            "type": "string",
+            "title": "Stage Id"
+          },
+          "tree_viz_id": {
+            "type": "integer",
+            "title": "Tree Viz Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage_id",
+          "tree_viz_id",
+          "version"
+        ],
+        "title": "TreeVizStoredEvent"
+      },
+      "TreeVizStoredPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/TreeVizStoredEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "TreeVizStoredPayload"
       },
       "UserListItem": {
         "properties": {

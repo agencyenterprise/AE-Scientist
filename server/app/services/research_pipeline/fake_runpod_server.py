@@ -792,6 +792,7 @@ class FakeRunner:
                 )
 
         conn = psycopg2.connect(self._database_url)
+        tree_viz_id: int
         try:
             with conn:
                 with conn.cursor() as cursor:
@@ -831,6 +832,33 @@ class FakeRunner:
                     )
         finally:
             conn.close()
+        
+        # Publish tree_viz_stored event via webhook
+        try:
+            if self._webhook_client:
+                self._webhook_client._post(
+                    path="/tree-viz-stored",
+                    payload={
+                        "run_id": self._run_id,
+                        "event": {
+                            "stage_id": stage_id,
+                            "tree_viz_id": tree_viz_id,
+                            "version": version,
+                        }
+                    }
+                )
+                logger.info(
+                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s", 
+                    self._run_id, 
+                    stage_id,
+                    tree_viz_id,
+                )
+        except Exception:
+            logger.exception(
+                "Failed to post tree_viz_stored webhook for run=%s stage=%s",
+                self._run_id,
+                stage_id,
+            )
 
     def _emit_fake_best_node(self, *, stage_name: str, stage_index: int) -> None:
         node_id = f"{stage_name}-best-{uuid.uuid4().hex[:8]}"

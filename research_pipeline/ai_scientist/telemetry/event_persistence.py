@@ -45,6 +45,7 @@ class WebhookClient:
         "substage_summary": "/substage-summary",
         "paper_generation_progress": "/paper-generation-progress",
         "best_node_selection": "/best-node-selection",
+        "tree_viz_stored": "/tree-viz-stored",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"

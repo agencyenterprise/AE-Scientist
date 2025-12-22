@@ -790,6 +790,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/tree-viz-stored": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Tree Viz Stored */
+        post: operations["ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/run-log": {
         parameters: {
             query?: never;
@@ -3535,6 +3552,21 @@ export interface components {
              */
             updated_at: string;
         };
+        /** TreeVizStoredEvent */
+        TreeVizStoredEvent: {
+            /** Stage Id */
+            stage_id: string;
+            /** Tree Viz Id */
+            tree_viz_id: number;
+            /** Version */
+            version: number;
+        };
+        /** TreeVizStoredPayload */
+        TreeVizStoredPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["TreeVizStoredEvent"];
+        };
         /**
          * UserListItem
          * @description User item for list responses.
@@ -4856,6 +4888,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["BestNodeSelectionPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreeVizStoredPayload"];
             };
         };
         responses: {

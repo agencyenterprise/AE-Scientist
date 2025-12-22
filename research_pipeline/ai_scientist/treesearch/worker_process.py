@@ -3,8 +3,10 @@ import multiprocessing
 import os
 import pickle
 import traceback
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, TypeVar
 
 from ai_scientist.llm import structured_query_with_schema
 
@@ -24,7 +26,21 @@ from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import wrap_code
 from .vlm_function_specs import METRIC_PARSE_SCHEMA
 
+T = TypeVar("T")
+
 logger = logging.getLogger("ai-scientist")
+_LLM_PARSE_TIMEOUT_SECONDS = 300
+
+
+def _call_with_timeout(
+    *,
+    func: Callable[..., T],
+    timeout_seconds: int,
+    kwargs: dict[str, object],
+) -> T:
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, **kwargs)
+        return future.result(timeout=timeout_seconds)
 
 
 def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
@@ -614,13 +630,41 @@ def parse_and_assign_metrics(
                 ),
                 "Execution Output": metrics_exec_result.term_out,
             }
-            metrics_model = structured_query_with_schema(
-                system_message=metrics_prompt,
-                user_message=None,
-                model=cfg.agent.feedback.model,
-                temperature=cfg.agent.feedback.temperature,
-                schema_class=METRIC_PARSE_SCHEMA,
-            )
+            try:
+                logger.info(
+                    "→ Parsing metrics with LLM (timeout=%ds, model=%s)",
+                    _LLM_PARSE_TIMEOUT_SECONDS,
+                    cfg.agent.feedback.model,
+                )
+                metrics_model = _call_with_timeout(
+                    func=structured_query_with_schema,
+                    timeout_seconds=_LLM_PARSE_TIMEOUT_SECONDS,
+                    kwargs={
+                        "system_message": metrics_prompt,
+                        "user_message": None,
+                        "model": cfg.agent.feedback.model,
+                        "temperature": cfg.agent.feedback.temperature,
+                        "schema_class": METRIC_PARSE_SCHEMA,
+                    },
+                )
+                logger.info("✓ Metrics parsing LLM completed")
+            except FuturesTimeoutError:
+                logger.warning(
+                    "Metrics parsing LLM timed out after %ds; marking node as buggy",
+                    _LLM_PARSE_TIMEOUT_SECONDS,
+                )
+                event_callback(
+                    RunLogEvent(
+                        message=(
+                            "Metrics parsing timed out while waiting for the LLM "
+                            f"(>{_LLM_PARSE_TIMEOUT_SECONDS}s)."
+                        ),
+                        level="warn",
+                    )
+                )
+                child_node.metric = WorstMetricValue()
+                child_node.is_buggy = True
+                return
             metrics_response = metrics_model.model_dump(by_alias=True)
             if metrics_model.valid_metrics_received:
                 metric_names = metrics_response.get("metric_names", [])
