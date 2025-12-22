@@ -152,6 +152,27 @@ def mark_terminated(*, execution_id: str, payload: str) -> Optional["Node"]:
     return node
 
 
+def get_termination_payload(execution_id: str) -> Optional[str]:
+    """
+    Retrieve the stored termination payload for an execution, if any.
+
+    Checks the local registry first (main process) and then the shared PID state
+    so that worker processes can access the payload after a termination request.
+    """
+    with _lock:
+        entry = _entries.get(execution_id)
+        if entry and entry.payload:
+            return entry.payload
+    shared = _shared_pid_state
+    if shared is None:
+        return None
+    shared_entry = shared.get(execution_id)
+    if not shared_entry:
+        return None
+    payload = shared_entry.get("payload")
+    return str(payload) if payload else None
+
+
 def get_entry(execution_id: str) -> Optional[ExecutionEntry]:
     with _lock:
         entry = _entries.get(execution_id)

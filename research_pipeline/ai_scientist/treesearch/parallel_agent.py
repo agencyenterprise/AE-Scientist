@@ -627,6 +627,18 @@ class ParallelAgent:
                 # Journal acts as a database to look up a parent node,
                 # and add the result node as a child.
                 result_node = Node.from_dict(result_data, self.journal)
+                if current_execution_id is not None:
+                    entry = execution_registry.get_entry(current_execution_id)
+                    if entry and entry.status == "terminated" and entry.payload:
+                        result_node.is_user_feedback = True
+                        result_node.user_feedback_payload = entry.payload
+                        result_node.user_feedback_pending = True
+                        logger.info(
+                            "Result node %s inherited termination payload (%s chars) from execution %s.",
+                            result_node.id[:8],
+                            len(entry.payload),
+                            current_execution_id,
+                        )
                 logger.debug("Investigating if result node has metric")
                 logger.debug(str(result_node.metric))
                 # Update hyperparam tuning state if in Stage 2

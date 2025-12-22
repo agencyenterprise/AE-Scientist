@@ -888,6 +888,17 @@ def process_node(
             exec_failed = True
             terminated_by_user = True
             payload_text = child_node.user_feedback_payload or ""
+            if not payload_text:
+                payload_text = execution_registry.get_termination_payload(execution_id) or ""
+            if payload_text:
+                child_node.is_user_feedback = True
+                child_node.user_feedback_payload = payload_text
+                child_node.user_feedback_pending = True
+                logger.info(
+                    "Attached termination payload (%s chars) to node %s after user kill.",
+                    len(payload_text),
+                    child_node.id,
+                )
             if payload_text:
                 failure_reason = (
                     "Execution terminated by user request. User feedback: " f"{payload_text}"
