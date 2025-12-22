@@ -342,6 +342,18 @@ class ParallelAgent:
         for node in feedback_nodes:
             if len(nodes_to_process) >= self.num_workers:
                 break
+            if node.is_leaf and node.parent is None and node.children:
+                logger.info(
+                    "Skipping root node %s for feedback re-run because it already has children; enqueuing most recent child instead.",
+                    node.id[:8],
+                )
+                newest_child = max(node.children, key=lambda c: c.ctime)
+                newest_child.is_user_feedback = node.is_user_feedback
+                newest_child.user_feedback_payload = node.user_feedback_payload
+                newest_child.user_feedback_pending = True
+                node.user_feedback_pending = False
+                feedback_nodes.append(newest_child)
+                continue
             logger.info(
                 "Scheduling node %s to re-run with user feedback (payload_preview=%s)",
                 node.id[:8],

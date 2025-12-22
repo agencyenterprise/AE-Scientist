@@ -887,7 +887,13 @@ def process_node(
         except ExecutionTerminatedError as term_exc:
             exec_failed = True
             terminated_by_user = True
-            failure_reason = "Execution terminated by user request."
+            payload_text = child_node.user_feedback_payload or ""
+            if payload_text:
+                failure_reason = (
+                    "Execution terminated by user request. User feedback: " f"{payload_text}"
+                )
+            else:
+                failure_reason = "Execution terminated by user request."
             exec_result = ExecutionResult(
                 term_out=[],
                 exec_time=term_exc.exec_time or 0.0,
