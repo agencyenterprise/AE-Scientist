@@ -38,7 +38,11 @@ class ResearchRunListItem(BaseModel):
     )
     current_stage: Optional[str] = Field(None, description="Latest stage from progress events")
     progress: Optional[float] = Field(
-        None, description="Progress percentage (0-1) from latest event"
+        None,
+        description=(
+            "Overall pipeline progress (0-1) computed as completed-stages-only buckets "
+            "(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)."
+        ),
     )
     gpu_type: Optional[str] = Field(None, description="GPU type used for the run")
     cost: float = Field(..., description="Hourly RunPod cost (USD) captured when the pod launched")

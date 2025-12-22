@@ -426,6 +426,11 @@ export function ResearchPipelineStages({
             ? PAPER_GENERATION_STEPS.findIndex(s => s.key === latestPaperEvent.step)
             : -1;
 
+          const displayMax =
+            info.maxIterations ?? (info.iteration !== null ? info.iteration + 1 : 0);
+          const displayIteration =
+            info.iteration !== null ? Math.min(info.iteration + 1, displayMax) : null;
+
           return (
             <div key={stage.id} className="flex flex-col gap-3">
               {/* Stage header with title, description, and status */}
@@ -438,7 +443,7 @@ export function ResearchPipelineStages({
                       !isPaperGeneration &&
                       info.iteration !== null && (
                         <span className="ml-2 text-slate-400">
-                          — Iteration {info.iteration} of {info.maxIterations}
+                          — Iteration {displayIteration} of {displayMax}
                         </span>
                       )}
                     {/* Stages 1-4: Show completion iteration count for completed */}
@@ -446,7 +451,7 @@ export function ResearchPipelineStages({
                       !isPaperGeneration &&
                       info.iteration !== null && (
                         <span className="ml-2 text-slate-400">
-                          — Completed in {info.iteration} iterations
+                          — Completed in {displayIteration} iterations
                         </span>
                       )}
                     {/* Stage 5: Show step name + step count for in_progress */}

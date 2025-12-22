@@ -192,7 +192,7 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
         {selectedNode ? (
           <>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-base font-semibold">Node {selectedNode.id}</h3>
+              <h3 className="text-base font-semibold">Node {selectedNode.id + 1}</h3>
               {selectedNode.excType ? (
                 <span className="text-xs text-red-300">Abandoned</span>
               ) : selectedNode.isBest ? (

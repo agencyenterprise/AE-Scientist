@@ -38,15 +38,12 @@ export default function ResearchRunDetailPage() {
     loading,
     error,
     conversationId,
-    isConnected,
-    connectionError,
     hwEstimatedCostCents,
     hwActualCostCents,
     hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
-    reconnect,
   } = useResearchRunDetails({ runId });
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
@@ -140,13 +137,10 @@ export default function ResearchRunDetailPage() {
           runNumber={runNumber}
           status={run.status}
           createdAt={run.created_at}
-          isConnected={isConnected}
-          connectionError={connectionError}
           canStopRun={canStopRun}
           stopPending={stopPending}
           stopError={stopError}
           onStopRun={handleStopRun}
-          onReconnect={reconnect}
         />
 
         {run.error_message && <ResearchRunError message={run.error_message} />}
@@ -156,7 +150,8 @@ export default function ResearchRunDetailPage() {
         )}
 
         <ResearchRunStats
-          stageProgress={stage_progress}
+          currentStage={runMeta?.current_stage ?? null}
+          progress={runMeta?.progress ?? null}
           gpuType={run.gpu_type}
           artifactsCount={artifacts.length}
         />

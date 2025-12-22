@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import type { ResearchRunStreamEvent } from "@/types";
@@ -39,9 +39,6 @@ interface UseResearchRunSSEOptions {
 }
 
 interface UseResearchRunSSEReturn {
-  isConnected: boolean;
-  connectionError: string | null;
-  reconnect: () => void;
   disconnect: () => void;
 }
 
@@ -156,8 +153,6 @@ export function useResearchRunSSE({
   onError,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
   void _onArtifact;
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -188,7 +183,6 @@ export function useResearchRunSSE({
     const details = mapInitialEventToDetails(snapshotData);
     onInitialData(details);
     onRunUpdate(details.run);
-    setConnectionError(null);
     initialSnapshotFetchedRef.current = true;
   }, [conversationId, runId, enabled, onInitialData, onRunUpdate]);
 
@@ -232,9 +226,9 @@ export function useResearchRunSSE({
         throw new Error("No response body");
       }
 
-      setIsConnected(true);
-      setConnectionError(null);
       reconnectAttemptsRef.current = 0;
+      // eslint-disable-next-line no-console
+      console.debug("[Research Run SSE] Connection established");
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -284,7 +278,6 @@ export function useResearchRunSSE({
                 break;
               case "complete":
                 onComplete(event.data.status);
-                setIsConnected(false);
                 return;
               case "error":
                 onError?.(event.data as string);
@@ -303,15 +296,21 @@ export function useResearchRunSSE({
         return;
       }
 
-      setIsConnected(false);
       const errorMessage = error instanceof Error ? error.message : "Connection failed";
-      setConnectionError(errorMessage);
 
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[Research Run SSE] Connection failed: ${errorMessage}. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
+        );
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[Research Run SSE] Max reconnection attempts reached. Connection permanently lost."
+        );
         onError?.("Max reconnection attempts reached. Please refresh the page.");
       }
     }
@@ -355,7 +354,6 @@ export function useResearchRunSSE({
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
-    setIsConnected(false);
   }, []);
 
   useEffect(() => {
@@ -363,9 +361,6 @@ export function useResearchRunSSE({
   }, [runId, conversationId]);
 
   return {
-    isConnected,
-    connectionError,
-    reconnect: connect,
     disconnect,
   };
 }

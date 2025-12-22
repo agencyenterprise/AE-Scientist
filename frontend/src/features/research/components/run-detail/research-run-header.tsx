@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2, StopCircle, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, Loader2, StopCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
@@ -10,13 +10,10 @@ interface ResearchRunHeaderProps {
   runNumber: number | null;
   status: string;
   createdAt: string;
-  isConnected: boolean;
-  connectionError: string | null;
   canStopRun: boolean;
   stopPending: boolean;
   stopError: string | null;
   onStopRun: () => void;
-  onReconnect: () => void;
 }
 
 /**
@@ -27,16 +24,12 @@ export function ResearchRunHeader({
   runNumber,
   status,
   createdAt,
-  isConnected,
-  connectionError,
   canStopRun,
   stopPending,
   stopError,
   onStopRun,
-  onReconnect,
 }: ResearchRunHeaderProps) {
   const router = useRouter();
-  const isLive = status === "running" || status === "pending";
 
   return (
     <div className="flex items-center gap-4">
@@ -48,7 +41,7 @@ export function ResearchRunHeader({
       </button>
       <div className="flex-1">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-white">{title}</h1>
+          <h1 className="text-2xl font-semibold text-white max-w-3xl">{title}</h1>
           {getStatusBadge(status, "lg")}
           {canStopRun && (
             <button
@@ -68,24 +61,6 @@ export function ResearchRunHeader({
                 </>
               )}
             </button>
-          )}
-          {isLive && (
-            <>
-              {isConnected ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400">
-                  <Wifi className="h-3 w-3" />
-                  Live
-                </span>
-              ) : connectionError ? (
-                <button
-                  onClick={onReconnect}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/25"
-                >
-                  <WifiOff className="h-3 w-3" />
-                  Reconnect
-                </button>
-              ) : null}
-            </>
           )}
         </div>
         <p className="mt-1 text-sm text-slate-400">
