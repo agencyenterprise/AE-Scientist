@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { Clock } from "lucide-react";
 import type { ResearchRun } from "@/types/research";
+import { formatResearchStageName } from "../utils/research-utils";
 
 interface ResearchHistoryCardProps {
   research: ResearchRun;
@@ -35,7 +36,8 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
               </p>
               {isRunning && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-200">
-                  running {research.currentStage || ""}
+                  running{" "}
+                  {(formatResearchStageName(research.currentStage) ?? research.currentStage) || ""}
                 </span>
               )}
               {isPending && (
