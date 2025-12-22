@@ -64,7 +64,11 @@ def update_pid(*, execution_id: str, pid: int) -> None:
             "Shared PID state not configured when updating pid for execution_id=%s", execution_id
         )
         return
-    shared[execution_id] = {"pid": pid, "reported_at": time.time()}
+    shared[execution_id] = {
+        "pid": pid,
+        "reported_at": time.time(),
+        "terminated": False,
+    }
     logger.info("Recorded pid=%s for execution_id=%s", pid, execution_id)
 
 
@@ -114,7 +118,13 @@ def mark_terminated(*, execution_id: str, payload: str) -> Optional["Node"]:
                 execution_id,
                 len(payload),
             )
-        return node
+    shared = _shared_pid_state
+    if shared is not None:
+        shared_entry = shared.get(execution_id) or {}
+        shared_entry["terminated"] = True
+        shared_entry["payload"] = payload
+        shared[execution_id] = shared_entry
+    return node
 
 
 def get_entry(execution_id: str) -> Optional[ExecutionEntry]:
@@ -198,4 +208,12 @@ def begin_termination(
 def is_terminated(execution_id: str) -> bool:
     with _lock:
         entry = _entries.get(execution_id)
-        return entry is not None and entry.status == "terminated"
+        if entry is not None and entry.status == "terminated":
+            return True
+    shared = _shared_pid_state
+    if shared is None:
+        return False
+    shared_entry = shared.get(execution_id)
+    if not shared_entry:
+        return False
+    return bool(shared_entry.get("terminated"))
