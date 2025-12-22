@@ -38,6 +38,37 @@ export function formatResearchStageName(stage: string | null | undefined): strin
 }
 
 /**
+ * Determines the current stage label for display in stats
+ * Takes into account status, current stage, and progress to show the most appropriate label
+ * @param status - Research run status
+ * @param currentStage - Current pipeline stage
+ * @param progress - Current progress (0-1)
+ * @returns Display label for current stage
+ */
+export function getCurrentStageLabel(
+  status: string,
+  currentStage: string | null,
+  progress: number | null
+): string {
+  // If explicitly completed or failed, show that status
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+
+  // Check if final stage is complete (stage 5 with 100% progress)
+  const isFinalStageComplete =
+    typeof currentStage === "string" &&
+    currentStage.startsWith("5_") &&
+    progress !== null &&
+    progress !== undefined &&
+    progress >= 1;
+
+  if (isFinalStageComplete) return "Completed";
+
+  // Format the current stage name
+  return (formatResearchStageName(currentStage) ?? currentStage) || "Pending";
+}
+
+/**
  * Stage badge configuration for Open/Closed compliance
  */
 export interface StageBadgeConfig {

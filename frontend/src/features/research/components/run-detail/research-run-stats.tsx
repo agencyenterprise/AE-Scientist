@@ -2,7 +2,7 @@
 
 import { Activity, Cpu, FlaskConical, Package } from "lucide-react";
 import { StatCard } from "./stat-card";
-import { formatResearchStageName } from "../../utils/research-utils";
+import { getCurrentStageLabel } from "../../utils/research-utils";
 
 interface ResearchRunStatsProps {
   status: string;
@@ -22,21 +22,7 @@ export function ResearchRunStats({
   gpuType,
   artifactsCount,
 }: ResearchRunStatsProps) {
-  const isFinalStageComplete =
-    typeof currentStage === "string" &&
-    currentStage.startsWith("5_") &&
-    progress !== null &&
-    progress !== undefined &&
-    progress >= 1;
-
-  const currentStageLabel =
-    status === "completed"
-      ? "Completed"
-      : status === "failed"
-        ? "Failed"
-        : isFinalStageComplete
-          ? "Completed"
-          : (formatResearchStageName(currentStage) ?? currentStage) || "Pending";
+  const currentStageLabel = getCurrentStageLabel(status, currentStage, progress);
   const progressLabel =
     progress === null || progress === undefined ? "-" : `${Math.round(progress * 100)}%`;
 
