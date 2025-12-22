@@ -17,6 +17,7 @@ import traceback
 import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
+from functools import partial
 from multiprocessing.managers import DictProxy
 from types import TracebackType
 from typing import List, Optional
@@ -44,13 +45,6 @@ def _executor_initializer(shared_state: DictProxy | None) -> None:
         return
     execution_registry.setup_shared_pid_state(shared_state)
     logger.info("Worker process configured shared PID state (id=%s)", id(shared_state))
-
-
-def _make_executor_initializer(shared_state: DictProxy | None) -> Callable[[], None]:
-    def _init() -> None:
-        _executor_initializer(shared_state)
-
-    return _init
 
 
 def _safe_pickle_test(obj: object, name: str = "object") -> bool:
@@ -705,7 +699,9 @@ class ParallelAgent:
 
     def _create_executor(self) -> ProcessPoolExecutor:
         shared_state = execution_registry.get_shared_pid_state()
-        initializer = _make_executor_initializer(shared_state) if shared_state is not None else None
+        initializer = (
+            partial(_executor_initializer, shared_state) if shared_state is not None else None
+        )
         if shared_state is None:
             logger.warning(
                 "Shared PID state missing; executor will start without termination support."
