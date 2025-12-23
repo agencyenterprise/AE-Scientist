@@ -9,7 +9,11 @@ from app.config import settings
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
-from app.services.research_pipeline import RunPodError, terminate_pod, upload_runpod_log_via_ssh
+from app.services.research_pipeline import (
+    RunPodError,
+    terminate_pod,
+    upload_runpod_artifacts_via_ssh,
+)
 from app.services.research_pipeline.runpod_manager import RunPodManager
 
 logger = logging.getLogger(__name__)
@@ -241,7 +245,7 @@ class ResearchPipelineMonitor:
             occurred_at=datetime.now(timezone.utc),
         )
         if run.pod_id:
-            self._upload_pod_log(run)
+            self._upload_pod_artifacts(run)
             try:
                 terminate_pod(pod_id=run.pod_id)
             except RuntimeError as exc:
@@ -348,12 +352,12 @@ class ResearchPipelineMonitor:
             occurred_at=datetime.now(timezone.utc),
         )
 
-    def _upload_pod_log(self, run: ResearchPipelineRun) -> None:
+    def _upload_pod_artifacts(self, run: ResearchPipelineRun) -> None:
         if not run.public_ip or not run.ssh_port:
             logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
             return
         try:
-            upload_runpod_log_via_ssh(
+            upload_runpod_artifacts_via_ssh(
                 host=run.public_ip,
                 port=run.ssh_port,
                 run_id=run.run_id,

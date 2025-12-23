@@ -46,7 +46,7 @@ from app.services.research_pipeline import (
     RunPodError,
     fetch_pod_billing_summary,
     terminate_pod,
-    upload_runpod_log_via_ssh,
+    upload_runpod_artifacts_via_ssh,
 )
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
@@ -226,13 +226,13 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
@@ -658,7 +658,6 @@ def ingest_run_finished(
     )
 
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
         try:
             logger.info(
                 "Run %s finished (success=%s, message=%s); terminating pod %s.",
@@ -752,7 +751,7 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
+        _upload_pod_artifacts_if_possible(run)
         try:
             terminate_pod(pod_id=run.pod_id)
             logger.info(
