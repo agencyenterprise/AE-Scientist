@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch } from "@/shared/lib/api-client";
+import { ApiError, apiFetch } from "@/shared/lib/api-client";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -145,6 +145,29 @@ export function useResearchRunDetails({
         return;
       }
       const eventType = (event as { event_type?: string }).event_type;
+      if (eventType === "status_changed") {
+        const metadata =
+          (event as { metadata?: Record<string, unknown> }).metadata ??
+          ({} as Record<string, unknown>);
+        const toStatus = metadata.to_status;
+        const errorMessage = metadata.error_message;
+        if (typeof toStatus === "string") {
+          setDetails(prev =>
+            prev
+              ? {
+                  ...prev,
+                  run: {
+                    ...prev.run,
+                    status: toStatus,
+                    error_message:
+                      typeof errorMessage === "string" ? errorMessage : prev.run.error_message,
+                  },
+                }
+              : prev
+          );
+        }
+        return;
+      }
       if (eventType === "tree_viz_stored") {
         if (!conversationId) {
           return;
@@ -304,14 +327,32 @@ export function useResearchRunDetails({
     if (!conversationId || stopPending) {
       return;
     }
+    const refreshDetails = async () => {
+      try {
+        const refreshed = await apiFetch<ResearchRunDetails>(
+          `/conversations/${conversationId}/idea/research-run/${runId}`
+        );
+        setDetails(refreshed);
+      } catch (refreshErr) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to refresh run details after stop:", refreshErr);
+      }
+    };
     try {
       setStopError(null);
       setStopPending(true);
       await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
         method: "POST",
       });
-      // SSE will automatically receive the status update
+      // Best-effort refresh so the UI updates immediately even if SSE is delayed/lost.
+      await refreshDetails();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Treat as idempotent stop: already stopped/terminal.
+        setStopError(null);
+        await refreshDetails();
+        return;
+      }
       setStopError(err instanceof Error ? err.message : "Failed to stop research run");
     } finally {
       setStopPending(false);
