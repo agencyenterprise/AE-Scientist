@@ -718,3 +718,356 @@ The PR is generally well-structured with good separation of concerns. The main r
 
 ---
 
+_**User (2025-12-23 14:45Z)**_
+
+Ok let's move back to 0 based indexing in the UI - that's fine. Agreed r.e. case 2. Also r.e. the minor issues you fond, ignore #1 but fix #2
+
+---
+
+_**Agent (model claude-4.5-opus-high-thinking, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+The user wants me to:
+1. Change the node ID display back to 0-based indexing in the UI (remove the +1)
+2. Fix the edge case in `mergeTreeVizItems` for missing best node (fall back to root node)
+3. Fix the duplicate `status_changed` handler in `useResearchRunDetails.ts`
+
+Let me make these changes.</details></think>
+
+---
+
+I'll make those three changes now.
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/components/run-detail/tree-viz-viewer.tsx</summary>
+
+**Chunk 1**
+Lines added: 2, lines removed: 2
+
+```diff
+@@ -347,6 +347,6 @@
+                &lt;h3 className="text-base font-semibold"&gt;
+                  {selectedNode.stageId
+-                   ? &#96;${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId + 1}&#96;
+-                   : &#96;Node ${selectedNode.id + 1}&#96;}
++                   ? &#96;${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId}&#96;
++                   : &#96;Node ${selectedNode.id}&#96;}
+                &lt;/h3&gt;
+                {selectedNode.excType ? (
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/shared/lib/tree-merge-utils.ts</summary>
+
+**Chunk 1**
+Lines added: 17, lines removed: 5
+
+```diff
+@@ -232,17 +232,29 @@
+      if (!currentStage || !nextStage) continue;
+  
+-     // Find best node in current stage
++     // Find best node in current stage, or fall back to root node
+      const isBestArray = currentStage.payload.is_best_node as boolean[] | undefined;
+-     const bestNodeLocalIdx = isBestArray?.findIndex(b =&gt; b === true) ?? -1;
++     let sourceNodeLocalIdx = isBestArray?.findIndex(b =&gt; b === true) ?? -1;
+  
+-     if (bestNodeLocalIdx &lt; 0) continue; // Skip if no best node
++     // Fallback: if no best node, use the root node (node with no incoming edges)
++     if (sourceNodeLocalIdx &lt; 0) {
++       const currentEdges = (currentStage.payload.edges as Array&lt;[number, number]&gt;) || [];
++       const hasIncoming = new Set(currentEdges.map(([, child]) =&gt; child));
++       for (let j = 0; j &lt; currentStage.nodeCount; j++) {
++         if (!hasIncoming.has(j)) {
++           sourceNodeLocalIdx = j;
++           break;
++         }
++       }
++     }
++ 
++     if (sourceNodeLocalIdx &lt; 0) continue; // Skip if still no source node found
+  
+      // Find root node in next stage (node with no incoming edges)
+      const nextEdges = (nextStage.payload.edges as Array&lt;[number, number]&gt;) || [];
+-     const hasIncoming = new Set(nextEdges.map(([, child]) =&gt; child));
++     const nextHasIncoming = new Set(nextEdges.map(([, child]) =&gt; child));
+  
+      let rootNodeLocalIdx = -1;
+      for (let j = 0; j &lt; nextStage.nodeCount; j++) {
+-       if (!hasIncoming.has(j)) {
++       if (!nextHasIncoming.has(j)) {
+          rootNodeLocalIdx = j;
+          break;
+```
+
+**Chunk 2**
+Lines added: 2, lines removed: 2
+
+```diff
+@@ -253,7 +265,7 @@
+  
+      // Add connection edge (global indices)
+-     const bestNodeGlobal = currentStage.globalOffset + bestNodeLocalIdx;
++     const sourceNodeGlobal = currentStage.globalOffset + sourceNodeLocalIdx;
+      const rootNodeGlobal = nextStage.globalOffset + rootNodeLocalIdx;
+-     merged.edges.push([bestNodeGlobal, rootNodeGlobal]);
++     merged.edges.push([sourceNodeGlobal, rootNodeGlobal]);
+    }
+  
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/hooks/useResearchRunDetails.ts</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+I can see the duplicate `status_changed` handlers. The first one at lines 180-201 handles status and error_message. The second one at lines 256-285 handles status, start_deadline_at, and error_message. 
+
+The second block will never execute because the first one returns early at line 201.
+
+The best fix is to merge them - the second handler has more complete logic (includes start_deadline_at). I should replace the first handler with the more complete logic and remove the duplicate.</details></think>
+
+---
+
+Now I can see the duplicate `status_changed` handlers clearly. The first one (lines 180-201) returns early, so the second one (lines 256-285) never executes. The second handler is more complete as it also handles `start_deadline_at`. I'll merge them:
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/hooks/useResearchRunDetails.ts</summary>
+
+**Chunk 1**
+Lines added: 27, lines removed: 20
+
+```diff
+@@ -179,24 +179,31 @@
+        const eventType = (event as { event_type?: string }).event_type;
+        if (eventType === "status_changed") {
+-         const metadata =
+-           (event as { metadata?: Record&lt;string, unknown&gt; }).metadata ??
+-           ({} as Record&lt;string, unknown&gt;);
+-         const toStatus = metadata.to_status;
+-         const errorMessage = metadata.error_message;
+-         if (typeof toStatus === "string") {
+-           setDetails(prev =&gt;
+-             prev
+-               ? {
+-                   ...prev,
+-                   run: {
+-                     ...prev.run,
+-                     status: toStatus,
+-                     error_message:
+-                       typeof errorMessage === "string" ? errorMessage : prev.run.error_message,
+-                   },
+-                 }
+-               : prev
+-           );
+-         }
++         const metadata = (event as { metadata?: Record&lt;string, unknown&gt; }).metadata ?? {};
++         const toStatus =
++           typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
++         const nextDeadline =
++           typeof metadata.start_deadline_at === "string"
++             ? (metadata.start_deadline_at as string)
++             : null;
++         const errorMessage =
++           typeof metadata.error_message === "string"
++             ? (metadata.error_message as string)
++             : null;
++         if (!toStatus) {
++           return;
++         }
++         setDetails(prev =&gt;
++           prev
++             ? {
++                 ...prev,
++                 run: {
++                   ...prev.run,
++                   status: toStatus,
++                   start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
++                   error_message: errorMessage ?? prev.run.error_message,
++                 },
++               }
++             : prev
++         );
+          return;
+        }
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+Now I need to remove the duplicate second handler. Let me read the file again to see what we need to remove.</details></think>
+
+---
+
+Now let me remove the duplicate second handler:
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file">
+<details><summary>Tool use: **read_file** • Read file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/hooks/useResearchRunDetails.ts</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+I can see the duplicate handler at lines 263-292. I need to remove this entire block.</details></think>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="search_replace">
+
+<details><summary>Tool use: **search_replace** • Edit file: /Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/hooks/useResearchRunDetails.ts</summary>
+
+**Chunk 1**
+Lines added: undefined, lines removed: 31
+
+```diff
+@@ -260,35 +260,4 @@
+          return;
+        }
+- 
+-       if (eventType === "status_changed") {
+-         const metadata = (event as { metadata?: Record&lt;string, unknown&gt; }).metadata ?? {};
+-         const toStatus =
+-           typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
+-         const nextDeadline =
+-           typeof metadata.start_deadline_at === "string"
+-             ? (metadata.start_deadline_at as string)
+-             : null;
+-         const errorMessage =
+-           typeof metadata.error_message === "string"
+-             ? (metadata.error_message as string)
+-             : null;
+-         if (!toStatus) {
+-           return;
+-         }
+-         setDetails(prev =&gt;
+-           prev
+-             ? {
+-                 ...prev,
+-                 run: {
+-                   ...prev.run,
+-                   status: toStatus,
+-                   start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
+-                   error_message: errorMessage ?? prev.run.error_message,
+-                 },
+-               }
+-             : prev
+-         );
+-         return;
+-       }
+      },
+      [conversationId, runId]
+```
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+Now let me check for linting errors on all modified files.</details></think>
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="read_lints">
+<details>
+          <summary>Tool use: **read_lints** • Read lints for 3 files</summary>
+      
+Lint paths:
+
+- `/Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/components/run-detail/tree-viz-viewer.tsx`
+- `/Users/jpbowler/code/ae/AE-Scientist/frontend/src/shared/lib/tree-merge-utils.ts`
+- `/Users/jpbowler/code/ae/AE-Scientist/frontend/src/features/research/hooks/useResearchRunDetails.ts`
+
+Lint results
+
+
+**No lint errors found**
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+All changes are clean. Let me commit these changes.</details></think>
+
+---
+
+All changes are clean. Let me commit them:
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_cmd">
+<details><summary>Tool use: **run_terminal_cmd** • Run command: cd /Users/jpbowler/code/ae/AE-Scientist && git add -A && git commit -m "Fix PR review items: 0-based node IDs, fallback for missing best node, remove duplicate status_changed handler"</summary>
+
+```bash
+cd /Users/jpbowler/code/ae/AE-Scientist && git add -A && git commit -m "Fix PR review items: 0-based node IDs, fallback for missing best node, remove duplicate status_changed handler"
+```
+
+```
+[AUT-213 995eacb] Fix PR review items: 0-based node IDs, fallback for missing best node, remove duplicate status_changed handler
+ 4 files changed, 767 insertions(+), 59 deletions(-)
+ create mode 100644 .specstory/history/2025-12-23_19-45Z-pr-119-review-node-ids-and-tree-merging.md
+
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+The changes have been committed. Let me provide a summary to the user.</details></think>
+
+---
+
+Done! I've made the following changes:
+
+### Summary of Changes
+
+1. **0-based node IDs in UI** (`tree-viz-viewer.tsx`)
+   - Removed the `+ 1` from node ID display
+   - Now shows `Node 0`, `Node 1`, etc. matching internal indices
+
+2. **Fallback for missing best node** (`tree-merge-utils.ts`)
+   - When connecting stages in Full Tree view, if no `is_best_node` is marked as `true`, the code now falls back to using the root node (node with no incoming edges) as the source for the inter-stage connection
+   - This ensures stages remain connected even during early runs before a best node is marked
+
+3. **Removed duplicate `status_changed` handler** (`useResearchRunDetails.ts`)
+   - Merged the more complete handler (with `start_deadline_at` support) into the first position
+   - Removed the unreachable duplicate code block
+
+All linting passes. The branch is ready to push to the PR.
+
+---
+
