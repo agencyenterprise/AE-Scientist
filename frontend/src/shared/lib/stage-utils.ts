@@ -37,10 +37,28 @@ export const STAGE_ID_TO_SLUG: Record<string, string> = {
 // =============================================================================
 
 /**
+ * Human-readable stage labels by stage number
+ */
+const STAGE_LABELS: Record<string, string> = {
+  "1": "1: Baseline Implementation",
+  "2": "2: Baseline Tuning",
+  "3": "3: Creative Research",
+  "4": "4: Ablation Studies",
+  "5": "5: Paper Generation",
+};
+
+/**
  * Convert stage ID to human-readable label
- * Example: "stage_1" → "Stage 1"
+ * Example: "stage_1" → "1: Baseline Implementation"
  */
 export function stageLabel(stageId: string): string {
+  // Handle "stage_N" format from frontend
+  const match = stageId.match(/^stage_(\d+)$/);
+  if (match && match[1]) {
+    return STAGE_LABELS[match[1]] ?? stageId.replace("stage_", "Stage ");
+  }
+  
+  // Fallback for any other format
   return stageId.replace("stage_", "Stage ");
 }
 
