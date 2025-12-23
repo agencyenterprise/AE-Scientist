@@ -314,7 +314,7 @@ class TreeVizItem(BaseModel):
 
     id: int = Field(..., description="Tree viz identifier")
     run_id: str = Field(..., description="Research run identifier")
-    stage_id: str = Field(..., description="Stage identifier (Stage_1..Stage_4)")
+    stage_id: str = Field(..., description="Stage identifier (stage_1..stage_4)")
     version: int = Field(..., description="Version counter for the stored viz")
     viz: dict = Field(..., description="Tree visualization payload")
     created_at: str = Field(..., description="ISO timestamp when the viz was stored")

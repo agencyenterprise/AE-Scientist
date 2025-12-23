@@ -74,8 +74,8 @@ const ADDITIONAL_HEIGHT_PER_STAGE = 33; // ~1.33x scaling per stage
 const VIEWBOX_TO_PIXELS_RATIO = 5; // viewBox 100 → 500px
 
 // Full Tree stage separator layout (in viewBox units)
-const LABEL_OFFSET_FROM_TOP = 5.0; // First stage: offset from zone top
-const LABEL_OFFSET_FROM_DIVIDER = 6.0; // Other stages: offset below divider
+const LABEL_OFFSET_FROM_TOP = 0.0; // First stage: offset from zone top
+const LABEL_OFFSET_FROM_DIVIDER = 7.0; // Other stages: offset below divider
 const DIVIDER_OFFSET = 2.0; // Offset from calculated position
 const LABEL_BG_HEIGHT = 5;
 const LABEL_BG_PADDING_TOP = 3.5;
@@ -205,11 +205,15 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const renderStageSeparators = () => {
     if (!isFullTree || zoneMetadata.length === 0) return null;
 
+    // Use the same coordinate transformation as nodes to avoid drift
+    // Nodes use: y * (viewBoxHeight - 15) + 7.5
+    const transformY = (y: number) => y * (viewBoxHeight - 15) + 7.5;
+
     return (
       <g className="stage-separators">
         {zoneMetadata.map((meta, idx) => {
           const isFirstStage = idx === 0;
-          const zoneStartY = meta.zone.min * viewBoxHeight;
+          const zoneStartY = transformY(meta.zone.min);
 
           // Position divider in the middle of the padding gap between stages
           let dividerY = zoneStartY;
@@ -217,7 +221,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
             const prevZone = zoneMetadata[idx - 1]?.zone;
             if (prevZone) {
               // Divider goes in the middle of the gap: between prevZone.max and meta.zone.min
-              dividerY = ((prevZone.max + meta.zone.min) / 2) * viewBoxHeight;
+              dividerY = transformY((prevZone.max + meta.zone.min) / 2);
             }
           }
 

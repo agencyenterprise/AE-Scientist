@@ -8,28 +8,30 @@ export const FULL_TREE_STAGE_ID = "full_tree";
 
 /**
  * Stage goal descriptions shown in the Tree Visualization UI
+ * Note: The research pipeline uses uppercase "Stage_N" format in tree viz data
  */
 export const STAGE_SUMMARIES: Record<string, string> = {
-  stage_1:
+  Stage_1:
     "Goal: Develop functional code which can produce a runnable result. The tree represents attempts and fixes needed to reach this state.",
-  stage_2:
+  Stage_2:
     "Goal: Improve the baseline through tuning and small changes to the code while keeping the overall approach fixed. The scientist tries to improve the metrics which quantify the quality of the research.",
-  stage_3:
+  Stage_3:
     "Goal: Explore higher-leverage variants and research directions, supported by plots and analyses to understand what is driving performance. The scientist tries to find and validate meaningful improvements worth writing up.",
-  stage_4:
+  Stage_4:
     "Goal: Run controlled ablations and robustness checks to isolate which components matter and why. The scientist tries to attribute gains and strengthen the evidence for the final claims.",
   [FULL_TREE_STAGE_ID]:
     "Combined view showing all stages of the research pipeline stacked vertically in chronological order.",
 };
 
 /**
- * Maps frontend stage IDs (stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
+ * Maps frontend stage IDs (Stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
+ * Note: The research pipeline uses uppercase "Stage_N" format in tree viz data
  */
 export const STAGE_ID_TO_SLUG: Record<string, string> = {
-  stage_1: "initial_implementation",
-  stage_2: "baseline_tuning",
-  stage_3: "creative_research",
-  stage_4: "ablation_studies",
+  Stage_1: "initial_implementation",
+  Stage_2: "baseline_tuning",
+  Stage_3: "creative_research",
+  Stage_4: "ablation_studies",
 };
 
 // =============================================================================
@@ -40,26 +42,25 @@ export const STAGE_ID_TO_SLUG: Record<string, string> = {
  * Human-readable stage labels by stage number
  */
 const STAGE_LABELS: Record<string, string> = {
-  "1": "1: Baseline Implementation",
-  "2": "2: Baseline Tuning",
-  "3": "3: Creative Research",
-  "4": "4: Ablation Studies",
-  "5": "5: Paper Generation",
+  "1": "Stage 1",
+  "2": "Stage 2",
+  "3": "Stage 3",
+  "4": "Stage 4",
+  "5": "Stage 5",
 };
 
 /**
  * Convert stage ID to human-readable label
- * Example: "stage_1" → "1: Baseline Implementation"
  */
 export function stageLabel(stageId: string): string {
-  // Handle "stage_N" format from frontend
-  const match = stageId.match(/^stage_(\d+)$/);
+  // Extract the number from "stage_N" or "Stage_N" format
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
   if (match && match[1]) {
-    return STAGE_LABELS[match[1]] ?? stageId.replace("stage_", "Stage ");
+    return STAGE_LABELS[match[1]] ?? `Stage ${match[1]}`;
   }
   
-  // Fallback for any other format
-  return stageId.replace("stage_", "Stage ");
+  // Fallback: just replace underscore with space
+  return stageId.replace(/_/g, " ");
 }
 
 /**
