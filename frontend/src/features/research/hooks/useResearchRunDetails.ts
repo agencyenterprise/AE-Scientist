@@ -15,6 +15,7 @@ import type {
   SubstageEvent,
   HwCostEstimateData,
   HwCostActualData,
+  ResearchRunCodeExecution,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -33,6 +34,13 @@ interface UseResearchRunDetailsReturn {
   stopPending: boolean;
   stopError: string | null;
   handleStopRun: () => Promise<void>;
+}
+
+interface CodeExecutionCompletionPayload {
+  execution_id: string;
+  status: "success" | "failed";
+  exec_time: number;
+  completed_at: string;
 }
 
 /**
@@ -120,6 +128,30 @@ export function useResearchRunDetails({
           }
         : null
     );
+  }, []);
+
+  const handleCodeExecutionStarted = useCallback((execution: ResearchRunCodeExecution) => {
+    setDetails(prev => (prev ? { ...prev, code_execution: execution } : prev));
+  }, []);
+
+  const handleCodeExecutionCompleted = useCallback((event: CodeExecutionCompletionPayload) => {
+    setDetails(prev => {
+      if (!prev?.code_execution) {
+        return prev;
+      }
+      if (prev.code_execution.execution_id !== event.execution_id) {
+        return prev;
+      }
+      return {
+        ...prev,
+        code_execution: {
+          ...prev.code_execution,
+          status: event.status,
+          exec_time: event.exec_time,
+          completed_at: event.completed_at,
+        },
+      };
+    });
   }, []);
 
   const handleSubstageSummary = useCallback((event: SubstageSummary) => {
@@ -240,6 +272,7 @@ export function useResearchRunDetails({
         ? {
             ...prev,
             run: { ...prev.run, status },
+            code_execution: null,
           }
         : null
     );
@@ -282,6 +315,8 @@ export function useResearchRunDetails({
     onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,
+    onCodeExecutionStarted: handleCodeExecutionStarted,
+    onCodeExecutionCompleted: handleCodeExecutionCompleted,
   });
 
   // Initial load to get conversation_id (SSE takes over after that)

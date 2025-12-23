@@ -5,6 +5,7 @@ import queue
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional
 
@@ -409,6 +410,8 @@ class FakeRunner:
         self._log_thread: Optional[threading.Thread] = None
         self._data_dir = Path(__file__).parent / "fake_run_pod_data"
         self._plot_filename: str | None = None
+        self._random_exec_time_seconds = 12.0
+        self._code_event_delay_seconds = 12.0
 
     def run(self) -> None:
         logger.info(
@@ -472,6 +475,191 @@ class FakeRunner:
             counter += 1
             self._log_stop.wait(timeout=self._periodic_log_interval_seconds)
 
+    def _enqueue_event(self, *, kind: str, data: dict[str, Any]) -> None:
+        try:
+            self._persistence.queue.put(PersistableEvent(kind=kind, data=data))
+        except Exception:
+            logger.exception("Failed to enqueue %s event for run %s", kind, self._run_id)
+
+    def _persist_code_execution_start(
+        self,
+        *,
+        execution_id: str,
+        stage_name: str,
+        code: str,
+        started_at: datetime,
+        run_type: str,
+    ) -> None:
+        conn = psycopg2.connect(self._database_url)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO rp_code_execution_events (
+                            run_id,
+                            execution_id,
+                            stage_name,
+                            run_type,
+                            code,
+                            started_at,
+                            status,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, now(), now())
+                        ON CONFLICT (run_id, execution_id, run_type)
+                        DO UPDATE SET
+                            stage_name = EXCLUDED.stage_name,
+                            code = EXCLUDED.code,
+                            started_at = EXCLUDED.started_at,
+                            status = EXCLUDED.status,
+                            updated_at = now()
+                        """,
+                        (
+                            self._run_id,
+                            execution_id,
+                            stage_name,
+                            run_type,
+                            code,
+                            started_at,
+                            "running",
+                        ),
+                    )
+        finally:
+            conn.close()
+
+    def _persist_code_execution_completion(
+        self,
+        *,
+        execution_id: str,
+        stage_name: str,
+        completed_at: datetime,
+        exec_time: float,
+        status: str,
+        run_type: str,
+    ) -> None:
+        conn = psycopg2.connect(self._database_url)
+        try:
+            with conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        UPDATE rp_code_execution_events
+                        SET
+                            status = %s,
+                            completed_at = %s,
+                            exec_time = %s,
+                            updated_at = now()
+                        WHERE run_id = %s
+                          AND execution_id = %s
+                          AND run_type = %s
+                        """,
+                        (
+                            status,
+                            completed_at,
+                            exec_time,
+                            self._run_id,
+                            execution_id,
+                            run_type,
+                        ),
+                    )
+                    if cursor.rowcount == 0:
+                        cursor.execute(
+                            """
+                            INSERT INTO rp_code_execution_events (
+                                run_id,
+                                execution_id,
+                                stage_name,
+                                run_type,
+                                code,
+                                started_at,
+                                status,
+                                completed_at,
+                                exec_time,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())
+                            """,
+                            (
+                                self._run_id,
+                                execution_id,
+                                stage_name,
+                                run_type,
+                                "synthetic completion fallback",
+                                completed_at,
+                                status,
+                                completed_at,
+                                exec_time,
+                            ),
+                        )
+        finally:
+            conn.close()
+
+    def _post_code_webhook(self, *, path: str, event: dict[str, Any]) -> None:
+        if not self._webhook_client:
+            return
+        try:
+            self._webhook_client._post(
+                path=path,
+                payload={
+                    "run_id": self._run_id,
+                    "event": event,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to post %s webhook for run %s", path, self._run_id)
+
+    def _emit_code_execution_events(self, *, stage_name: str, iteration: int) -> None:
+        execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
+        started_at = datetime.now(timezone.utc)
+        fake_code = (
+            f"# Fake experiment for {stage_name} iteration {iteration + 1}\n"
+            f"print('Simulating execution for run {self._run_id}')\n"
+        )
+        run_type = "main_execution"
+        self._persist_code_execution_start(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            code=fake_code,
+            started_at=started_at,
+            run_type=run_type,
+        )
+        self._post_code_webhook(
+            path="/running-code",
+            event={
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": run_type,
+                "code": fake_code,
+                "started_at": started_at.isoformat(),
+            },
+        )
+        if self._code_event_delay_seconds > 0:
+            time.sleep(self._code_event_delay_seconds)
+        exec_time = self._random_exec_time_seconds
+        completed_at = started_at + timedelta(seconds=exec_time)
+        self._persist_code_execution_completion(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            completed_at=completed_at,
+            exec_time=exec_time,
+            status="success",
+            run_type=run_type,
+        )
+        self._post_code_webhook(
+            path="/run-completed",
+            event={
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": run_type,
+                "status": "success",
+                "exec_time": exec_time,
+                "completed_at": completed_at.isoformat(),
+            },
+        )
+
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage
         current_iter = 0
@@ -494,31 +682,28 @@ class FakeRunner:
                     iteration + 1,
                     progress,
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_stage_progress",
-                        data={
-                            "stage": stage_name,
-                            "iteration": iteration + 1,
-                            "max_iterations": max_iterations,
-                            "progress": progress,
-                            "total_nodes": 10 + iteration,
-                            "buggy_nodes": iteration,
-                            "good_nodes": 9 - iteration,
-                            "best_metric": f"metric-{progress:.2f}",
-                            "eta_s": int((total_iterations - current_iter) * 20),
-                            "latest_iteration_time_s": 20,
-                        },
-                    )
+                self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data={
+                        "stage": stage_name,
+                        "iteration": iteration + 1,
+                        "max_iterations": max_iterations,
+                        "progress": progress,
+                        "total_nodes": 10 + iteration,
+                        "buggy_nodes": iteration,
+                        "good_nodes": 9 - iteration,
+                        "best_metric": f"metric-{progress:.2f}",
+                        "eta_s": int((total_iterations - current_iter) * 20),
+                        "latest_iteration_time_s": 20,
+                    },
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_log",
-                        data={
-                            "message": f"{stage_name} iteration {iteration + 1} complete",
-                            "level": "info",
-                        },
-                    )
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"{stage_name} iteration {iteration + 1} complete",
+                        "level": "info",
+                    },
                 )
                 # Mid-stage tree viz emit on second iteration (iteration index 1)
                 if iteration == 1:
@@ -549,30 +734,26 @@ class FakeRunner:
                 "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
             }
             logger.info("Emitting substage_completed for stage %s", stage_name)
-            self._persistence.queue.put(
-                PersistableEvent(
-                    kind="substage_completed",
-                    data={
-                        "stage": stage_name,
-                        "main_stage_number": stage_index + 1,
-                        "reason": "completed",
-                        "summary": summary,
-                    },
-                )
+            self._enqueue_event(
+                kind="substage_completed",
+                data={
+                    "stage": stage_name,
+                    "main_stage_number": stage_index + 1,
+                    "reason": "completed",
+                    "summary": summary,
+                },
             )
             try:
                 self._store_substage_summary(stage_name=stage_name, summary=summary)
             except Exception:
                 logger.exception("Failed to store fake substage summary for stage %s", stage_name)
             try:
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="substage_summary",
-                        data={
-                            "stage": stage_name,
-                            "summary": summary,
-                        },
-                    )
+                self._enqueue_event(
+                    kind="substage_summary",
+                    data={
+                        "stage": stage_name,
+                        "summary": summary,
+                    },
                 )
             except Exception:
                 logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
@@ -638,30 +819,26 @@ class FakeRunner:
                 step_progress = (substep_idx + 1) / len(substeps)
                 overall_progress = (step_idx + step_progress) / total_steps
 
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="paper_generation_progress",
-                        data={
-                            "step": step_name,
-                            "substep": substep_name,
-                            "progress": overall_progress,
-                            "step_progress": step_progress,
-                            "details": {
-                                **step_details,
-                                "current_substep": substep_idx + 1,
-                                "total_substeps": len(substeps),
-                            },
+                self._enqueue_event(
+                    kind="paper_generation_progress",
+                    data={
+                        "step": step_name,
+                        "substep": substep_name,
+                        "progress": overall_progress,
+                        "step_progress": step_progress,
+                        "details": {
+                            **step_details,
+                            "current_substep": substep_idx + 1,
+                            "total_substeps": len(substeps),
                         },
-                    )
+                    },
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_log",
-                        data={
-                            "message": f"Paper generation: {step_name} - {substep_name}",
-                            "level": "info",
-                        },
-                    )
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"Paper generation: {step_name} - {substep_name}",
+                        "level": "info",
+                    },
                 )
                 # Shorter delay for paper generation steps (5s instead of 20s)
                 time.sleep(5)
@@ -673,14 +850,12 @@ class FakeRunner:
                 )
 
         # Log completion
-        self._persistence.queue.put(
-            PersistableEvent(
-                kind="run_log",
-                data={
-                    "message": "Paper generation completed",
-                    "level": "info",
-                },
-            )
+        self._enqueue_event(
+            kind="run_log",
+            data={
+                "message": "Paper generation completed",
+                "level": "info",
+            },
         )
         logger.info("[FakeRunner %s] Paper generation complete", self._run_id[:8])
 
@@ -832,7 +1007,7 @@ class FakeRunner:
                     )
         finally:
             conn.close()
-        
+
         # Publish tree_viz_stored event via webhook
         try:
             if self._webhook_client:
@@ -844,12 +1019,12 @@ class FakeRunner:
                             "stage_id": stage_id,
                             "tree_viz_id": tree_viz_id,
                             "version": version,
-                        }
-                    }
+                        },
+                    },
                 )
                 logger.info(
-                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s", 
-                    self._run_id, 
+                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
+                    self._run_id,
                     stage_id,
                     tree_viz_id,
                 )

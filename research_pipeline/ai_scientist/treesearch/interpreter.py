@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from multiprocessing import Queue
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import humanize
 import IPython.core.ultratb
@@ -330,6 +330,7 @@ class Interpreter:
                 list[tuple[str, int, str, str | None]] | None,
             ]
         ]
+        self._pid_callback: Callable[[int], None] | None = None
 
     def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
@@ -443,6 +444,13 @@ class Interpreter:
             logger.debug(
                 f"Child process started (pid={self.process.pid}, executable={self._venv_python}, cwd={self.working_dir}, agent_file={self.agent_file_name})"
             )
+            if self._pid_callback is not None and self.process.pid is not None:
+                try:
+                    self._pid_callback(self.process.pid)
+                except Exception:
+                    logger.exception(
+                        "PID callback failed for interpreter process %s", self.process.pid
+                    )
         finally:
             multiprocessing.set_executable(str(old_executable))
             logger.debug(f"Restored multiprocessing executable to {old_executable}")
@@ -637,3 +645,7 @@ class Interpreter:
             )
         logger.debug(f"Child execution completed (exc_type={e_cls_name}, exec_time={exec_time})")
         return ExecutionResult(output, exec_time, e_cls_name, exc_info, exc_stack)
+
+    def set_pid_callback(self, callback: Callable[[int], None] | None) -> None:
+        """Register a callback invoked when a new interpreter process starts."""
+        self._pid_callback = callback

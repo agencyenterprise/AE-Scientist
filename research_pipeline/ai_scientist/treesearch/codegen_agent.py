@@ -247,21 +247,28 @@ class MinimalAgent:
 
         return {"Implementation guideline": impl_guideline}
 
-        # Response format is fully specified by the PlanAndCodeSchema Pydantic model
-
-    # schemas used elsewhere; no additional response-format helpers are needed here.
-
     def debug(self, parent_node: Node) -> Node:
         # Build a debugging prompt combining previous code, outputs, and feedback
+        feedback = parent_node.user_feedback_payload
+        introduction = (
+            "You are an experienced AI researcher. Your previous code for research experiment had a bug, so based on the information below, you should revise it in order to fix this bug. "
+            "Your response should be an implementation outline in natural language, "
+            " followed by a single markdown code block which implements the bugfix/solution. "
+        )
+        if feedback:
+            introduction = (
+                "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
+                "Based on the user feedback, you should revise it in order to address that request. "
+                "Your main goal is to satisfy the user request. "
+                "Your response should be an implementation outline in natural language, "
+                " followed by a single markdown code block. "
+            )
         prompt: PromptType = {
-            "Introduction": (
-                "You are an experienced AI researcher. Your previous code for research experiment had a bug, so based on the information below, you should revise it in order to fix this bug. "
-                "Your response should be an implementation outline in natural language,"
-                " followed by a single markdown code block which implements the bugfix/solution."
-            ),
+            "Introduction": introduction,
             "Research idea": self.task_desc,
             "Previous (buggy) implementation": wrap_code(parent_node.code),
             "Execution output": wrap_code(parent_node.term_out, lang=""),
+            "User feedback": feedback,
             "Feedback based on generated plots": parent_node.vlm_feedback_summary,
             "Feedback about execution time": parent_node.exec_time_feedback,
             "Instructions": {},
@@ -275,7 +282,11 @@ class MinimalAgent:
         }
         debug_instructions |= self.prompt_impl_guideline
         prompt["Instructions"] = debug_instructions
+        logger.debug("Debugging prompt for stage=%s: %s", self.stage_name, prompt)
         plan, code = self.plan_and_code_query(prompt)
+        logger.debug("----- LLM code start (debug) -----")
+        logger.debug(code)
+        logger.debug("----- LLM code end (debug) -----")
         return Node(plan=plan, code=code, parent=parent_node)
 
     def generate_seed_node(self, parent_node: Node) -> Node:
@@ -289,6 +300,7 @@ class MinimalAgent:
     def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
+        logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):
             logger.debug(
                 "Calling code-generation LLM with gpu_id=%s, gpu_spec=%s",
