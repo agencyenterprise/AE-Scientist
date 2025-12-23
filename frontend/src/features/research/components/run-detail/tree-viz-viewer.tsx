@@ -206,8 +206,8 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
     if (!isFullTree || zoneMetadata.length === 0) return null;
 
     // Use the same coordinate transformation as nodes to avoid drift
-    // Nodes use: y * (viewBoxHeight - 15) + 7.5
-    const transformY = (y: number) => y * (viewBoxHeight - 15) + 7.5;
+    // Full Tree nodes use: y * (viewBoxHeight - 10) + 5
+    const transformY = (y: number) => y * (viewBoxHeight - 10) + 5;
 
     return (
       <g className="stage-separators">
@@ -284,6 +284,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
         <div className="relative flex-1 border border-slate-700 bg-slate-900 overflow-auto max-h-[700px]">
           <svg
             viewBox={`0 0 100 ${viewBoxHeight}`}
+            preserveAspectRatio="xMinYMin meet"
             className="w-full"
             style={{ height: `${cssHeight}px` }}
           >
@@ -296,9 +297,14 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               const c = nodes[child];
               if (!p || !c) return null;
               const px = p.x * 85 + 7.5;
-              const py = isFullTree ? p.y * viewBoxHeight : p.y * (viewBoxHeight - 15) + 7.5;
+              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
+              const py = isFullTree
+                ? p.y * (viewBoxHeight - 10) + 5
+                : p.y * (viewBoxHeight - 15) + 7.5;
               const cx = c.x * 85 + 7.5;
-              const cy = isFullTree ? c.y * viewBoxHeight : c.y * (viewBoxHeight - 15) + 7.5;
+              const cy = isFullTree
+                ? c.y * (viewBoxHeight - 10) + 5
+                : c.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <line
                   key={idx}
@@ -323,7 +329,10 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
                 ? selectedBorderConfig.strokeWidth
                 : borderConfig.strokeWidth;
               const cx = node.x * 85 + 7.5;
-              const cy = isFullTree ? node.y * viewBoxHeight : node.y * (viewBoxHeight - 15) + 7.5;
+              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
+              const cy = isFullTree
+                ? node.y * (viewBoxHeight - 10) + 5
+                : node.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
                   <circle
