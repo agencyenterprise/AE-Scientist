@@ -259,9 +259,10 @@ def _improve_existing_implementation(
         "Memory": worker_agent.memory_summary if worker_agent.memory_summary else "",
         "Feedback based on generated plots": parent_node.vlm_feedback_summary,
         "Feedback about execution time": parent_node.exec_time_feedback,
-        "User feedback": user_feedback,
         "Instructions": {},
     }
+    if user_feedback is not None:
+        prompt["User feedback"] = user_feedback
     prompt["Previous solution"] = {
         "Code": wrap_code(code=parent_node.code),
     }

@@ -12,7 +12,7 @@ from .token_tracker import TrackCostCallbackHandler
 logger = logging.getLogger("ai-scientist")
 
 
-PromptType = str | dict[str, Any] | list[Any]
+PromptType = str | dict[str, Any] | list[Any] | None
 FunctionCallType = dict[str, Any]
 OutputType = str | FunctionCallType
 TStructured = TypeVar("TStructured", bound=BaseModel)
@@ -124,6 +124,9 @@ def compile_prompt_to_md(
     _header_depth: int = 1,
 ) -> str | list[Any] | dict[str, Any]:
     try:
+        if prompt is None:
+            return ""
+
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
 
