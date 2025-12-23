@@ -62,7 +62,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
           name: "Debugging Phase",
           description:
             "Failed implementations (buggy nodes) are selected for debugging attempts. This is controlled by a probability mechanism that prevents the algorithm from getting stuck optimizing one path while ignoring potentially better alternatives. The depth limit prevents infinite debugging loops.",
-          trigger: `When random() < ${SEARCH_CONFIG.debug_prob} (${Math.round(SEARCH_CONFIG.debug_prob * 100)}% of the time)`,
+          trigger: `Decided randomly (${Math.round(SEARCH_CONFIG.debug_prob * 100)}% of the time)`,
           configValues: [
             `debug_prob: ${SEARCH_CONFIG.debug_prob} (${Math.round(SEARCH_CONFIG.debug_prob * 100)}% chance of debugging)`,
             `max_debug_depth: ${SEARCH_CONFIG.max_debug_depth} (max iterations per node)`,
@@ -79,7 +79,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
           name: "Improvement Phase",
           description:
             "Working implementations are refined and optimized. Uses best-first search to prioritize the most promising implementations while maintaining diversity through parallel processing.",
-          trigger: `When ${Math.round((1 - SEARCH_CONFIG.debug_prob) * 100)}% of the time (or no debugging opportunities)`,
+          trigger: `Decided Randomly (${Math.round((1 - SEARCH_CONFIG.debug_prob) * 100)}% of the time) or when there are no debugging opportunities)`,
           configValues: [],
           action: "Select best performing node and create improvements",
           selectionCriteria: [
@@ -102,71 +102,34 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
     title: "Stage 2: Baseline Tuning",
     goal: "Improve baseline through hyperparameter optimization",
     description:
-      "The AI scientist systematically explores hyperparameter variations of the best Stage 1 implementation. Stage 2 always processes the best Stage 1 node but may generate different types of child nodes (Hyperparameter Tuning, Improve, or Seed nodes) depending on parent state and evaluation progress. This ensures the stage handles failures gracefully while prioritizing hyperparameter optimization.",
+      "The AI scientist systematically explores hyperparameter variations of the best Stage 1 implementation. Unlike Stage 1, this stage does not explore new code structures—it focuses purely on optimizing parameters of the proven baseline.",
     nodeSelectionStrategy: {
       overview:
-        "Stage 2 always selects the best Stage 1 node for processing. However, it creates different node types based on parent node state. When a parent is working (not buggy), it creates Hyperparameter Tuning nodes that propose new parameter ideas. When a parent node is buggy, it creates Improve nodes to fix the bugs so tuning can continue. After Stage 2 completes, Seed nodes run the best solution with different random seeds to validate that improvements generalize.",
+        "Stage 2 bypasses the drafting/debugging logic from Stage 1and instead focuses exclusively on hyperparameter variations. The search is anchored to the best implementation from Stage 1. Each iteration generates a different hyperparameter tuning proposal.",
       phases: [
         {
-          name: "Hyperparameter Tuning (Primary)",
+          name: "Hyperparameter Tuning",
           description:
-            "Systematic exploration of hyperparameter combinations. When the parent node is working correctly, new hyperparameter ideas are generated (learning rate, batch size, epochs, regularization, etc.). Each iteration proposes new parameter values based on analysis of previous results and measured improvements.",
-          trigger: "When parent node is NOT buggy (healthy)",
+            "Systematic exploration of hyperparameter combinations. Each iteration proposes new parameter values based on analysis of previous results, measured improvements, and domain knowledge about the algorithm.",
+          trigger: "Always - Stage 2 is dedicated to this task",
           configValues: [],
-          action: "Generate and apply hyperparameter tuning idea to Stage 1 baseline",
+          action: "Apply hyperparameter tuning variation to best Stage 1 node",
           selectionCriteria: [
-            "Always use best_stage1_node as parent",
-            "Only create hyperparameter tuning nodes if parent code is working",
-            "Propose distinct hyperparameter ideas (avoid repeating previous tries)",
-            "Apply tuning to exact Stage 1 code without architecture changes",
-            "Evaluate impact on test metrics across datasets",
-          ],
-        },
-        {
-          name: "Improve Node (Recovery)",
-          description:
-            "When the parent node becomes buggy or fails to run, Improve nodes attempt to fix the code. This is a recovery mechanism that allows Stage 2 to overcome bugs and continue with hyperparameter tuning in subsequent iterations. The improvement uses general code refinement rather than hyperparameter-specific logic.",
-          trigger: "When parent node IS buggy or exception occurs during execution",
-          configValues: [],
-          action: "Attempt to fix bugs in parent implementation",
-          selectionCriteria: [
-            "Created as fallback when hyperparameter tuning fails",
-            "Uses general improvement prompt to fix issues",
-            "Allows Stage 2 to recover and resume tuning in next iteration",
-            "Preserves original algorithm structure while fixing bugs",
-          ],
-        },
-        {
-          name: "Seed Nodes (Robustness Validation)",
-          description:
-            "After Stage 2 completes and a best hyperparameter configuration is found, Seed nodes run the same code with different random initializations. This validates that the performance improvements are robust and not due to luck with a particular random seed. Multiple seed runs provide error bars and statistical confidence.",
-          trigger: "After Stage 2 completion during multi-seed evaluation phase",
-          configValues: [],
-          action: "Run best Stage 2 node code with N different random seeds",
-          selectionCriteria: [
-            "Run identical code with different random initializations",
-            "Aggregate results across seeds to compute mean and confidence intervals",
-            "Validate that hyperparameter improvements generalize",
-            "Create aggregation node to summarize multi-seed results",
+            "Always use best_stage1_node as the parent/baseline",
+            "Generate new hyperparameter ideas each iteration",
+            "Evaluate impact of each parameter change across multiple datasets",
+            "Track which parameter combinations show promise",
           ],
         },
       ],
     },
-    exampleFlow: `1. Select best implementation from Stage 1 (the anchor point)
-2. For each iteration, either:
-   a. Parent is working → Create HYPERPARAMETER TUNING node
-      - Propose new hyperparameter idea
-      - Apply to Stage 1 baseline
-      - Evaluate and measure improvement
-   b. Parent is buggy → Create IMPROVE node
-      - Attempt to fix bugs
-      - Allow Stage 2 to recover
-      - Continue tuning in next iteration
-3. After Stage 2 completes:
-   a. Create SEED NODES (e.g., 3-5 runs with different random seeds)
-   b. Run multi-seed evaluation
-   c. Create AGGREGATION NODE with results summary
-4. Best hyperparameter configuration now validated across random initializations`,
+    exampleFlow: `1. Select best implementation from Stage 1 (the baseline)
+2. For each iteration:
+   - Propose a hyperparameter tuning variation (e.g., different learning rate, batch size, regularization)
+   - Apply it to the Stage 1 code
+   - Evaluate performance on multiple datasets
+   - Keep track of improvements
+3. Continue until diminishing returns or iteration limit reached`,
   },
 
   Stage_3: {
