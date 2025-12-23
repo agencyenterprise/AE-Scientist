@@ -322,6 +322,29 @@ class EventPersistenceManager:
         upsert_exec_time = exec_time if is_completion else None
 
         with connection.cursor() as cursor:
+            if is_completion and (upsert_code is None or upsert_started_at is None):
+                cursor.execute(
+                    """
+                    SELECT code, started_at
+                    FROM rp_code_execution_events
+                    WHERE run_id = %s AND execution_id = %s AND run_type = %s
+                    LIMIT 1
+                    """,
+                    (self._run_id, execution_id, run_type),
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    logger.warning(
+                        "Dropping completion event for run_id=%s execution_id=%s; missing prior running_code record.",
+                        self._run_id,
+                        execution_id,
+                    )
+                    return
+                existing_code, existing_started_at = existing
+                if upsert_code is None:
+                    upsert_code = existing_code
+                if upsert_started_at is None:
+                    upsert_started_at = existing_started_at
             cursor.execute(
                 """
                 INSERT INTO rp_code_execution_events (

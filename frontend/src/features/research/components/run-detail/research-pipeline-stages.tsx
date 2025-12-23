@@ -22,6 +22,7 @@ interface ResearchPipelineStagesProps {
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
   currentCodeExecution?: ResearchRunCodeExecution | null;
+  runStatus: string;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
   className?: string;
 }
@@ -288,6 +289,7 @@ export function ResearchPipelineStages({
   paperGenerationProgress,
   bestNodeSelections,
   currentCodeExecution,
+  runStatus,
   onTerminateExecution,
   className,
 }: ResearchPipelineStagesProps) {
@@ -436,6 +438,7 @@ export function ResearchPipelineStages({
             : -1;
 
           const isStageExecutionActive =
+            runStatus === "running" &&
             currentCodeExecution &&
             currentCodeExecution.status === "running" &&
             extractStageSlug(currentCodeExecution.stage_name) === stage.key;

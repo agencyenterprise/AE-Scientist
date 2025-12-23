@@ -183,6 +183,7 @@ export default function ResearchRunDetailPage() {
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
               currentCodeExecution={code_execution ?? null}
+              runStatus={run.status}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
               className="max-h-[600px] overflow-y-auto"
             />
