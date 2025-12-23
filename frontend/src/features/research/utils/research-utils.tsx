@@ -189,13 +189,33 @@ export function truncateRunId(runId: string, maxLength = 14): string {
 /**
  * Returns a styled stage badge for a research pipeline stage
  * @param stage - Pipeline stage string (baseline, tuning, plotting, ablation)
+ * @param status - Optional run status to check for completed/failed states
  * @param configs - Optional custom stage configurations (Open/Closed compliant)
  * @returns React element with styled badge, or null if no stage
  */
 export function getStageBadge(
   stage: string | null,
+  status?: string | null,
   configs: StageBadgeConfig[] = DEFAULT_STAGE_CONFIGS
 ): ReactNode {
+  // If status is completed, show "Completed" badge
+  if (status === "completed") {
+    return (
+      <span className="inline-flex rounded-lg border px-2.5 py-1 text-xs font-medium bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+        Completed
+      </span>
+    );
+  }
+
+  // If status is failed, show "Failed" badge
+  if (status === "failed") {
+    return (
+      <span className="inline-flex rounded-lg border px-2.5 py-1 text-xs font-medium bg-red-500/15 text-red-400 border-red-500/30">
+        Failed
+      </span>
+    );
+  }
+
   if (!stage) return null;
 
   const matchedConfig = configs.find(config => stage.toLowerCase().includes(config.pattern));
