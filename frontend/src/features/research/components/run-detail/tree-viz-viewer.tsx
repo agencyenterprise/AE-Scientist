@@ -284,7 +284,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
         <div className="relative flex-1 border border-slate-700 bg-slate-900 overflow-auto max-h-[700px]">
           <svg
             viewBox={`0 0 100 ${viewBoxHeight}`}
-            preserveAspectRatio="xMinYMin meet"
+            preserveAspectRatio="xMidYMin meet"
             className="w-full"
             style={{ height: `${cssHeight}px` }}
           >

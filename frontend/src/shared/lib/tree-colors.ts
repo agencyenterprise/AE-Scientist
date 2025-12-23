@@ -3,6 +3,8 @@
  * Centralized configuration for node colors and border styles
  */
 
+import { normalizeStageId } from "@/shared/lib/stage-utils";
+
 export enum NodeType {
   Root = "root",
   Debug = "debug",
@@ -151,18 +153,6 @@ export function getBorderStyle(node: Node): BorderStyle {
   if (node.excType) return BorderStyle.Failed;
   if (node.isBest) return BorderStyle.Best;
   return BorderStyle.Normal;
-}
-
-/**
- * Normalize stage ID to lowercase format (stage_N)
- * Handles both "Stage_N" and "stage_N" formats from different data sources
- */
-function normalizeStageId(stageId: string): string {
-  const match = stageId.match(/^[Ss]tage_(\d+)$/);
-  if (match && match[1]) {
-    return `stage_${match[1]}`;
-  }
-  return stageId;
 }
 
 /**

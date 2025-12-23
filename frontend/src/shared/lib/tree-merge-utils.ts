@@ -5,21 +5,10 @@ import type {
   MergedTreeVizPayload,
   MergedTreeViz,
 } from "@/types/research";
+import { normalizeStageId } from "@/shared/lib/stage-utils";
 
 // Re-export types for consumers that import from this module
 export type { StageZoneMetadata, MergedTreeVizPayload, MergedTreeViz };
-
-/**
- * Normalize stage ID to lowercase format (stage_N)
- * Handles both "Stage_N" and "stage_N" formats from different data sources
- */
-function normalizeStageId(stageId: string): string {
-  const match = stageId.match(/^[Ss]tage_(\d+)$/);
-  if (match && match[1]) {
-    return `stage_${match[1]}`;
-  }
-  return stageId;
-}
 
 /**
  * Sort stages in chronological order (stage_1, stage_2, stage_3, stage_4)

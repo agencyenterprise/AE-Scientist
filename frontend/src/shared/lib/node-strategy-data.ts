@@ -8,6 +8,8 @@
  * If you update the YAML, update these values here as well to ensure the UI stays current.
  */
 
+import { normalizeStageId } from "@/shared/lib/stage-utils";
+
 export const SEARCH_CONFIG = {
   num_drafts: 3,
   debug_prob: 0.7,
@@ -204,18 +206,6 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
 4. Identify core components vs. nice-to-have optimizations`,
   },
 };
-
-/**
- * Normalize stage ID to lowercase format (stage_N)
- * Handles both "Stage_N" and "stage_N" formats from different data sources
- */
-function normalizeStageId(stageId: string): string {
-  const match = stageId.match(/^[Ss]tage_(\d+)$/);
-  if (match && match[1]) {
-    return `stage_${match[1]}`;
-  }
-  return stageId;
-}
 
 export function getStageStrategy(stageId: string): StageStrategy | null {
   const normalizedId = normalizeStageId(stageId) as StageId;
