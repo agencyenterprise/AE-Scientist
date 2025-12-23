@@ -45,7 +45,7 @@ from app.services.research_pipeline.runpod_manager import (
     launch_research_pipeline_run,
     send_execution_feedback_via_ssh,
     terminate_pod,
-    upload_runpod_log_via_ssh,
+    upload_runpod_artifacts_via_ssh,
 )
 from app.services.s3_service import get_s3_service
 
@@ -160,13 +160,13 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
@@ -611,7 +611,7 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
 
     pod_id = run.pod_id
     if pod_id:
-        _upload_pod_log_if_possible(run)
+        _upload_pod_artifacts_if_possible(run)
         try:
             terminate_pod(pod_id=pod_id)
         except RunPodError as exc:

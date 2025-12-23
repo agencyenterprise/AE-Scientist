@@ -501,12 +501,7 @@ def _build_remote_script(
         "# === Upload Research Pipeline Log to S3 ===",
         'echo "Uploading research pipeline log to S3 (best-effort)..."',
         "python upload_runpod_log.py --log-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        'if [ "$pipeline_exit_code" -ne 0 ]; then',
-        '  echo "Research pipeline failed with exit code $pipeline_exit_code (log uploaded)."',
-        "  python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
-        "else",
-        '  echo "Research pipeline finished successfully (log uploaded)."',
-        "fi",
+        "python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
     ]
     return "\n".join(script_parts).strip()
 
@@ -657,7 +652,7 @@ def _write_temp_key_file(raw_key: str) -> str:
     return path
 
 
-def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
+def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
     if not host or not port:
         logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
         return
@@ -674,7 +669,11 @@ def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> Non
         "cd /workspace/AE-Scientist/research_pipeline && "
         "source .venv/bin/activate && "
         f"{remote_env} python upload_runpod_log.py "
-        "--log-path /workspace/research_pipeline.log --artifact-type run_log"
+        "--log-path /workspace/research_pipeline.log --artifact-type run_log || true && "
+        f"{remote_env} python upload_runpod_workspace.py "
+        "--workspace-path /workspace/AE-Scientist/workspaces/0-run "
+        "--artifact-type workspace_archive "
+        "--archive-name 0-run-workspace.zip"
     )
     ssh_command = [
         "ssh",
