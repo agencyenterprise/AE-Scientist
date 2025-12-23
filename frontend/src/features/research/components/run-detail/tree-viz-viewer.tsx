@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ArtifactMetadata, TreeVizItem } from "@/types/research";
+import type { ArtifactMetadata, TreeVizItem, MergedTreeViz } from "@/types/research";
+import type { StageZoneMetadata } from "@/shared/lib/tree-merge-utils";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
 import {
   getNodeType,
@@ -54,13 +55,17 @@ type TreeVizPayload = TreeVizItem["viz"] & {
 };
 
 interface Props {
-  viz: TreeVizItem;
+  viz: TreeVizItem | MergedTreeViz;
   artifacts: ArtifactMetadata[];
   stageId: string;
   bestNodeId?: number | null;
 }
 
-const NODE_SIZE = 18;
+function stageLabel(stageId: string): string {
+  return stageId.replace("Stage_", "Stage ");
+}
+
+const NODE_SIZE = 14; // Reduced from 18 for better density
 
 export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
@@ -84,6 +89,8 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const nodes = useMemo(() => {
     return (payload.layout || []).map((coords, idx) => ({
       id: idx,
+      stageId: (payload as { stageIds?: string[] }).stageIds?.[idx] ?? stageId,
+      originalNodeId: (payload as { originalNodeIds?: number[] }).originalNodeIds?.[idx] ?? idx,
       x: coords?.[0] ?? 0,
       y: coords?.[1] ?? 0,
       code: payload.code?.[idx] ?? "",
@@ -105,9 +112,17 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
       ablationName: payload.ablation_name?.[idx],
       hyperparamName: payload.hyperparam_name?.[idx],
     }));
-  }, [payload]);
+  }, [payload, stageId]);
 
   const edges: Array<[number, number]> = payload.edges ?? [];
+
+  // Extract zone metadata for Full Tree view
+  const zoneMetadata = (payload as { zoneMetadata?: StageZoneMetadata[] }).zoneMetadata ?? [];
+  const isFullTree = stageId === "Full_Tree";
+
+  // Calculate dynamic viewBox height based on number of stages
+  const numStages = isFullTree ? zoneMetadata.length : 1;
+  const viewBoxHeight = 100 + (numStages - 1) * 33;
 
   const selectedNode = nodes[selected];
   const plotList = useMemo(() => {
@@ -169,19 +184,102 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
     };
   }, [artifacts, plotList]);
 
+  // Render stage separators (dividers + labels) for Full Tree view
+  const renderStageSeparators = () => {
+    if (!isFullTree || zoneMetadata.length === 0) return null;
+
+    return (
+      <g className="stage-separators">
+        {zoneMetadata.map((meta, idx) => {
+          const zoneStartY = meta.zone.min * viewBoxHeight;
+
+          // Position divider in the middle of the padding gap between stages
+          let dividerY = zoneStartY;
+          if (idx > 0) {
+            const prevZone = zoneMetadata[idx - 1]?.zone;
+            if (prevZone) {
+              // Divider goes in the middle of the gap: between prevZone.max and meta.zone.min
+              dividerY = ((prevZone.max + meta.zone.min) / 2) * viewBoxHeight;
+            }
+          }
+
+          // Position labels:
+          // - Stage 1: 8 units below zone start (good position relative to top)
+          // - Stage 2, 3, 4: 3.5 units below divider line
+          let labelY;
+          if (idx === 0) {
+            labelY = zoneStartY + 6.0;
+          } else {
+            labelY = dividerY + 7.0;
+          }
+          const labelText = stageLabel(meta.stageId);
+
+          return (
+            <g key={`separator-${meta.stageId}`}>
+              {/* Background rectangle behind label to prevent node overlap */}
+              <rect
+                x={1}
+                y={labelY - 3.5}
+                width={labelText.length * 2.5}
+                height={5}
+                fill="#0f172a"
+                opacity={0.9}
+                className="select-none"
+              />
+
+              {/* Stage label */}
+              <text
+                x={2}
+                y={labelY}
+                fontSize="4"
+                fill="#64748b"
+                fontWeight="600"
+                className="select-none"
+              >
+                {labelText}
+              </text>
+
+              {/* Divider line (skip first stage, only draw between stages) */}
+              {idx > 0 && (
+                <line
+                  x1={0}
+                  y1={dividerY+2}
+                  x2={100}
+                  y2={dividerY+2}
+                  stroke="#64748b"
+                  strokeWidth={0.4}
+                  strokeDasharray="2,2"
+                  opacity={0.6}
+                />
+              )}
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
   return (
     <div className="flex w-full gap-4">
       <div className="w-1/2 flex flex-col">
-        <div className="relative flex-1 border border-slate-700 bg-slate-900">
-          <svg viewBox="0 0 100 100" className="w-full h-[320px]">
+        <div className="relative flex-1 border border-slate-700 bg-slate-900 overflow-auto max-h-[700px]">
+          <svg
+            viewBox={`0 0 100 ${viewBoxHeight}`}
+            className="w-full"
+            style={{ height: `${viewBoxHeight * 5}px` }}
+          >
+            {/* Stage separators (rendered first as background) */}
+            {renderStageSeparators()}
+
+            {/* Edges */}
             {edges.map(([parent, child], idx) => {
               const p = nodes[parent];
               const c = nodes[child];
               if (!p || !c) return null;
               const px = p.x * 85 + 7.5;
-              const py = p.y * 85 + 7.5;
+              const py = p.y * (viewBoxHeight - 15) + 7.5;
               const cx = c.x * 85 + 7.5;
-              const cy = c.y * 85 + 7.5;
+              const cy = c.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <line
                   key={idx}
@@ -190,7 +288,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
                   x2={cx}
                   y2={cy}
                   stroke="#cbd5e1"
-                  strokeWidth={0.6}
+                  strokeWidth={0.48}
                 />
               );
             })}
@@ -206,7 +304,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
                 ? selectedBorderConfig.strokeWidth
                 : borderConfig.strokeWidth;
               const cx = node.x * 85 + 7.5;
-              const cy = node.y * 85 + 7.5;
+              const cy = node.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
                   <circle
@@ -223,15 +321,19 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
           </svg>
         </div>
         <div className="mt-2 flex gap-2">
-          <NodeTypesLegend stageId={stageId} />
-          <NodeStrategyGuide stageId={stageId} />
+          <NodeTypesLegend stageId={stageId === "Full_Tree" ? undefined : stageId} />
+          <NodeStrategyGuide stageId={stageId === "Full_Tree" ? undefined : stageId} />
         </div>
       </div>
       <div className="w-1/2 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 max-h-[600px] overflow-y-auto">
         {selectedNode ? (
           <>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-base font-semibold">Node {selectedNode.id + 1}</h3>
+              <h3 className="text-base font-semibold">
+                {selectedNode.stageId
+                  ? `${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId + 1}`
+                  : `Node ${selectedNode.id + 1}`}
+              </h3>
               {selectedNode.excType ? (
                 <span className="text-xs text-red-300">Abandoned</span>
               ) : selectedNode.isBest ? (

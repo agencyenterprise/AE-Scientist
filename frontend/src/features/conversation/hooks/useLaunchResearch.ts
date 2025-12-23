@@ -24,7 +24,7 @@ export function useLaunchResearch(conversationId: number | null) {
       const response = await apiFetch<ResearchRunAcceptedResponse>(
         `/conversations/${conversationId}/idea/research-run`,
         {
-        method: "POST",
+          method: "POST",
         }
       );
       setIsLaunchModalOpen(false);
