@@ -746,7 +746,8 @@ def send_execution_feedback_via_ssh(
         )
         return
 
-    payload_b64 = base64.b64encode(payload.encode("utf-8")).decode("utf-8")
+    request_body = json.dumps({"payload": payload}, ensure_ascii=False)
+    payload_b64 = base64.b64encode(request_body.encode("utf-8")).decode("utf-8")
     key_path = _write_temp_key_file(private_key)
     remote_command = (
         f"PAYLOAD=$(printf '%s' '{payload_b64}' | base64 --decode); "
