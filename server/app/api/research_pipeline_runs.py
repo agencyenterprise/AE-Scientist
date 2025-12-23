@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Protocol, Sequence, Union, cast
+from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -39,11 +39,15 @@ from app.services.database.research_pipeline_runs import PodUpdateInfo, Research
 from app.services.research_pipeline.runpod_manager import (
     PodLaunchInfo,
     RunPodError,
+    TerminationConflictError,
+    TerminationNotFoundError,
+    TerminationRequestError,
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     launch_research_pipeline_run,
+    send_execution_feedback_via_ssh,
     terminate_pod,
-    upload_runpod_log_via_ssh,
+    upload_runpod_artifacts_via_ssh,
 )
 from app.services.s3_service import get_s3_service
 
@@ -73,6 +77,15 @@ class ResearchRunStopResponse(BaseModel):
     run_id: str
     status: str
     message: str
+
+
+class TerminateExecutionRequest(BaseModel):
+    payload: str
+
+
+class TerminateExecutionResponse(BaseModel):
+    execution_id: str
+    status: Literal["terminating"]
 
 
 class IdeaPayloadSource(Protocol):
@@ -149,13 +162,13 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
@@ -174,7 +187,40 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
 
 
 async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_id: str) -> None:
+    logger.info(
+        "Waiting for pod readiness for run_id=%s (pod_id=%s, pod_name=%s)",
+        run_id,
+        pod_info.pod_id,
+        pod_info.pod_name,
+    )
     ready_metadata = await fetch_pod_ready_metadata(pod_id=pod_info.pod_id)
+    logger.info(
+        "Pod ready for run_id=%s (pod_id=%s). public_ip=%s ssh_port=%s host_id=%s",
+        run_id,
+        pod_info.pod_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
+        ready_metadata.pod_host_id,
+    )
+    db.update_research_pipeline_run(
+        run_id=run_id,
+        pod_update_info=PodUpdateInfo(
+            pod_id=pod_info.pod_id,
+            pod_name=pod_info.pod_name,
+            gpu_type=pod_info.gpu_type,
+            cost=pod_info.cost,
+            public_ip=ready_metadata.public_ip,
+            ssh_port=ready_metadata.ssh_port,
+            pod_host_id=ready_metadata.pod_host_id,
+        ),
+    )
+    logger.info(
+        "Updated research_pipeline_runs row for run_id=%s with ip=%s port=%s host_id=%s",
+        run_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
+        ready_metadata.pod_host_id,
+    )
     db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_info_updated",
@@ -188,6 +234,12 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
             "pod_host_id": ready_metadata.pod_host_id,
         },
         occurred_at=datetime.now(timezone.utc),
+    )
+    logger.info(
+        "Recorded pod_info_updated event for run_id=%s with public_ip=%s ssh_port=%s",
+        run_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
     )
 
 
@@ -441,6 +493,102 @@ def get_research_run_review(
 
 
 @router.post(
+    "/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
+    response_model=TerminateExecutionResponse,
+)
+def terminate_code_execution(
+    conversation_id: int,
+    run_id: str,
+    execution_id: str,
+    payload: TerminateExecutionRequest,
+    request: Request,
+) -> TerminateExecutionResponse:
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    user = get_current_user(request)
+    db = get_database()
+
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    if run.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research run is already {run.status}; cannot terminate execution.",
+        )
+
+    if not run.public_ip or not run.ssh_port:
+        raise HTTPException(
+            status_code=409,
+            detail="Run pod is not reachable; SSH endpoint unavailable for termination.",
+        )
+
+    feedback_payload = payload.payload
+    logger.info(
+        "Termination requested by user_id=%s run_id=%s execution_id=%s payload_len=%s",
+        user.id,
+        run_id,
+        execution_id,
+        len(feedback_payload),
+    )
+    try:
+        send_execution_feedback_via_ssh(
+            host=run.public_ip,
+            port=run.ssh_port,
+            execution_id=execution_id,
+            payload=feedback_payload,
+        )
+    except TerminationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TerminationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TerminationRequestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="termination_requested",
+        metadata={
+            "execution_id": execution_id,
+            "payload_length": len(feedback_payload),
+        },
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type="termination_requested",
+        metadata={
+            "execution_id": execution_id,
+            "payload_length": len(feedback_payload),
+        },
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
+    logger.info(
+        "Termination request forwarded successfully for run_id=%s execution_id=%s",
+        run_id,
+        execution_id,
+    )
+
+    return TerminateExecutionResponse(execution_id=execution_id, status="terminating")
+
+
+@router.post(
     "/{conversation_id}/idea/research-run/{run_id}/stop",
     response_model=ResearchRunStopResponse,
 )
@@ -460,7 +608,7 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
 
     pod_id = run.pod_id
     if pod_id:
-        _upload_pod_log_if_possible(run)
+        _upload_pod_artifacts_if_possible(run)
         try:
             terminate_pod(pod_id=pod_id)
         except RunPodError as exc:

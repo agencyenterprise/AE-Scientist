@@ -3,6 +3,8 @@ import logging
 from typing import Any, Dict, Set, Union
 
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
+from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
@@ -22,6 +24,8 @@ StreamEventModel = Union[
     SSERunEvent,
     SSECompleteEvent,
     SSELogEvent,
+    SSECodeExecutionStartedEvent,
+    SSECodeExecutionCompletedEvent,
 ]
 
 _RUN_STREAM_SUBSCRIBERS: Dict[str, Set[asyncio.Queue[Dict[str, Any]]]] = {}

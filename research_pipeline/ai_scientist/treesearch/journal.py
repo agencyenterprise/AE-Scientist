@@ -114,6 +114,11 @@ class Node(DataClassJsonMixin):
     # ---- agent ----
     agent: Any | None = field(default=None, kw_only=True, repr=False)
 
+    # ---- user feedback ----
+    is_user_feedback: bool = field(default=False, kw_only=True)
+    user_feedback_payload: str | None = field(default=None, kw_only=True)
+    user_feedback_pending: bool = field(default=False, kw_only=True)
+
     def __post_init__(self) -> None:
         # Ensure children is a set even if initialized with a list
         if isinstance(cast(Any, self.children), list):
@@ -276,6 +281,9 @@ class Node(DataClassJsonMixin):
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
             "exec_time_feedback": self.exec_time_feedback,
+            "is_user_feedback": self.is_user_feedback,
+            "user_feedback_payload": self.user_feedback_payload,
+            "user_feedback_pending": self.user_feedback_pending,
         }
 
     @classmethod
@@ -770,13 +778,15 @@ class Journal:
 
         for node in self.buggy_nodes:
             failure_info = f"Design: {node.plan}\n  "
-            failure_info += f"Error Analysis: {node.analysis}\n"
+            failure_info += f"Error Analysis: {node.analysis}\n  "
             failure_info += (
-                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n"
+                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n  "
             )
-            failure_info += f"Debug Depth: {node.debug_depth}\n"
+            if node.user_feedback_payload:
+                failure_info += f"User killed the execution and provided the following feedback: {node.user_feedback_payload}\n  "
+            failure_info += f"Debug Depth: {node.debug_depth}\n  "
             if include_code:
-                failure_info += f"Code: {node.code}\n"
+                failure_info += f"Code: {node.code}\n  "
             prompt["Failed Experiments"] += failure_info
 
         summary_resp = query(

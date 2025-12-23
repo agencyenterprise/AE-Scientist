@@ -3,7 +3,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
@@ -27,6 +27,10 @@ from app.models.research_pipeline import (
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCodeExecutionCompletedData
+from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
+from app.models.sse import ResearchRunCodeExecutionStartedData
+from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
@@ -42,7 +46,7 @@ from app.services.research_pipeline import (
     RunPodError,
     fetch_pod_billing_summary,
     terminate_pod,
-    upload_runpod_log_via_ssh,
+    upload_runpod_artifacts_via_ssh,
 )
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
@@ -155,6 +159,33 @@ class RunLogPayload(BaseModel):
     event: RunLogEvent
 
 
+class RunningCodeEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    code: str
+    started_at: str
+    run_type: str = "main_execution"
+
+
+class RunningCodePayload(BaseModel):
+    run_id: str
+    event: RunningCodeEventPayload
+
+
+class RunCompletedEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: str
+    run_type: str = "main_execution"
+
+
+class RunCompletedPayload(BaseModel):
+    run_id: str
+    event: RunCompletedEventPayload
+
+
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
     expected_token = settings.TELEMETRY_WEBHOOK_TOKEN
     if not expected_token:
@@ -195,13 +226,13 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
 
 
 def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
@@ -452,6 +483,65 @@ def ingest_run_log(
     )
 
 
+@router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_running_code(
+    payload: RunningCodePayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionStartedEvent(
+                type="code_execution_started",
+                data=ResearchRunCodeExecutionStartedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    code=event.code,
+                    started_at=event.started_at,
+                ),
+            ),
+        ),
+    )
+
+
+@router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_run_completed(
+    payload: RunCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionCompletedEvent(
+                type="code_execution_completed",
+                data=ResearchRunCodeExecutionCompletedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    status=event.status,
+                    exec_time=event.exec_time,
+                    completed_at=event.completed_at,
+                ),
+            ),
+        ),
+    )
+
+
 @router.post("/run-started", status_code=status.HTTP_204_NO_CONTENT)
 def ingest_run_started(
     payload: RunStartedPayload,
@@ -568,7 +658,6 @@ def ingest_run_finished(
     )
 
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
         try:
             logger.info(
                 "Run %s finished (success=%s, message=%s); terminating pod %s.",
@@ -662,7 +751,7 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
+        _upload_pod_artifacts_if_possible(run)
         try:
             terminate_pod(pod_id=run.pod_id)
             logger.info(

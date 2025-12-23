@@ -20,7 +20,7 @@ class TreeVizStore:
     webhook_url: str | None = None
     webhook_token: str | None = None
     run_id: str | None = None
-    
+
     def _get_webhook_client(self) -> WebhookClient | None:
         """Create webhook client if configured."""
         if self.webhook_url and self.webhook_token and self.run_id:
@@ -84,7 +84,7 @@ class TreeVizStore:
                         ),
                     )
                 conn.commit()
-            
+
             # Publish webhook event using WebhookClient if configured
             webhook_client = self._get_webhook_client()
             if webhook_client is not None:
@@ -95,7 +95,7 @@ class TreeVizStore:
                             "stage_id": stage_id,
                             "tree_viz_id": tree_viz_id,
                             "version": version,
-                        }
+                        },
                     )
                     logger.info(
                         "Published tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
@@ -109,7 +109,7 @@ class TreeVizStore:
                         run_id,
                         stage_id,
                     )
-            
+
             return tree_viz_id
         except Exception:
             logger.exception(

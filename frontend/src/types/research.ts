@@ -157,6 +157,7 @@ export interface ResearchRunDetailsApi {
   paper_generation_progress: PaperGenerationEventApi[];
   tree_viz: TreeVizItemApi[];
   best_node_selections?: BestNodeSelectionApi[];
+  code_execution?: ResearchRunCodeExecution | null;
 }
 
 // Frontend types (camelCase) - using same structure for SSE compatibility
@@ -247,6 +248,17 @@ export interface PaperGenerationEvent {
   created_at: string;
 }
 
+export interface ResearchRunCodeExecution {
+  execution_id: string;
+  stage_name: string;
+  run_type: string;
+  code: string;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  exec_time?: number | null;
+}
+
 export interface ArtifactMetadata {
   id: number;
   artifact_type: string;
@@ -284,6 +296,7 @@ export interface ResearchRunDetails {
   best_node_selections?: BestNodeSelection[];
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
+  code_execution?: ResearchRunCodeExecution | null;
 }
 
 export interface TreeVizItemApi {

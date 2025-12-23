@@ -14,13 +14,17 @@ import multiprocessing
 import pickle
 import random
 import traceback
+import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
+from functools import partial
+from multiprocessing.managers import DictProxy
 from types import TracebackType
 from typing import List, Optional
 
 from ai_scientist.llm import query, structured_query_with_schema
 
+from . import execution_registry
 from .codegen_agent import PlanAndCodeSchema
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
@@ -30,9 +34,17 @@ from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .worker_process import process_node
+from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, process_node
 
 logger = logging.getLogger("ai-scientist")
+
+
+def _executor_initializer(shared_state: DictProxy | None) -> None:
+    if shared_state is None:
+        logger.warning("Executor initializer received no shared_state; PID tracking disabled.")
+        return
+    execution_registry.setup_shared_pid_state(shared_state)
+    logger.info("Worker process configured shared PID state (id=%s)", id(shared_state))
 
 
 def _safe_pickle_test(obj: object, name: str = "object") -> bool:
@@ -101,6 +113,8 @@ class ParallelAgent:
         self._hyperparam_tuning_state: dict[str, set[str]] = {  # store hyperparam tuning ideas
             "tried_hyperparams": set(),
         }
+        self._shared_pid_state = execution_registry.get_shared_pid_state()
+        self._future_execution_ids: dict[Future, str] = {}
 
     def _handle_gpu_shortage(self, *, available_gpus: int, required_gpus: int) -> None:
         message = (
@@ -199,7 +213,8 @@ class ParallelAgent:
 
         # Submit parallel jobs for different seeds
         seed_nodes: List[Node] = []
-        futures: list = []
+        futures: list[Future] = []
+        execution_ids: list[str] = []
         seed_process_ids: list[str | None] = []  # Track process IDs for GPU release
         executor = self._ensure_executor()
         for seed in range(self.cfg.agent.multi_seed_eval["num_seeds"]):
@@ -226,26 +241,36 @@ class ParallelAgent:
             seed_eval = True
             memory_summary = ""
             logger.info("Starting multi-seed eval...")
-            futures.append(
-                executor.submit(
-                    process_node,
-                    node_data=node_data,
-                    task_desc=self.task_desc,
-                    cfg=self.cfg,
-                    gpu_id=gpu_id,
-                    memory_summary=memory_summary,
-                    evaluation_metrics=self.evaluation_metrics,
-                    stage_name=self.stage_name,
-                    new_ablation_idea=new_ablation_idea,
-                    new_hyperparam_idea=new_hyperparam_idea,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    seed_eval=seed_eval,
-                    event_callback=self.event_callback,
-                )
+            execution_id = uuid.uuid4().hex
+            logger.info(
+                "ParallelAgent registering multi-seed execution %s (seed=%s) for node %s",
+                execution_id,
+                seed,
+                node.id,
             )
+            execution_registry.register_execution(execution_id=execution_id, node=node)
+            future = executor.submit(
+                process_node,
+                node_data=node_data,
+                task_desc=self.task_desc,
+                cfg=self.cfg,
+                gpu_id=gpu_id,
+                memory_summary=memory_summary,
+                evaluation_metrics=self.evaluation_metrics,
+                stage_name=self.stage_name,
+                new_ablation_idea=new_ablation_idea,
+                new_hyperparam_idea=new_hyperparam_idea,
+                best_stage3_plot_code=best_stage3_plot_code,
+                seed_eval=seed_eval,
+                event_callback=self.event_callback,
+                execution_id=execution_id,
+            )
+            futures.append(future)
+            execution_ids.append(execution_id)
 
         # Collect results and release GPUs
         for idx, future in enumerate(futures):
+            execution_id = execution_ids[idx]
             try:
                 result_data = future.result(timeout=self.timeout)
                 result_node = Node.from_dict(result_data, self.journal)
@@ -258,9 +283,26 @@ class ParallelAgent:
                 if node_found is not None:
                     seed_nodes.append(node_found)
                 logger.debug("Added result node to journal")
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Multi-seed execution %s was terminated intentionally; skipping result.",
+                    execution_id,
+                )
+            except ExecutionCrashedError as exc:
+                logger.error(
+                    "Multi-seed execution %s crashed unexpectedly: %s",
+                    execution_id,
+                    exc,
+                )
             except Exception as e:
                 logger.error(f"Error in multi-seed evaluation: {str(e)}")
             finally:
+                logger.info(
+                    "ParallelAgent clearing execution %s after multi-seed run for node %s",
+                    execution_id,
+                    node.id,
+                )
+                execution_registry.clear_execution(execution_id)
                 # Release GPU after this seed completes
                 if self.gpu_manager is not None and idx < len(seed_process_ids):
                     proc_id = seed_process_ids[idx]
@@ -295,6 +337,30 @@ class ParallelAgent:
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
         logger.debug(f"self.num_workers: {self.num_workers}, ")
+
+        feedback_nodes = [node for node in self.journal.nodes if node.user_feedback_pending]
+        for node in feedback_nodes:
+            if len(nodes_to_process) >= self.num_workers:
+                break
+            if node.is_leaf and node.parent is None and node.children:
+                logger.info(
+                    "Skipping root node %s for feedback re-run because it already has children; enqueuing most recent child instead.",
+                    node.id[:8],
+                )
+                newest_child = max(node.children, key=lambda c: c.ctime)
+                newest_child.is_user_feedback = node.is_user_feedback
+                newest_child.user_feedback_payload = node.user_feedback_payload
+                newest_child.user_feedback_pending = True
+                node.user_feedback_pending = False
+                feedback_nodes.append(newest_child)
+                continue
+            logger.info(
+                "Scheduling node %s to re-run with user feedback (payload_preview=%s)",
+                node.id[:8],
+                (node.user_feedback_payload or "")[:120].replace("\n", " "),
+            )
+            node.user_feedback_pending = False
+            nodes_to_process.append(node)
 
         while len(nodes_to_process) < self.num_workers:
             # Drafting: create root nodes up to target drafts
@@ -466,7 +532,7 @@ class ParallelAgent:
 
         executor = self._ensure_executor()
         futures: list[Future] = []
-        for node_data in node_data_list:
+        for node, node_data in zip(nodes_to_process, node_data_list):
             gpu_id = None
             if self.gpu_manager is not None:
                 try:
@@ -512,27 +578,44 @@ class ParallelAgent:
                 self.best_stage3_node.plot_code if self.best_stage3_node else None
             )
             seed_eval = False
-            futures.append(
-                executor.submit(
-                    process_node,
-                    node_data=node_data,
-                    task_desc=self.task_desc,
-                    cfg=self.cfg,
-                    gpu_id=gpu_id,
-                    memory_summary=memory_summary,
-                    evaluation_metrics=self.evaluation_metrics,
-                    stage_name=self.stage_name,
-                    new_ablation_idea=new_ablation_idea,
-                    new_hyperparam_idea=new_hyperparam_idea,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    seed_eval=seed_eval,
-                    event_callback=self.event_callback,
-                )
+            execution_id = uuid.uuid4().hex
+            node_label = node.id if node else "draft"
+            logger.info(
+                "ParallelAgent registering execution %s for node %s (stage=%s, feedback=%s)",
+                execution_id,
+                node_label,
+                self.stage_name,
+                bool(node.user_feedback_payload) if node else False,
             )
+            execution_registry.register_execution(execution_id=execution_id, node=node)
+            future = executor.submit(
+                process_node,
+                node_data=node_data,
+                task_desc=self.task_desc,
+                cfg=self.cfg,
+                gpu_id=gpu_id,
+                memory_summary=memory_summary,
+                evaluation_metrics=self.evaluation_metrics,
+                stage_name=self.stage_name,
+                new_ablation_idea=new_ablation_idea,
+                new_hyperparam_idea=new_hyperparam_idea,
+                best_stage3_plot_code=best_stage3_plot_code,
+                seed_eval=seed_eval,
+                event_callback=self.event_callback,
+                execution_id=execution_id,
+            )
+            futures.append(future)
+            self._future_execution_ids[future] = execution_id
 
         # Collect results as they complete and update journal/state
         logger.debug("Waiting for results")
         for i, future in enumerate(futures):
+            current_execution_id: str | None
+            current_execution_id = (
+                self._future_execution_ids.pop(future)
+                if future in self._future_execution_ids
+                else None
+            )
             try:
                 logger.debug("About to get result from future")
                 result_data = future.result(timeout=self.timeout)
@@ -544,6 +627,18 @@ class ParallelAgent:
                 # Journal acts as a database to look up a parent node,
                 # and add the result node as a child.
                 result_node = Node.from_dict(result_data, self.journal)
+                if current_execution_id is not None:
+                    entry = execution_registry.get_entry(current_execution_id)
+                    if entry and entry.status == "terminated" and entry.payload:
+                        result_node.is_user_feedback = True
+                        result_node.user_feedback_payload = entry.payload
+                        result_node.user_feedback_pending = True
+                        logger.info(
+                            "Result node %s inherited termination payload (%s chars) from execution %s.",
+                            result_node.id[:8],
+                            len(entry.payload),
+                            current_execution_id,
+                        )
                 logger.debug("Investigating if result node has metric")
                 logger.debug(str(result_node.metric))
                 # Update hyperparam tuning state if in Stage 2
@@ -588,12 +683,50 @@ class ParallelAgent:
                     )
                 )
                 self._handle_worker_timeout(future=future)
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Execution %s was terminated intentionally; deferring node re-run.",
+                    current_execution_id,
+                )
+                self.event_callback(
+                    RunLogEvent(
+                        message=f"Node {i + 1}/{len(futures)} was terminated intentionally",
+                        level="info",
+                    )
+                )
+                continue
+            except ExecutionCrashedError as exc:
+                logger.error(
+                    "Execution %s crashed unexpectedly: %s",
+                    current_execution_id,
+                    exc,
+                )
+                self.event_callback(
+                    RunLogEvent(
+                        message=(
+                            f"Node {i + 1}/{len(futures)} crashed unexpectedly: {exc}. "
+                            "Marking as buggy."
+                        ),
+                        level="error",
+                    )
+                )
+                if current_execution_id is not None:
+                    entry = execution_registry.get_entry(current_execution_id)
+                    if entry and entry.node is not None:
+                        entry.node.is_buggy = True
+                continue
             except Exception as e:
                 logger.exception(f"Error processing node: {str(e)}")
 
                 traceback.print_exc()
                 raise
             finally:
+                if current_execution_id is not None:
+                    logger.info(
+                        "ParallelAgent clearing execution %s after future completion",
+                        current_execution_id,
+                    )
+                    execution_registry.clear_execution(current_execution_id)
                 # Release GPU for this process if it was using one
                 process_id = f"worker_{i}"
                 if self.gpu_manager is not None and process_id in self.gpu_manager.gpu_assignments:
@@ -632,9 +765,18 @@ class ParallelAgent:
         self.cleanup()
 
     def _create_executor(self) -> ProcessPoolExecutor:
+        shared_state = execution_registry.get_shared_pid_state()
+        initializer = (
+            partial(_executor_initializer, shared_state) if shared_state is not None else None
+        )
+        if shared_state is None:
+            logger.warning(
+                "Shared PID state missing; executor will start without termination support."
+            )
         return ProcessPoolExecutor(
             max_workers=self.num_workers,
             mp_context=self._mp_context,
+            initializer=initializer,
         )
 
     def _shutdown_executor(self) -> None:

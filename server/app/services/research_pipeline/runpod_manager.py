@@ -60,6 +60,18 @@ class RunPodError(Exception):
         self.status = status
 
 
+class TerminationRequestError(Exception):
+    """Generic error when sending termination requests to the pipeline pod."""
+
+
+class TerminationConflictError(TerminationRequestError):
+    """Raised when the targeted execution already finished or is terminating."""
+
+
+class TerminationNotFoundError(TerminationRequestError):
+    """Raised when the targeted execution_id cannot be found on the pod."""
+
+
 class PodLaunchInfo(NamedTuple):
     pod_id: str
     pod_name: str
@@ -489,12 +501,7 @@ def _build_remote_script(
         "# === Upload Research Pipeline Log to S3 ===",
         'echo "Uploading research pipeline log to S3 (best-effort)..."',
         "python upload_runpod_log.py --log-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        'if [ "$pipeline_exit_code" -ne 0 ]; then',
-        '  echo "Research pipeline failed with exit code $pipeline_exit_code (log uploaded)."',
-        "  python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
-        "else",
-        '  echo "Research pipeline finished successfully (log uploaded)."',
-        "fi",
+        "python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
     ]
     return "\n".join(script_parts).strip()
 
@@ -645,7 +652,7 @@ def _write_temp_key_file(raw_key: str) -> str:
     return path
 
 
-def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
+def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
     if not host or not port:
         logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
         return
@@ -662,7 +669,11 @@ def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> Non
         "cd /workspace/AE-Scientist/research_pipeline && "
         "source .venv/bin/activate && "
         f"{remote_env} python upload_runpod_log.py "
-        "--log-path /workspace/research_pipeline.log --artifact-type run_log"
+        "--log-path /workspace/research_pipeline.log --artifact-type run_log || true && "
+        f"{remote_env} python upload_runpod_workspace.py "
+        "--workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
+        "--artifact-type workspace_archive "
+        "--archive-name 0-run-workspace.zip"
     )
     ssh_command = [
         "ssh",
@@ -708,3 +719,111 @@ def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> Non
             Path(key_path).unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def send_execution_feedback_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    execution_id: str,
+    payload: str,
+) -> None:
+    """
+    Kill a running execution inside the research pipeline pod and submit user feedback payload.
+
+    This connects via SSH and sends a POST request to the local termination server running
+    alongside the pipeline (default http://127.0.0.1:8090/terminate/{execution_id}).
+    """
+    if not host or not port:
+        logger.warning("Cannot send feedback for execution %s; missing host or port.", execution_id)
+        return
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        logger.warning(
+            "RUN_POD_SSH_ACCESS_KEY not configured; skipping feedback for execution %s",
+            execution_id,
+        )
+        return
+
+    request_body = json.dumps({"payload": payload}, ensure_ascii=False)
+    payload_b64 = base64.b64encode(request_body.encode("utf-8")).decode("utf-8")
+    key_path = _write_temp_key_file(private_key)
+    remote_command = (
+        f"PAYLOAD=$(printf '%s' '{payload_b64}' | base64 --decode); "
+        "RESPONSE=$(curl -sS -w '\\n%{http_code}' "
+        "-H 'Content-Type: application/json' "
+        f'--data "$PAYLOAD" '
+        f"http://127.0.0.1:8090/terminate/{execution_id}); "
+        "STATUS=$(printf '%s' \"$RESPONSE\" | tail -n1); "
+        "BODY=$(printf '%s' \"$RESPONSE\" | sed '$d'); "
+        "printf 'HTTP_STATUS:%s\\n' \"$STATUS\"; "
+        "printf '%s' \"$BODY\""
+    )
+    ssh_command = [
+        "ssh",
+        "-i",
+        key_path,
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-p",
+        str(port),
+        f"root@{host}",
+        "bash",
+        "-lc",
+        shlex.quote(remote_command),
+    ]
+    try:
+        result = subprocess.run(
+            ssh_command,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Error sending feedback for execution %s", execution_id)
+        raise TerminationRequestError(f"SSH command failed for execution {execution_id}") from exc
+    finally:
+        try:
+            Path(key_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    stdout = result.stdout.strip() if result.stdout else ""
+    stderr = result.stderr.strip() if result.stderr else ""
+
+    if result.returncode != 0:
+        raise TerminationRequestError(
+            f"SSH command exited with {result.returncode} for execution {execution_id}: {stderr}"
+        )
+
+    status_line, _, body = stdout.partition("\n")
+    if not status_line.startswith("HTTP_STATUS:"):
+        raise TerminationRequestError(
+            f"Malformed response from termination server for execution {execution_id}: {stdout}"
+        )
+
+    status_code = status_line.split(":", 1)[1].strip()
+    body = body.strip()
+
+    if status_code == "200":
+        logger.info(
+            "Termination acknowledged for execution %s: %s", execution_id, body or "<empty>"
+        )
+        return
+
+    if status_code == "404":
+        raise TerminationNotFoundError(
+            f"Execution {execution_id} not found on pod (response: {body or 'no body'})"
+        )
+
+    if status_code == "409":
+        raise TerminationConflictError(
+            f"Execution {execution_id} already completed or terminating (response: {body or 'no body'})"
+        )
+
+    raise TerminationRequestError(
+        f"Unexpected termination response for execution {execution_id}: status={status_code} body={body}"
+    )

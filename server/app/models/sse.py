@@ -14,6 +14,7 @@ from app.models.ideas import Idea
 from app.models.research_pipeline import (
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
+    ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
@@ -234,6 +235,10 @@ class ResearchRunInitialEventData(BaseModel):
         None,
         description="Hardware cost billed so far, if available.",
     )
+    code_execution: ResearchRunCodeExecution | None = Field(
+        None,
+        description="Latest code execution snapshot available for the run.",
+    )
 
 
 class ResearchRunInitialEvent(BaseModel):
@@ -270,6 +275,33 @@ class ResearchRunLogEvent(BaseModel):
 class ResearchRunBestNodeEvent(BaseModel):
     type: Literal["best_node_selection"]
     data: ResearchRunBestNodeSelection
+
+
+class ResearchRunCodeExecutionStartedData(BaseModel):
+    execution_id: str
+    stage_name: str
+    run_type: str
+    code: str
+    started_at: str
+
+
+class ResearchRunCodeExecutionStartedEvent(BaseModel):
+    type: Literal["code_execution_started"]
+    data: ResearchRunCodeExecutionStartedData
+
+
+class ResearchRunCodeExecutionCompletedData(BaseModel):
+    execution_id: str
+    stage_name: str
+    run_type: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: str
+
+
+class ResearchRunCodeExecutionCompletedEvent(BaseModel):
+    type: Literal["code_execution_completed"]
+    data: ResearchRunCodeExecutionCompletedData
 
 
 class ResearchRunSubstageCompletedEvent(BaseModel):
@@ -314,6 +346,8 @@ ResearchRunEventUnion = Annotated[
         ResearchRunPaperGenerationEvent,
         ResearchRunSubstageEventStream,
         ResearchRunSubstageSummaryEvent,
+        ResearchRunCodeExecutionStartedEvent,
+        ResearchRunCodeExecutionCompletedEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunHwCostEstimateEvent,
         ResearchRunHwCostActualEvent,

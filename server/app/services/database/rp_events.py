@@ -71,6 +71,21 @@ class BestNodeReasoningEvent(NamedTuple):
     created_at: datetime
 
 
+class CodeExecutionEvent(NamedTuple):
+    id: int
+    run_id: str
+    execution_id: str
+    stage_name: str
+    run_type: str
+    code: str
+    status: str
+    started_at: datetime
+    completed_at: Optional[datetime]
+    exec_time: Optional[float]
+    created_at: datetime
+    updated_at: datetime
+
+
 class ResearchPipelineEventsMixin(ConnectionProvider):
     """Methods to read pipeline telemetry events."""
 
@@ -246,3 +261,29 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 cursor.execute(query, (run_id,))
                 row = cursor.fetchone()
         return PaperGenerationEvent(**row) if row else None
+
+    def get_latest_code_execution_event(self, run_id: str) -> Optional[CodeExecutionEvent]:
+        """Fetch the most recent code execution event for a run."""
+        query = """
+            SELECT id,
+                   run_id,
+                   execution_id,
+                   stage_name,
+                   run_type,
+                   code,
+                   status,
+                   started_at,
+                   completed_at,
+                   exec_time,
+                   created_at,
+                   updated_at
+            FROM rp_code_execution_events
+            WHERE run_id = %s
+            ORDER BY started_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                row = cursor.fetchone()
+        return CodeExecutionEvent(**row) if row else None

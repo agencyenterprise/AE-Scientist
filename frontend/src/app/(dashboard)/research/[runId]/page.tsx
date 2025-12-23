@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   AutoEvaluationCard,
   FinalPdfBanner,
@@ -80,6 +80,22 @@ export default function ResearchRunDetailPage() {
     }
   }, [conversationId, review, notFound, reviewError, reviewLoading, fetchReview]);
 
+  const handleTerminateExecution = useCallback(
+    async (executionId: string, feedback: string) => {
+      if (!conversationId) {
+        throw new Error("Conversation not available yet. Please try again in a moment.");
+      }
+      await apiFetch(
+        `/conversations/${conversationId}/idea/research-run/${runId}/executions/${executionId}/terminate`,
+        {
+          method: "POST",
+          body: { payload: feedback },
+        }
+      );
+    },
+    [conversationId, runId]
+  );
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -112,6 +128,7 @@ export default function ResearchRunDetailPage() {
     substage_summaries = [],
     paper_generation_progress,
     best_node_selections = [],
+    code_execution,
   } = details;
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
@@ -165,6 +182,9 @@ export default function ResearchRunDetailPage() {
               substageSummaries={substage_summaries}
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
+              currentCodeExecution={code_execution ?? null}
+              runStatus={run.status}
+              onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
               className="max-h-[600px] overflow-y-auto"
             />
           </div>
