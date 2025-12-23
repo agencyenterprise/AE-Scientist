@@ -80,7 +80,9 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
 
   return (
     <div className="w-full rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-      <div className="mb-2 text-sm font-semibold text-slate-100">Tree Visualization</div>
+      <div className="mb-2">
+        <span className="text-sm font-semibold text-slate-100">Tree Visualization</span>
+      </div>
       {!hasViz && <p className="text-sm text-slate-300">No tree visualization available yet.</p>}
       {hasViz && selectedViz && (
         <>
@@ -118,6 +120,7 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
           <TreeVizViewer
             viz={selectedViz}
             artifacts={artifacts}
+            stageId={selectedViz.stage_id}
             bestNodeId={bestNodeForSelectedStage}
           />
         </>

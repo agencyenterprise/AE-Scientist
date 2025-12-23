@@ -2,8 +2,10 @@
 
 import { Activity, Cpu, FlaskConical, Package } from "lucide-react";
 import { StatCard } from "./stat-card";
+import { getCurrentStageLabel } from "../../utils/research-utils";
 
 interface ResearchRunStatsProps {
+  status: string;
   currentStage: string | null;
   progress: number | null;
   gpuType: string | null;
@@ -14,12 +16,13 @@ interface ResearchRunStatsProps {
  * Overview stats grid for research run detail page
  */
 export function ResearchRunStats({
+  status,
   currentStage,
   progress,
   gpuType,
   artifactsCount,
 }: ResearchRunStatsProps) {
-  const currentStageLabel = currentStage || "Pending";
+  const currentStageLabel = getCurrentStageLabel(status, currentStage, progress);
   const progressLabel =
     progress === null || progress === undefined ? "-" : `${Math.round(progress * 100)}%`;
 

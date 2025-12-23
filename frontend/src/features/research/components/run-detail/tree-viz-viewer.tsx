@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ArtifactMetadata, TreeVizItem } from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
+import {
+  getNodeType,
+  getBorderStyle,
+  NODE_TYPE_COLORS,
+  BORDER_STYLES,
+  NODE_TYPE_LONG_DESCRIPTIONS,
+  BorderStyle,
+} from "@/shared/lib/tree-colors";
+import { NodeTypesLegend } from "./NodeTypesLegend";
+import { NodeStrategyGuide } from "./NodeStrategyGuide";
 
 type MetricName = {
   metric_name: string;
@@ -37,32 +47,35 @@ type TreeVizPayload = TreeVizItem["viz"] & {
   exec_time?: Array<number | string | null>;
   exec_time_feedback?: Array<string | null>;
   is_best_node?: Array<boolean>;
+  is_seed_node?: Array<boolean>;
+  is_seed_agg_node?: Array<boolean>;
+  ablation_name?: Array<string | null>;
+  hyperparam_name?: Array<string | null>;
 };
 
 interface Props {
   viz: TreeVizItem;
   artifacts: ArtifactMetadata[];
+  stageId: string;
   bestNodeId?: number | null;
 }
 
-const NODE_SIZE = 14;
-const BLUE = "#1a73e8";
-const GRAY = "#6b7280";
+const NODE_SIZE = 18;
 
-export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
+export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
-  
+
   // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
   const initialSelection = useMemo(() => {
     if (bestNodeId !== null && bestNodeId !== undefined && bestNodeId >= 0) {
       return bestNodeId;
     }
-    
+
     return 0;
   }, [bestNodeId]);
-  
+
   const [selected, setSelected] = useState<number>(initialSelection);
-  
+
   // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
   useEffect(() => {
     setSelected(initialSelection);
@@ -87,6 +100,10 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
       execTime: payload.exec_time?.[idx],
       execTimeFeedback: payload.exec_time_feedback?.[idx] ?? "",
       isBest: payload.is_best_node?.[idx] ?? false,
+      isSeedNode: payload.is_seed_node?.[idx] ?? false,
+      isSeedAggNode: payload.is_seed_agg_node?.[idx] ?? false,
+      ablationName: payload.ablation_name?.[idx],
+      hyperparamName: payload.hyperparam_name?.[idx],
     }));
   }, [payload]);
 
@@ -154,39 +171,61 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
 
   return (
     <div className="flex w-full gap-4">
-      <div className="relative w-1/2 border border-slate-700 bg-slate-900">
-        <svg viewBox="0 0 100 100" className="w-full h-[320px]">
-          {edges.map(([parent, child], idx) => {
-            const p = nodes[parent];
-            const c = nodes[child];
-            if (!p || !c) return null;
-            const px = p.x * 90 + 5;
-            const py = p.y * 90 + 5;
-            const cx = c.x * 90 + 5;
-            const cy = c.y * 90 + 5;
-            return (
-              <line key={idx} x1={px} y1={py} x2={cx} y2={cy} stroke="#cbd5e1" strokeWidth={0.6} />
-            );
-          })}
-          {nodes.map(node => {
-            const isSelected = node.id === selected;
-            const color = node.excType ? GRAY : node.isBest ? "#10b981" : BLUE;
-            const cx = node.x * 90 + 5;
-            const cy = node.y * 90 + 5;
-            return (
-              <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={NODE_SIZE / 3}
-                  fill={color}
-                  stroke={isSelected ? "#fbbf24" : "#0f172a"}
-                  strokeWidth={isSelected ? 1.2 : 0.6}
+      <div className="w-1/2 flex flex-col">
+        <div className="relative flex-1 border border-slate-700 bg-slate-900">
+          <svg viewBox="0 0 100 100" className="w-full h-[320px]">
+            {edges.map(([parent, child], idx) => {
+              const p = nodes[parent];
+              const c = nodes[child];
+              if (!p || !c) return null;
+              const px = p.x * 85 + 7.5;
+              const py = p.y * 85 + 7.5;
+              const cx = c.x * 85 + 7.5;
+              const cy = c.y * 85 + 7.5;
+              return (
+                <line
+                  key={idx}
+                  x1={px}
+                  y1={py}
+                  x2={cx}
+                  y2={cy}
+                  stroke="#cbd5e1"
+                  strokeWidth={0.6}
                 />
-              </g>
-            );
-          })}
-        </svg>
+              );
+            })}
+            {nodes.map(node => {
+              const isSelected = node.id === selected;
+              const nodeType = getNodeType(node.id, { nodes, edges });
+              const nodeColor = NODE_TYPE_COLORS[nodeType].color;
+              const qualityBorder = getBorderStyle(node);
+              const borderConfig = BORDER_STYLES[qualityBorder];
+              const selectedBorderConfig = BORDER_STYLES[BorderStyle.Selected];
+              const strokeColor = isSelected ? selectedBorderConfig.stroke : borderConfig.stroke;
+              const strokeWidth = isSelected
+                ? selectedBorderConfig.strokeWidth
+                : borderConfig.strokeWidth;
+              const cx = node.x * 85 + 7.5;
+              const cy = node.y * 85 + 7.5;
+              return (
+                <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={NODE_SIZE / 3}
+                    fill={nodeColor}
+                    stroke={strokeColor}
+                    strokeWidth={parseFloat(strokeWidth)}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <NodeTypesLegend stageId={stageId} />
+          <NodeStrategyGuide stageId={stageId} />
+        </div>
       </div>
       <div className="w-1/2 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 max-h-[600px] overflow-y-auto">
         {selectedNode ? (
@@ -202,7 +241,8 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
               )}
             </div>
             <div className="space-y-2">
-              <Section label="Plan" value={selectedNode.plan} />
+              <NodeTypeSection nodeId={selectedNode.id} nodes={nodes} edges={edges} />
+              {selectedNode.isSeedNode ? null : <Section label="Plan" value={selectedNode.plan} />}
               <Section label="Analysis" value={selectedNode.analysis} />
               <MetricsSection metrics={selectedNode.metrics} />
               <ExecSection
@@ -255,6 +295,33 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
           <p className="text-slate-300">Select a node to inspect details.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+interface NodeTypeSectionProps {
+  nodeId: number;
+  nodes: Array<{
+    id: number;
+    excType?: string | null;
+    isBest?: boolean;
+    isSeedNode?: boolean;
+    isSeedAggNode?: boolean;
+    ablationName?: string | null;
+    hyperparamName?: string | null;
+  }>;
+  edges: Array<[number, number]>;
+}
+
+function NodeTypeSection({ nodeId, nodes, edges }: NodeTypeSectionProps) {
+  const nodeType = getNodeType(nodeId, { nodes, edges });
+  const longDescription = NODE_TYPE_LONG_DESCRIPTIONS[nodeType];
+  const label = NODE_TYPE_COLORS[nodeType].label;
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-300">Node Type: {label}</div>
+      <div className="whitespace-pre-wrap">{longDescription}</div>
     </div>
   );
 }

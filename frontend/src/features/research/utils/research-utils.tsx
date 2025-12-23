@@ -5,6 +5,70 @@ import type { ReactNode } from "react";
 import { CheckCircle2, Clock, Loader2, AlertCircle } from "lucide-react";
 
 /**
+ * Converts backend stage ids into a human-readable label.
+ *
+ * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
+ * Examples:
+ * - "5_paper_generation" -> "5: Paper Generation"
+ * - "2_baseline_tuning_2_optimization" -> "2: Baseline Tuning"
+ */
+const STAGE_LABEL_BY_NUMBER: Record<string, string> = {
+  "1": "1: Baseline Implementation",
+  "2": "2: Baseline Tuning",
+  "3": "3: Creative Research",
+  "4": "4: Ablation Studies",
+  "5": "5: Paper Generation",
+};
+
+function extractLeadingStageNumber(stage: string): string | null {
+  const match = stage.match(/^(\d+)(?:_|$)/);
+  return match?.[1] ?? null;
+}
+
+export function formatResearchStageName(stage: string | null | undefined): string | null {
+  if (!stage) return null;
+  const raw = stage.trim();
+  if (!raw) return null;
+
+  const stageNumber = extractLeadingStageNumber(raw);
+  if (stageNumber) return STAGE_LABEL_BY_NUMBER[stageNumber] ?? raw;
+
+  // Fallback: if we ever get an unexpected stage name, don't break UI—just show the raw value.
+  return raw;
+}
+
+/**
+ * Determines the current stage label for display in stats
+ * Takes into account status, current stage, and progress to show the most appropriate label
+ * @param status - Research run status
+ * @param currentStage - Current pipeline stage
+ * @param progress - Current progress (0-1)
+ * @returns Display label for current stage
+ */
+export function getCurrentStageLabel(
+  status: string,
+  currentStage: string | null,
+  progress: number | null
+): string {
+  // If explicitly completed or failed, show that status
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+
+  // Check if final stage is complete (stage 5 with 100% progress)
+  const isFinalStageComplete =
+    typeof currentStage === "string" &&
+    currentStage.startsWith("5_") &&
+    progress !== null &&
+    progress !== undefined &&
+    progress >= 1;
+
+  if (isFinalStageComplete) return "Completed";
+
+  // Format the current stage name
+  return (formatResearchStageName(currentStage) ?? currentStage) || "Pending";
+}
+
+/**
  * Stage badge configuration for Open/Closed compliance
  */
 export interface StageBadgeConfig {
@@ -34,7 +98,7 @@ export function getStatusText(status: string, currentStage: string | null): stri
       return "Completed";
     case "running":
       if (currentStage) {
-        return `Running ${currentStage}`;
+        return `Running ${formatResearchStageName(currentStage) ?? currentStage}`;
       }
       return "Running";
     case "failed":
@@ -139,9 +203,11 @@ export function getStageBadge(
   const colorClass =
     matchedConfig?.className ?? "bg-slate-500/15 text-slate-400 border-slate-500/30";
 
+  const label = formatResearchStageName(stage) ?? stage;
+
   return (
     <span className={`inline-flex rounded-lg border px-2.5 py-1 text-xs font-medium ${colorClass}`}>
-      {stage}
+      {label}
     </span>
   );
 }
