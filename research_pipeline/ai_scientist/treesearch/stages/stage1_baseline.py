@@ -132,3 +132,16 @@ class Stage1Baseline(Stage):
 
     def evaluate_stage_completion(self) -> tuple[bool, str]:
         return Stage1Baseline.compute_stage_completion(journal=self._context.journal)
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        if journal.good_nodes:
+            self._set_skip_state(
+                can_skip=True, reason="Stage 1 has at least one working implementation."
+            )
+        else:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Produce a working baseline implementation before skipping.",
+            )

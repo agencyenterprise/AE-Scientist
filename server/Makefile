@@ -34,7 +34,7 @@ export-openapi:
 # Fake RunPod server for local validation
 fake-runpod:
 	@echo "🎭 Starting fake RunPod server..."
-	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run python -m app.services.research_pipeline.fake_runpod_server
+	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run python -m app.services.research_pipeline.fake_runpod.runner
 
 # Generate API types for frontend
 gen-api-types: export-openapi

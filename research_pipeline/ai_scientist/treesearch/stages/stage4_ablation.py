@@ -210,3 +210,16 @@ class Stage4Ablation(Stage):
 
     def evaluate_stage_completion(self) -> tuple[bool, str]:
         return Stage4Ablation.compute_stage_completion()
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        if journal.good_nodes:
+            self._set_skip_state(
+                can_skip=True, reason="At least one ablation succeeded; reports can proceed."
+            )
+        else:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Run at least one successful ablation before skipping final stage.",
+            )

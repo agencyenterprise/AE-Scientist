@@ -14,6 +14,8 @@ import { cn } from "@/shared/lib/utils";
 import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
+import { extractStageSlug } from "@/features/research/hooks/useResearchRunDetails";
+import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
@@ -21,9 +23,11 @@ interface ResearchPipelineStagesProps {
   substageSummaries: SubstageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
+  stageSkipState: StageSkipStateMap;
   currentCodeExecution?: ResearchRunCodeExecution | null;
   runStatus: string;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+  onSkipStage?: (stageSlug: string) => Promise<void>;
   className?: string;
 }
 
@@ -61,34 +65,6 @@ const PIPELINE_STAGES = [
     description: "Plot aggregation, citation gathering, paper writeup, and peer review",
   },
 ] as const;
-
-/**
- * Helper function to extract stage slug from backend stage name
- *
- * Backend format: {stage_number}_{stage_slug}
- * Examples:
- *   "1_initial_implementation" → "initial_implementation"
- *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
- *   "3_creative_research_1_exploration" → "creative_research"
- */
-const extractStageSlug = (stageName: string): string | null => {
-  const parts = stageName.split("_");
-
-  // Need at least 2 parts: stage_number + slug
-  if (parts.length < 2) return null;
-
-  // Skip first part (stage number), collect parts until we hit next number (substage number)
-  const slugParts: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part) continue;
-    // Stop when we hit a number (substage number)
-    if (/^\d+$/.test(part)) break;
-    slugParts.push(part);
-  }
-
-  return slugParts.length > 0 ? slugParts.join("_") : null;
-};
 
 interface StageInfo {
   status: "pending" | "in_progress" | "completed";
@@ -288,11 +264,54 @@ export function ResearchPipelineStages({
   substageSummaries,
   paperGenerationProgress,
   bestNodeSelections,
+  stageSkipState,
   currentCodeExecution,
   runStatus,
   onTerminateExecution,
+  onSkipStage,
   className,
 }: ResearchPipelineStagesProps) {
+  const [skipPendingStage, setSkipPendingStage] = useState<string | null>(null);
+  const [skipErrorStage, setSkipErrorStage] = useState<string | null>(null);
+  const [skipErrorMessage, setSkipErrorMessage] = useState<string | null>(null);
+  const [skipDialogStage, setSkipDialogStage] = useState<string | null>(null);
+
+  const openSkipDialog = (stageKey: string) => {
+    if (!onSkipStage) {
+      return;
+    }
+    setSkipDialogStage(stageKey);
+    setSkipErrorStage(null);
+    setSkipErrorMessage(null);
+  };
+
+  const closeSkipDialog = () => {
+    if (skipPendingStage && skipPendingStage === skipDialogStage) {
+      return;
+    }
+    setSkipDialogStage(null);
+  };
+
+  const confirmSkipStage = async () => {
+    if (!onSkipStage || !skipDialogStage) {
+      return;
+    }
+    const stageKey = skipDialogStage;
+    setSkipPendingStage(stageKey);
+    setSkipErrorStage(null);
+    setSkipErrorMessage(null);
+    try {
+      await onSkipStage(stageKey);
+      setSkipDialogStage(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to request stage skip. Please try again.";
+      setSkipErrorStage(stageKey);
+      setSkipErrorMessage(message);
+    } finally {
+      setSkipPendingStage(null);
+    }
+  };
   /**
    * Get aggregated stage information for a given main stage
    * Handles multiple substages within a main stage by using the latest progress
@@ -448,56 +467,92 @@ export function ResearchPipelineStages({
           const displayIteration =
             info.iteration !== null ? Math.min(info.iteration + 1, displayMax) : null;
 
+          const canShowSkipButton = Boolean(
+            stageSkipState[stage.key] &&
+              runStatus === "running" &&
+              info.status === "in_progress" &&
+              typeof onSkipStage === "function" &&
+              !isPaperGeneration
+          );
+
           return (
             <div key={stage.id} className="flex flex-col gap-3">
-              {/* Stage header with title, description, and status */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-base font-semibold text-white">
-                    Stage {stage.id}: {stage.title}
-                    {/* Stages 1-4: Show iteration count for in_progress */}
-                    {info.status === "in_progress" &&
-                      !isPaperGeneration &&
-                      info.iteration !== null && (
+              {/* Stage header with title, description, status, and skip action */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-base font-semibold text-white">
+                      Stage {stage.id}: {stage.title}
+                      {/* Stages 1-4: Show iteration count for in_progress */}
+                      {info.status === "in_progress" &&
+                        !isPaperGeneration &&
+                        info.iteration !== null && (
+                          <span className="ml-2 text-slate-400">
+                            — Iteration {displayIteration} of {displayMax}
+                          </span>
+                        )}
+                      {/* Stages 1-4: Show completion iteration count for completed */}
+                      {info.status === "completed" &&
+                        !isPaperGeneration &&
+                        info.iteration !== null && (
+                          <span className="ml-2 text-slate-400">
+                            — Completed in {displayIteration} iterations
+                          </span>
+                        )}
+                      {/* Stage 5: Show step name + step count for in_progress */}
+                      {isPaperGeneration &&
+                        info.status === "in_progress" &&
+                        latestPaperEvent?.step && (
+                          <span className="ml-2 text-slate-400">
+                            — {STEP_LABELS[latestPaperEvent.step]} (Step {currentStepIndex + 1} of{" "}
+                            {PAPER_GENERATION_STEPS.length})
+                          </span>
+                        )}
+                      {/* Stage 5: Show completed message */}
+                      {isPaperGeneration && info.status === "completed" && (
                         <span className="ml-2 text-slate-400">
-                          — Iteration {displayIteration} of {displayMax}
+                          — Completed in {PAPER_GENERATION_STEPS.length} steps
                         </span>
                       )}
-                    {/* Stages 1-4: Show completion iteration count for completed */}
-                    {info.status === "completed" &&
-                      !isPaperGeneration &&
-                      info.iteration !== null && (
-                        <span className="ml-2 text-slate-400">
-                          — Completed in {displayIteration} iterations
-                        </span>
-                      )}
-                    {/* Stage 5: Show step name + step count for in_progress */}
-                    {isPaperGeneration &&
-                      info.status === "in_progress" &&
-                      latestPaperEvent?.step && (
-                        <span className="ml-2 text-slate-400">
-                          — {STEP_LABELS[latestPaperEvent.step]} (Step {currentStepIndex + 1} of{" "}
-                          {PAPER_GENERATION_STEPS.length})
-                        </span>
-                      )}
-                    {/* Stage 5: Show completed message */}
-                    {isPaperGeneration && info.status === "completed" && (
-                      <span className="ml-2 text-slate-400">
-                        — Completed in {PAPER_GENERATION_STEPS.length} steps
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {info.status === "completed" && (
+                      <span className="text-sm font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                        COMPLETED
                       </span>
                     )}
-                  </h3>
+                    {info.status === "in_progress" && (
+                      <span className="text-sm font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
+                        IN PROGRESS
+                      </span>
+                    )}
+                    {canShowSkipButton && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openSkipDialog(stage.key)}
+                        disabled={skipPendingStage === stage.key}
+                      >
+                        {skipPendingStage === stage.key ? "Skipping…" : "Skip Stage"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {/* Status Badge */}
-                {info.status === "completed" && (
-                  <span className="text-sm font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
-                    COMPLETED
-                  </span>
-                )}
-                {info.status === "in_progress" && (
-                  <span className="text-sm font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
-                    IN PROGRESS
-                  </span>
+                <div className="flex items-center gap-2">
+                  {info.status === "completed" && (
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                      COMPLETED
+                    </span>
+                  )}
+                  {info.status === "in_progress" && (
+                    <span className="text-xs font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
+                      IN PROGRESS
+                    </span>
+                  )}
+                </div>
+                {skipErrorStage === stage.key && skipErrorMessage && (
+                  <p className="text-xs text-red-300">{skipErrorMessage}</p>
                 )}
               </div>
 
@@ -546,6 +601,49 @@ export function ResearchPipelineStages({
           );
         })}
       </div>
+      <Modal
+        isOpen={Boolean(skipDialogStage && onSkipStage)}
+        onClose={closeSkipDialog}
+        title="Skip current stage?"
+        maxWidth="max-w-lg"
+      >
+        <p className="text-sm text-slate-300">
+          Skipping{" "}
+          <span className="font-semibold text-white">
+            {PIPELINE_STAGES.find(stage => stage.key === skipDialogStage)?.title ??
+              skipDialogStage ??
+              "this stage"}
+          </span>{" "}
+          will stop remaining iterations and immediately advance the pipeline to the next stage.
+          This action cannot be undone.
+        </p>
+        {skipErrorStage === skipDialogStage && skipErrorMessage && (
+          <p className="mt-4 text-sm text-red-400">{skipErrorMessage}</p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={closeSkipDialog}
+            disabled={skipPendingStage !== null && skipPendingStage === skipDialogStage}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={confirmSkipStage}
+            disabled={
+              !skipDialogStage ||
+              (skipPendingStage !== null && skipPendingStage === skipDialogStage)
+            }
+          >
+            {skipPendingStage !== null && skipPendingStage === skipDialogStage
+              ? "Skipping..."
+              : "Skip Stage"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

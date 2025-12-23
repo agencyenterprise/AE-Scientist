@@ -10,6 +10,7 @@ from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
+from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 
@@ -26,6 +27,7 @@ StreamEventModel = Union[
     SSELogEvent,
     SSECodeExecutionStartedEvent,
     SSECodeExecutionCompletedEvent,
+    SSEStageSkipWindowEvent,
 ]
 
 _RUN_STREAM_SUBSCRIBERS: Dict[str, Set[asyncio.Queue[Dict[str, Any]]]] = {}

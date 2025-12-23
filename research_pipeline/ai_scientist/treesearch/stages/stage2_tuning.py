@@ -276,3 +276,37 @@ class Stage2Tuning(Stage):
         return Stage2Tuning.compute_stage_completion(
             journal=self._context.journal, cfg=self._context.cfg
         )
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        best_node = journal.get_best_node()
+        if not best_node:
+            self._set_skip_state(can_skip=False, reason="Stage 2 skipping requires a best node.")
+            return
+        if not journal.nodes or best_node == journal.nodes[0]:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Best node still matches the baseline; need a tuned improvement.",
+            )
+            return
+        if best_node.metric is None:
+            self._set_skip_state(can_skip=False, reason="Best node is missing parsed metrics.")
+            return
+        datasets = best_node.datasets_successfully_tested or []
+        unique_datasets = {name for name in datasets if name}
+        if len(unique_datasets) < 2:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Run tuning experiments on at least two datasets before skipping.",
+            )
+            return
+        if best_node.is_buggy or best_node.is_buggy_plots:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Best node must be validated successfully before skipping.",
+            )
+            return
+        self._set_skip_state(
+            can_skip=True, reason="Stage 2 best node satisfies downstream requirements."
+        )

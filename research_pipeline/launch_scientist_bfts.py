@@ -38,6 +38,7 @@ from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
+from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
@@ -61,7 +62,7 @@ from ai_scientist.treesearch.utils.config import (
     save_run,
 )
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
-from termination_server import (
+from management_server import (
     initialize_execution_registry,
     shutdown_execution_registry_manager,
     start_termination_server,
@@ -845,6 +846,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
     if review_cfg is not None and not writeup_enabled:
         logger.info("Review configuration provided but writeup is disabled; skipping review.")
 
+    stage_control.reset_stage_state()
     initialize_execution_registry()
     try:
         start_termination_server(host="127.0.0.1", port=8090)
@@ -986,6 +988,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
                 artifact_publisher.close()
             stop_termination_server()
             shutdown_execution_registry_manager()
+            stage_control.clear_stage_state()
         except Exception:
             logger.exception("Encountered an error while cleaning up the research pipeline run.")
 

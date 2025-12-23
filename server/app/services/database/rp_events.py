@@ -86,6 +86,18 @@ class CodeExecutionEvent(NamedTuple):
     updated_at: datetime
 
 
+class StageSkipWindowRecord(NamedTuple):
+    id: int
+    run_id: str
+    stage: str
+    opened_at: datetime
+    opened_reason: Optional[str]
+    closed_at: Optional[datetime]
+    closed_reason: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
 class ResearchPipelineEventsMixin(ConnectionProvider):
     """Methods to read pipeline telemetry events."""
 
@@ -287,3 +299,25 @@ class ResearchPipelineEventsMixin(ConnectionProvider):
                 cursor.execute(query, (run_id,))
                 row = cursor.fetchone()
         return CodeExecutionEvent(**row) if row else None
+
+    def list_stage_skip_windows(self, run_id: str) -> List[StageSkipWindowRecord]:
+        """Fetch all recorded stage skip eligibility windows for a run."""
+        query = """
+            SELECT id,
+                   run_id,
+                   stage,
+                   opened_at,
+                   opened_reason,
+                   closed_at,
+                   closed_reason,
+                   created_at,
+                   updated_at
+            FROM rp_stage_skip_windows
+            WHERE run_id = %s
+            ORDER BY opened_at ASC, id ASC
+        """
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(query, (run_id,))
+                rows = cursor.fetchall() or []
+        return [StageSkipWindowRecord(**row) for row in rows]

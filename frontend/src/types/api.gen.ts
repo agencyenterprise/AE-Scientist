@@ -790,6 +790,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/stage-skip-window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Stage Skip Window */
+        post: operations["ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/tree-viz-stored": {
         parameters: {
             query?: never;
@@ -1025,6 +1042,26 @@ export interface paths {
         put?: never;
         /** Terminate Code Execution */
         post: operations["terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/skip-stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Active Stage
+         * @description Request the running pipeline to skip the current stage.
+         */
+        post: operations["skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2875,6 +2912,11 @@ export interface components {
              * @description Paper generation progress events (Stage 5)
              */
             paper_generation_progress?: components["schemas"]["ResearchRunPaperGenerationProgress"][];
+            /**
+             * Stage Skip Windows
+             * @description Windows indicating when each stage became skippable.
+             */
+            stage_skip_windows?: components["schemas"]["ResearchRunStageSkipWindow"][];
         };
         /** ResearchRunErrorEvent */
         ResearchRunErrorEvent: {
@@ -3103,6 +3145,11 @@ export interface components {
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
             /** Best Node Selections */
             best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
+            /**
+             * Stage Skip Windows
+             * @description Recorded windows when stages became skippable.
+             */
+            stage_skip_windows?: components["schemas"]["ResearchRunStageSkipWindow"][];
             /** @description Hardware cost estimate available when the initial snapshot was emitted. */
             hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
             /** @description Hardware cost billed so far, if available. */
@@ -3370,6 +3417,62 @@ export interface components {
             type: "stage_progress";
             data: components["schemas"]["ResearchRunStageProgress"];
         };
+        /** ResearchRunStageSkipWindow */
+        ResearchRunStageSkipWindow: {
+            /**
+             * Id
+             * @description Unique identifier for the skip window record
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier where skipping became possible
+             */
+            stage: string;
+            /**
+             * Opened At
+             * @description ISO timestamp when the window opened
+             */
+            opened_at: string;
+            /**
+             * Opened Reason
+             * @description Reason provided when the window opened
+             */
+            opened_reason?: string | null;
+            /**
+             * Closed At
+             * @description ISO timestamp when the window closed (if closed)
+             */
+            closed_at?: string | null;
+            /**
+             * Closed Reason
+             * @description Reason provided when the window closed
+             */
+            closed_reason?: string | null;
+        };
+        /** ResearchRunStageSkipWindowEvent */
+        ResearchRunStageSkipWindowEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_skip_window";
+            data: components["schemas"]["ResearchRunStageSkipWindowUpdate"];
+        };
+        /** ResearchRunStageSkipWindowUpdate */
+        ResearchRunStageSkipWindowUpdate: {
+            /** Stage */
+            stage: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "opened" | "closed";
+            /** Timestamp */
+            timestamp: string;
+            /** Reason */
+            reason?: string | null;
+        };
         /** ResearchRunStopResponse */
         ResearchRunStopResponse: {
             /** Run Id */
@@ -3383,7 +3486,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -3632,6 +3735,23 @@ export interface components {
             run_id: string;
             event: components["schemas"]["RunningCodeEventPayload"];
         };
+        /** SkipStageRequest */
+        SkipStageRequest: {
+            /** Stage */
+            stage?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** SkipStageResponse */
+        SkipStageResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "pending";
+            /** Message */
+            message: string;
+        };
         /** StageProgressEvent */
         StageProgressEvent: {
             /** Stage */
@@ -3660,6 +3780,26 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["StageProgressEvent"];
+        };
+        /** StageSkipWindowEventModel */
+        StageSkipWindowEventModel: {
+            /** Stage */
+            stage: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "opened" | "closed";
+            /** Timestamp */
+            timestamp: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** StageSkipWindowPayload */
+        StageSkipWindowPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["StageSkipWindowEventModel"];
         };
         /** SubstageCompletedEvent */
         SubstageCompletedEvent: {
@@ -5121,6 +5261,39 @@ export interface operations {
             };
         };
     };
+    ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageSkipWindowPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post: {
         parameters: {
             query?: never;
@@ -5569,6 +5742,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TerminateExecutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipStageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkipStageResponse"];
                 };
             };
             /** @description Validation Error */

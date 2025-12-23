@@ -127,3 +127,32 @@ class Stage3Plotting(Stage):
             cfg=self._context.cfg,
             max_stage3_iterations=self._meta.max_iterations,
         )
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        best_node = journal.get_best_node()
+        if not best_node:
+            self._set_skip_state(can_skip=False, reason="Stage 3 skipping requires a best node.")
+            return
+        if best_node.is_buggy or best_node.is_buggy_plots:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Best node must pass execution and plot validation.",
+            )
+            return
+        if not best_node.plots or not best_node.plot_paths:
+            self._set_skip_state(can_skip=False, reason="Generate plots before skipping Stage 3.")
+            return
+        datasets = best_node.datasets_successfully_tested or []
+        unique_datasets = {name for name in datasets if name}
+        if len(unique_datasets) < 2:
+            self._set_skip_state(
+                can_skip=False,
+                reason="Use at least two datasets before moving to ablations.",
+            )
+            return
+        self._set_skip_state(
+            can_skip=True,
+            reason="Stage 3 outputs (plots + datasets) are ready for Stage 4.",
+        )
