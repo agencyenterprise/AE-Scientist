@@ -347,7 +347,7 @@ export interface MergedTreeVizPayload {
 }
 
 export interface MergedTreeViz extends Omit<TreeVizItem, "stage_id" | "viz"> {
-  stage_id: "Full_Tree";
+  stage_id: "full_tree";
   viz: MergedTreeVizPayload;
 }
 

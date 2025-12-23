@@ -10,10 +10,10 @@ import type {
 export type { StageZoneMetadata, MergedTreeVizPayload, MergedTreeViz };
 
 /**
- * Sort stages in chronological order (Stage_1, Stage_2, Stage_3, Stage_4)
+ * Sort stages in chronological order (stage_1, stage_2, stage_3, stage_4)
  */
 function sortStages(items: TreeVizItem[]): TreeVizItem[] {
-  const order = ["Stage_1", "Stage_2", "Stage_3", "Stage_4"];
+  const order = ["stage_1", "stage_2", "stage_3", "stage_4"];
   return [...items].sort((a, b) => order.indexOf(a.stage_id) - order.indexOf(b.stage_id));
 }
 
@@ -265,7 +265,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
   return {
     id: -1, // Synthetic ID
     run_id: firstItem.run_id,
-    stage_id: "Full_Tree",
+    stage_id: "full_tree",
     version: 1,
     viz: merged,
     created_at: firstItem.created_at,

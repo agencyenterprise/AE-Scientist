@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ArtifactMetadata, TreeVizItem, MergedTreeViz, StageZoneMetadata } from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
-import { stageLabel } from "@/shared/lib/stage-utils";
+import { stageLabel, FULL_TREE_STAGE_ID } from "@/shared/lib/stage-utils";
 import {
   getNodeType,
   getBorderStyle,
@@ -61,18 +61,25 @@ interface Props {
   bestNodeId?: number | null;
 }
 
-const NODE_SIZE = 14; // Reduced from 18 for better density
+// =============================================================================
+// SVG VISUALIZATION CONSTANTS
+// =============================================================================
 
-// SVG sizing configuration
-// These values are calibrated to maintain good aspect ratio and readability:
-// - SINGLE_STAGE_VIEWBOX_HEIGHT: Base height for single-stage tree visualization
-// - ADDITIONAL_HEIGHT_PER_STAGE: Extra height per additional stage in Full Tree view
-//   (33 provides ~1.33x scaling per stage which maintains readable node density)
-// - VIEWBOX_TO_PIXELS_RATIO: Maps viewBox units to CSS pixels
-//   (5x multiplier means viewBox 100 → 500px, giving good resolution)
+// Node appearance
+const NODE_SIZE = 14;
+
+// ViewBox sizing - calibrated for good aspect ratio and readability
 const SINGLE_STAGE_VIEWBOX_HEIGHT = 100;
-const ADDITIONAL_HEIGHT_PER_STAGE = 33;
-const VIEWBOX_TO_PIXELS_RATIO = 5;
+const ADDITIONAL_HEIGHT_PER_STAGE = 33; // ~1.33x scaling per stage
+const VIEWBOX_TO_PIXELS_RATIO = 5; // viewBox 100 → 500px
+
+// Full Tree stage separator layout (in viewBox units)
+const LABEL_OFFSET_FROM_TOP = 5.0; // First stage: offset from zone top
+const LABEL_OFFSET_FROM_DIVIDER = 6.0; // Other stages: offset below divider
+const DIVIDER_OFFSET = 2.0; // Offset from calculated position
+const LABEL_BG_HEIGHT = 5;
+const LABEL_BG_PADDING_TOP = 3.5;
+
 
 export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
@@ -125,7 +132,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
 
   // Extract zone metadata for Full Tree view
   const zoneMetadata = (payload as { zoneMetadata?: StageZoneMetadata[] }).zoneMetadata ?? [];
-  const isFullTree = stageId === "Full_Tree";
+  const isFullTree = stageId === FULL_TREE_STAGE_ID;
 
   // Calculate dynamic viewBox height based on number of stages
   // Full Tree view scales height based on stage count; single stage uses base height
@@ -197,13 +204,6 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   // Render stage separators (dividers + labels) for Full Tree view
   const renderStageSeparators = () => {
     if (!isFullTree || zoneMetadata.length === 0) return null;
-
-    // Spacing constants (in viewBox units)
-    const LABEL_OFFSET_FROM_TOP = 5.0; // First stage: offset from zone top
-    const LABEL_OFFSET_FROM_DIVIDER = 6.0; // Other stages: offset below divider
-    const DIVIDER_OFFSET = 2.0; // Offset from calculated position
-    const LABEL_BG_HEIGHT = 5;
-    const LABEL_BG_PADDING_TOP = 3.5;
 
     return (
       <g className="stage-separators">
@@ -336,8 +336,8 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
           </svg>
         </div>
         <div className="mt-2 flex gap-2">
-          <NodeTypesLegend stageId={stageId === "Full_Tree" ? undefined : stageId} />
-          <NodeStrategyGuide stageId={stageId === "Full_Tree" ? undefined : stageId} />
+          <NodeTypesLegend stageId={isFullTree ? undefined : stageId} />
+          <NodeStrategyGuide stageId={isFullTree ? undefined : stageId} />
         </div>
       </div>
       <div className="w-1/2 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 max-h-[600px] overflow-y-auto">

@@ -160,23 +160,11 @@ export function getBorderStyle(node: Node): BorderStyle {
 export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
   if (!stageId) return Object.values(NodeType);
 
-  // Normalize stage_id (e.g., "Stage_1" or "stage_1")
-  const stageNum = stageId.toLowerCase().includes("stage_1")
-    ? 1
-    : stageId.toLowerCase().includes("stage_2")
-      ? 2
-      : stageId.toLowerCase().includes("stage_3")
-        ? 3
-        : stageId.toLowerCase().includes("stage_4")
-          ? 4
-          : null;
-
-  if (!stageNum) return Object.values(NodeType);
-
-  switch (stageNum) {
-    case 1:
+  // Stage IDs are expected in lowercase format (stage_1, stage_2, etc.)
+  switch (stageId) {
+    case "stage_1":
       return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
-    case 2:
+    case "stage_2":
       return [
         NodeType.Root,
         NodeType.Debug,
@@ -184,9 +172,9 @@ export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
         NodeType.Hyperparam,
         NodeType.SeedNode,
       ];
-    case 3:
+    case "stage_3":
       return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
-    case 4:
+    case "stage_4":
       return [NodeType.Improve, NodeType.Ablation, NodeType.SeedNode];
     default:
       return Object.values(NodeType);

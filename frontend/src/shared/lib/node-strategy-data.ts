@@ -34,10 +34,10 @@ export interface StageStrategy {
   exampleFlow: string;
 }
 
-export type StageId = "Stage_1" | "Stage_2" | "Stage_3" | "Stage_4";
+export type StageId = "stage_1" | "stage_2" | "stage_3" | "stage_4";
 
 export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
-  Stage_1: {
+  stage_1: {
     title: "Stage 1: Baseline Implementation",
     goal: "Develop functional code which can produce a runnable result",
     description:
@@ -98,7 +98,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
 3. Continue until stage completion criteria are met (working implementation + sufficient exploration)`,
   },
 
-  Stage_2: {
+  stage_2: {
     title: "Stage 2: Baseline Tuning",
     goal: "Improve baseline through hyperparameter optimization",
     description:
@@ -132,7 +132,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
 3. Continue until diminishing returns or iteration limit reached`,
   },
 
-  Stage_3: {
+  stage_3: {
     title: "Stage 3: Creative Exploration",
     goal: "Explore higher-leverage variants with supporting analysis",
     description:
@@ -168,7 +168,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
 4. Continue until strong research ideas are exhausted`,
   },
 
-  Stage_4: {
+  stage_4: {
     title: "Stage 4: Ablation Studies",
     goal: "Run controlled ablations to understand component contributions",
     description:

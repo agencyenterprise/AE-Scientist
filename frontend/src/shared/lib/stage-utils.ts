@@ -1,11 +1,60 @@
 import type { SubstageSummary } from "@/types/research";
 
+// =============================================================================
+// STAGE CONSTANTS
+// =============================================================================
+
+export const FULL_TREE_STAGE_ID = "full_tree";
+
+/**
+ * Stage goal descriptions shown in the Tree Visualization UI
+ */
+export const STAGE_SUMMARIES: Record<string, string> = {
+  stage_1:
+    "Goal: Develop functional code which can produce a runnable result. The tree represents attempts and fixes needed to reach this state.",
+  stage_2:
+    "Goal: Improve the baseline through tuning and small changes to the code while keeping the overall approach fixed. The scientist tries to improve the metrics which quantify the quality of the research.",
+  stage_3:
+    "Goal: Explore higher-leverage variants and research directions, supported by plots and analyses to understand what is driving performance. The scientist tries to find and validate meaningful improvements worth writing up.",
+  stage_4:
+    "Goal: Run controlled ablations and robustness checks to isolate which components matter and why. The scientist tries to attribute gains and strengthen the evidence for the final claims.",
+  [FULL_TREE_STAGE_ID]:
+    "Combined view showing all stages of the research pipeline stacked vertically in chronological order.",
+};
+
+/**
+ * Maps frontend stage IDs (stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
+ */
+export const STAGE_ID_TO_SLUG: Record<string, string> = {
+  stage_1: "initial_implementation",
+  stage_2: "baseline_tuning",
+  stage_3: "creative_research",
+  stage_4: "ablation_studies",
+};
+
+// =============================================================================
+// STAGE UTILITY FUNCTIONS
+// =============================================================================
+
 /**
  * Convert stage ID to human-readable label
- * Example: "Stage_1" → "Stage 1"
+ * Example: "stage_1" → "Stage 1"
  */
 export function stageLabel(stageId: string): string {
-  return stageId.replace("Stage_", "Stage ");
+  return stageId.replace("stage_", "Stage ");
+}
+
+/**
+ * Extract the leading stage number from a backend stage name
+ *
+ * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
+ * Examples:
+ *   "1_initial_implementation" → "1"
+ *   "5_paper_generation" → "5"
+ */
+export function extractStageNumber(stageName: string): string | null {
+  const match = stageName.match(/^(\d+)(?:_|$)/);
+  return match?.[1] ?? null;
 }
 
 /**

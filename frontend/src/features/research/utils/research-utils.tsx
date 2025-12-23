@@ -3,6 +3,7 @@
  */
 import type { ReactNode } from "react";
 import { CheckCircle2, Clock, Loader2, AlertCircle } from "lucide-react";
+import { extractStageNumber } from "@/shared/lib/stage-utils";
 
 /**
  * Converts backend stage ids into a human-readable label.
@@ -20,17 +21,12 @@ const STAGE_LABEL_BY_NUMBER: Record<string, string> = {
   "5": "5: Paper Generation",
 };
 
-function extractLeadingStageNumber(stage: string): string | null {
-  const match = stage.match(/^(\d+)(?:_|$)/);
-  return match?.[1] ?? null;
-}
-
 export function formatResearchStageName(stage: string | null | undefined): string | null {
   if (!stage) return null;
   const raw = stage.trim();
   if (!raw) return null;
 
-  const stageNumber = extractLeadingStageNumber(raw);
+  const stageNumber = extractStageNumber(raw);
   if (stageNumber) return STAGE_LABEL_BY_NUMBER[stageNumber] ?? raw;
 
   // Fallback: if we ever get an unexpected stage name, don't break UI—just show the raw value.
