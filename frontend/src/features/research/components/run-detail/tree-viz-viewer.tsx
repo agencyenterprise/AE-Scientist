@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ArtifactMetadata, TreeVizItem, MergedTreeViz } from "@/types/research";
-import type { StageZoneMetadata } from "@/shared/lib/tree-merge-utils";
+import type { ArtifactMetadata, TreeVizItem, MergedTreeViz, StageZoneMetadata } from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
+import { stageLabel } from "@/shared/lib/stage-utils";
 import {
   getNodeType,
   getBorderStyle,
@@ -61,11 +61,18 @@ interface Props {
   bestNodeId?: number | null;
 }
 
-function stageLabel(stageId: string): string {
-  return stageId.replace("Stage_", "Stage ");
-}
-
 const NODE_SIZE = 14; // Reduced from 18 for better density
+
+// SVG sizing configuration
+// These values are calibrated to maintain good aspect ratio and readability:
+// - SINGLE_STAGE_VIEWBOX_HEIGHT: Base height for single-stage tree visualization
+// - ADDITIONAL_HEIGHT_PER_STAGE: Extra height per additional stage in Full Tree view
+//   (33 provides ~1.33x scaling per stage which maintains readable node density)
+// - VIEWBOX_TO_PIXELS_RATIO: Maps viewBox units to CSS pixels
+//   (5x multiplier means viewBox 100 → 500px, giving good resolution)
+const SINGLE_STAGE_VIEWBOX_HEIGHT = 100;
+const ADDITIONAL_HEIGHT_PER_STAGE = 33;
+const VIEWBOX_TO_PIXELS_RATIO = 5;
 
 export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
@@ -121,8 +128,11 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const isFullTree = stageId === "Full_Tree";
 
   // Calculate dynamic viewBox height based on number of stages
+  // Full Tree view scales height based on stage count; single stage uses base height
   const numStages = isFullTree ? zoneMetadata.length : 1;
-  const viewBoxHeight = 100 + (numStages - 1) * 33;
+  const viewBoxHeight =
+    SINGLE_STAGE_VIEWBOX_HEIGHT + (numStages - 1) * ADDITIONAL_HEIGHT_PER_STAGE;
+  const cssHeight = viewBoxHeight * VIEWBOX_TO_PIXELS_RATIO;
 
   const selectedNode = nodes[selected];
   const plotList = useMemo(() => {
@@ -188,14 +198,22 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const renderStageSeparators = () => {
     if (!isFullTree || zoneMetadata.length === 0) return null;
 
+    // Spacing constants (in viewBox units)
+    const LABEL_OFFSET_FROM_TOP = 5.0; // First stage: offset from zone top
+    const LABEL_OFFSET_FROM_DIVIDER = 6.0; // Other stages: offset below divider
+    const DIVIDER_OFFSET = 2.0; // Offset from calculated position
+    const LABEL_BG_HEIGHT = 5;
+    const LABEL_BG_PADDING_TOP = 3.5;
+
     return (
       <g className="stage-separators">
         {zoneMetadata.map((meta, idx) => {
+          const isFirstStage = idx === 0;
           const zoneStartY = meta.zone.min * viewBoxHeight;
 
           // Position divider in the middle of the padding gap between stages
           let dividerY = zoneStartY;
-          if (idx > 0) {
+          if (!isFirstStage) {
             const prevZone = zoneMetadata[idx - 1]?.zone;
             if (prevZone) {
               // Divider goes in the middle of the gap: between prevZone.max and meta.zone.min
@@ -203,17 +221,12 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
             }
           }
 
-          // Position labels:
-          // - Stage 1: 8 units below zone start (good position relative to top)
-          // - Stage 2, 3, 4: 3.5 units below divider line
-          let labelY;
-          if (idx === 0) {
-            labelY = zoneStartY + 5.0;
-          } else if (idx === 3) {
-            labelY = dividerY + 4.0;
-          } else {
-            labelY = dividerY + 7.0;
-          }
+          // Position labels consistently:
+          // - First stage: offset from zone start (no divider above)
+          // - Other stages: offset below divider line
+          const labelY = isFirstStage
+            ? zoneStartY + LABEL_OFFSET_FROM_TOP
+            : dividerY + LABEL_OFFSET_FROM_DIVIDER;
           const labelText = stageLabel(meta.stageId);
 
           return (
@@ -221,9 +234,9 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               {/* Background rectangle behind label to prevent node overlap */}
               <rect
                 x={1}
-                y={labelY - 3.5}
+                y={labelY - LABEL_BG_PADDING_TOP}
                 width={labelText.length * 2.5}
-                height={5}
+                height={LABEL_BG_HEIGHT}
                 fill="#0f172a"
                 opacity={0.9}
                 className="select-none"
@@ -242,12 +255,12 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               </text>
 
               {/* Divider line (skip first stage, only draw between stages) */}
-              {idx > 0 && (
+              {!isFirstStage && (
                 <line
                   x1={0}
-                  y1={dividerY + 2 - (idx === 3 ? 3 : 0)} // Adjust for the last stage to avoid overlap with the node
+                  y1={dividerY + DIVIDER_OFFSET}
                   x2={100}
-                  y2={dividerY + 2 - (idx === 3 ? 3 : 0)}
+                  y2={dividerY + DIVIDER_OFFSET}
                   stroke="#64748b"
                   strokeWidth={0.4}
                   strokeDasharray="2,2"
@@ -268,7 +281,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
           <svg
             viewBox={`0 0 100 ${viewBoxHeight}`}
             className="w-full"
-            style={{ height: `${viewBoxHeight * 5}px` }}
+            style={{ height: `${cssHeight}px` }}
           >
             {/* Stage separators (rendered first as background) */}
             {renderStageSeparators()}

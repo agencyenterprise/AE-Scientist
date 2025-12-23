@@ -5,10 +5,11 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app.config import settings
 from app.api.research_pipeline_stream import publish_stream_event
+from app.config import settings
 from app.models import ResearchRunEvent
-from app.models.sse import ResearchRunCompleteData, ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -267,7 +268,7 @@ class ResearchPipelineMonitor:
             SSECompleteEvent(
                 type="complete",
                 data=ResearchRunCompleteData(
-                    status="failed",  # type: ignore[arg-type]
+                    status="failed",
                     success=False,
                     message=message,
                 ),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, apiFetch } from "@/shared/lib/api-client";
+import { apiFetch } from "@/shared/lib/api-client";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -347,12 +347,6 @@ export function useResearchRunDetails({
       // Best-effort refresh so the UI updates immediately even if SSE is delayed/lost.
       await refreshDetails();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        // Treat as idempotent stop: already stopped/terminal.
-        setStopError(null);
-        await refreshDetails();
-        return;
-      }
       setStopError(err instanceof Error ? err.message : "Failed to stop research run");
     } finally {
       setStopPending(false);

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { TreeVizItem, ArtifactMetadata, SubstageSummary } from "@/types/research";
 import { formatDateTime } from "@/shared/lib/date-utils";
+import { stageLabel, extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
 import { mergeTreeVizItems } from "@/shared/lib/tree-merge-utils";
 
@@ -28,51 +29,12 @@ const STAGE_SUMMARIES: Record<string, string> = {
     "Combined view showing all stages of the research pipeline stacked vertically in chronological order.",
 };
 
-function stageLabel(stageId: string): string {
-  return stageId.replace("Stage_", "Stage ");
-}
-
 const STAGE_ID_TO_STAGE_KEY: Record<string, string> = {
   Stage_1: "initial_implementation",
   Stage_2: "baseline_tuning",
   Stage_3: "creative_research",
   Stage_4: "ablation_studies",
 };
-
-/**
- * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
- * Examples:
- *  - "1_initial_implementation" → "initial_implementation"
- *  - "2_baseline_tuning_2_optimization" → "baseline_tuning"
- */
-function extractStageSlug(stageName: string): string | null {
-  const parts = stageName.split("_");
-  if (parts.length < 2) return null;
-
-  const slugParts: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part) continue;
-    if (/^\d+$/.test(part)) break;
-    slugParts.push(part);
-  }
-
-  return slugParts.length > 0 ? slugParts.join("_") : null;
-}
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-function getSummaryText(summary: SubstageSummary): string {
-  if (!isRecord(summary.summary)) {
-    return JSON.stringify(summary.summary, null, 2);
-  }
-  const llmSummary = summary.summary.llm_summary;
-  if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
-    return llmSummary.trim();
-  }
-  return JSON.stringify(summary.summary, null, 2);
-}
 
 export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummaries }: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);

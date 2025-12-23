@@ -29,8 +29,9 @@ from app.models import (
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
-from app.models.sse import ResearchRunCompleteData, ResearchRunCompleteEvent as SSECompleteEvent
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
@@ -563,7 +564,7 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
         SSECompleteEvent(
             type="complete",
             data=ResearchRunCompleteData(
-                status="failed",  # type: ignore[arg-type]
+                status="failed",
                 success=False,
                 message=stop_message,
             ),

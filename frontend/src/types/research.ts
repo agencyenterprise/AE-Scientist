@@ -306,11 +306,23 @@ export interface TreeVizItem {
   updated_at: string;
 }
 
+export interface StageZone {
+  min: number;
+  max: number;
+}
+
+export interface StageZoneMetadata {
+  stageIndex: number;
+  stageId: string;
+  zone: StageZone;
+}
+
 export interface MergedTreeVizPayload {
   layout: Array<[number, number]>;
   edges: Array<[number, number]>;
   stageIds: string[];
   originalNodeIds: number[];
+  zoneMetadata?: StageZoneMetadata[];
   code?: string[];
   plan?: string[];
   analysis?: string[];

@@ -398,7 +398,7 @@ def ingest_tree_viz_stored(
         event.version,
     )
     created_at = datetime.now(timezone.utc).isoformat()
-    
+
     # Create run event for SSE streaming
     run_event = RPEvent(
         id=_next_stream_event_id(),
@@ -411,7 +411,7 @@ def ingest_tree_viz_stored(
         },
         occurred_at=created_at,
     )
-    
+
     # Publish to SSE stream
     publish_stream_event(
         run_id=payload.run_id,

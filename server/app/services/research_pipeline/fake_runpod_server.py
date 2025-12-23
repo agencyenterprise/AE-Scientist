@@ -832,7 +832,7 @@ class FakeRunner:
                     )
         finally:
             conn.close()
-        
+
         # Publish tree_viz_stored event via webhook
         try:
             if self._webhook_client:
@@ -844,12 +844,12 @@ class FakeRunner:
                             "stage_id": stage_id,
                             "tree_viz_id": tree_viz_id,
                             "version": version,
-                        }
-                    }
+                        },
+                    },
                 )
                 logger.info(
-                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s", 
-                    self._run_id, 
+                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
+                    self._run_id,
                     stage_id,
                     tree_viz_id,
                 )
