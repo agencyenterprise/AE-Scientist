@@ -45,7 +45,8 @@ def publish_stage_state(
     global _stage_state, _skip_request
     with _lock:
         current_stage = _stage_state.get("stage_name")
-        if current_stage is not None and current_stage != stage_name:
+        stage_changed = current_stage is not None and current_stage != stage_name
+        if stage_changed:
             # Stage changed; discard stale skip requests.
             _skip_request = None
             _stage_state["skip_pending"] = False
@@ -56,20 +57,33 @@ def publish_stage_state(
                 stage_name,
             )
 
+        # Check if state actually changed before logging
+        current_can_skip = _stage_state.get("can_be_skipped", False)
+        current_reason = _stage_state.get("cannot_skip_reason")
+        new_cannot_skip_reason = (
+            None if can_be_skipped else (cannot_skip_reason or "Stage cannot be skipped yet.")
+        )
+        state_changed = (
+            stage_changed
+            or _stage_state.get("stage_number") != stage_number
+            or current_can_skip != bool(can_be_skipped)
+            or current_reason != new_cannot_skip_reason
+        )
+
         _stage_state["stage_name"] = stage_name
         _stage_state["stage_number"] = stage_number
         _stage_state["can_be_skipped"] = bool(can_be_skipped)
-        _stage_state["cannot_skip_reason"] = (
-            None if can_be_skipped else (cannot_skip_reason or "Stage cannot be skipped yet.")
-        )
+        _stage_state["cannot_skip_reason"] = new_cannot_skip_reason
         _stage_state["updated_at"] = time.time()
-        logger.info(
-            "Stage state updated: stage=%s number=%s can_skip=%s reason=%s",
-            stage_name,
-            stage_number,
-            can_be_skipped,
-            _stage_state["cannot_skip_reason"],
-        )
+
+        if state_changed:
+            logger.info(
+                "Stage state updated: stage=%s number=%s can_skip=%s reason=%s",
+                stage_name,
+                stage_number,
+                can_be_skipped,
+                new_cannot_skip_reason,
+            )
 
 
 def clear_stage_state() -> None:
