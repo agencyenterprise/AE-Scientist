@@ -7,9 +7,9 @@ import {
   stageLabel,
   extractStageSlug,
   getSummaryText,
+  getStageSummary,
+  getStageSlug,
   FULL_TREE_STAGE_ID,
-  STAGE_SUMMARIES,
-  STAGE_ID_TO_SLUG,
 } from "@/shared/lib/stage-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
 import { mergeTreeVizItems } from "@/shared/lib/tree-merge-utils";
@@ -91,7 +91,7 @@ export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummar
     if (!substageSummaries || substageSummaries.length === 0) return null;
     if (selectedViz.stage_id === FULL_TREE_STAGE_ID) return null;
 
-    const stageKey = STAGE_ID_TO_SLUG[selectedViz.stage_id];
+    const stageKey = getStageSlug(selectedViz.stage_id);
     if (!stageKey) return null;
 
     const matches = substageSummaries.filter(
@@ -149,7 +149,7 @@ export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummar
             </button>
           </div>
           <p className="mb-2 text-xs text-slate-300">
-            {STAGE_SUMMARIES[selectedViz.stage_id] ?? ""}
+            {getStageSummary(selectedViz.stage_id) ?? ""}
           </p>
           {stageSummaryText && (
             <div className="mb-2 w-full rounded border border-slate-800/60 bg-slate-900/60 p-3">

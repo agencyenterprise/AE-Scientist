@@ -8,35 +8,60 @@ export const FULL_TREE_STAGE_ID = "full_tree";
 
 /**
  * Stage goal descriptions shown in the Tree Visualization UI
- * Note: The research pipeline uses uppercase "Stage_N" format in tree viz data
  */
 export const STAGE_SUMMARIES: Record<string, string> = {
-  Stage_1:
+  stage_1:
     "Goal: Develop functional code which can produce a runnable result. The tree represents attempts and fixes needed to reach this state.",
-  Stage_2:
+  stage_2:
     "Goal: Improve the baseline through tuning and small changes to the code while keeping the overall approach fixed. The scientist tries to improve the metrics which quantify the quality of the research.",
-  Stage_3:
+  stage_3:
     "Goal: Explore higher-leverage variants and research directions, supported by plots and analyses to understand what is driving performance. The scientist tries to find and validate meaningful improvements worth writing up.",
-  Stage_4:
+  stage_4:
     "Goal: Run controlled ablations and robustness checks to isolate which components matter and why. The scientist tries to attribute gains and strengthen the evidence for the final claims.",
   [FULL_TREE_STAGE_ID]:
     "Combined view showing all stages of the research pipeline stacked vertically in chronological order.",
 };
 
 /**
- * Maps frontend stage IDs (Stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
- * Note: The research pipeline uses uppercase "Stage_N" format in tree viz data
+ * Maps frontend stage IDs (stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
  */
 export const STAGE_ID_TO_SLUG: Record<string, string> = {
-  Stage_1: "initial_implementation",
-  Stage_2: "baseline_tuning",
-  Stage_3: "creative_research",
-  Stage_4: "ablation_studies",
+  stage_1: "initial_implementation",
+  stage_2: "baseline_tuning",
+  stage_3: "creative_research",
+  stage_4: "ablation_studies",
 };
 
 // =============================================================================
 // STAGE UTILITY FUNCTIONS
 // =============================================================================
+
+/**
+ * Normalize stage ID to lowercase format (stage_N)
+ * Handles both "Stage_N" and "stage_N" formats from different data sources
+ */
+export function normalizeStageId(stageId: string): string {
+  // Match "Stage_N" or "stage_N" and normalize to lowercase
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
+  if (match && match[1]) {
+    return `stage_${match[1]}`;
+  }
+  return stageId;
+}
+
+/**
+ * Get stage summary for a stage ID (case-insensitive lookup)
+ */
+export function getStageSummary(stageId: string): string | undefined {
+  return STAGE_SUMMARIES[normalizeStageId(stageId)];
+}
+
+/**
+ * Get stage slug for a stage ID (case-insensitive lookup)
+ */
+export function getStageSlug(stageId: string): string | undefined {
+  return STAGE_ID_TO_SLUG[normalizeStageId(stageId)];
+}
 
 /**
  * Human-readable stage labels by stage number

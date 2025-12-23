@@ -154,14 +154,28 @@ export function getBorderStyle(node: Node): BorderStyle {
 }
 
 /**
+ * Normalize stage ID to lowercase format (stage_N)
+ * Handles both "Stage_N" and "stage_N" formats from different data sources
+ */
+function normalizeStageId(stageId: string): string {
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
+  if (match && match[1]) {
+    return `stage_${match[1]}`;
+  }
+  return stageId;
+}
+
+/**
  * Get stage-relevant node types
  * Returns only node types that can appear in a given stage
  */
 export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
   if (!stageId) return Object.values(NodeType);
 
-  // Stage IDs are expected in lowercase format (stage_1, stage_2, etc.)
-  switch (stageId) {
+  // Normalize to lowercase format for consistent matching
+  const normalized = normalizeStageId(stageId);
+
+  switch (normalized) {
     case "stage_1":
       return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
     case "stage_2":

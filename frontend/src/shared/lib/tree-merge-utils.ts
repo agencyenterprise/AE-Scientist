@@ -10,11 +10,27 @@ import type {
 export type { StageZoneMetadata, MergedTreeVizPayload, MergedTreeViz };
 
 /**
+ * Normalize stage ID to lowercase format (stage_N)
+ * Handles both "Stage_N" and "stage_N" formats from different data sources
+ */
+function normalizeStageId(stageId: string): string {
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
+  if (match && match[1]) {
+    return `stage_${match[1]}`;
+  }
+  return stageId;
+}
+
+/**
  * Sort stages in chronological order (stage_1, stage_2, stage_3, stage_4)
  */
 function sortStages(items: TreeVizItem[]): TreeVizItem[] {
   const order = ["stage_1", "stage_2", "stage_3", "stage_4"];
-  return [...items].sort((a, b) => order.indexOf(a.stage_id) - order.indexOf(b.stage_id));
+  return [...items].sort((a, b) => {
+    const normalizedA = normalizeStageId(a.stage_id);
+    const normalizedB = normalizeStageId(b.stage_id);
+    return order.indexOf(normalizedA) - order.indexOf(normalizedB);
+  });
 }
 
 /**

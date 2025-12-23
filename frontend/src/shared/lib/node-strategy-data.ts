@@ -205,7 +205,19 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
   },
 };
 
+/**
+ * Normalize stage ID to lowercase format (stage_N)
+ * Handles both "Stage_N" and "stage_N" formats from different data sources
+ */
+function normalizeStageId(stageId: string): string {
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
+  if (match && match[1]) {
+    return `stage_${match[1]}`;
+  }
+  return stageId;
+}
+
 export function getStageStrategy(stageId: string): StageStrategy | null {
-  const normalizedId = stageId as StageId;
+  const normalizedId = normalizeStageId(stageId) as StageId;
   return STAGE_STRATEGIES[normalizedId] || null;
 }
