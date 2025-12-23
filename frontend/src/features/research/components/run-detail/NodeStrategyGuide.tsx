@@ -7,7 +7,7 @@ import { getStageStrategy } from "@/shared/lib/node-strategy-data";
 import { Modal } from "@/shared/components/Modal";
 
 interface Props {
-  stageId: string;
+  stageId?: string;
 }
 
 export function NodeStrategyGuide({ stageId }: Props) {
@@ -16,6 +16,9 @@ export function NodeStrategyGuide({ stageId }: Props) {
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
 
   if (!isClient) return null;
+
+  // Don't show strategy guide for Full Tree view (no specific stage strategy)
+  if (!stageId) return null;
 
   const strategy = getStageStrategy(stageId);
   if (!strategy) return null;
