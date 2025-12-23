@@ -157,7 +157,7 @@ export function getBorderStyle(node: Node): BorderStyle {
  * Get stage-relevant node types
  * Returns only node types that can appear in a given stage
  */
-export function getStageRelevantNodeTypes(stageId: string): NodeType[] {
+export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
   if (!stageId) return Object.values(NodeType);
 
   // Normalize stage_id (e.g., "Stage_1" or "stage_1")
@@ -177,9 +177,9 @@ export function getStageRelevantNodeTypes(stageId: string): NodeType[] {
     case 1:
       return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
     case 2:
-      return [NodeType.Root, NodeType.Improve, NodeType.Hyperparam, NodeType.SeedNode];
+      return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.Hyperparam, NodeType.SeedNode];
     case 3:
-      return [NodeType.Improve, NodeType.SeedNode];
+      return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
     case 4:
       return [NodeType.Improve, NodeType.Ablation, NodeType.SeedNode];
     default:

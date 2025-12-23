@@ -41,7 +41,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
     title: "Stage 1: Baseline Implementation",
     goal: "Develop functional code which can produce a runnable result",
     description:
-      "The AI scientist generates initial implementations and iteratively debugs failures to achieve a working baseline. The strategy balances exploration (trying multiple approaches) with exploitation (improving the best solutions found).",
+      "The AE Scientist generates initial implementations and iteratively debugs failures to achieve a working baseline. The strategy balances exploration (trying multiple approaches) with exploitation (improving the best solutions found).",
     nodeSelectionStrategy: {
       overview:
         "Stage 1 uses a combination of exploration (drafting new implementations) and exploitation (debugging failures or improving working code). The decision-making process follows three phases that work together to efficiently search the implementation space.",
@@ -79,7 +79,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
           name: "Improvement Phase",
           description:
             "Working implementations are refined and optimized. Uses best-first search to prioritize the most promising implementations while maintaining diversity through parallel processing.",
-          trigger: `Decided Randomly (${Math.round((1 - SEARCH_CONFIG.debug_prob) * 100)}% of the time) or when there are no debugging opportunities)`,
+          trigger: `Decided randomly (${Math.round((1 - SEARCH_CONFIG.debug_prob) * 100)}% of the time) or when there are no debugging opportunities`,
           configValues: [],
           action: "Select best performing node and create improvements",
           selectionCriteria: [
@@ -102,10 +102,10 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
     title: "Stage 2: Baseline Tuning",
     goal: "Improve baseline through hyperparameter optimization",
     description:
-      "The AI scientist systematically explores hyperparameter variations of the best Stage 1 implementation. Unlike Stage 1, this stage does not explore new code structures—it focuses purely on optimizing parameters of the proven baseline.",
+      "The AE Scientist systematically explores hyperparameter variations of the best Stage 1 implementation. Unlike Stage 1, this stage does not explore new code structures—it focuses purely on optimizing parameters of the proven baseline.",
     nodeSelectionStrategy: {
       overview:
-        "Stage 2 bypasses the drafting/debugging logic from Stage 1and instead focuses exclusively on hyperparameter variations. The search is anchored to the best implementation from Stage 1. Each iteration generates a different hyperparameter tuning proposal.",
+        "Stage 2 bypasses the drafting/debugging logic from Stage 1 and instead focuses exclusively on hyperparameter variations. The search is anchored to the best implementation from Stage 1. Each iteration generates a different hyperparameter tuning proposal.",
       phases: [
         {
           name: "Hyperparameter Tuning",
@@ -136,7 +136,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
     title: "Stage 3: Creative Exploration",
     goal: "Explore higher-leverage variants with supporting analysis",
     description:
-      "The AI scientist generates creative variants and explores new research directions with empirical validation. Unlike Stage 1's focus on basic functionality, Stage 3 proposes more ambitious changes (new architectures, novel techniques) and backs them up with analysis (plots, ablations, comparisons).",
+      "The AE Scientist generates creative variants and explores new research directions with empirical validation. Unlike Stage 1's focus on basic functionality, Stage 3 proposes more ambitious changes (new architectures, novel techniques) and backs them up with analysis (plots, ablations, comparisons).",
     nodeSelectionStrategy: {
       overview:
         "Stage 3 returns to exploration/exploitation dynamics similar to Stage 1, but with a focus on higher-leverage conceptual variations rather than basic debugging. The selection strategy emphasizes both performance metrics and analysis quality.",
@@ -172,7 +172,7 @@ export const STAGE_STRATEGIES: Record<StageId, StageStrategy> = {
     title: "Stage 4: Ablation Studies",
     goal: "Run controlled ablations to understand component contributions",
     description:
-      "The AI scientist performs controlled ablation studies on the best Stage 3 implementation to isolate the importance of individual components. This provides insight into which parts of the solution are critical versus optional.",
+      "The AE Scientist performs controlled ablation studies on the best Stage 3 implementation to isolate the importance of individual components. This provides insight into which parts of the solution are critical versus optional.",
     nodeSelectionStrategy: {
       overview:
         "Stage 4 anchors all work to the best Stage 3 node, systematically removing or modifying specific components to measure their contribution to overall performance. This is a systematic analysis phase, not an exploration phase.",
