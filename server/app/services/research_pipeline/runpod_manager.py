@@ -501,7 +501,7 @@ def _build_remote_script(
         "# === Upload Research Pipeline Log to S3 ===",
         'echo "Uploading research pipeline log to S3 (best-effort)..."',
         "python upload_runpod_log.py --log-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        "python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
+        "python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
     ]
     return "\n".join(script_parts).strip()
 
@@ -671,7 +671,7 @@ def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) 
         f"{remote_env} python upload_runpod_log.py "
         "--log-path /workspace/research_pipeline.log --artifact-type run_log || true && "
         f"{remote_env} python upload_runpod_workspace.py "
-        "--workspace-path /workspace/AE-Scientist/workspaces/0-run "
+        "--workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
         "--artifact-type workspace_archive "
         "--archive-name 0-run-workspace.zip"
     )
