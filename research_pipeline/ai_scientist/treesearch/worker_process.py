@@ -250,7 +250,8 @@ def _improve_existing_implementation(
     if user_feedback:
         introduction = (
             "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
-            "Based on the user feedback, you should revise it to satisfy that request."
+            "Based on the user feedback, you should revise it to satisfy that request. "
+            "Your main goal is to satisfy the user request. "
         )
     prompt: PromptType = {
         "Introduction": introduction,

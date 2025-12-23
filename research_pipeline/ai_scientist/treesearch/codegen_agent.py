@@ -259,6 +259,7 @@ class MinimalAgent:
             introduction = (
                 "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
                 "Based on the user feedback, you should revise it in order to address that request. "
+                "Your main goal is to satisfy the user request. "
                 "Your response should be an implementation outline in natural language, "
                 " followed by a single markdown code block. "
             )

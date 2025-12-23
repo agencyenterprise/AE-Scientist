@@ -411,6 +411,7 @@ class FakeRunner:
         self._data_dir = Path(__file__).parent / "fake_run_pod_data"
         self._plot_filename: str | None = None
         self._random_exec_time_seconds = 12.0
+        self._code_event_delay_seconds = 12.0
 
     def run(self) -> None:
         logger.info(
@@ -635,6 +636,8 @@ class FakeRunner:
                 "started_at": started_at.isoformat(),
             },
         )
+        if self._code_event_delay_seconds > 0:
+            time.sleep(self._code_event_delay_seconds)
         exec_time = self._random_exec_time_seconds
         completed_at = started_at + timedelta(seconds=exec_time)
         self._persist_code_execution_completion(

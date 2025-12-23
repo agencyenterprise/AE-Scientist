@@ -1014,6 +1014,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Terminate Code Execution */
+        post: operations["terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop": {
         parameters: {
             query?: never;
@@ -3689,6 +3706,21 @@ export interface components {
              */
             summary: string;
         };
+        /** TerminateExecutionRequest */
+        TerminateExecutionRequest: {
+            /** Payload */
+            payload: string;
+        };
+        /** TerminateExecutionResponse */
+        TerminateExecutionResponse: {
+            /** Execution Id */
+            execution_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "terminating";
+        };
         /**
          * TreeVizItem
          * @description Stored tree visualization payload for a run stage.
@@ -5500,6 +5532,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmReviewResponse"] | components["schemas"]["LlmReviewNotFoundResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminateExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminateExecutionResponse"];
                 };
             };
             /** @description Validation Error */

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Protocol, Sequence, Union, cast
+from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -37,9 +37,13 @@ from app.services.database.research_pipeline_runs import PodUpdateInfo, Research
 from app.services.research_pipeline.runpod_manager import (
     PodLaunchInfo,
     RunPodError,
+    TerminationConflictError,
+    TerminationNotFoundError,
+    TerminationRequestError,
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     launch_research_pipeline_run,
+    send_execution_feedback_via_ssh,
     terminate_pod,
     upload_runpod_log_via_ssh,
 )
@@ -71,6 +75,15 @@ class ResearchRunStopResponse(BaseModel):
     run_id: str
     status: str
     message: str
+
+
+class TerminateExecutionRequest(BaseModel):
+    payload: str
+
+
+class TerminateExecutionResponse(BaseModel):
+    execution_id: str
+    status: Literal["terminating"]
 
 
 class IdeaPayloadSource(Protocol):
@@ -436,6 +449,102 @@ def get_research_run_review(
         source_path=review["source_path"],
         created_at=review["created_at"].isoformat(),
     )
+
+
+@router.post(
+    "/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
+    response_model=TerminateExecutionResponse,
+)
+def terminate_code_execution(
+    conversation_id: int,
+    run_id: str,
+    execution_id: str,
+    payload: TerminateExecutionRequest,
+    request: Request,
+) -> TerminateExecutionResponse:
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    user = get_current_user(request)
+    db = get_database()
+
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    if run.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Research run is already {run.status}; cannot terminate execution.",
+        )
+
+    if not run.public_ip or not run.ssh_port:
+        raise HTTPException(
+            status_code=409,
+            detail="Run pod is not reachable; SSH endpoint unavailable for termination.",
+        )
+
+    feedback_payload = payload.payload
+    logger.info(
+        "Termination requested by user_id=%s run_id=%s execution_id=%s payload_len=%s",
+        user.id,
+        run_id,
+        execution_id,
+        len(feedback_payload),
+    )
+    try:
+        send_execution_feedback_via_ssh(
+            host=run.public_ip,
+            port=run.ssh_port,
+            execution_id=execution_id,
+            payload=feedback_payload,
+        )
+    except TerminationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except TerminationConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except TerminationRequestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="termination_requested",
+        metadata={
+            "execution_id": execution_id,
+            "payload_length": len(feedback_payload),
+        },
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type="termination_requested",
+        metadata={
+            "execution_id": execution_id,
+            "payload_length": len(feedback_payload),
+        },
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
+    logger.info(
+        "Termination request forwarded successfully for run_id=%s execution_id=%s",
+        run_id,
+        execution_id,
+    )
+
+    return TerminateExecutionResponse(execution_id=execution_id, status="terminating")
 
 
 @router.post(
