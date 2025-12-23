@@ -8,7 +8,7 @@ from typing import Optional
 from app.config import settings
 from app.services import get_database
 from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.research_pipeline import RunPodError, terminate_pod, upload_runpod_log_via_ssh
 from app.services.research_pipeline.runpod_manager import RunPodManager
 
@@ -138,6 +138,8 @@ class ResearchPipelineMonitor:
                 "pipeline_monitor",
             )
             return
+
+        await self._maybe_backfill_ssh_info(db=db, run=run, now=now)
 
         if run.last_heartbeat_at is None:
             deadline = run.start_deadline_at
@@ -358,6 +360,102 @@ class ResearchPipelineMonitor:
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
+
+    async def _maybe_backfill_ssh_info(
+        self,
+        db: "DatabaseManager",
+        run: ResearchPipelineRun,
+        now: datetime,
+    ) -> None:
+        if (
+            not run.pod_id
+            or (run.public_ip and run.ssh_port)
+            or not self._has_grace_period_elapsed(run=run, now=now)
+        ):
+            return
+        await self._refresh_pod_connection_info(db=db, run=run)
+
+    def _has_grace_period_elapsed(self, *, run: ResearchPipelineRun, now: datetime) -> bool:
+        deadline = run.start_deadline_at
+        if deadline is None and run.started_running_at is not None:
+            deadline = run.started_running_at + self._startup_grace
+        if deadline is None:
+            return False
+        return now >= deadline
+
+    async def _refresh_pod_connection_info(
+        self,
+        *,
+        db: "DatabaseManager",
+        run: ResearchPipelineRun,
+    ) -> None:
+        assert run.pod_id  # mypy appeasement
+        logger.info(
+            "Backfilling SSH info for run %s (pod_id=%s) after grace period.",
+            run.run_id,
+            run.pod_id,
+        )
+        try:
+            pod = await self._runpod_manager.get_pod(run.pod_id)
+        except RunPodError as exc:
+            logger.warning(
+                "Failed to refresh pod %s info for run %s: %s", run.pod_id, run.run_id, exc
+            )
+            return
+
+        public_ip = pod.get("publicIp")
+        port_mappings = pod.get("portMappings") or {}
+        ssh_port_value = None
+        if isinstance(port_mappings, dict):
+            ssh_port_value = port_mappings.get("22")
+        if not public_ip or ssh_port_value is None:
+            logger.warning(
+                "Pod %s still missing SSH data (ip=%s, port=%s); will retry later.",
+                run.pod_id,
+                public_ip,
+                ssh_port_value,
+            )
+            return
+        ssh_port = str(ssh_port_value)
+
+        pod_host_id = run.pod_host_id
+        if not pod_host_id:
+            pod_host_id = await self._runpod_manager.get_pod_host_id(run.pod_id)
+
+        pod_name = run.pod_name or pod.get("name") or run.pod_id
+        machine = pod.get("machine") or {}
+        gpu_type = run.gpu_type or machine.get("gpuTypeId") or "unknown"
+
+        db.update_research_pipeline_run(
+            run_id=run.run_id,
+            pod_update_info=PodUpdateInfo(
+                pod_id=run.pod_id,
+                pod_name=str(pod_name),
+                gpu_type=str(gpu_type),
+                cost=run.cost,
+                public_ip=str(public_ip),
+                ssh_port=ssh_port,
+                pod_host_id=pod_host_id,
+            ),
+        )
+        db.insert_research_pipeline_run_event(
+            run_id=run.run_id,
+            event_type="pod_info_backfilled",
+            metadata={
+                "pod_id": run.pod_id,
+                "public_ip": public_ip,
+                "ssh_port": ssh_port,
+                "pod_host_id": pod_host_id,
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
+        logger.info(
+            "Backfilled SSH info for run %s: ip=%s port=%s host=%s",
+            run.run_id,
+            public_ip,
+            ssh_port,
+            pod_host_id,
+        )
 
 
 def _require_int(name: str) -> int:

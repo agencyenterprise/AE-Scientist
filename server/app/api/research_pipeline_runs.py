@@ -185,7 +185,40 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
 
 
 async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_id: str) -> None:
+    logger.info(
+        "Waiting for pod readiness for run_id=%s (pod_id=%s, pod_name=%s)",
+        run_id,
+        pod_info.pod_id,
+        pod_info.pod_name,
+    )
     ready_metadata = await fetch_pod_ready_metadata(pod_id=pod_info.pod_id)
+    logger.info(
+        "Pod ready for run_id=%s (pod_id=%s). public_ip=%s ssh_port=%s host_id=%s",
+        run_id,
+        pod_info.pod_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
+        ready_metadata.pod_host_id,
+    )
+    db.update_research_pipeline_run(
+        run_id=run_id,
+        pod_update_info=PodUpdateInfo(
+            pod_id=pod_info.pod_id,
+            pod_name=pod_info.pod_name,
+            gpu_type=pod_info.gpu_type,
+            cost=pod_info.cost,
+            public_ip=ready_metadata.public_ip,
+            ssh_port=ready_metadata.ssh_port,
+            pod_host_id=ready_metadata.pod_host_id,
+        ),
+    )
+    logger.info(
+        "Updated research_pipeline_runs row for run_id=%s with ip=%s port=%s host_id=%s",
+        run_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
+        ready_metadata.pod_host_id,
+    )
     db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_info_updated",
@@ -199,6 +232,12 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
             "pod_host_id": ready_metadata.pod_host_id,
         },
         occurred_at=datetime.now(timezone.utc),
+    )
+    logger.info(
+        "Recorded pod_info_updated event for run_id=%s with public_ip=%s ssh_port=%s",
+        run_id,
+        ready_metadata.public_ip,
+        ready_metadata.ssh_port,
     )
 
 
