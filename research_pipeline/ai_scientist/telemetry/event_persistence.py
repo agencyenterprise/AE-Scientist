@@ -316,8 +316,8 @@ class EventPersistenceManager:
         status = payload.get("status") if is_completion else "running"
         exec_time = payload.get("exec_time")
 
-        upsert_code = code if not is_completion else None
-        upsert_started_at = started_at if not is_completion else None
+        upsert_code = code if not is_completion else payload.get("code")
+        upsert_started_at = started_at if not is_completion else payload.get("started_at")
         upsert_completed_at = completed_at if is_completion else None
         upsert_exec_time = exec_time if is_completion else None
 
