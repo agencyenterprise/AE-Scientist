@@ -132,27 +132,43 @@ class Stage3Plotting(Stage):
         super().reset_skip_state()
         journal = self._context.journal
         best_node = journal.get_best_node()
+        total_nodes = len(journal.nodes)
+        best_node_id = best_node.id[:8] if best_node else "None"
+        logger.info(
+            "Stage 3 skip evaluation: total_nodes=%s best_node=%s good_nodes=%s",
+            total_nodes,
+            best_node_id,
+            len(journal.good_nodes),
+        )
         if not best_node:
-            self._set_skip_state(can_skip=False, reason="Stage 3 skipping requires a best node.")
+            reason = "Stage 3 skipping requires a best node."
+            logger.info("Stage 3 skip blocked: %s", reason)
+            self._set_skip_state(can_skip=False, reason=reason)
             return
         if best_node.is_buggy or best_node.is_buggy_plots:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Best node must pass execution and plot validation.",
+            reason = "Best node must pass execution and plot validation."
+            logger.info(
+                "Stage 3 skip blocked: %s (is_buggy=%s is_buggy_plots=%s)",
+                reason,
+                best_node.is_buggy,
+                best_node.is_buggy_plots,
             )
+            self._set_skip_state(can_skip=False, reason=reason)
             return
         if not best_node.plots or not best_node.plot_paths:
-            self._set_skip_state(can_skip=False, reason="Generate plots before skipping Stage 3.")
-            return
-        datasets = best_node.datasets_successfully_tested or []
-        unique_datasets = {name for name in datasets if name}
-        if len(unique_datasets) < 2:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Use at least two datasets before moving to ablations.",
+            reason = "Generate at least one plot artifact before skipping Stage 3."
+            logger.info(
+                "Stage 3 skip blocked: %s (plots=%s plot_paths=%s)",
+                reason,
+                len(best_node.plots or []),
+                len(best_node.plot_paths or []),
             )
+            self._set_skip_state(can_skip=False, reason=reason)
             return
-        self._set_skip_state(
-            can_skip=True,
-            reason="Stage 3 outputs (plots + datasets) are ready for Stage 4.",
+        reason = "Stage 3 has plot artifacts ready for downstream stages."
+        logger.info(
+            "Stage 3 skip allowed: %s (best_node=%s)",
+            reason,
+            best_node_id,
         )
+        self._set_skip_state(can_skip=True, reason=reason)

@@ -214,12 +214,21 @@ class Stage4Ablation(Stage):
     def reset_skip_state(self) -> None:
         super().reset_skip_state()
         journal = self._context.journal
-        if journal.good_nodes:
-            self._set_skip_state(
-                can_skip=True, reason="At least one ablation succeeded; reports can proceed."
-            )
+        good_nodes = len(journal.good_nodes)
+        logger.info(
+            "Stage 4 skip evaluation: total_nodes=%s good_nodes=%s",
+            len(journal.nodes),
+            good_nodes,
+        )
+        best_node = journal.get_best_node()
+        if best_node and not best_node.is_buggy:
+            reason = "Stage 4 has at least one ablation-ready node."
+            logger.info("Stage 4 skip allowed: %s", reason)
+            self._set_skip_state(can_skip=True, reason=reason)
+            return
+        if best_node and best_node.is_buggy:
+            reason = "Best node is buggy; fix execution before skipping."
         else:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Run at least one successful ablation before skipping final stage.",
-            )
+            reason = "Run at least one ablation node before skipping final stage."
+        logger.info("Stage 4 skip blocked: %s", reason)
+        self._set_skip_state(can_skip=False, reason=reason)

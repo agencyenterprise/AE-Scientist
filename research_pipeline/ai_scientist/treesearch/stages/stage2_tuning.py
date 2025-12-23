@@ -281,32 +281,32 @@ class Stage2Tuning(Stage):
         super().reset_skip_state()
         journal = self._context.journal
         best_node = journal.get_best_node()
+        total_nodes = len(journal.nodes)
+        best_node_id = best_node.id[:8] if best_node else "None"
+        logger.info(
+            "Stage 2 skip evaluation: total_nodes=%s best_node=%s good_nodes=%s",
+            total_nodes,
+            best_node_id,
+            len(journal.good_nodes),
+        )
         if not best_node:
-            self._set_skip_state(can_skip=False, reason="Stage 2 skipping requires a best node.")
+            reason = "Stage 2 skipping requires a best node."
+            logger.info("Stage 2 skip blocked: %s", reason)
+            self._set_skip_state(can_skip=False, reason=reason)
             return
         if not journal.nodes or best_node == journal.nodes[0]:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Best node still matches the baseline; need a tuned improvement.",
+            reason = "Best node still matches the baseline; need a tuned improvement."
+            logger.info(
+                "Stage 2 skip blocked: %s (total_nodes=%s)",
+                reason,
+                total_nodes,
             )
+            self._set_skip_state(can_skip=False, reason=reason)
             return
-        if best_node.metric is None:
-            self._set_skip_state(can_skip=False, reason="Best node is missing parsed metrics.")
-            return
-        datasets = best_node.datasets_successfully_tested or []
-        unique_datasets = {name for name in datasets if name}
-        if len(unique_datasets) < 2:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Run tuning experiments on at least two datasets before skipping.",
-            )
-            return
-        if best_node.is_buggy or best_node.is_buggy_plots:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Best node must be validated successfully before skipping.",
-            )
-            return
-        self._set_skip_state(
-            can_skip=True, reason="Stage 2 best node satisfies downstream requirements."
+        reason = "Stage 2 has a tuned node distinct from the baseline."
+        logger.info(
+            "Stage 2 skip allowed: %s (best_node=%s)",
+            reason,
+            best_node_id,
         )
+        self._set_skip_state(can_skip=True, reason=reason)

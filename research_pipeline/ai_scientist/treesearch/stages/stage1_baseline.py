@@ -136,12 +136,18 @@ class Stage1Baseline(Stage):
     def reset_skip_state(self) -> None:
         super().reset_skip_state()
         journal = self._context.journal
+        total_nodes = len(journal.nodes)
+        good_nodes = len(journal.good_nodes)
+        logger.info(
+            "Stage 1 skip evaluation: total_nodes=%s good_nodes=%s",
+            total_nodes,
+            good_nodes,
+        )
         if journal.good_nodes:
-            self._set_skip_state(
-                can_skip=True, reason="Stage 1 has at least one working implementation."
-            )
-        else:
-            self._set_skip_state(
-                can_skip=False,
-                reason="Produce a working baseline implementation before skipping.",
-            )
+            reason = "Stage 1 has at least one working implementation."
+            logger.info("Stage 1 skip allowed: %s", reason)
+            self._set_skip_state(can_skip=True, reason=reason)
+            return
+        reason = "Produce a working baseline implementation before skipping."
+        logger.info("Stage 1 skip blocked: %s", reason)
+        self._set_skip_state(can_skip=False, reason=reason)
