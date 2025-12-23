@@ -245,9 +245,9 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               {idx > 0 && (
                 <line
                   x1={0}
-                  y1={dividerY+2 - (idx === 3 ? 3 : 0)} // Adjust for the last stage to avoid overlap with the node
+                  y1={dividerY + 2 - (idx === 3 ? 3 : 0)} // Adjust for the last stage to avoid overlap with the node
                   x2={100}
-                  y2={dividerY+2 - (idx === 3 ? 3 : 0)}
+                  y2={dividerY + 2 - (idx === 3 ? 3 : 0)}
                   stroke="#64748b"
                   strokeWidth={0.4}
                   strokeDasharray="2,2"

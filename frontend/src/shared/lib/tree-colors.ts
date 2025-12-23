@@ -177,7 +177,13 @@ export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
     case 1:
       return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
     case 2:
-      return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.Hyperparam, NodeType.SeedNode];
+      return [
+        NodeType.Root,
+        NodeType.Debug,
+        NodeType.Improve,
+        NodeType.Hyperparam,
+        NodeType.SeedNode,
+      ];
     case 3:
       return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
     case 4:

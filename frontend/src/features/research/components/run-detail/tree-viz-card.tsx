@@ -148,12 +148,15 @@ export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummar
     const stageKey = STAGE_ID_TO_STAGE_KEY[selectedViz.stage_id];
     if (!stageKey) return null;
 
-    const matches = substageSummaries.filter(summary => extractStageSlug(summary.stage) === stageKey);
+    const matches = substageSummaries.filter(
+      summary => extractStageSlug(summary.stage) === stageKey
+    );
     if (matches.length === 0) return null;
 
     const latest =
-      matches.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0] ??
-      null;
+      matches.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0] ?? null;
     if (!latest) return null;
 
     return getSummaryText(latest);

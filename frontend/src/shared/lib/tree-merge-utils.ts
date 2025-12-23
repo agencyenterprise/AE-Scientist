@@ -269,7 +269,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
 
     // Find best node in current stage
     const isBestArray = currentStage.payload.is_best_node as boolean[] | undefined;
-    const bestNodeLocalIdx = isBestArray?.findIndex((b) => b === true) ?? -1;
+    const bestNodeLocalIdx = isBestArray?.findIndex(b => b === true) ?? -1;
 
     if (bestNodeLocalIdx < 0) continue; // Skip if no best node
 
