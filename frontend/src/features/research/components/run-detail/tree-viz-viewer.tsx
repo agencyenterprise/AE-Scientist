@@ -346,8 +346,8 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold">
                 {selectedNode.stageId
-                  ? `${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId + 1}`
-                  : `Node ${selectedNode.id + 1}`}
+                  ? `${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId}`
+                  : `Node ${selectedNode.id}`}
               </h3>
               {selectedNode.excType ? (
                 <span className="text-xs text-red-300">Abandoned</span>

@@ -231,19 +231,31 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
     const nextStage = processedStages[i + 1];
     if (!currentStage || !nextStage) continue;
 
-    // Find best node in current stage
+    // Find best node in current stage, or fall back to root node
     const isBestArray = currentStage.payload.is_best_node as boolean[] | undefined;
-    const bestNodeLocalIdx = isBestArray?.findIndex(b => b === true) ?? -1;
+    let sourceNodeLocalIdx = isBestArray?.findIndex(b => b === true) ?? -1;
 
-    if (bestNodeLocalIdx < 0) continue; // Skip if no best node
+    // Fallback: if no best node, use the root node (node with no incoming edges)
+    if (sourceNodeLocalIdx < 0) {
+      const currentEdges = (currentStage.payload.edges as Array<[number, number]>) || [];
+      const hasIncoming = new Set(currentEdges.map(([, child]) => child));
+      for (let j = 0; j < currentStage.nodeCount; j++) {
+        if (!hasIncoming.has(j)) {
+          sourceNodeLocalIdx = j;
+          break;
+        }
+      }
+    }
+
+    if (sourceNodeLocalIdx < 0) continue; // Skip if still no source node found
 
     // Find root node in next stage (node with no incoming edges)
     const nextEdges = (nextStage.payload.edges as Array<[number, number]>) || [];
-    const hasIncoming = new Set(nextEdges.map(([, child]) => child));
+    const nextHasIncoming = new Set(nextEdges.map(([, child]) => child));
 
     let rootNodeLocalIdx = -1;
     for (let j = 0; j < nextStage.nodeCount; j++) {
-      if (!hasIncoming.has(j)) {
+      if (!nextHasIncoming.has(j)) {
         rootNodeLocalIdx = j;
         break;
       }
@@ -252,9 +264,9 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
     if (rootNodeLocalIdx < 0) continue; // Skip if no root found
 
     // Add connection edge (global indices)
-    const bestNodeGlobal = currentStage.globalOffset + bestNodeLocalIdx;
+    const sourceNodeGlobal = currentStage.globalOffset + sourceNodeLocalIdx;
     const rootNodeGlobal = nextStage.globalOffset + rootNodeLocalIdx;
-    merged.edges.push([bestNodeGlobal, rootNodeGlobal]);
+    merged.edges.push([sourceNodeGlobal, rootNodeGlobal]);
   }
 
   // Return merged tree viz

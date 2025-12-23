@@ -178,26 +178,33 @@ export function useResearchRunDetails({
       }
       const eventType = (event as { event_type?: string }).event_type;
       if (eventType === "status_changed") {
-        const metadata =
-          (event as { metadata?: Record<string, unknown> }).metadata ??
-          ({} as Record<string, unknown>);
-        const toStatus = metadata.to_status;
-        const errorMessage = metadata.error_message;
-        if (typeof toStatus === "string") {
-          setDetails(prev =>
-            prev
-              ? {
-                  ...prev,
-                  run: {
-                    ...prev.run,
-                    status: toStatus,
-                    error_message:
-                      typeof errorMessage === "string" ? errorMessage : prev.run.error_message,
-                  },
-                }
-              : prev
-          );
+        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
+        const toStatus =
+          typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
+        const nextDeadline =
+          typeof metadata.start_deadline_at === "string"
+            ? (metadata.start_deadline_at as string)
+            : null;
+        const errorMessage =
+          typeof metadata.error_message === "string"
+            ? (metadata.error_message as string)
+            : null;
+        if (!toStatus) {
+          return;
         }
+        setDetails(prev =>
+          prev
+            ? {
+                ...prev,
+                run: {
+                  ...prev.run,
+                  status: toStatus,
+                  start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
+                  error_message: errorMessage ?? prev.run.error_message,
+                },
+              }
+            : prev
+        );
         return;
       }
       if (eventType === "tree_viz_stored") {
@@ -250,37 +257,6 @@ export function useResearchRunDetails({
         if (cents !== null) {
           setHwActualCostCents(cents);
         }
-        return;
-      }
-
-      if (eventType === "status_changed") {
-        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
-        const toStatus =
-          typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
-        const nextDeadline =
-          typeof metadata.start_deadline_at === "string"
-            ? (metadata.start_deadline_at as string)
-            : null;
-        const errorMessage =
-          typeof metadata.error_message === "string"
-            ? (metadata.error_message as string)
-            : null;
-        if (!toStatus) {
-          return;
-        }
-        setDetails(prev =>
-          prev
-            ? {
-                ...prev,
-                run: {
-                  ...prev.run,
-                  status: toStatus,
-                  start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
-                  error_message: errorMessage ?? prev.run.error_message,
-                },
-              }
-            : prev
-        );
         return;
       }
     },
