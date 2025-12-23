@@ -296,9 +296,9 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               const c = nodes[child];
               if (!p || !c) return null;
               const px = p.x * 85 + 7.5;
-              const py = p.y * (viewBoxHeight - 15) + 7.5;
+              const py = isFullTree ? p.y * viewBoxHeight : p.y * (viewBoxHeight - 15) + 7.5;
               const cx = c.x * 85 + 7.5;
-              const cy = c.y * (viewBoxHeight - 15) + 7.5;
+              const cy = isFullTree ? c.y * viewBoxHeight : c.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <line
                   key={idx}
@@ -323,7 +323,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
                 ? selectedBorderConfig.strokeWidth
                 : borderConfig.strokeWidth;
               const cx = node.x * 85 + 7.5;
-              const cy = node.y * (viewBoxHeight - 15) + 7.5;
+              const cy = isFullTree ? node.y * viewBoxHeight : node.y * (viewBoxHeight - 15) + 7.5;
               return (
                 <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
                   <circle
