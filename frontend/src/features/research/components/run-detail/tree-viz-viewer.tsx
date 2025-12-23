@@ -208,7 +208,9 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
           // - Stage 2, 3, 4: 3.5 units below divider line
           let labelY;
           if (idx === 0) {
-            labelY = zoneStartY + 6.0;
+            labelY = zoneStartY + 5.0;
+          } else if (idx === 3) {
+            labelY = dividerY + 4.0;
           } else {
             labelY = dividerY + 7.0;
           }
@@ -243,9 +245,9 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
               {idx > 0 && (
                 <line
                   x1={0}
-                  y1={dividerY+2}
+                  y1={dividerY+2 - (idx === 3 ? 3 : 0)} // Adjust for the last stage to avoid overlap with the node
                   x2={100}
-                  y2={dividerY+2}
+                  y2={dividerY+2 - (idx === 3 ? 3 : 0)}
                   stroke="#64748b"
                   strokeWidth={0.4}
                   strokeDasharray="2,2"
