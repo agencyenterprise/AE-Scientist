@@ -28,7 +28,8 @@ class UserData(NamedTuple):
     """User data from database."""
 
     id: int
-    google_id: str
+    google_id: Optional[str]
+    clerk_user_id: Optional[str]
     email: str
     name: str
     is_active: bool
@@ -53,28 +54,35 @@ def should_give_free_credits(email: str) -> bool:
 class UsersDatabaseMixin(ConnectionProvider):
     """Mixin for user and session database operations."""
 
-    def create_user(self, google_id: str, email: str, name: str) -> Optional[UserData]:
+    def create_user(
+        self,
+        email: str,
+        name: str,
+        google_id: Optional[str] = None,
+        clerk_user_id: Optional[str] = None,
+    ) -> Optional[UserData]:
         """
         Create a new user.
 
         Args:
-            google_id: Google OAuth user ID
             email: User email address
             name: User display name
+            google_id: Google OAuth user ID (optional, for legacy)
+            clerk_user_id: Clerk user ID (optional, for Clerk auth)
 
         Returns:
-            User data dict if successful, None otherwise
+            User data if successful, None otherwise
         """
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        INSERT INTO users (google_id, email, name)
-                        VALUES (%s, %s, %s)
-                        RETURNING id, google_id, email, name, is_active, created_at, updated_at
+                        INSERT INTO users (google_id, clerk_user_id, email, name)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
                         """,
-                        (google_id, email, name),
+                        (google_id, clerk_user_id, email, name),
                     )
                     has_free_credits = should_give_free_credits(email)
                     result = cursor.fetchone()
@@ -112,7 +120,7 @@ class UsersDatabaseMixin(ConnectionProvider):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        SELECT id, google_id, email, name, is_active, created_at, updated_at
+                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
                         FROM users
                         WHERE google_id = %s AND is_active = TRUE
                         """,
@@ -122,6 +130,33 @@ class UsersDatabaseMixin(ConnectionProvider):
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception(f"Error getting user by Google ID: {e}")
+            return None
+
+    def get_user_by_clerk_id(self, clerk_user_id: str) -> Optional[UserData]:
+        """
+        Get user by Clerk user ID.
+
+        Args:
+            clerk_user_id: Clerk user ID
+
+        Returns:
+            User data if found, None otherwise
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    cursor.execute(
+                        """
+                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        FROM users
+                        WHERE clerk_user_id = %s AND is_active = TRUE
+                        """,
+                        (clerk_user_id,),
+                    )
+                    result = cursor.fetchone()
+                    return UserData(**result) if result else None
+        except Exception as e:
+            logger.exception(f"Error getting user by Clerk ID: {e}")
             return None
 
     def get_user_by_id(self, user_id: int) -> Optional[UserData]:
@@ -139,7 +174,7 @@ class UsersDatabaseMixin(ConnectionProvider):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        SELECT id, google_id, email, name, is_active, created_at, updated_at
+                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
                         FROM users
                         WHERE id = %s
                         """,
@@ -151,7 +186,40 @@ class UsersDatabaseMixin(ConnectionProvider):
             logger.exception("Error getting user by id %s: %s", user_id, e)
             return None
 
-    def update_user(self, user_id: int, email: str, name: str) -> Optional[UserData]:
+    def get_user_by_email(self, email: str) -> Optional[UserData]:
+        """
+        Get user by email.
+
+        Args:
+            email: User email address
+
+        Returns:
+            User data dict if found, None otherwise
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    cursor.execute(
+                        """
+                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        FROM users
+                        WHERE email = %s AND is_active = TRUE
+                        """,
+                        (email,),
+                    )
+                    result = cursor.fetchone()
+                    return UserData(**result) if result else None
+        except Exception as e:
+            logger.exception(f"Error getting user by email: {e}")
+            return None
+
+    def update_user(
+        self,
+        user_id: int,
+        email: str,
+        name: str,
+        clerk_user_id: Optional[str] = None,
+    ) -> Optional[UserData]:
         """
         Update user information.
 
@@ -159,6 +227,7 @@ class UsersDatabaseMixin(ConnectionProvider):
             user_id: Database user ID
             email: Updated email address
             name: Updated display name
+            clerk_user_id: Optional Clerk user ID (for migration from Google OAuth)
 
         Returns:
             Updated user data dict if successful, None otherwise
@@ -166,15 +235,28 @@ class UsersDatabaseMixin(ConnectionProvider):
         try:
             with self._get_connection() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
-                        """
-                        UPDATE users
-                        SET email = %s, name = %s, updated_at = NOW()
-                        WHERE id = %s AND is_active = TRUE
-                        RETURNING id, google_id, email, name, is_active, created_at, updated_at
-                        """,
-                        (email, name, user_id),
-                    )
+                    if clerk_user_id is not None:
+                        # Update including clerk_user_id (for migration)
+                        cursor.execute(
+                            """
+                            UPDATE users
+                            SET email = %s, name = %s, clerk_user_id = %s, updated_at = NOW()
+                            WHERE id = %s AND is_active = TRUE
+                            RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                            """,
+                            (email, name, clerk_user_id, user_id),
+                        )
+                    else:
+                        # Update without clerk_user_id (normal update)
+                        cursor.execute(
+                            """
+                            UPDATE users
+                            SET email = %s, name = %s, updated_at = NOW()
+                            WHERE id = %s AND is_active = TRUE
+                            RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                            """,
+                            (email, name, user_id),
+                        )
                     result = cursor.fetchone()
                     conn.commit()
                     return UserData(**result) if result else None
@@ -227,7 +309,7 @@ class UsersDatabaseMixin(ConnectionProvider):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        SELECT u.id, u.google_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
+                        SELECT u.id, u.google_id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
                         FROM users u
                         JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
@@ -295,7 +377,7 @@ class UsersDatabaseMixin(ConnectionProvider):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        SELECT id, google_id, email, name, is_active, created_at, updated_at
+                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
                         FROM users
                         WHERE is_active = TRUE
                         ORDER BY name ASC

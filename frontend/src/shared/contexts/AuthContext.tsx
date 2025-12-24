@@ -7,10 +7,12 @@
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useAuth as useClerkAuth, useUser } from "@clerk/nextjs";
 import type { AuthContextValue, AuthState } from "@/types/auth";
 import * as authApi from "@/shared/lib/auth-api";
 import { clearSessionToken, getSessionToken, setSessionToken } from "@/shared/lib/session-token";
+import { config } from "@/shared/lib/config";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -20,7 +22,10 @@ interface AuthProviderProps {
 
 function AuthProviderInner({ children }: AuthProviderProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+
+  // Clerk hooks
+  const { isLoaded: clerkLoaded, isSignedIn, getToken, signOut } = useClerkAuth();
+  const { user: clerkUser } = useUser();
 
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
@@ -29,21 +34,100 @@ function AuthProviderInner({ children }: AuthProviderProps) {
     error: null,
   });
 
-  const checkAuthStatus = useCallback(async () => {
-    const token = getSessionToken();
-    if (!token) {
-      setAuthState({
-        isAuthenticated: false,
-        isLoading: false,
-        user: null,
-        error: null,
+  // Track if we've completed the initial auth check
+  const [initialCheckComplete, setInitialCheckComplete] = useState(false);
+
+  // Exchange Clerk session for internal session
+  const exchangeClerkSession = useCallback(async () => {
+    if (!isSignedIn || !clerkUser) {
+      return null;
+    }
+
+    try {
+      // Get Clerk session token
+      const clerkToken = await getToken();
+      if (!clerkToken) {
+        return null;
+      }
+
+      // Exchange for internal session token
+      const response = await fetch(`${config.apiUrl}/auth/clerk-session`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${clerkToken}`,
+          "Content-Type": "application/json",
+        },
       });
+
+      if (!response.ok) {
+        throw new Error("Failed to exchange Clerk session");
+      }
+
+      const data = await response.json();
+      return data.session_token;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Error exchanging Clerk session:", error);
+      return null;
+    }
+  }, [isSignedIn, clerkUser, getToken]);
+
+  const checkAuthStatus = useCallback(async () => {
+    if (!clerkLoaded) {
       return;
     }
 
     try {
+      // Check if we already have an internal session token
+      const existingToken = getSessionToken();
+
+      if (existingToken) {
+        // Try to use existing internal token first
+        try {
+          const authStatus = await authApi.checkAuthStatus();
+          if (authStatus.authenticated && authStatus.user) {
+            setAuthState({
+              isAuthenticated: true,
+              isLoading: false,
+              user: authStatus.user,
+              error: null,
+            });
+            setInitialCheckComplete(true);
+            return;
+          }
+          // Token is invalid, clear it
+          clearSessionToken();
+        } catch {
+          // Token check failed, clear it
+          clearSessionToken();
+        }
+      }
+
+      // No valid internal token, check Clerk
+      if (!isSignedIn) {
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          user: null,
+          error: null,
+        });
+        setInitialCheckComplete(true);
+        return;
+      }
+
+      // User is signed in with Clerk but no internal token, exchange it
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
+      // Exchange Clerk session for internal token
+      const internalToken = await exchangeClerkSession();
+      if (!internalToken) {
+        throw new Error("Failed to get internal session token");
+      }
+
+      // Store internal token
+      setSessionToken(internalToken);
+
+      // Verify with backend
       const authStatus = await authApi.checkAuthStatus();
 
       if (authStatus.authenticated && authStatus.user) {
@@ -53,6 +137,7 @@ function AuthProviderInner({ children }: AuthProviderProps) {
           user: authStatus.user,
           error: null,
         });
+        setInitialCheckComplete(true);
         return;
       }
 
@@ -63,7 +148,10 @@ function AuthProviderInner({ children }: AuthProviderProps) {
         user: null,
         error: null,
       });
-    } catch {
+      setInitialCheckComplete(true);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Auth check failed:", error);
       clearSessionToken();
       setAuthState({
         isAuthenticated: false,
@@ -71,39 +159,33 @@ function AuthProviderInner({ children }: AuthProviderProps) {
         user: null,
         error: "Failed to check authentication status",
       });
+      setInitialCheckComplete(true);
     }
-  }, []);
+  }, [clerkLoaded, isSignedIn, exchangeClerkSession]);
 
-  // Handle login redirect
+  // Handle login redirect (now redirects to Clerk)
   const login = () => {
-    authApi.login();
+    router.push("/login");
   };
 
-  // Handle logout
+  // Handle logout (sign out from both Clerk and internal session)
   const logout = async () => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
       clearSessionToken();
-      const success = await authApi.logout();
+      await authApi.logout();
 
-      if (success) {
-        setAuthState({
-          isAuthenticated: false,
-          isLoading: false,
-          user: null,
-          error: null,
-        });
+      setAuthState({
+        isAuthenticated: false,
+        isLoading: false,
+        user: null,
+        error: null,
+      });
 
-        // Redirect to login page
-        router.push("/login");
-      } else {
-        setAuthState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: "Logout failed",
-        }));
-      }
+      await signOut({
+        redirectUrl: "/login",
+      });
     } catch {
       clearSessionToken();
       setAuthState(prev => ({
@@ -114,91 +196,10 @@ function AuthProviderInner({ children }: AuthProviderProps) {
     }
   };
 
-  // Initialize auth - check for OAuth errors and auth status on mount
-  const readTokenFromHash = (): string | null => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-    const hash = window.location.hash.startsWith("#")
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-    if (!hash) {
-      return null;
-    }
-    const params = new URLSearchParams(hash);
-    return params.get("token");
-  };
-
-  const clearTokenParams = (): void => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const url = new URL(window.location.href);
-    if (url.searchParams.has("token")) {
-      url.searchParams.delete("token");
-    }
-    if (url.hash) {
-      const hashValue = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-      if (hashValue) {
-        const hashParams = new URLSearchParams(hashValue);
-        if (hashParams.has("token")) {
-          hashParams.delete("token");
-          const nextHash = hashParams.toString();
-          url.hash = nextHash ? `#${nextHash}` : "";
-        }
-      }
-    }
-    window.history.replaceState({}, "", url.toString());
-  };
-
+  // Initialize auth
   useEffect(() => {
-    const initAuth = async () => {
-      // Check for OAuth callback errors in URL
-      const error = searchParams.get("error");
-      if (error) {
-        clearSessionToken();
-        let errorMessage = "Authentication failed";
-
-        switch (error) {
-          case "oauth_cancelled":
-            errorMessage = "Login was cancelled. Please try again if you want to sign in.";
-            break;
-          case "oauth_error":
-            errorMessage = "OAuth authentication failed";
-            break;
-          case "auth_failed":
-            errorMessage = "Authentication failed";
-            break;
-          case "server_error":
-            errorMessage = "Server error during authentication";
-            break;
-          default:
-            errorMessage = `Authentication error: ${error}`;
-        }
-
-        setAuthState({
-          isAuthenticated: false,
-          isLoading: false,
-          user: null,
-          error: errorMessage,
-        });
-        return;
-      }
-
-      const tokenFromQuery = searchParams.get("token");
-      const tokenFromHash = readTokenFromHash();
-      const incomingToken = tokenFromQuery || tokenFromHash;
-      if (incomingToken) {
-        setSessionToken(incomingToken);
-        clearTokenParams();
-      }
-
-      // No error - check auth status
-      await checkAuthStatus();
-    };
-
-    void initAuth();
-  }, [searchParams, checkAuthStatus]);
+    checkAuthStatus();
+  }, [checkAuthStatus]);
 
   const contextValue: AuthContextValue = {
     ...authState,
@@ -207,25 +208,39 @@ function AuthProviderInner({ children }: AuthProviderProps) {
     checkAuthStatus,
   };
 
+  // Show loading state until initial auth check is complete
+  if (!initialCheckComplete) {
+    return <AuthLoadingState />;
+  }
+
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-          <div className="sm:mx-auto sm:w-full sm:max-w-md">
-            <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-            <p className="mt-4 text-center text-gray-600">Loading authentication...</p>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<AuthLoadingState />}>
       <AuthProviderInner>{children}</AuthProviderInner>
     </Suspense>
+  );
+}
+
+function AuthLoadingState() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+      <div className="flex flex-col items-center gap-6">
+        {/* Animated spinner with gradient */}
+        <div className="relative">
+          <div className="h-16 w-16 rounded-full border-8 border-slate-800"></div>
+          <div className="absolute inset-0 h-16 w-16 animate-spin rounded-full border-8 border-transparent border-t-sky-500 border-r-sky-400"></div>
+        </div>
+
+        {/* Loading text */}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-lg font-medium text-slate-200">Initializing</p>
+          <p className="text-sm text-slate-400">Preparing your workspace...</p>
+        </div>
+      </div>
+    </div>
   );
 }
 
