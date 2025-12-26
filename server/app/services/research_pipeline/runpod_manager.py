@@ -487,6 +487,8 @@ def _build_remote_script(
         "torch.cuda.set_device(0)",
         "print('✅ PyTorch device initialized successfully')",
         "PY",
+        "",
+        f"python upload_file.py --file-path '/workspace/AE-Scientist/research_pipeline/{config_filename}' --artifact-type run_config || true",
         "pipeline_exit_code=0",
         "set +e",
         f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
@@ -500,8 +502,8 @@ def _build_remote_script(
         "",
         "# === Upload Research Pipeline Log to S3 ===",
         'echo "Uploading research pipeline log to S3 (best-effort)..."',
-        "python upload_runpod_log.py --log-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        "python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
+        "python upload_file.py --file-path /workspace/research_pipeline.log --artifact-type run_log || true",
+        "python upload_folder.py --folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
     ]
     return "\n".join(script_parts).strip()
 
@@ -668,10 +670,10 @@ def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) 
     remote_command = (
         "cd /workspace/AE-Scientist/research_pipeline && "
         "source .venv/bin/activate && "
-        f"{remote_env} python upload_runpod_log.py "
-        "--log-path /workspace/research_pipeline.log --artifact-type run_log || true && "
-        f"{remote_env} python upload_runpod_workspace.py "
-        "--workspace-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
+        f"{remote_env} python upload_file.py "
+        "--file-path /workspace/research_pipeline.log --artifact-type run_log || true && "
+        f"{remote_env} python upload_folder.py "
+        "--folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
         "--artifact-type workspace_archive "
         "--archive-name 0-run-workspace.zip"
     )

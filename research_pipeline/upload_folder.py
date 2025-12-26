@@ -10,7 +10,6 @@ from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 
 PROJECT_DIR = Path(__file__).resolve().parent
 load_dotenv(PROJECT_DIR / ".env")
-DEFAULT_WORKSPACE_PATH = PROJECT_DIR / "workspaces" / "0-run"
 DEFAULT_EXCLUDES = (".venv", ".ai_scientist_venv")
 
 
@@ -21,18 +20,18 @@ def _require_env(name: str) -> str:
     return value
 
 
-def upload_workspace(
+def upload_folder(
     *,
-    workspace_path: Path,
+    folder_path: Path,
     artifact_type: str,
-    archive_name: str | None,
+    archive_name: str,
     exclude: Sequence[str],
 ) -> None:
-    if not workspace_path.exists():
-        print(f"[workspace] Path {workspace_path} does not exist; skipping upload.")
+    if not folder_path.exists():
+        print(f"[folder] Path {folder_path} does not exist; skipping upload.")
         return
-    if not workspace_path.is_dir():
-        print(f"[workspace] Path {workspace_path} is not a directory; skipping upload.")
+    if not folder_path.is_dir():
+        print(f"[folder] Path {folder_path} is not a directory; skipping upload.")
         return
 
     run_id = _require_env("RUN_ID")
@@ -45,41 +44,38 @@ def upload_workspace(
         database_url=_require_env("DATABASE_PUBLIC_URL"),
     )
 
-    archive = archive_name or f"{workspace_path.name}-workspace.zip"
     try:
         publisher.publish(
             spec=ArtifactSpec(
                 artifact_type=artifact_type,
-                path=workspace_path,
+                path=folder_path,
                 packaging="zip",
-                archive_name=archive,
+                archive_name=archive_name,
                 exclude_dir_names=tuple(exclude),
             )
         )
-        print(f"[workspace] Uploaded archive {archive} from {workspace_path} for run {run_id}.")
+        print(f"[folder] Uploaded archive {archive_name} from {folder_path} for run {run_id}.")
     finally:
         publisher.close()
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Upload the research pipeline workspace directory as an artifact."
-    )
+    parser = argparse.ArgumentParser(description="Upload a folder as an artifact.")
     parser.add_argument(
-        "--workspace-path",
+        "--folder-path",
         type=Path,
-        default=DEFAULT_WORKSPACE_PATH,
-        help="Path to the workspace directory to archive.",
+        required=True,
+        help="Path to the folder to archive.",
     )
     parser.add_argument(
         "--artifact-type",
-        default="workspace_archive",
+        required=True,
         help="Artifact type to record in rp_artifacts.",
     )
     parser.add_argument(
         "--archive-name",
-        default=None,
-        help="Optional archive filename (defaults to <workspace>-workspace.zip).",
+        required=True,
+        help="Optional archive filename (defaults to <folder>-folder.zip).",
     )
     parser.add_argument(
         "--exclude",
@@ -93,14 +89,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     try:
-        upload_workspace(
-            workspace_path=args.workspace_path,
+        upload_folder(
+            folder_path=args.folder_path,
             artifact_type=args.artifact_type,
             archive_name=args.archive_name,
             exclude=args.exclude,
         )
     except SystemExit as exc:
-        print(f"[workspace] {exc}")
+        print(f"[folder] {exc}")
         sys.exit(exc.code if isinstance(exc.code, int) else 1)
 
 
