@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/shared/lib/api-client";
+import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -47,26 +48,12 @@ interface CodeExecutionCompletionPayload {
   completed_at: string;
 }
 
-export type StageSkipStateMap = Record<string, string>;
-
-export function extractStageSlug(stageName: string): string | null {
-  const parts = stageName.split("_");
-  if (parts.length < 2) {
-    return null;
-  }
-  const slugParts: string[] = [];
-  for (let i = 1; i < parts.length; i += 1) {
-    const part = parts[i];
-    if (!part) {
-      continue;
-    }
-    if (/^\d+$/.test(part)) {
-      break;
-    }
-    slugParts.push(part);
-  }
-  return slugParts.length > 0 ? slugParts.join("_") : null;
+export interface StageSkipStateEntry {
+  reason: string | null;
+  updatedAt: string;
 }
+
+export type StageSkipStateMap = Record<string, StageSkipStateEntry>;
 
 /**
  * Hook that manages research run details state including SSE updates
@@ -100,7 +87,10 @@ export function useResearchRunDetails({
         if (!slug) {
           return;
         }
-        next[slug] = window.opened_at;
+        next[slug] = {
+          reason: window.opened_reason ?? null,
+          updatedAt: window.opened_at,
+        };
       });
       return next;
     });
@@ -236,9 +226,7 @@ export function useResearchRunDetails({
             ? (metadata.start_deadline_at as string)
             : null;
         const errorMessage =
-          typeof metadata.error_message === "string"
-            ? (metadata.error_message as string)
-            : null;
+          typeof metadata.error_message === "string" ? (metadata.error_message as string) : null;
         if (!toStatus) {
           return;
         }

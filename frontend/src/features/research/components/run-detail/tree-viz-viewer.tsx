@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ArtifactMetadata, TreeVizItem, MergedTreeViz, StageZoneMetadata } from "@/types/research";
+import type {
+  ArtifactMetadata,
+  TreeVizItem,
+  MergedTreeViz,
+  StageZoneMetadata,
+} from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
 import { stageLabel, FULL_TREE_STAGE_ID } from "@/shared/lib/stage-utils";
 import {
@@ -80,7 +85,6 @@ const DIVIDER_OFFSET = 2.0; // Offset from calculated position
 const LABEL_BG_HEIGHT = 5;
 const LABEL_BG_PADDING_TOP = 3.5;
 
-
 export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
 
@@ -137,8 +141,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
   // Calculate dynamic viewBox height based on number of stages
   // Full Tree view scales height based on stage count; single stage uses base height
   const numStages = isFullTree ? zoneMetadata.length : 1;
-  const viewBoxHeight =
-    SINGLE_STAGE_VIEWBOX_HEIGHT + (numStages - 1) * ADDITIONAL_HEIGHT_PER_STAGE;
+  const viewBoxHeight = SINGLE_STAGE_VIEWBOX_HEIGHT + (numStages - 1) * ADDITIONAL_HEIGHT_PER_STAGE;
   const cssHeight = viewBoxHeight * VIEWBOX_TO_PIXELS_RATIO;
 
   const selectedNode = nodes[selected];

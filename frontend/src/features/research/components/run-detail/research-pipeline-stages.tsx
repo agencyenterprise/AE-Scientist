@@ -15,7 +15,6 @@ import { extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
-import { extractStageSlug } from "@/features/research/hooks/useResearchRunDetails";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 
 interface ResearchPipelineStagesProps {
