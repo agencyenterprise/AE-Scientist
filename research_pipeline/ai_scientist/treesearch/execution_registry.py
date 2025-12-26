@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 class ExecutionEntry:
     node_id: str
     node: Optional["Node"]
+    stage_name: Optional[str]
     status: RegistryStatus = "running"
     payload: Optional[str] = None
 
@@ -37,19 +38,23 @@ def get_shared_pid_state() -> DictProxy | None:
     return _shared_pid_state
 
 
-def register_execution(*, execution_id: str, node: Optional["Node"]) -> None:
+def register_execution(
+    *, execution_id: str, node: Optional["Node"], stage_name: Optional[str]
+) -> None:
     """Register a new execution with the controller."""
     with _lock:
         _entries[execution_id] = ExecutionEntry(
             node_id=node.id if node is not None else execution_id,
             node=node,
+            stage_name=stage_name,
             status="running",
             payload=None,
         )
     logger.info(
-        "Registered execution_id=%s for node=%s (feedback_pending=%s)",
+        "Registered execution_id=%s for node=%s stage=%s (feedback_pending=%s)",
         execution_id,
         node.id if node is not None else "standalone",
+        stage_name or "unknown",
         bool(node.user_feedback_pending) if node is not None else False,
     )
 
@@ -179,6 +184,7 @@ def get_entry(execution_id: str) -> Optional[ExecutionEntry]:
         return ExecutionEntry(
             node_id=entry.node_id,
             node=entry.node,
+            stage_name=entry.stage_name,
             status=entry.status,
             payload=entry.payload,
         )
@@ -212,6 +218,18 @@ def has_active_execution(execution_id: str) -> bool:
         is_active = entry is not None and entry.status == "running"
     logger.debug("has_active_execution(%s) -> %s", execution_id, is_active)
     return is_active
+
+
+def list_active_executions(*, stage_name: Optional[str] = None) -> list[str]:
+    """Return IDs of executions that are currently running, optionally filtered by stage."""
+    with _lock:
+        active = [
+            exec_id
+            for exec_id, entry in _entries.items()
+            if entry.status == "running" and (stage_name is None or entry.stage_name == stage_name)
+        ]
+    logger.debug("list_active_executions(stage_name=%s) -> %s", stage_name, len(active))
+    return active
 
 
 def begin_termination(

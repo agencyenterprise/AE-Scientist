@@ -1,7 +1,11 @@
 import logging
+import os
+import signal
 import threading
 import time
 from typing import Any, Dict, Optional, Tuple
+
+from . import execution_registry
 
 logger = logging.getLogger(__name__)
 _lock = threading.RLock()
@@ -21,6 +25,53 @@ def _default_state() -> Dict[str, Any]:
 
 _stage_state: Dict[str, Any] = _default_state()
 _skip_request: Optional[Dict[str, Any]] = None
+
+
+def _terminate_active_executions_for_stage(*, stage_name: str, reason: str) -> None:
+    """Kill any active worker processes for the provided stage."""
+    active_exec_ids = execution_registry.list_active_executions(stage_name=stage_name)
+    if not active_exec_ids:
+        logger.info(
+            "No active executions found for stage=%s when processing skip request.", stage_name
+        )
+        return
+    payload = reason or f"Stage {stage_name} skipped by operator."
+    logger.info(
+        "Terminating %s active execution(s) for stage=%s due to skip request.",
+        len(active_exec_ids),
+        stage_name,
+    )
+    for execution_id in active_exec_ids:
+        status, pid, _node = execution_registry.begin_termination(
+            execution_id=execution_id, payload=payload
+        )
+        if status != "ok" or pid is None:
+            logger.warning(
+                "Unable to terminate execution_id=%s for stage=%s (status=%s).",
+                execution_id,
+                stage_name,
+                status,
+            )
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+            logger.info(
+                "Sent SIGKILL to pid=%s for execution_id=%s (stage=%s).",
+                pid,
+                execution_id,
+                stage_name,
+            )
+        except ProcessLookupError:
+            logger.info(
+                "Process already exited before skip termination for execution_id=%s.",
+                execution_id,
+            )
+        except PermissionError:
+            logger.exception(
+                "Permission error while terminating pid=%s for execution_id=%s.",
+                pid,
+                execution_id,
+            )
 
 
 def reset_stage_state() -> None:
@@ -125,6 +176,9 @@ def request_stage_skip(*, reason: Optional[str] = None) -> Tuple[bool, str]:
         }
         _stage_state["skip_pending"] = True
         _stage_state["skip_reason"] = _skip_request["reason"]
+        _terminate_active_executions_for_stage(
+            stage_name=stage_name, reason=_skip_request["reason"]
+        )
         logger.info(
             "Skip request accepted for stage=%s reason=%s",
             stage_name,
