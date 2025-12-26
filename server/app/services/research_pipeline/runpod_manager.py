@@ -621,12 +621,12 @@ async def terminate_pod(*, pod_id: str) -> None:
         raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc
 
 
-def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
+async def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
-    return asyncio.run(manager.get_pod_billing_summary(pod_id=pod_id))
+    return await manager.get_pod_billing_summary(pod_id=pod_id)
 
 
 def _gather_log_env(run_id: str) -> dict[str, str] | None:

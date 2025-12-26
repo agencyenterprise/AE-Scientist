@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -201,7 +202,7 @@ def _verify_bearer_token(authorization: str = Header(...)) -> None:
         )
 
 
-def _record_pod_billing_event(
+async def _record_pod_billing_event(
     db: DatabaseManager,
     *,
     run_id: str,
@@ -209,7 +210,7 @@ def _record_pod_billing_event(
     context: str,
 ) -> None:
     try:
-        summary = fetch_pod_billing_summary(pod_id=pod_id)
+        summary = await fetch_pod_billing_summary(pod_id=pod_id)
     except (RuntimeError, RunPodError) as exc:
         logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
         return
@@ -226,13 +227,18 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
+async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
+    await asyncio.to_thread(
+        upload_runpod_artifacts_via_ssh,
+        host=host,
+        port=port,
+        run_id=run.run_id,
+    )
 
 
 def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
@@ -668,13 +674,13 @@ async def ingest_run_finished(
             )
             # This call is also performed by the research pipeline when the paper was generated.
             # But we want to be sure to upload the log file and workspace archive so we call it again here.
-            _upload_pod_artifacts_if_possible(run)
+            await _upload_pod_artifacts_if_possible(run)
             await terminate_pod(pod_id=run.pod_id)
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
         finally:
-            _record_pod_billing_event(
+            await _record_pod_billing_event(
                 db,
                 run_id=payload.run_id,
                 pod_id=run.pod_id,
@@ -754,7 +760,7 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     if run.pod_id:
-        _upload_pod_artifacts_if_possible(run)
+        await _upload_pod_artifacts_if_possible(run)
         try:
             await terminate_pod(pod_id=run.pod_id)
             logger.info(
@@ -765,7 +771,7 @@ async def ingest_gpu_shortage(
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
         finally:
-            _record_pod_billing_event(
+            await _record_pod_billing_event(
                 db,
                 run_id=payload.run_id,
                 pod_id=run.pod_id,
