@@ -38,7 +38,8 @@ class Stage2Tuning(Stage):
     DEFAULT_GOALS: ClassVar[str] = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"
-        "- Introduce additional datasets to test robustness. Research appropriate sources (HuggingFace, Zenodo, academic repositories, etc.) or use datasets specified in the research idea. Use dataset sizes appropriate to the experiment. Use streaming=True for very large datasets when using HuggingFace datasets."
+        "- Introduce additional datasets to test robustness.\n"
+        "- Research appropriate dataset sources (HuggingFace, Github, academic repositories, etc.) or use datasets specified in the research idea.\n"
     )
     # Memoization caches for completion queries
     # key -> (is_complete, message)
