@@ -577,7 +577,7 @@ async def launch_research_pipeline_run(
     pod_name = f"{POD_NAME_PREFIX}-{user_component}-{run_id}"
     pod = await creator.create_pod(
         name=pod_name,
-        image="newtonsander/runpod_pytorch_texdeps:v1",
+        image="newtonsander/runpod_pytorch_texdeps:v1.1",
         gpu_types=gpu_types,
         env=metadata_env,
         docker_cmd=docker_cmd,

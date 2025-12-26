@@ -30,6 +30,12 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu \
     && rm -rf /var/lib/apt/lists/*
 
+# Install yq
+ARG YQ_VERSION=v4.2.0
+ARG YQ_PLATFORM=linux_amd64
+RUN wget https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_${YQ_PLATFORM} -O /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
