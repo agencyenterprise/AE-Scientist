@@ -129,6 +129,10 @@ class ArtifactRepository:
                         source_path
                     )
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (s3_key) DO UPDATE SET
+                        file_size = EXCLUDED.file_size,
+                        source_path = EXCLUDED.source_path,
+                        created_at = NOW()
                     """,
                     (
                         run_id,
