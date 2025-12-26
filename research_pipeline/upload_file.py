@@ -18,9 +18,9 @@ def _require_env(name: str) -> str:
     return value
 
 
-def upload_runlog(*, log_path: Path, artifact_type: str) -> None:
-    if not log_path.exists():
-        print(f"[runlog] Log file {log_path} not found; skipping upload.")
+def upload_file(*, file_path: Path, artifact_type: str) -> None:
+    if not file_path.exists():
+        print(f"[file] File {file_path} not found; skipping upload.")
         return
 
     run_id = _require_env("RUN_ID")
@@ -36,28 +36,26 @@ def upload_runlog(*, log_path: Path, artifact_type: str) -> None:
         publisher.publish(
             spec=ArtifactSpec(
                 artifact_type=artifact_type,
-                path=log_path,
+                path=file_path,
                 packaging="file",
             )
         )
-        print(f"[runlog] Uploaded {log_path} for run {run_id}.")
+        print(f"[file] Uploaded {file_path} for run {run_id}.")
     finally:
         publisher.close()
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Upload RunPod research_pipeline.log to S3 and record metadata."
-    )
+    parser = argparse.ArgumentParser(description="Upload file to S3 and record metadata.")
     parser.add_argument(
-        "--log-path",
-        default="/workspace/research_pipeline.log",
+        "--file-path",
         type=Path,
-        help="Path to the log file to upload.",
+        required=True,
+        help="Path to the file to upload.",
     )
     parser.add_argument(
         "--artifact-type",
-        default="run_log",
+        required=True,
         help="Artifact type label to record in rp_artifacts.",
     )
     return parser.parse_args()
@@ -66,9 +64,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     try:
-        upload_runlog(log_path=args.log_path, artifact_type=args.artifact_type)
+        upload_file(file_path=args.file_path, artifact_type=args.artifact_type)
     except SystemExit as exc:
-        print(f"[runlog] {exc}")
+        print(f"[file] {exc}")
         sys.exit(exc.code if isinstance(exc.code, int) else 1)
 
 

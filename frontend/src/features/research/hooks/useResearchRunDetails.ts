@@ -227,6 +227,36 @@ export function useResearchRunDetails({
         return;
       }
       const eventType = (event as { event_type?: string }).event_type;
+      if (eventType === "status_changed") {
+        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
+        const toStatus =
+          typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
+        const nextDeadline =
+          typeof metadata.start_deadline_at === "string"
+            ? (metadata.start_deadline_at as string)
+            : null;
+        const errorMessage =
+          typeof metadata.error_message === "string"
+            ? (metadata.error_message as string)
+            : null;
+        if (!toStatus) {
+          return;
+        }
+        setDetails(prev =>
+          prev
+            ? {
+                ...prev,
+                run: {
+                  ...prev.run,
+                  status: toStatus,
+                  start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
+                  error_message: errorMessage ?? prev.run.error_message,
+                },
+              }
+            : prev
+        );
+        return;
+      }
       if (eventType === "tree_viz_stored") {
         if (!conversationId) {
           return;
@@ -277,35 +307,6 @@ export function useResearchRunDetails({
         if (cents !== null) {
           setHwActualCostCents(cents);
         }
-        return;
-      }
-
-      if (eventType === "status_changed") {
-        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
-        const toStatus =
-          typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
-        const nextDeadline =
-          typeof metadata.start_deadline_at === "string"
-            ? (metadata.start_deadline_at as string)
-            : null;
-        const errorMessage =
-          typeof metadata.error_message === "string" ? (metadata.error_message as string) : null;
-        if (!toStatus) {
-          return;
-        }
-        setDetails(prev =>
-          prev
-            ? {
-                ...prev,
-                run: {
-                  ...prev.run,
-                  status: toStatus,
-                  start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
-                  error_message: errorMessage ?? prev.run.error_message,
-                },
-              }
-            : prev
-        );
         return;
       }
     },
@@ -439,13 +440,25 @@ export function useResearchRunDetails({
     if (!conversationId || stopPending) {
       return;
     }
+    const refreshDetails = async () => {
+      try {
+        const refreshed = await apiFetch<ResearchRunDetails>(
+          `/conversations/${conversationId}/idea/research-run/${runId}`
+        );
+        setDetails(refreshed);
+      } catch (refreshErr) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to refresh run details after stop:", refreshErr);
+      }
+    };
     try {
       setStopError(null);
       setStopPending(true);
       await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
         method: "POST",
       });
-      // SSE will automatically receive the status update
+      // Best-effort refresh so the UI updates immediately even if SSE is delayed/lost.
+      await refreshDetails();
     } catch (err) {
       setStopError(err instanceof Error ? err.message : "Failed to stop research run");
     } finally {

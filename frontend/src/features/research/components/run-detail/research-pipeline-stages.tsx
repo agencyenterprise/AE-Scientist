@@ -11,6 +11,7 @@ import type {
 } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
@@ -187,9 +188,6 @@ const getBestNodeForStage = (
   );
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 const getLatestSummaryForStage = (
   stageKey: string,
   summaries: SubstageSummary[]
@@ -203,17 +201,6 @@ const getLatestSummaryForStage = (
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0] ?? null
   );
-};
-
-const getSummaryText = (summary: SubstageSummary): string => {
-  if (!isRecord(summary.summary)) {
-    return JSON.stringify(summary.summary, null, 2);
-  }
-  const llmSummary = summary.summary.llm_summary;
-  if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
-    return llmSummary.trim();
-  }
-  return JSON.stringify(summary.summary, null, 2);
 };
 
 // Paper generation step labels for Stage 5

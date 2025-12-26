@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
+import type { ResearchRunAcceptedResponse } from "@/types";
 
 /**
  * Custom hook for launching research from an idea
@@ -20,11 +21,14 @@ export function useLaunchResearch(conversationId: number | null) {
     if (!conversationId) return;
     setIsLaunching(true);
     try {
-      await apiFetch(`/conversations/${conversationId}/idea/research-run`, {
-        method: "POST",
-      });
+      const response = await apiFetch<ResearchRunAcceptedResponse>(
+        `/conversations/${conversationId}/idea/research-run`,
+        {
+          method: "POST",
+        }
+      );
       setIsLaunchModalOpen(false);
-      router.push("/research");
+      router.push(`/research/${response.run_id}`);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 402) {

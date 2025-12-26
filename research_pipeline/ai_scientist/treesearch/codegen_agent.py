@@ -268,11 +268,12 @@ class MinimalAgent:
             "Research idea": self.task_desc,
             "Previous (buggy) implementation": wrap_code(parent_node.code),
             "Execution output": wrap_code(parent_node.term_out, lang=""),
-            "User feedback": feedback,
             "Feedback based on generated plots": parent_node.vlm_feedback_summary,
             "Feedback about execution time": parent_node.exec_time_feedback,
             "Instructions": {},
         }
+        if feedback is not None:
+            prompt["User feedback"] = feedback
         debug_instructions: dict[str, str | list[str]] = {}
         debug_instructions |= {
             "Bugfix improvement sketch guideline": [

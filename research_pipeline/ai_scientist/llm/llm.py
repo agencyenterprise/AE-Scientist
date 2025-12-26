@@ -12,7 +12,7 @@ from .token_tracker import TrackCostCallbackHandler
 logger = logging.getLogger("ai-scientist")
 
 
-PromptType = str | dict[str, Any] | list[Any]
+PromptType = str | dict[str, Any] | list[Any] | None
 FunctionCallType = dict[str, Any]
 OutputType = str | FunctionCallType
 TStructured = TypeVar("TStructured", bound=BaseModel)
@@ -124,6 +124,9 @@ def compile_prompt_to_md(
     _header_depth: int = 1,
 ) -> str | list[Any] | dict[str, Any]:
     try:
+        if prompt is None:
+            return ""
+
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
 
@@ -194,6 +197,23 @@ def get_structured_response_from_llm(
         compiled_system = compile_prompt_to_md(prompt=combined_system)
         messages.append(SystemMessage(content=str(compiled_system)))
     messages.extend(new_msg_history)
+
+    message_payload = [
+        {
+            "type": message.type,
+            "content": message.content,
+        }
+        for message in messages
+    ]
+    logger.info(
+        "LLM structured payload (model=%s, temperature=%s, messages=%s)",
+        model,
+        temperature,
+        len(message_payload),
+    )
+    logger.info(
+        "LLM structured payload detail: %s", json.dumps(message_payload, ensure_ascii=False)
+    )
 
     chat = init_chat_model(
         model=model,

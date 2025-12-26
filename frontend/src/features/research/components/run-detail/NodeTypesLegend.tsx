@@ -12,7 +12,7 @@ import {
 import { Modal } from "@/shared/components/Modal";
 
 interface Props {
-  stageId: string;
+  stageId?: string;
 }
 
 const CIRCLE_RADIUS = 8;

@@ -3878,7 +3878,7 @@ export interface components {
             run_id: string;
             /**
              * Stage Id
-             * @description Stage identifier (Stage_1..Stage_4)
+             * @description Stage identifier (stage_1..stage_4)
              */
             stage_id: string;
             /**

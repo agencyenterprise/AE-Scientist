@@ -30,6 +30,8 @@ from app.models import (
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
@@ -671,7 +673,7 @@ def skip_active_stage(
     "/{conversation_id}/idea/research-run/{run_id}/stop",
     response_model=ResearchRunStopResponse,
 )
-def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopResponse:
+async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopResponse:
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
 
@@ -684,22 +686,25 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
     run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
-    if run.status not in ("pending", "running"):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Research run is already {run.status}; cannot stop.",
-        )
 
     pod_id = run.pod_id
     if pod_id:
         _upload_pod_artifacts_if_possible(run)
         try:
-            terminate_pod(pod_id=pod_id)
+            await terminate_pod(pod_id=pod_id)
         except RunPodError as exc:
-            logger.exception("Failed to terminate pod %s for run %s", pod_id, run_id)
-            raise HTTPException(
-                status_code=502, detail="Failed to terminate the research run pod."
-            ) from exc
+            # If the run is already terminal, treat stop as idempotent (pod may already be gone).
+            if run.status not in ("pending", "running"):
+                logger.info(
+                    "Pod termination for run %s returned RunPodError but run already %s; continuing.",
+                    run_id,
+                    run.status,
+                )
+            else:
+                logger.exception("Failed to terminate pod %s for run %s", pod_id, run_id)
+                raise HTTPException(
+                    status_code=502, detail="Failed to terminate the research run pod."
+                ) from exc
         finally:
             _record_pod_billing_event(
                 db,
@@ -710,12 +715,49 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
     else:
         logger.info("Run %s has no pod_id; marking as stopped without pod termination.", run_id)
 
+    now = datetime.now(timezone.utc)
+
+    # Idempotent stop: if already terminal, do not error—just return and (best-effort) push SSE so UI updates.
+    if run.status not in ("pending", "running"):
+        message = run.error_message or f"Research run is already {run.status}."
+        run_event = ResearchRunEvent(
+            id=int(now.timestamp() * 1000),
+            run_id=run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run.status,
+                "to_status": run.status,
+                "reason": "user_stop_idempotent",
+                "error_message": message,
+            },
+            occurred_at=now.isoformat(),
+        )
+        publish_stream_event(
+            run_id,
+            SSERunEvent(
+                type="run_event",
+                data=run_event,
+            ),
+        )
+        publish_stream_event(
+            run_id,
+            SSECompleteEvent(
+                type="complete",
+                data=ResearchRunCompleteData(
+                    status=run.status,  # type: ignore[arg-type]
+                    success=run.status == "completed",
+                    message=message,
+                ),
+            ),
+        )
+        return ResearchRunStopResponse(
+            run_id=run_id,
+            status="stopped",
+            message=message,
+        )
+
     stop_message = "Research run was stopped by the user."
-    db.update_research_pipeline_run(
-        run_id=run_id,
-        status="failed",
-        error_message=stop_message,
-    )
+    db.update_research_pipeline_run(run_id=run_id, status="failed", error_message=stop_message)
     db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="status_changed",
@@ -725,7 +767,37 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
             "reason": "user_stop",
             "error_message": stop_message,
         },
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type="status_changed",
+        metadata={
+            "from_status": run.status,
+            "to_status": "failed",
+            "reason": "user_stop",
+            "error_message": stop_message,
+        },
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
+    publish_stream_event(
+        run_id,
+        SSECompleteEvent(
+            type="complete",
+            data=ResearchRunCompleteData(
+                status="failed",
+                success=False,
+                message=stop_message,
+            ),
+        ),
     )
 
     return ResearchRunStopResponse(

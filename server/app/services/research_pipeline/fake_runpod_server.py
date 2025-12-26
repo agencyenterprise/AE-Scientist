@@ -86,7 +86,7 @@ def _build_pod_response(record: PodRecord) -> Dict[str, object]:
         "createdAt": "2025-12-16 17:44:56.726 +0000 UTC",
         "RUN_ID": record.run_id,
         "gpuCount": 1,
-        "imageName": "newtonsander/runpod_pytorch_texdeps:v1",
+        "imageName": "newtonsander/runpod_pytorch_texdeps:v1.1",
         "lastStartedAt": "2025-12-16 17:44:56.715 +0000 UTC",
         "lastStatusChange": "Rented by User: Tue Dec 16 2025 17:44:56 GMT+0000 (Coordinated Universal Time)",
         "machine": {

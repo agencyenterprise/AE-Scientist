@@ -346,6 +346,51 @@ export interface TreeVizItem {
   updated_at: string;
 }
 
+export interface StageZone {
+  min: number;
+  max: number;
+}
+
+export interface StageZoneMetadata {
+  stageIndex: number;
+  stageId: string;
+  zone: StageZone;
+}
+
+export interface MergedTreeVizPayload {
+  layout: Array<[number, number]>;
+  edges: Array<[number, number]>;
+  stageIds: string[];
+  originalNodeIds: number[];
+  zoneMetadata?: StageZoneMetadata[];
+  code?: string[];
+  plan?: string[];
+  analysis?: string[];
+  metrics?: Array<unknown>;
+  exc_type?: Array<string | null>;
+  exc_info?: Array<{ args?: unknown[] } | null>;
+  exc_stack?: Array<unknown>;
+  plot_plan?: Array<string | null>;
+  plot_code?: Array<string | null>;
+  plot_analyses?: Array<unknown>;
+  plots?: Array<string | string[] | null>;
+  plot_paths?: Array<string | string[] | null>;
+  vlm_feedback_summary?: Array<string | string[] | null>;
+  datasets_successfully_tested?: Array<string[] | null>;
+  exec_time?: Array<number | string | null>;
+  exec_time_feedback?: Array<string | null>;
+  is_best_node?: Array<boolean>;
+  is_seed_node?: Array<boolean>;
+  is_seed_agg_node?: Array<boolean>;
+  ablation_name?: Array<string | null>;
+  hyperparam_name?: Array<string | null>;
+}
+
+export interface MergedTreeViz extends Omit<TreeVizItem, "stage_id" | "viz"> {
+  stage_id: "full_tree";
+  viz: MergedTreeVizPayload;
+}
+
 // ==========================================
 // LLM Review Types (for auto-evaluation)
 // ==========================================

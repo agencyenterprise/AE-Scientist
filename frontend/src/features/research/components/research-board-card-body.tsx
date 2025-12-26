@@ -50,7 +50,7 @@ export function ResearchBoardCardBody({
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
             Stage
           </p>
-          {getStageBadge(currentStage) || (
+          {getStageBadge(currentStage, status) || (
             <span className="text-sm text-slate-500">Not started</span>
           )}
         </div>

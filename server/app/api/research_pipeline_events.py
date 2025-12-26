@@ -643,7 +643,7 @@ def ingest_run_started(
 
 
 @router.post("/run-finished", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_run_finished(
+async def ingest_run_finished(
     payload: RunFinishedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -714,7 +714,10 @@ def ingest_run_finished(
                 payload.message,
                 run.pod_id,
             )
-            terminate_pod(pod_id=run.pod_id)
+            # This call is also performed by the research pipeline when the paper was generated.
+            # But we want to be sure to upload the log file and workspace archive so we call it again here.
+            _upload_pod_artifacts_if_possible(run)
+            await terminate_pod(pod_id=run.pod_id)
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
@@ -801,7 +804,7 @@ async def ingest_gpu_shortage(
     if run.pod_id:
         _upload_pod_artifacts_if_possible(run)
         try:
-            terminate_pod(pod_id=run.pod_id)
+            await terminate_pod(pod_id=run.pod_id)
             logger.info(
                 "Terminated pod %s for run %s after GPU shortage.",
                 run.pod_id,

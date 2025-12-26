@@ -242,6 +242,7 @@ export default function ResearchRunDetailPage() {
               treeViz={details.tree_viz ?? []}
               conversationId={conversationId}
               artifacts={artifacts}
+              substageSummaries={substage_summaries}
             />
           </div>
         )}
