@@ -10,7 +10,7 @@ import traceback
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, cast
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
@@ -30,6 +30,7 @@ from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEve
 logger = logging.getLogger(__name__)
 
 JsonValue = str | int | float | bool | None | Dict[str, "JsonValue"] | List["JsonValue"]
+SUMMARY_KEYS_TO_STRIP: FrozenSet[str] = frozenset({"plot_code", "code"})
 
 
 def ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str) -> None:
@@ -590,11 +591,15 @@ def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -
     return filtered
 
 
-def remove_plot_code(data: JsonValue) -> JsonValue:
+def strip_summary_keys(data: JsonValue, keys_to_strip: FrozenSet[str]) -> JsonValue:
     if isinstance(data, dict):
-        return {k: remove_plot_code(v) for k, v in data.items() if k != "plot_code"}
+        return {
+            k: strip_summary_keys(v, keys_to_strip)
+            for k, v in data.items()
+            if k not in keys_to_strip
+        }
     if isinstance(data, list):
-        return [remove_plot_code(item) for item in data]
+        return [strip_summary_keys(item, keys_to_strip) for item in data]
     return data
 
 
@@ -888,7 +893,8 @@ def perform_writeup(
             exp_summaries=summaries, step_name="writeup"
         )
         filtered_summaries_for_writeup = cast(
-            Dict[str, Any], remove_plot_code(filtered_summaries_for_writeup)
+            Dict[str, Any],
+            strip_summary_keys(filtered_summaries_for_writeup, SUMMARY_KEYS_TO_STRIP),
         )
         combined_summaries_str = json.dumps(filtered_summaries_for_writeup, indent=2)
 
