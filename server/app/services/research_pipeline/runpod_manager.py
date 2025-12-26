@@ -506,10 +506,9 @@ def _build_remote_script(
         '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
         "fi",
         "",
-        "# === Upload Research Pipeline Log to S3 ===",
-        'echo "Uploading research pipeline log to S3 (best-effort)..."',
-        "python upload_file.py --file-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        "python upload_folder.py --folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
+        "# === Await External Cleanup ===",
+        'echo "Research pipeline finished; sleeping until server collects artifacts..."',
+        "while true; do sleep 3600; done",
     ]
     return "\n".join(script_parts).strip()
 
