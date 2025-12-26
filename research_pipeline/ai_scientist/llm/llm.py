@@ -198,6 +198,23 @@ def get_structured_response_from_llm(
         messages.append(SystemMessage(content=str(compiled_system)))
     messages.extend(new_msg_history)
 
+    message_payload = [
+        {
+            "type": message.type,
+            "content": message.content,
+        }
+        for message in messages
+    ]
+    logger.info(
+        "LLM structured payload (model=%s, temperature=%s, messages=%s)",
+        model,
+        temperature,
+        len(message_payload),
+    )
+    logger.info(
+        "LLM structured payload detail: %s", json.dumps(message_payload, ensure_ascii=False)
+    )
+
     chat = init_chat_model(
         model=model,
         temperature=temperature,
