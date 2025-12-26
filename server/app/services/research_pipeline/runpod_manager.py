@@ -488,7 +488,7 @@ def _build_remote_script(
         "print('✅ PyTorch device initialized successfully')",
         "PY",
         "",
-        "scrubbed_config_path=$(mktemp /tmp/run_config.yaml)",
+        "scrubbed_config_path=/tmp/run_config.yaml",
         f"yq eval 'del(.telemetry.database_public_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
         'if [ -s "$scrubbed_config_path" ]; then',
         '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config || true',
