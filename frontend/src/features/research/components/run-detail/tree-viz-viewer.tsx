@@ -74,7 +74,7 @@ const ADDITIONAL_HEIGHT_PER_STAGE = 33; // ~1.33x scaling per stage
 const VIEWBOX_TO_PIXELS_RATIO = 5; // viewBox 100 → 500px
 
 // Full Tree stage separator layout (in viewBox units)
-const LABEL_OFFSET_FROM_TOP = 0.0; // First stage: offset from zone top
+const LABEL_OFFSET_FROM_TOP = -7.0; // First stage: offset above zone top (prevents node overlap)
 const LABEL_OFFSET_FROM_DIVIDER = 7.0; // Other stages: offset below divider
 const DIVIDER_OFFSET = 2.0; // Offset from calculated position
 const LABEL_BG_HEIGHT = 5;
@@ -283,7 +283,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
       <div className="w-1/2 flex flex-col">
         <div className="relative flex-1 border border-slate-700 bg-slate-900 overflow-auto max-h-[700px]">
           <svg
-            viewBox={`0 0 100 ${viewBoxHeight}`}
+            viewBox={`0 -8 100 ${viewBoxHeight + 8}`}
             preserveAspectRatio="xMidYMin meet"
             className="w-full"
             style={{ height: `${cssHeight}px` }}
