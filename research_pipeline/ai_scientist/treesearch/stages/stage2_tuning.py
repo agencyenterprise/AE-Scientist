@@ -295,16 +295,7 @@ class Stage2Tuning(Stage):
             logger.info("Stage 2 skip blocked: %s", reason)
             self._set_skip_state(can_skip=False, reason=reason)
             return
-        if not journal.nodes or best_node == journal.nodes[0]:
-            reason = "Best node still matches the baseline; need a tuned improvement."
-            logger.info(
-                "Stage 2 skip blocked: %s (total_nodes=%s)",
-                reason,
-                total_nodes,
-            )
-            self._set_skip_state(can_skip=False, reason=reason)
-            return
-        reason = "Stage 2 has a tuned node distinct from the baseline."
+        reason = "Stage 2 has a working node."
         logger.info(
             "Stage 2 skip allowed: %s (best_node=%s)",
             reason,
