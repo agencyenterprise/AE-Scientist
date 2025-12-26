@@ -610,13 +610,13 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
     )
 
 
-def terminate_pod(*, pod_id: str) -> None:
+async def terminate_pod(*, pod_id: str) -> None:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     creator = RunPodManager(api_key=runpod_api_key)
     try:
-        asyncio.run(creator.delete_pod(pod_id=pod_id))
+        await creator.delete_pod(pod_id=pod_id)
     except RunPodError as exc:
         raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc
 

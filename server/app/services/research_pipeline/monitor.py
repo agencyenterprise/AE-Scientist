@@ -283,9 +283,9 @@ class ResearchPipelineMonitor:
         if run.pod_id:
             self._upload_pod_artifacts(run)
             try:
-                terminate_pod(pod_id=run.pod_id)
-            except RuntimeError as exc:
-                logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
+                await terminate_pod(pod_id=run.pod_id)
+            except RuntimeError:
+                logger.exception("Failed to terminate pod %s", run.pod_id)
             await self._record_pod_billing_event(
                 db=db,
                 run_id=run.run_id,

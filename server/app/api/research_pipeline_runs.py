@@ -592,7 +592,7 @@ def terminate_code_execution(
     "/{conversation_id}/idea/research-run/{run_id}/stop",
     response_model=ResearchRunStopResponse,
 )
-def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopResponse:
+async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopResponse:
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
 
@@ -610,7 +610,7 @@ def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunStopRespo
     if pod_id:
         _upload_pod_artifacts_if_possible(run)
         try:
-            terminate_pod(pod_id=pod_id)
+            await terminate_pod(pod_id=pod_id)
         except RunPodError as exc:
             # If the run is already terminal, treat stop as idempotent (pod may already be gone).
             if run.status not in ("pending", "running"):
