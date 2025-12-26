@@ -637,29 +637,39 @@ def run_writeup_stage(
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
-) -> bool:
-    if writeup_cfg is None or not should_run_reports or not agg_ok:
-        return False
+) -> None:
+    if writeup_cfg is None:
+        logger.info("Writeup configuration missing; skipping writeup stage.")
+        return
+    if not should_run_reports:
+        logger.info("Reports generation disabled; skipping writeup stage.")
+        return
+    if not agg_ok:
+        logger.info("Plot aggregation failed; skipping writeup stage.")
+        return
 
     writeup_type = writeup_cfg.writeup_type.lower()
     writeup_retries = writeup_cfg.writeup_retries
     num_cite_rounds = writeup_cfg.num_cite_rounds
     writeup_model = writeup_cfg.model
     citation_model = writeup_cfg.citation_model or writeup_model
+    base_path = Path(reports_base)
+    logs_dir = base_path / "logs"
+    run_name = run_dir_path.name if run_dir_path is not None else None
 
     citations_text = gather_citations(
-        base_folder=reports_base,
-        num_cite_rounds=num_cite_rounds,
+        base_path=base_path,
+        logs_dir=logs_dir,
         model=citation_model,
-        run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         temperature=writeup_cfg.temperature,
-        event_callback=event_callback,
-        run_id=run_id,
+        num_cite_rounds=num_cite_rounds,
+        run_dir_name=run_name or "",
     )
     writeup_success = False
-    try:
-        for attempt in range(writeup_retries):
-            logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
+    last_error: Exception | None = None
+    for attempt in range(writeup_retries):
+        logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
+        try:
             if writeup_type == "normal":
                 writeup_success = perform_writeup(
                     base_folder=reports_base,
@@ -680,49 +690,55 @@ def run_writeup_stage(
                     run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                     temperature=writeup_cfg.temperature,
                 )
-            if writeup_success:
-                break
-    except Exception as e:
-        logger.exception(f"Writeup failed: {e}")
-        traceback.print_exc()
+        except Exception as exc:
+            last_error = exc
+            logger.exception("Writeup attempt %s failed.", attempt + 1)
+            continue
+        if writeup_success:
+            break
 
     if not writeup_success:
-        logger.error("Writeup process did not complete successfully after all retries.")
-    elif run_dir_path is not None:
-        run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
-        latex_path = run_out_dir / "latex"
-        pdf_paths = sorted(run_out_dir.glob("*.pdf"))
-        for pdf_path in pdf_paths:
-            try:
-                artifact_callback(
-                    ArtifactSpec(
-                        artifact_type="paper_pdf",
-                        path=pdf_path,
-                        packaging="file",
-                    )
+        error_message = "Writeup process did not complete successfully after all retries."
+        logger.error(error_message)
+        if last_error is not None:
+            raise RuntimeError(error_message) from last_error
+        raise RuntimeError(error_message)
+
+    if run_dir_path is None:
+        return
+
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    latex_path = run_out_dir / "latex"
+    pdf_paths = sorted(run_out_dir.glob("*.pdf"))
+    for pdf_path in pdf_paths:
+        try:
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="paper_pdf",
+                    path=pdf_path,
+                    packaging="file",
                 )
-            except Exception:
-                logger.exception("Failed to upload PDF artifact: %s", pdf_path)
-        if latex_path.exists():
-            try:
-                artifact_callback(
-                    ArtifactSpec(
-                        artifact_type="latex_archive",
-                        path=latex_path,
-                        packaging="zip",
-                        archive_name=f"{run_dir_path.name}-latex.zip",
-                    )
+            )
+        except Exception:
+            logger.exception("Failed to upload PDF artifact: %s", pdf_path)
+    if latex_path.exists():
+        try:
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="latex_archive",
+                    path=latex_path,
+                    packaging="zip",
+                    archive_name=f"{run_dir_path.name}-latex.zip",
                 )
-            except Exception:
-                logger.exception("Failed to upload LaTeX archive artifact: %s", latex_path)
-    return writeup_success
+            )
+        except Exception:
+            logger.exception("Failed to upload LaTeX archive artifact: %s", latex_path)
 
 
 def run_review_stage(
     review_cfg: ReviewConfig | None,
     reports_base: str,
     run_dir_path: Path | None,
-    writeup_success: bool,
     should_run_reports: bool,
     agg_ok: bool,
     artifact_callback: ArtifactCallback,
@@ -730,13 +746,7 @@ def run_review_stage(
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> None:
-    if (
-        review_cfg is None
-        or run_dir_path is None
-        or not should_run_reports
-        or not agg_ok
-        or not writeup_success
-    ):
+    if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
         return
 
     pdf_path = find_pdf_path_for_review(
@@ -932,7 +942,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         cleanup_aggregated_results(reports_base=reports_base)
 
-        writeup_success = run_writeup_stage(
+        run_writeup_stage(
             writeup_cfg=writeup_cfg,
             reports_base=reports_base,
             run_dir_path=run_dir_path,
@@ -947,7 +957,6 @@ def execute_launcher(args: argparse.Namespace) -> None:
             review_cfg=review_cfg if review_enabled else None,
             reports_base=reports_base,
             run_dir_path=run_dir_path,
-            writeup_success=writeup_success,
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
             artifact_callback=artifact_callback,

@@ -59,6 +59,8 @@ def apply_log_level(*, level_name: str) -> None:
             "s3fs",
             "datasets",
             "huggingface_hub",
+            "boto3",
+            "botocore",
         ]
         for name in noisy_loggers:
             lgr = logging.getLogger(name)

@@ -10,7 +10,7 @@ import traceback
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
@@ -29,8 +29,10 @@ from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEve
 
 logger = logging.getLogger(__name__)
 
+JsonValue = str | int | float | bool | None | Dict[str, "JsonValue"] | List["JsonValue"]
 
-def _ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str) -> None:
+
+def ensure_graphicspath(writeup_file: str, latex_folder: str, figures_dir: str) -> None:
     """
     Ensure LaTeX graphicspath includes the run-specific figures directory.
     """
@@ -588,6 +590,14 @@ def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -
     return filtered
 
 
+def remove_plot_code(data: JsonValue) -> JsonValue:
+    if isinstance(data, dict):
+        return {k: remove_plot_code(v) for k, v in data.items() if k != "plot_code"}
+    if isinstance(data, list):
+        return [remove_plot_code(item) for item in data]
+    return data
+
+
 def gather_citations(
     base_path: Path,
     logs_dir: Path,
@@ -877,6 +887,9 @@ def perform_writeup(
         filtered_summaries_for_writeup = filter_experiment_summaries(
             exp_summaries=summaries, step_name="writeup"
         )
+        filtered_summaries_for_writeup = cast(
+            Dict[str, Any], remove_plot_code(filtered_summaries_for_writeup)
+        )
         combined_summaries_str = json.dumps(filtered_summaries_for_writeup, indent=2)
 
         if latex_folder.exists():
@@ -976,7 +989,7 @@ def perform_writeup(
             logger.error("Structured LLM response missing latex_code.")
             return False
         writeup_file.write_text(updated_latex_code, encoding="utf-8")
-        _ensure_graphicspath(
+        ensure_graphicspath(
             writeup_file=str(writeup_file),
             latex_folder=str(latex_folder),
             figures_dir=str(figures_dir),
@@ -1087,7 +1100,7 @@ Respond using the structured schema (latex_code, should_stop). Set should_stop=t
                     final_text = final_text.replace(bad_str, repl_str)
                 final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
                 writeup_file.write_text(final_text, encoding="utf-8")
-                _ensure_graphicspath(
+                ensure_graphicspath(
                     writeup_file=str(writeup_file),
                     latex_folder=str(latex_folder),
                     figures_dir=str(figures_dir),
@@ -1151,7 +1164,7 @@ Use the structured response schema (latex_code, should_stop). Set should_stop=tr
                     final_text = final_text.replace(bad_str, repl_str)
                 final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
                 writeup_file.write_text(final_text, encoding="utf-8")
-                _ensure_graphicspath(
+                ensure_graphicspath(
                     writeup_file=str(writeup_file),
                     latex_folder=str(latex_folder),
                     figures_dir=str(figures_dir),

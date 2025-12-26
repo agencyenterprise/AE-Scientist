@@ -153,17 +153,31 @@ def aggregate_plots(
         shutil.rmtree(figures_dir)
         logger.debug("Cleaned up previous figures directory")
 
-    idea_text = load_idea_text(base_folder)
-    exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
+    base_path = Path(base_folder)
+    logs_dir = base_path / "logs"
+    active_run_name = run_dir_name
+    if not active_run_name:
+        try:
+            active_run_name = find_latest_run_dir_name(logs_dir=logs_dir)
+        except Exception:
+            traceback.print_exc()
+            active_run_name = "0-run"
+    idea_text = load_idea_text(
+        base_path=base_path,
+        logs_dir=logs_dir,
+        run_dir_name=run_dir_name,
+    )
+    exp_summaries = load_exp_summaries(
+        base_path=base_path,
+        run_dir_name=active_run_name,
+    )
     filtered_summaries_for_plot_agg = filter_experiment_summaries(
         exp_summaries, step_name="plot_aggregation"
     )
     # Make exp_results_npy_files and plot_paths absolute under the chosen run dir
     try:
-        chosen_run = run_dir_name
-        if not chosen_run:
-            chosen_run = find_latest_run_dir_name(logs_dir=Path(base_folder) / "logs")
-        run_dir = Path(base_folder) / "logs" / str(chosen_run)
+        chosen_run = active_run_name
+        run_dir = logs_dir / str(chosen_run)
 
         def absolutize_paths(obj: object) -> object:
             if isinstance(obj, dict):

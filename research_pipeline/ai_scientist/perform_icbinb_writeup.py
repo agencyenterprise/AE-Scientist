@@ -10,7 +10,7 @@ import tempfile
 import traceback
 import unicodedata
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from langchain_core.messages import BaseMessage
 
@@ -23,9 +23,14 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
 )
-from ai_scientist.perform_writeup import _ensure_graphicspath
+from ai_scientist.perform_writeup import (
+    ensure_graphicspath,
+    filter_experiment_summaries,
+    gather_citations,
+    load_exp_summaries,
+    load_idea_text,
+)
 from ai_scientist.semantic_scholar import search_for_papers
-from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -601,335 +606,6 @@ with "latex" syntax highlighting, like so:
 """
 
 
-def load_idea_text(base_folder: str) -> str:
-    """
-    Load the idea text from the base folder.
-    """
-    idea_text = ""
-    research_idea_path = osp.join(base_folder, "research_idea.md")
-    if osp.exists(research_idea_path):
-        with open(research_idea_path, "r") as f_idea:
-            idea_text = f_idea.read()
-    else:
-        # Try per-run location under logs/<latest-run>/research_idea.md
-        logs_dir = osp.join(base_folder, "logs")
-        run_candidate = None
-        if osp.exists(logs_dir):
-            try:
-                run_candidate = find_latest_run_dir_name(logs_dir=Path(logs_dir))
-            except Exception:
-                traceback.print_exc()
-                run_candidate = None
-        if run_candidate:
-            run_md_path = osp.join(logs_dir, run_candidate, "research_idea.md")
-            if osp.exists(run_md_path):
-                with open(run_md_path, "r") as f_idea:
-                    idea_text = f_idea.read()
-            else:
-                idea_md_path = osp.join(base_folder, "idea.md")
-                if osp.exists(idea_md_path):
-                    with open(idea_md_path, "r") as f_idea:
-                        idea_text = f_idea.read()
-                else:
-                    logger.warning(
-                        f"Warning: Missing idea markdown files. "
-                        f"Not found: {research_idea_path}, {run_md_path} and {idea_md_path}. "
-                        "Proceeding with empty idea_text."
-                    )
-        else:
-            # Fallback to idea.md in base folder
-            idea_md_path = osp.join(base_folder, "idea.md")
-            if osp.exists(idea_md_path):
-                with open(idea_md_path, "r") as f_idea:
-                    idea_text = f_idea.read()
-            else:
-                logger.warning(
-                    f"Warning: Missing idea markdown files. "
-                    f"Not found: {research_idea_path} and {idea_md_path}. "
-                    "Proceeding with empty idea_text."
-                )
-    return idea_text
-
-
-def load_exp_summaries(base_folder: str, run_dir_name: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Load the experiment summaries from the base folder.
-    """
-    logs_dir = osp.join(base_folder, "logs")
-    latest_run_dir = "0-run"
-    if run_dir_name and osp.exists(osp.join(logs_dir, run_dir_name)):
-        latest_run_dir = run_dir_name
-    elif osp.exists(logs_dir):
-        try:
-            latest_run_dir = find_latest_run_dir_name(logs_dir=Path(logs_dir))
-        except Exception:
-            traceback.print_exc()
-            latest_run_dir = "0-run"
-    if osp.exists(logs_dir):
-        try:
-            candidates = [
-                d
-                for d in os.listdir(logs_dir)
-                if osp.isdir(osp.join(logs_dir, d)) and d.endswith("-run")
-            ]
-            if len(candidates) > 0:
-                # Prefer highest numeric prefix (e.g., 4-run > 1-run > 0-run)
-                def _run_number(name: str) -> int:
-                    try:
-                        return int(name.split("-")[0])
-                    except Exception:
-                        return -1
-
-                latest_run_dir = sorted(candidates, key=_run_number, reverse=True)[0]
-        except Exception:
-            traceback.print_exc()
-            # Fall back to 0-run if discovery fails
-            latest_run_dir = "0-run"
-
-    summary_files = [
-        (osp.join("logs", latest_run_dir, "baseline_summary.json"), "BASELINE_SUMMARY"),
-        (osp.join("logs", latest_run_dir, "research_summary.json"), "RESEARCH_SUMMARY"),
-        (osp.join("logs", latest_run_dir, "ablation_summary.json"), "ABLATION_SUMMARY"),
-    ]
-    loaded_summaries: Dict[str, Any] = {}
-    for fname, key in summary_files:
-        path = osp.join(base_folder, fname)
-        if osp.exists(path):
-            try:
-                with open(path, "r") as f:
-                    data = json.load(f)
-                    # Coerce nulls to empty containers expected by downstream code
-                    if key in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
-                        loaded_summaries[key] = data if isinstance(data, dict) else {}
-                    elif key == "ABLATION_SUMMARY":
-                        loaded_summaries[key] = data if isinstance(data, list) else []
-                    else:
-                        loaded_summaries[key] = data
-            except json.JSONDecodeError:
-                traceback.print_exc()
-                logger.warning(f"Warning: {fname} is not valid JSON. Using empty data for {key}.")
-                loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
-        else:
-            logger.warning(f"Warning: Summary file not found for {key}: {path}")
-            loaded_summaries[key] = {} if key != "ABLATION_SUMMARY" else []
-    return loaded_summaries
-
-
-def filter_experiment_summaries(exp_summaries: Dict[str, Any], step_name: str) -> Dict[str, Any]:
-    if step_name == "citation_gathering":
-        node_keys_to_keep = {
-            "overall_plan",
-            "analysis",
-            "metric",
-            "vlm_feedback_summary",
-        }
-    elif step_name == "writeup":
-        node_keys_to_keep = {
-            "overall_plan",
-            "analysis",
-            "metric",
-            "code",
-            "plot_analyses",
-            "vlm_feedback_summary",
-        }
-    elif step_name == "plot_aggregation":
-        node_keys_to_keep = {
-            "overall_plan",
-            "analysis",
-            "plot_plan",
-            "plot_code",
-            "plot_analyses",
-            "vlm_feedback_summary",
-            "exp_results_npy_files",
-        }
-    else:
-        raise ValueError(f"Invalid step name: {step_name}")
-
-    filtered_summaries: Dict[str, Any] = {}
-    for stage_name in exp_summaries.keys():
-        if stage_name in {"BASELINE_SUMMARY", "RESEARCH_SUMMARY"}:
-            filtered_summaries[stage_name] = {}
-            for key in exp_summaries[stage_name].keys():
-                if key in {"best node"}:
-                    filtered_summaries[stage_name][key] = {}
-                    for node_key in exp_summaries[stage_name][key].keys():
-                        if node_key in node_keys_to_keep:
-                            filtered_summaries[stage_name][key][node_key] = exp_summaries[
-                                stage_name
-                            ][key][node_key]
-        elif stage_name == "ABLATION_SUMMARY" and step_name == "plot_aggregation":
-            filtered_summaries[stage_name] = {}
-            for ablation_summary in exp_summaries[stage_name]:
-                filtered_summaries[stage_name][ablation_summary["ablation_name"]] = {}
-                for node_key in ablation_summary.keys():
-                    if node_key in node_keys_to_keep:
-                        filtered_summaries[stage_name][ablation_summary["ablation_name"]][
-                            node_key
-                        ] = ablation_summary[node_key]
-    return filtered_summaries
-
-
-def gather_citations(
-    base_folder: str,
-    model: str,
-    temperature: float,
-    num_cite_rounds: int,
-    run_dir_name: Optional[str] = None,
-    event_callback: Optional[Callable[[BaseEvent], None]] = None,
-    run_id: Optional[str] = None,
-) -> Optional[str]:
-    """
-    Gather citations for a paper, with ability to resume from previous progress.
-
-    Args:
-        base_folder: Path to project folder
-        num_cite_rounds: Maximum number of citation gathering rounds
-        model: Model to use for writeup.
-        resume: Whether to try to resume from previous progress
-
-    Returns:
-        str: The gathered citations text, or None if failed
-    """
-
-    # Paths for storing progress (per-run when provided)
-    cache_base = osp.join(base_folder, "logs", run_dir_name) if run_dir_name else base_folder
-    os.makedirs(cache_base, exist_ok=True)
-    citations_cache_path = osp.join(cache_base, "cached_citations.bib")
-    progress_path = osp.join(cache_base, "citations_progress.json")
-
-    # Initialize or load progress
-    current_round = 0
-    citations_text = ""
-
-    if osp.exists(citations_cache_path) and osp.exists(progress_path):
-        try:
-            with open(citations_cache_path, "r") as f:
-                citations_text = f.read()
-            with open(progress_path, "r") as f:
-                progress = json.load(f)
-                current_round = progress.get("completed_rounds", 0)
-            logger.info(f"Resuming citation gathering from round {current_round}")
-        except Exception as e:
-            logger.warning(f"Error loading cached citations: {e}")
-            logger.info("Starting fresh")
-            current_round = 0
-            citations_text = ""
-
-    try:
-        # Load idea text and summaries
-        idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
-        filtered_summaries = filter_experiment_summaries(
-            exp_summaries, step_name="citation_gathering"
-        )
-        filtered_summaries_str = json.dumps(filtered_summaries, indent=2)
-
-        # Emit event: citation gathering starting
-        if event_callback and run_id:
-            event_callback(
-                PaperGenerationProgressEvent(
-                    run_id=run_id,
-                    step="citation_gathering",
-                    substep="Starting citation gathering...",
-                    progress=0.15,
-                    step_progress=0.0,
-                )
-            )
-
-        # Run model for citation additions
-        citation_model = model
-
-        for round_idx in range(current_round, num_cite_rounds):
-            try:
-                # Emit event: citation gathering round progress
-                if event_callback and run_id:
-                    step_progress = (round_idx + 1) / num_cite_rounds
-                    citation_count = len(re.findall(r"@\w+{", citations_text))
-                    event_callback(
-                        PaperGenerationProgressEvent(
-                            run_id=run_id,
-                            step="citation_gathering",
-                            substep=f"Round {round_idx + 1} of {num_cite_rounds}",
-                            progress=0.15 + 0.15 * step_progress,  # citation_gathering is 15-30%
-                            step_progress=step_progress,
-                            details=(
-                                {"citations_found": citation_count} if citation_count > 0 else None
-                            ),
-                        )
-                    )
-
-                context_for_citation = (filtered_summaries_str, citations_text)
-                addition, done = get_citation_addition(
-                    model=citation_model,
-                    context=context_for_citation,
-                    current_round=round_idx,
-                    total_rounds=num_cite_rounds,
-                    idea_text=idea_text,
-                    temperature=temperature,
-                )
-
-                if done:
-                    # Save final state before exiting
-                    with open(citations_cache_path, "w") as f:
-                        f.write(citations_text)
-                    with open(progress_path, "w") as f:
-                        json.dump(
-                            {"completed_rounds": round_idx + 1, "status": "completed"},
-                            f,
-                        )
-                    break
-
-                if addition is not None:
-                    # Simple check to avoid duplicating the same title
-                    title_match = re.search(r" title = {(.*?)}", addition)
-                    if title_match:
-                        new_title = title_match.group(1).lower()
-                        existing_titles = re.findall(r" title = {(.*?)}", citations_text)
-                        existing_titles = [t.lower() for t in existing_titles]
-                        if new_title not in existing_titles:
-                            citations_text += "\n" + addition
-                            # Save progress after each successful addition
-                            with open(citations_cache_path, "w") as f:
-                                f.write(citations_text)
-                            with open(progress_path, "w") as f:
-                                json.dump(
-                                    {
-                                        "completed_rounds": round_idx + 1,
-                                        "status": "in_progress",
-                                    },
-                                    f,
-                                )
-
-            except Exception as e:
-                logger.exception(f"Error in citation round {round_idx}: {e}")
-                # Save progress even if there's an error
-                with open(citations_cache_path, "w") as f:
-                    f.write(citations_text)
-                with open(progress_path, "w") as f:
-                    json.dump({"completed_rounds": round_idx, "status": "error"}, f)
-                continue
-
-        # Emit event: citation gathering completed
-        if event_callback and run_id:
-            citation_count = len(re.findall(r"@\w+{", citations_text))
-            event_callback(
-                PaperGenerationProgressEvent(
-                    run_id=run_id,
-                    step="citation_gathering",
-                    substep="Citation gathering completed",
-                    progress=0.30,
-                    step_progress=1.0,
-                    details={"citations_found": citation_count} if citation_count > 0 else None,
-                )
-            )
-
-        return citations_text if citations_text else None
-
-    except Exception:
-        logger.exception("EXCEPTION in gather_citations:")
-        return citations_text if citations_text else None
-
-
 def perform_writeup(
     base_folder: str,
     model: str,
@@ -941,13 +617,15 @@ def perform_writeup(
     page_limit: int = 4,
     run_dir_name: Optional[str] = None,
 ) -> bool:
+    base_path = Path(base_folder)
+    logs_dir = base_path / "logs"
     # Place outputs under the specific run directory
-    logs_root = osp.join(base_folder, "logs")
+    logs_root = str(logs_dir)
     if run_dir_name and osp.exists(osp.join(logs_root, run_dir_name)):
         chosen_run = run_dir_name
     else:
         try:
-            chosen_run = find_latest_run_dir_name(logs_dir=Path(logs_root))
+            chosen_run = find_latest_run_dir_name(logs_dir=logs_dir)
         except Exception:
             traceback.print_exc()
             chosen_run = "0-run"
@@ -968,8 +646,10 @@ def perform_writeup(
             os.remove(osp.join(run_out_dir, old_pdf))
 
     try:
-        idea_text = load_idea_text(base_folder)
-        exp_summaries = load_exp_summaries(base_folder, run_dir_name=run_dir_name)
+        idea_text = load_idea_text(
+            base_path=base_path, logs_dir=logs_dir, run_dir_name=run_dir_name
+        )
+        exp_summaries = load_exp_summaries(base_path=base_path, run_dir_name=chosen_run)
         filtered_summaries_for_writeup = filter_experiment_summaries(
             exp_summaries, step_name="writeup"
         )
@@ -1030,11 +710,12 @@ def perform_writeup(
             # If still no citations, gather them
             if not citations_text:
                 citations_text = gather_citations(
-                    base_folder,
+                    base_path=base_path,
+                    logs_dir=logs_dir,
                     model=model,
-                    num_cite_rounds=num_cite_rounds,
-                    run_dir_name=run_dir_name,
                     temperature=temperature,
+                    num_cite_rounds=num_cite_rounds,
+                    run_dir_name=run_dir_name or "",
                 )
                 if citations_text is None:
                     logger.warning("Warning: Citation gathering failed")
@@ -1123,7 +804,7 @@ def perform_writeup(
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
         # Ensure figures path is correct for this run
-        _ensure_graphicspath(
+        ensure_graphicspath(
             writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
         )
         with open(writeup_file, "r") as f:
@@ -1243,7 +924,7 @@ Ensure proper citation usage:
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
-                    _ensure_graphicspath(
+                    ensure_graphicspath(
                         writeup_file=writeup_file,
                         latex_folder=latex_folder,
                         figures_dir=figures_dir,
@@ -1313,7 +994,7 @@ If you believe you are done with reflection, simply say: "I am done"."""
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
 
-                    _ensure_graphicspath(
+                    ensure_graphicspath(
                         writeup_file=writeup_file,
                         latex_folder=latex_folder,
                         figures_dir=figures_dir,
@@ -1368,7 +1049,7 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
                 with open(writeup_file, "w") as fo:
                     fo.write(final_text)
 
-                _ensure_graphicspath(
+                ensure_graphicspath(
                     writeup_file=writeup_file, latex_folder=latex_folder, figures_dir=figures_dir
                 )
                 compile_latex(latex_folder, reflection_pdf)
