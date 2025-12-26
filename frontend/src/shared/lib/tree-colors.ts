@@ -3,6 +3,8 @@
  * Centralized configuration for node colors and border styles
  */
 
+import { normalizeStageId } from "@/shared/lib/stage-utils";
+
 export enum NodeType {
   Root = "root",
   Debug = "debug",
@@ -157,30 +159,26 @@ export function getBorderStyle(node: Node): BorderStyle {
  * Get stage-relevant node types
  * Returns only node types that can appear in a given stage
  */
-export function getStageRelevantNodeTypes(stageId: string): NodeType[] {
+export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
   if (!stageId) return Object.values(NodeType);
 
-  // Normalize stage_id (e.g., "Stage_1" or "stage_1")
-  const stageNum = stageId.toLowerCase().includes("stage_1")
-    ? 1
-    : stageId.toLowerCase().includes("stage_2")
-      ? 2
-      : stageId.toLowerCase().includes("stage_3")
-        ? 3
-        : stageId.toLowerCase().includes("stage_4")
-          ? 4
-          : null;
+  // Normalize to lowercase format for consistent matching
+  const normalized = normalizeStageId(stageId);
 
-  if (!stageNum) return Object.values(NodeType);
-
-  switch (stageNum) {
-    case 1:
+  switch (normalized) {
+    case "stage_1":
       return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
-    case 2:
-      return [NodeType.Improve, NodeType.Hyperparam, NodeType.SeedNode];
-    case 3:
-      return [NodeType.Improve, NodeType.SeedNode];
-    case 4:
+    case "stage_2":
+      return [
+        NodeType.Root,
+        NodeType.Debug,
+        NodeType.Improve,
+        NodeType.Hyperparam,
+        NodeType.SeedNode,
+      ];
+    case "stage_3":
+      return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
+    case "stage_4":
       return [NodeType.Improve, NodeType.Ablation, NodeType.SeedNode];
     default:
       return Object.values(NodeType);

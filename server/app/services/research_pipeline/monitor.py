@@ -5,7 +5,12 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
+from app.models import ResearchRunEvent
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
@@ -228,6 +233,7 @@ class ResearchPipelineMonitor:
         reason: str,
     ) -> None:
         logger.warning("Marking run %s as failed: %s", run.run_id, message)
+        now = datetime.now(timezone.utc)
         db.update_research_pipeline_run(
             run_id=run.run_id,
             status="failed",
@@ -242,7 +248,37 @@ class ResearchPipelineMonitor:
                 "reason": reason,
                 "error_message": message,
             },
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=now,
+        )
+        run_event = ResearchRunEvent(
+            id=int(now.timestamp() * 1000),
+            run_id=run.run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run.status,
+                "to_status": "failed",
+                "reason": reason,
+                "error_message": message,
+            },
+            occurred_at=now.isoformat(),
+        )
+        publish_stream_event(
+            run.run_id,
+            SSERunEvent(
+                type="run_event",
+                data=run_event,
+            ),
+        )
+        publish_stream_event(
+            run.run_id,
+            SSECompleteEvent(
+                type="complete",
+                data=ResearchRunCompleteData(
+                    status="failed",
+                    success=False,
+                    message=message,
+                ),
+            ),
         )
         if run.pod_id:
             self._upload_pod_artifacts(run)

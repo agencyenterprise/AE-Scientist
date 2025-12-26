@@ -25,10 +25,11 @@ class TelemetryLike(Protocol):
 
 
 def _normalize_stage_id(stage_name: str) -> str:
+    """Normalize stage name to stage_N format (e.g., 'stage_1')."""
     if stage_name.startswith("stage_"):
         parts = stage_name.split("_")
         if len(parts) >= 2 and parts[1].isdigit():
-            return f"Stage_{parts[1]}"
+            return f"stage_{parts[1]}"
     return stage_name
 
 

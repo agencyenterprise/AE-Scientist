@@ -12,6 +12,50 @@ logger = logging.getLogger(__name__)
 
 PIPELINE_RUN_STATUSES = ("pending", "running", "failed", "completed")
 
+# Shared SQL CTE for calculating progress across pipeline runs.
+# Combines stage progress and paper generation events, then calculates overall progress
+# as completed-stages-only buckets (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+_PROGRESS_CTE_SQL = """
+    all_progress AS (
+        SELECT run_id, stage, progress, best_metric, created_at
+        FROM rp_run_stage_progress_events
+        UNION ALL
+        SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
+        FROM rp_paper_generation_events
+    ),
+    latest_progress AS (
+        SELECT DISTINCT ON (run_id)
+            run_id,
+            stage,
+            progress,
+            best_metric,
+            created_at
+        FROM all_progress
+        ORDER BY run_id, created_at DESC
+    ),
+    progress_with_calculations AS (
+        SELECT
+            run_id,
+            stage,
+            best_metric,
+            -- Calculate overall progress as completed-stages-only buckets.
+            -- If the *current* stage is incomplete, the displayed progress reflects
+            -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+            CASE
+                WHEN stage ~ '^[1-5]_' THEN
+                    CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
+                    CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
+                ELSE progress
+            END AS overall_progress
+        FROM latest_progress
+    ),
+    artifact_counts AS (
+        SELECT run_id, COUNT(*) as count
+        FROM rp_artifacts
+        GROUP BY run_id
+    )
+"""
+
 
 class PodUpdateInfo(NamedTuple):
     pod_id: str
@@ -391,45 +435,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         Returns a dict with the same fields as list_all_research_pipeline_runs,
         or None if not found.
         """
-        query = """
-            WITH all_progress AS (
-                SELECT run_id, stage, progress, best_metric, created_at
-                FROM rp_run_stage_progress_events
-                UNION ALL
-                SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
-                FROM rp_paper_generation_events
-            ),
-            latest_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    stage,
-                    progress,
-                    best_metric,
-                    created_at
-                FROM all_progress
-                ORDER BY run_id, created_at DESC
-            ),
-            progress_with_calculations AS (
-                SELECT
-                    run_id,
-                    stage,
-                    best_metric,
-                    -- Calculate overall progress as completed-stages-only buckets.
-                    -- If the *current* stage is incomplete, the displayed progress reflects
-                    -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
-                    CASE
-                        WHEN stage ~ '^[1-5]_' THEN
-                            CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
-                            CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
-                        ELSE progress
-                    END AS overall_progress
-                FROM latest_progress
-            ),
-            artifact_counts AS (
-                SELECT run_id, COUNT(*) as count
-                FROM rp_artifacts
-                GROUP BY run_id
-            )
+        query = f"""
+            WITH {_PROGRESS_CTE_SQL}
             SELECT
                 r.run_id,
                 r.status,
@@ -522,44 +529,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
         query = f"""
-            WITH all_progress AS (
-                SELECT run_id, stage, progress, best_metric, created_at
-                FROM rp_run_stage_progress_events
-                UNION ALL
-                SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
-                FROM rp_paper_generation_events
-            ),
-            latest_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    stage,
-                    progress,
-                    best_metric,
-                    created_at
-                FROM all_progress
-                ORDER BY run_id, created_at DESC
-            ),
-            progress_with_calculations AS (
-                SELECT
-                    run_id,
-                    stage,
-                    best_metric,
-                    -- Calculate overall progress as completed-stages-only buckets.
-                    -- If the *current* stage is incomplete, the displayed progress reflects
-                    -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
-                    CASE
-                        WHEN stage ~ '^[1-5]_' THEN
-                            CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
-                            CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
-                        ELSE progress
-                    END AS overall_progress
-                FROM latest_progress
-            ),
-            artifact_counts AS (
-                SELECT run_id, COUNT(*) as count
-                FROM rp_artifacts
-                GROUP BY run_id
-            )
+            WITH {_PROGRESS_CTE_SQL}
             SELECT
                 r.run_id,
                 r.status,

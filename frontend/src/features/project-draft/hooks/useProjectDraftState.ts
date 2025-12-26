@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { ConversationDetail, Idea } from "@/types";
+import type { ConversationDetail, Idea, ResearchRunAcceptedResponse } from "@/types";
 import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { useProjectDraftData } from "./use-project-draft-data";
 import { useProjectDraftEdit } from "./use-project-draft-edit";
@@ -117,11 +117,14 @@ export function useProjectDraftState({
   const handleConfirmCreateProject = useCallback(async (): Promise<void> => {
     setIsCreatingProject(true);
     try {
-      await apiFetch(`/conversations/${conversation.id}/idea/research-run`, {
-        method: "POST",
-      });
+      const response = await apiFetch<ResearchRunAcceptedResponse>(
+        `/conversations/${conversation.id}/idea/research-run`,
+        {
+          method: "POST",
+        }
+      );
       setIsCreateModalOpen(false);
-      router.push("/research");
+      router.push(`/research/${response.run_id}`);
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 402) {
