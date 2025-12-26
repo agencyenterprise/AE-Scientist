@@ -49,6 +49,7 @@ class WebhookClient:
         "tree_viz_stored": "/tree-viz-stored",
         "running_code": "/running-code",
         "run_completed": "/run-completed",
+        "stage_skip_window": "/stage-skip-window",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
@@ -280,6 +281,8 @@ class EventPersistenceManager:
                     payload=event.data,
                     is_completion=True,
                 )
+            elif event.kind == "stage_skip_window":
+                self._upsert_stage_skip_window(connection=connection, payload=event.data)
         if self._webhook_client is not None:
             self._webhook_client.publish(kind=event.kind, payload=event.data)
 
@@ -383,6 +386,81 @@ class EventPersistenceManager:
                     upsert_exec_time,
                 ),
             )
+
+    def _upsert_stage_skip_window(
+        self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
+    ) -> None:
+        stage = payload.get("stage")
+        state = (payload.get("state") or "").strip().lower()
+        timestamp = self._coerce_timestamp(value=payload.get("timestamp")) or datetime.now(
+            timezone.utc
+        )
+        reason = payload.get("reason")
+        if not stage:
+            logger.debug("Dropping stage_skip_window event without stage name: %s", payload)
+            return
+        with connection.cursor() as cursor:
+            if state == "opened":
+                cursor.execute(
+                    """
+                    UPDATE rp_stage_skip_windows
+                    SET
+                        opened_at = %s,
+                        opened_reason = %s,
+                        closed_at = NULL,
+                        closed_reason = NULL,
+                        updated_at = now()
+                    WHERE run_id = %s
+                      AND stage = %s
+                    """,
+                    (timestamp, reason, self._run_id, stage),
+                )
+                if cursor.rowcount == 0:
+                    cursor.execute(
+                        """
+                        INSERT INTO rp_stage_skip_windows (
+                            run_id,
+                            stage,
+                            opened_at,
+                            opened_reason,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (%s, %s, %s, %s, now(), now())
+                        """,
+                        (self._run_id, stage, timestamp, reason),
+                    )
+            elif state == "closed":
+                cursor.execute(
+                    """
+                    WITH pending AS (
+                        SELECT id
+                        FROM rp_stage_skip_windows
+                        WHERE run_id = %s AND stage = %s AND closed_at IS NULL
+                        ORDER BY opened_at DESC
+                        LIMIT 1
+                    )
+                    UPDATE rp_stage_skip_windows
+                    SET closed_at = %s,
+                        closed_reason = COALESCE(%s, closed_reason),
+                        updated_at = now()
+                    WHERE id IN (SELECT id FROM pending)
+                    """,
+                    (self._run_id, stage, timestamp, reason),
+                )
+                if cursor.rowcount == 0:
+                    logger.warning(
+                        "No open stage_skip_window row found to close (run_id=%s stage=%s).",
+                        self._run_id,
+                        stage,
+                    )
+            else:
+                logger.warning(
+                    "Unknown stage_skip_window state '%s' for run_id=%s stage=%s",
+                    state,
+                    self._run_id,
+                    stage,
+                )
 
     def _insert_stage_progress(
         self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]

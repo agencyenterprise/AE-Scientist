@@ -248,7 +248,11 @@ class ParallelAgent:
                 seed,
                 node.id,
             )
-            execution_registry.register_execution(execution_id=execution_id, node=node)
+            execution_registry.register_execution(
+                execution_id=execution_id,
+                node=node,
+                stage_name=self.stage_name,
+            )
             future = executor.submit(
                 process_node,
                 node_data=node_data,
@@ -587,7 +591,11 @@ class ParallelAgent:
                 self.stage_name,
                 bool(node.user_feedback_payload) if node else False,
             )
-            execution_registry.register_execution(execution_id=execution_id, node=node)
+            execution_registry.register_execution(
+                execution_id=execution_id,
+                node=node,
+                stage_name=self.stage_name,
+            )
             future = executor.submit(
                 process_node,
                 node_data=node_data,

@@ -15,6 +15,8 @@ import type {
   HwCostEstimateData,
   HwCostActualData,
   ResearchRunCodeExecution,
+  StageSkipWindow,
+  StageSkipWindowUpdate,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -39,6 +41,7 @@ interface UseResearchRunSSEOptions {
   onHwCostActual?: (event: HwCostActualData) => void;
   onCodeExecutionStarted?: (execution: ResearchRunCodeExecution) => void;
   onCodeExecutionCompleted?: (event: CodeExecutionCompletionEvent) => void;
+  onStageSkipWindow?: (event: StageSkipWindowUpdate) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -60,6 +63,7 @@ type ApiCodeExecutionSnapshot = ApiComponents["schemas"]["ResearchRunCodeExecuti
 type ApiCodeExecutionStartedData = ApiComponents["schemas"]["ResearchRunCodeExecutionStartedData"];
 type ApiCodeExecutionCompletedData =
   ApiComponents["schemas"]["ResearchRunCodeExecutionCompletedData"];
+type ApiStageSkipWindow = ApiComponents["schemas"]["ResearchRunStageSkipWindow"];
 
 function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
   return {
@@ -144,6 +148,17 @@ function mapCodeExecutionStartedEvent(
   };
 }
 
+function normalizeStageSkipWindow(window: ApiStageSkipWindow): StageSkipWindow {
+  return {
+    id: window.id,
+    stage: window.stage,
+    opened_at: window.opened_at,
+    opened_reason: window.opened_reason ?? null,
+    closed_at: window.closed_at ?? null,
+    closed_reason: window.closed_reason ?? null,
+  };
+}
+
 function getInitialSubstageSummaries(data: InitialEventData): SubstageSummary[] {
   if (
     typeof data === "object" &&
@@ -165,6 +180,11 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     "hw_cost_actual" in data && data.hw_cost_actual
       ? (data.hw_cost_actual as HwCostActualData)
       : null;
+  const rawStageSkipWindows =
+    "stage_skip_windows" in data
+      ? ((data as { stage_skip_windows?: ApiStageSkipWindow[] }).stage_skip_windows ?? [])
+      : [];
+
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
@@ -175,6 +195,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
     best_node_selections: data.best_node_selections ?? [],
+    stage_skip_windows: rawStageSkipWindows.map(normalizeStageSkipWindow),
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,
     code_execution: normalizeCodeExecution(
@@ -203,6 +224,7 @@ export function useResearchRunSSE({
   onError,
   onCodeExecutionStarted,
   onCodeExecutionCompleted,
+  onStageSkipWindow,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
   void _onArtifact;
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -346,6 +368,11 @@ export function useResearchRunSSE({
                   });
                 }
                 break;
+              case "stage_skip_window":
+                if (onStageSkipWindow) {
+                  onStageSkipWindow(event.data as StageSkipWindowUpdate);
+                }
+                break;
               case "complete":
                 onComplete(event.data.status);
                 return;
@@ -400,6 +427,7 @@ export function useResearchRunSSE({
     onHwCostEstimate,
     onHwCostActual,
     onError,
+    onStageSkipWindow,
     onCodeExecutionStarted,
     onCodeExecutionCompleted,
   ]);

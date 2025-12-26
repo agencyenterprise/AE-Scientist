@@ -277,3 +277,28 @@ class Stage2Tuning(Stage):
         return Stage2Tuning.compute_stage_completion(
             journal=self._context.journal, cfg=self._context.cfg
         )
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        best_node = journal.get_best_node()
+        total_nodes = len(journal.nodes)
+        best_node_id = best_node.id[:8] if best_node else "None"
+        logger.info(
+            "Stage 2 skip evaluation: total_nodes=%s best_node=%s good_nodes=%s",
+            total_nodes,
+            best_node_id,
+            len(journal.good_nodes),
+        )
+        if not best_node:
+            reason = "Stage 2 skipping requires a best node."
+            logger.info("Stage 2 skip blocked: %s", reason)
+            self._set_skip_state(can_skip=False, reason=reason)
+            return
+        reason = "Stage 2 has a working node."
+        logger.info(
+            "Stage 2 skip allowed: %s (best_node=%s)",
+            reason,
+            best_node_id,
+        )
+        self._set_skip_state(can_skip=True, reason=reason)

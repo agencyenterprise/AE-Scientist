@@ -1887,6 +1887,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/stage-skip-window": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Stage Skip Window",
+        "operationId": "ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageSkipWindowPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/tree-viz-stored": {
       "post": {
         "tags": [
@@ -2560,6 +2605,68 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TerminateExecutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/skip-stage": {
+      "post": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Skip Active Stage",
+        "description": "Request the running pipeline to skip the current stage.",
+        "operationId": "skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipStageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkipStageResponse"
                 }
               }
             }
@@ -5989,6 +6096,14 @@
             "type": "array",
             "title": "Paper Generation Progress",
             "description": "Paper generation progress events (Stage 5)"
+          },
+          "stage_skip_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
+            },
+            "type": "array",
+            "title": "Stage Skip Windows",
+            "description": "Windows indicating when each stage became skippable."
           }
         },
         "type": "object",
@@ -6423,6 +6538,14 @@
             },
             "type": "array",
             "title": "Best Node Selections"
+          },
+          "stage_skip_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
+            },
+            "type": "array",
+            "title": "Stage Skip Windows",
+            "description": "Recorded windows when stages became skippable."
           },
           "hw_cost_estimate": {
             "anyOf": [
@@ -6896,6 +7019,124 @@
         ],
         "title": "ResearchRunStageProgressEvent"
       },
+      "ResearchRunStageSkipWindow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier for the skip window record"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier where skipping became possible"
+          },
+          "opened_at": {
+            "type": "string",
+            "title": "Opened At",
+            "description": "ISO timestamp when the window opened"
+          },
+          "opened_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened Reason",
+            "description": "Reason provided when the window opened"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At",
+            "description": "ISO timestamp when the window closed (if closed)"
+          },
+          "closed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Reason",
+            "description": "Reason provided when the window closed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "opened_at"
+        ],
+        "title": "ResearchRunStageSkipWindow"
+      },
+      "ResearchRunStageSkipWindowEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "stage_skip_window",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageSkipWindowUpdate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageSkipWindowEvent"
+      },
+      "ResearchRunStageSkipWindowUpdate": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "timestamp"
+        ],
+        "title": "ResearchRunStageSkipWindowUpdate"
+      },
       "ResearchRunStopResponse": {
         "properties": {
           "run_id": {
@@ -6958,6 +7199,9 @@
             "$ref": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunStageSkipWindowEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
           },
           {
@@ -6988,6 +7232,7 @@
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
+            "stage_skip_window": "#/components/schemas/ResearchRunStageSkipWindowEvent",
             "substage_completed": "#/components/schemas/ResearchRunSubstageCompletedEvent",
             "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
             "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
@@ -7465,6 +7710,53 @@
         ],
         "title": "RunningCodePayload"
       },
+      "SkipStageRequest": {
+        "properties": {
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "SkipStageRequest"
+      },
+      "SkipStageResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "SkipStageResponse"
+      },
       "StageProgressEvent": {
         "properties": {
           "stage": {
@@ -7557,6 +7849,61 @@
           "event"
         ],
         "title": "StageProgressPayload"
+      },
+      "StageSkipWindowEventModel": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "timestamp"
+        ],
+        "title": "StageSkipWindowEventModel"
+      },
+      "StageSkipWindowPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/StageSkipWindowEventModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "StageSkipWindowPayload"
       },
       "SubstageCompletedEvent": {
         "properties": {

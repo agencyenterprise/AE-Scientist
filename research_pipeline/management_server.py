@@ -2,8 +2,6 @@
 Termination web server for handling execution kill requests.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import multiprocessing
@@ -16,7 +14,7 @@ import uvicorn
 from fastapi import Body, FastAPI, HTTPException
 from pydantic import BaseModel
 
-from ai_scientist.treesearch import execution_registry
+from ai_scientist.treesearch import execution_registry, stage_control
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +26,10 @@ _PID_MANAGER: multiprocessing.managers.SyncManager | None = None
 
 class TerminateRequest(BaseModel):
     payload: str
+
+
+class SkipStageRequest(BaseModel):
+    reason: str | None = None
 
 
 def initialize_execution_registry() -> None:
@@ -113,6 +115,20 @@ def _create_app() -> FastAPI:
     async def health_check() -> dict[str, str]:
         logger.debug("Termination server health check requested.")
         return {"status": "ok"}
+
+    @app.post("/skip-stage")
+    async def skip_stage(request: SkipStageRequest) -> dict[str, object]:
+        ok, message = stage_control.request_stage_skip(reason=request.reason)
+        if not ok:
+            logger.warning("Skip-stage request rejected: %s", message)
+            raise HTTPException(status_code=409, detail=message)
+        state = stage_control.get_stage_state()
+        logger.info(
+            "Skip-stage request acknowledged for %s (%s)",
+            state.get("stage_name"),
+            state.get("stage_number"),
+        )
+        return {}
 
     return app
 

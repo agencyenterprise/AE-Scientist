@@ -18,6 +18,7 @@ from app.services.database.rp_events import (
     PaperGenerationEvent,
     RunLogEvent,
     StageProgressEvent,
+    StageSkipWindowRecord,
     SubstageCompletedEvent,
     SubstageSummaryEvent,
 )
@@ -217,6 +218,28 @@ class ResearchRunBestNodeSelection(BaseModel):
         )
 
 
+class ResearchRunStageSkipWindow(BaseModel):
+    id: int = Field(..., description="Unique identifier for the skip window record")
+    stage: str = Field(..., description="Stage identifier where skipping became possible")
+    opened_at: str = Field(..., description="ISO timestamp when the window opened")
+    opened_reason: Optional[str] = Field(None, description="Reason provided when the window opened")
+    closed_at: Optional[str] = Field(
+        None, description="ISO timestamp when the window closed (if closed)"
+    )
+    closed_reason: Optional[str] = Field(None, description="Reason provided when the window closed")
+
+    @staticmethod
+    def from_db_record(record: StageSkipWindowRecord) -> "ResearchRunStageSkipWindow":
+        return ResearchRunStageSkipWindow(
+            id=record.id,
+            stage=record.stage,
+            opened_at=record.opened_at.isoformat(),
+            opened_reason=record.opened_reason,
+            closed_at=record.closed_at.isoformat() if record.closed_at else None,
+            closed_reason=record.closed_reason,
+        )
+
+
 class ResearchRunPaperGenerationProgress(BaseModel):
     id: int = Field(..., description="Unique identifier of the paper generation event")
     run_id: str = Field(..., description="Research run identifier")
@@ -365,6 +388,10 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     paper_generation_progress: List[ResearchRunPaperGenerationProgress] = Field(
         default_factory=list, description="Paper generation progress events (Stage 5)"
+    )
+    stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
+        default_factory=list,
+        description="Windows indicating when each stage became skippable.",
     )
 
 

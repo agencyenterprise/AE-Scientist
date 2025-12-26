@@ -40,6 +40,8 @@ class Stage:
     def __init__(self, *, meta: StageMeta, context: StageContext) -> None:
         self._meta = meta
         self._context = context
+        self.can_be_skipped: bool = False
+        self.skip_reason: str = "Stage cannot be skipped yet."
 
     def meta(self) -> StageMeta:
         return self._meta
@@ -58,3 +60,15 @@ class Stage:
 
     def best_carryover_nodes(self) -> Dict[int, Node]:
         return self._context.best_nodes_by_stage
+
+    def reset_skip_state(self) -> None:
+        """Reset can_be_skipped + reason state."""
+        self.can_be_skipped = False
+        self.skip_reason = "Stage cannot be skipped yet."
+
+    def skip_state(self) -> Tuple[bool, str]:
+        return self.can_be_skipped, self.skip_reason
+
+    def _set_skip_state(self, *, can_skip: bool, reason: str) -> None:
+        self.can_be_skipped = can_skip
+        self.skip_reason = reason

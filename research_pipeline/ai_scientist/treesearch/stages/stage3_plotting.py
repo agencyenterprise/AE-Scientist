@@ -128,3 +128,48 @@ class Stage3Plotting(Stage):
             cfg=self._context.cfg,
             max_stage3_iterations=self._meta.max_iterations,
         )
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        best_node = journal.get_best_node()
+        total_nodes = len(journal.nodes)
+        best_node_id = best_node.id[:8] if best_node else "None"
+        logger.info(
+            "Stage 3 skip evaluation: total_nodes=%s best_node=%s good_nodes=%s",
+            total_nodes,
+            best_node_id,
+            len(journal.good_nodes),
+        )
+        if not best_node:
+            reason = "Stage 3 skipping requires a best node."
+            logger.info("Stage 3 skip blocked: %s", reason)
+            self._set_skip_state(can_skip=False, reason=reason)
+            return
+        if best_node.is_buggy or best_node.is_buggy_plots:
+            reason = "Best node must pass execution and plot validation."
+            logger.info(
+                "Stage 3 skip blocked: %s (is_buggy=%s is_buggy_plots=%s)",
+                reason,
+                best_node.is_buggy,
+                best_node.is_buggy_plots,
+            )
+            self._set_skip_state(can_skip=False, reason=reason)
+            return
+        if not best_node.plots or not best_node.plot_paths:
+            reason = "Generate at least one plot artifact before skipping Stage 3."
+            logger.info(
+                "Stage 3 skip blocked: %s (plots=%s plot_paths=%s)",
+                reason,
+                len(best_node.plots or []),
+                len(best_node.plot_paths or []),
+            )
+            self._set_skip_state(can_skip=False, reason=reason)
+            return
+        reason = "Stage 3 has plot artifacts ready for downstream stages."
+        logger.info(
+            "Stage 3 skip allowed: %s (best_node=%s)",
+            reason,
+            best_node_id,
+        )
+        self._set_skip_state(can_skip=True, reason=reason)

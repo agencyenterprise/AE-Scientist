@@ -19,6 +19,7 @@ from app.models import (
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
+    ResearchRunStageSkipWindow,
     ResearchRunStreamEvent,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
@@ -328,6 +329,10 @@ def _build_initial_stream_payload(
         if latest_code_execution
         else None
     )
+    stage_skip_windows = [
+        ResearchRunStageSkipWindow.from_db_record(record).model_dump()
+        for record in db.list_stage_skip_windows(run_id=run_id)
+    ]
 
     return {
         "run": ResearchRunInfo.from_db_record(current_run).model_dump(),
@@ -341,6 +346,7 @@ def _build_initial_stream_payload(
         "paper_generation_progress": paper_gen_events,
         "best_node_selections": best_node_payload,
         "code_execution": code_execution_snapshot,
+        "stage_skip_windows": stage_skip_windows,
         "hw_cost_estimate": _build_hw_cost_event_payload(
             started_running_at=current_run.started_running_at,
             cost_per_hour_cents=_run_cost_per_hour_cents(current_run),

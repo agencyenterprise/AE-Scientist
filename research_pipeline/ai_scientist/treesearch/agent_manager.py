@@ -15,8 +15,9 @@ import json
 import logging
 import pickle
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, cast
 
 from pydantic import BaseModel
 
@@ -25,10 +26,12 @@ from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
     RunStageProgressEvent,
+    StageSkipWindowEvent,
     SubstageCompletedEvent,
     SubstageSummaryEvent,
 )
 
+from . import stage_control
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
@@ -99,6 +102,9 @@ class AgentManager:
         self._last_logged_iteration_by_stage: Dict[str, int] = {}
         self._last_logged_node_count_by_stage: Dict[str, int] = {}
         self._attempt_iteration_by_stage: Dict[str, int] = {}
+        self._forced_stage_completion_reasons: Dict[str, str] = {}
+        self._stage_skip_states: Dict[str, bool] = {}
+        stage_control.reset_stage_state()
 
     def get_max_iterations(self, stage_number: int) -> int:
         """Get max iterations for a stage from config or default"""
@@ -177,6 +183,105 @@ Your research idea:\n\n
             if definition.phase_id == stage_id:
                 return definition
         return None
+
+    def _stage_impl_from_meta(self, *, stage_meta: StageMeta, context: StageContext) -> StageImpl:
+        if stage_meta.number == 1:
+            return Stage1Baseline(meta=stage_meta, context=context)
+        if stage_meta.number == 2:
+            return Stage2Tuning(meta=stage_meta, context=context)
+        if stage_meta.number == 3:
+            return Stage3Plotting(meta=stage_meta, context=context)
+        if stage_meta.number == 4:
+            return Stage4Ablation(meta=stage_meta, context=context)
+        raise ValueError(f"Unknown stage number: {stage_meta.number}")
+
+    def _build_stage_impl(self, stage_meta: StageMeta, journal: Journal) -> StageImpl:
+        ctx = StageContext(
+            cfg=self.cfg,
+            task_desc=self._curate_task_desc(stage_meta),
+            stage_name=stage_meta.name,
+            journal=journal,
+            workspace_dir=self.workspace_dir,
+            event_callback=self.event_callback,
+            best_nodes_by_stage={},
+        )
+        return self._stage_impl_from_meta(stage_meta=stage_meta, context=ctx)
+
+    def _publish_stage_control_state(self, stage_meta: StageMeta) -> None:
+        journal = self.journals.get(stage_meta.name)
+        if journal is None:
+            return
+        try:
+            stage_obj = self._build_stage_impl(stage_meta, journal)
+            stage_obj.reset_skip_state()
+            can_skip, reason = stage_obj.skip_state()
+            safe_reason = reason or "Stage skip state updated."
+            logger.info(
+                "Stage %s skip state evaluated: can_skip=%s reason=%s",
+                stage_meta.name,
+                can_skip,
+                safe_reason,
+            )
+            self._update_stage_skip_state(
+                stage_name=stage_meta.name,
+                can_skip=can_skip,
+                reason=safe_reason,
+            )
+            stage_control.publish_stage_state(
+                stage_name=stage_meta.name,
+                stage_number=stage_meta.number,
+                can_be_skipped=can_skip,
+                cannot_skip_reason=safe_reason,
+            )
+        except Exception:
+            logger.exception("Failed to publish stage skip state for %s", stage_meta.name)
+
+    def _emit_stage_skip_window_event(
+        self, *, stage_name: str, state: Literal["opened", "closed"], reason: str
+    ) -> None:
+        try:
+            self.event_callback(
+                StageSkipWindowEvent(
+                    stage=stage_name,
+                    state=state,
+                    timestamp=datetime.now(timezone.utc),
+                    reason=reason,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit stage skip window event for %s", stage_name)
+
+    def _update_stage_skip_state(self, *, stage_name: str, can_skip: bool, reason: str) -> None:
+        previous = self._stage_skip_states.get(stage_name, False)
+        if can_skip and not previous:
+            self._stage_skip_states[stage_name] = True
+            self._emit_stage_skip_window_event(stage_name=stage_name, state="opened", reason=reason)
+            logger.info("Stage %s skip window opened (reason=%s)", stage_name, reason)
+        elif not can_skip and previous:
+            self._stage_skip_states[stage_name] = False
+            self._emit_stage_skip_window_event(stage_name=stage_name, state="closed", reason=reason)
+            logger.info("Stage %s skip window closed (reason=%s)", stage_name, reason)
+        else:
+            self._stage_skip_states[stage_name] = can_skip
+
+    def _clear_stage_skip_state(self, *, stage_name: str, reason: str) -> None:
+        if self._stage_skip_states.get(stage_name):
+            self._stage_skip_states[stage_name] = False
+            self._emit_stage_skip_window_event(stage_name=stage_name, state="closed", reason=reason)
+            logger.info("Stage %s skip window force-closed (reason=%s)", stage_name, reason)
+        self._stage_skip_states.pop(stage_name, None)
+
+    def _clear_all_stage_skip_states(self, *, reason: str) -> None:
+        for stage_name, is_open in list(self._stage_skip_states.items()):
+            if is_open:
+                self._emit_stage_skip_window_event(
+                    stage_name=stage_name, state="closed", reason=reason
+                )
+                logger.info("Stage %s skip window force-closed (reason=%s)", stage_name, reason)
+        self._stage_skip_states.clear()
+
+    def _force_stage_completion(self, *, stage_name: str, reason: str) -> None:
+        self._forced_stage_completion_reasons[stage_name] = reason
 
     def _plan_progress_for_phase(self, *, stage_id: str) -> Optional[PhasePlanProgress]:
         for index, definition in enumerate(self.phase_plan):
@@ -303,29 +408,7 @@ Your research idea:\n\n
         if len(journal.nodes) >= limit:
             logger.info(f"Stage {current_substage.name} completed: reached max iterations")
             return True, "Reached max iterations"
-        main_stage_num = current_substage.number
-
-        ctx = StageContext(
-            cfg=self.cfg,
-            task_desc=self._curate_task_desc(current_substage),
-            stage_name=current_substage.name,
-            journal=journal,
-            workspace_dir=self.workspace_dir,
-            event_callback=self.event_callback,
-            best_nodes_by_stage={},
-        )
-        # Delegate substage completion to the corresponding Stage implementation
-        stage_obj: StageImpl
-        if main_stage_num == 1:
-            stage_obj = Stage1Baseline(meta=current_substage, context=ctx)
-        elif main_stage_num == 2:
-            stage_obj = Stage2Tuning(meta=current_substage, context=ctx)
-        elif main_stage_num == 3:
-            stage_obj = Stage3Plotting(meta=current_substage, context=ctx)
-        elif main_stage_num == 4:
-            stage_obj = Stage4Ablation(meta=current_substage, context=ctx)
-        else:
-            raise ValueError(f"Unknown stage number: {main_stage_num}")
+        stage_obj = self._build_stage_impl(current_substage, journal)
         return stage_obj.evaluate_substage_completion()
 
     def _check_stage_completion(self, stage: StageMeta) -> Tuple[bool, str]:
@@ -349,29 +432,12 @@ Your research idea:\n\n
             else:
                 return True, "Reached max iterations"
 
-        main_stage_num = stage.number
+        forced_reason = self._forced_stage_completion_reasons.pop(stage.name, None)
+        if forced_reason is not None:
+            logger.info("Stage %s marked complete via override: %s", stage.name, forced_reason)
+            return True, forced_reason
 
-        ctx = StageContext(
-            cfg=self.cfg,
-            task_desc=self._curate_task_desc(stage),
-            stage_name=stage.name,
-            journal=journal,
-            workspace_dir=self.workspace_dir,
-            event_callback=self.event_callback,
-            best_nodes_by_stage={},
-        )
-        # Delegate main stage completion to the Stage implementation
-        stage_obj: StageImpl
-        if main_stage_num == 1:
-            stage_obj = Stage1Baseline(meta=stage, context=ctx)
-        elif main_stage_num == 2:
-            stage_obj = Stage2Tuning(meta=stage, context=ctx)
-        elif main_stage_num == 3:
-            stage_obj = Stage3Plotting(meta=stage, context=ctx)
-        elif main_stage_num == 4:
-            stage_obj = Stage4Ablation(meta=stage, context=ctx)
-        else:
-            raise ValueError(f"Unknown stage number: {main_stage_num}")
+        stage_obj = self._build_stage_impl(stage, journal)
         return stage_obj.evaluate_stage_completion()
 
     def _get_best_implementation(self, stage_name: str) -> Optional[Node]:
@@ -682,8 +748,16 @@ Your research idea:\n\n
             journal = self.journals[stage_name]
             max_iters = current_substage.max_iterations
             node_count = len(journal.nodes)
-            current_iter = self._attempt_iteration_by_stage.get(stage_name, 0) + 1
-            self._attempt_iteration_by_stage[stage_name] = current_iter
+            self._publish_stage_control_state(current_substage)
+            skip_reason = stage_control.consume_skip_request(stage_name=stage_name)
+            skip_requested = skip_reason is not None
+            skip_reason_text = skip_reason or "Stage skipped by operator."
+            if not skip_requested:
+                current_iter = self._attempt_iteration_by_stage.get(stage_name, 0) + 1
+                self._attempt_iteration_by_stage[stage_name] = current_iter
+            else:
+                current_iter = self._attempt_iteration_by_stage.get(stage_name, 0)
+
             logger.debug(f"Stage {stage_name}: Iteration {current_iter}/{max_iters}")
 
             last_node_count = self._last_logged_node_count_by_stage.get(stage_name)
@@ -695,32 +769,54 @@ Your research idea:\n\n
             if last_logged_iter is None or current_iter > last_logged_iter:
                 self._last_logged_iteration_by_stage[stage_name] = current_iter
                 self._last_logged_node_count_by_stage[stage_name] = node_count
+                if not skip_requested:
+                    try:
+                        self.event_callback(
+                            RunLogEvent(
+                                message=f"Stage {stage_name}: Iteration {current_iter}/{max_iters}",
+                                level="info",
+                            )
+                        )
+                    except Exception:
+                        # Best-effort logging; never block iteration on event errors
+                        pass
+
+            # Drive one iteration of the agent to make forward progress.
+            if skip_requested:
+                logger.info("Skip requested for stage %s: %s", stage_name, skip_reason_text)
+                self._force_stage_completion(stage_name=stage_name, reason=skip_reason_text)
                 try:
                     self.event_callback(
                         RunLogEvent(
-                            message=f"Stage {stage_name}: Iteration {current_iter}/{max_iters}",
-                            level="info",
+                            message=f"Skipping stage {stage_name}: {skip_reason_text}",
+                            level="warn",
                         )
                     )
                 except Exception:
-                    # Best-effort logging; never block iteration on event errors
                     pass
+            else:
+                agent.step()
 
-            # Drive one iteration of the agent to make forward progress.
-            agent.step()
-
-            if step_callback:
-                step_callback(current_substage, self.journals[current_substage.name])
+                if step_callback:
+                    step_callback(current_substage, self.journals[current_substage.name])
 
             # Check if sub-stage is complete (check this before main stage completion)
-            substage_complete, substage_feedback = self._check_substage_completion(
-                current_substage, self.journals[current_substage.name]
-            )
+            if skip_requested:
+                substage_complete = True
+                substage_feedback = skip_reason_text
+            else:
+                substage_complete, substage_feedback = self._check_substage_completion(
+                    current_substage, self.journals[current_substage.name]
+                )
 
             # Check if main stage is complete
-            main_stage_complete, main_stage_feedback = self._check_stage_completion(
-                current_substage
-            )
+            if skip_requested:
+                main_stage_complete = True
+                main_stage_feedback = skip_reason_text
+            else:
+                main_stage_complete, main_stage_feedback = self._check_stage_completion(
+                    current_substage
+                )
             logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
 
             # If substage completes, emit event (even if main stage also completes)
@@ -734,6 +830,10 @@ Your research idea:\n\n
             # If main stage completes, run multi-seed eval and return
             if main_stage_complete:
                 self._completed_stages.add(current_substage.name)
+                self._clear_stage_skip_state(
+                    stage_name=current_substage.name,
+                    reason=main_stage_feedback or "Stage completed",
+                )
                 self._emit_final_progress_if_needed(
                     current_substage=current_substage,
                     journal=self.journals[current_substage.name],
@@ -824,11 +924,14 @@ Your research idea:\n\n
                 run_id=self.cfg.telemetry.run_id if self.cfg.telemetry else None,
             )
             self.current_stage = next_main_stage
+            self._publish_stage_control_state(next_main_stage)
         else:
             # Exit the outer loop if no more main stages
             logger.info(f"Completed stage: {self.current_stage.name}")
             logger.info("No more stages to run -- exiting the loop...")
             self.current_stage = None
+            self._clear_all_stage_skip_states(reason="All stages completed")
+            stage_control.clear_stage_state()
 
     def run(
         self,
@@ -858,6 +961,8 @@ Your research idea:\n\n
         performs any post-stage evaluation, and saves a checkpoint.
         """
         current_substage: Optional[StageMeta] = initial_substage
+        if current_substage is not None:
+            self._publish_stage_control_state(current_substage)
         while current_substage:
             logger.info(f"Starting sub-stage: {current_substage.name}")
             logger.info(
@@ -879,6 +984,10 @@ Your research idea:\n\n
             with self._create_agent_for_stage(current_substage) as agent:
                 # Initialize with best result from previous sub-stage if available
                 if not self._prepare_substage(current_substage=current_substage):
+                    self._clear_stage_skip_state(
+                        stage_name=current_substage.name,
+                        reason="Stage preparation failed",
+                    )
                     self.current_stage = None
                     current_substage = None
                     break
@@ -898,6 +1007,9 @@ Your research idea:\n\n
         # Save checkpoint using the last completed stage (before advancing to next)
         if self.current_stage:
             self._save_checkpoint()
+        else:
+            self._clear_all_stage_skip_states(reason="Experiment halted")
+            stage_control.clear_stage_state()
 
     def _gather_stage_metrics(self, journal: Journal) -> Dict[str, Any]:
         """Gather detailed metrics and analysis from the stage's nodes"""

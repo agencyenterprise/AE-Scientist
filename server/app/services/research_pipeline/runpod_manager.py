@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, cast
+from typing import Any, Dict, NamedTuple, Type, cast
 
 import httpx
 from omegaconf import OmegaConf
@@ -728,39 +728,25 @@ def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) 
             pass
 
 
-def send_execution_feedback_via_ssh(
+def _perform_management_ssh_request(
     *,
     host: str,
     port: str | int,
-    execution_id: str,
-    payload: str,
-) -> None:
-    """
-    Kill a running execution inside the research pipeline pod and submit user feedback payload.
-
-    This connects via SSH and sends a POST request to the local termination server running
-    alongside the pipeline (default http://127.0.0.1:8090/terminate/{execution_id}).
-    """
-    if not host or not port:
-        logger.warning("Cannot send feedback for execution %s; missing host or port.", execution_id)
-        return
-    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
-    if not private_key:
-        logger.warning(
-            "RUN_POD_SSH_ACCESS_KEY not configured; skipping feedback for execution %s",
-            execution_id,
-        )
-        return
-
-    request_body = json.dumps({"payload": payload}, ensure_ascii=False)
-    payload_b64 = base64.b64encode(request_body.encode("utf-8")).decode("utf-8")
+    payload: dict[str, object],
+    endpoint: str,
+    private_key: str,
+    timeout: int,
+    error_cls: Type[Exception],
+) -> tuple[int, str]:
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    payload_b64 = base64.b64encode(payload_json.encode("utf-8")).decode("utf-8")
     key_path = _write_temp_key_file(private_key)
     remote_command = (
         f"PAYLOAD=$(printf '%s' '{payload_b64}' | base64 --decode); "
         "RESPONSE=$(curl -sS -w '\\n%{http_code}' "
         "-H 'Content-Type: application/json' "
-        f'--data "$PAYLOAD" '
-        f"http://127.0.0.1:8090/terminate/{execution_id}); "
+        '--data "$PAYLOAD" '
+        f"http://127.0.0.1:8090{endpoint}); "
         "STATUS=$(printf '%s' \"$RESPONSE\" | tail -n1); "
         "BODY=$(printf '%s' \"$RESPONSE\" | sed '$d'); "
         "printf 'HTTP_STATUS:%s\\n' \"$STATUS\"; "
@@ -786,12 +772,12 @@ def send_execution_feedback_via_ssh(
             ssh_command,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=timeout,
             check=False,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Error sending feedback for execution %s", execution_id)
-        raise TerminationRequestError(f"SSH command failed for execution {execution_id}") from exc
+        logger.exception("SSH management request failed (endpoint=%s)", endpoint)
+        raise error_cls(f"SSH command failed for endpoint {endpoint}") from exc
     finally:
         try:
             Path(key_path).unlink(missing_ok=True)
@@ -800,33 +786,69 @@ def send_execution_feedback_via_ssh(
 
     stdout = result.stdout.strip() if result.stdout else ""
     stderr = result.stderr.strip() if result.stderr else ""
-
     if result.returncode != 0:
-        raise TerminationRequestError(
-            f"SSH command exited with {result.returncode} for execution {execution_id}: {stderr}"
+        raise error_cls(
+            f"SSH command exited with {result.returncode} for endpoint {endpoint}: {stderr}"
         )
 
     status_line, _, body = stdout.partition("\n")
     if not status_line.startswith("HTTP_STATUS:"):
-        raise TerminationRequestError(
-            f"Malformed response from termination server for execution {execution_id}: {stdout}"
+        raise error_cls(
+            f"Malformed response from management server for endpoint {endpoint}: {stdout}"
         )
-
     status_code = status_line.split(":", 1)[1].strip()
-    body = body.strip()
+    return int(status_code or "0"), body.strip()
 
-    if status_code == "200":
+
+def send_execution_feedback_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    execution_id: str,
+    payload: str,
+) -> None:
+    """
+    Kill a running execution inside the research pipeline pod and submit user feedback payload.
+
+    This connects via SSH and sends a POST request to the local termination server running
+    alongside the pipeline (default http://127.0.0.1:8090/terminate/{execution_id}).
+    """
+    if not host or not port:
+        logger.warning("Cannot send feedback for execution %s; missing host or port.", execution_id)
+        return
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        logger.warning(
+            "RUN_POD_SSH_ACCESS_KEY not configured; skipping feedback for execution %s",
+            execution_id,
+        )
+        return
+
+    try:
+        status_code, body = _perform_management_ssh_request(
+            host=host,
+            port=port,
+            payload={"payload": payload},
+            endpoint=f"/terminate/{execution_id}",
+            private_key=private_key,
+            timeout=60,
+            error_cls=TerminationRequestError,
+        )
+    except TerminationRequestError:
+        raise
+
+    if status_code == 200:
         logger.info(
             "Termination acknowledged for execution %s: %s", execution_id, body or "<empty>"
         )
         return
 
-    if status_code == "404":
+    if status_code == 404:
         raise TerminationNotFoundError(
             f"Execution {execution_id} not found on pod (response: {body or 'no body'})"
         )
 
-    if status_code == "409":
+    if status_code == 409:
         raise TerminationConflictError(
             f"Execution {execution_id} already completed or terminating (response: {body or 'no body'})"
         )
@@ -834,3 +856,36 @@ def send_execution_feedback_via_ssh(
     raise TerminationRequestError(
         f"Unexpected termination response for execution {execution_id}: status={status_code} body={body}"
     )
+
+
+def request_stage_skip_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    reason: str | None = None,
+) -> None:
+    """
+    Request the pipeline to skip the current stage via the management server.
+    """
+    if not host or not port:
+        raise RuntimeError("Cannot request stage skip; missing host or port.")
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        raise RuntimeError("RUN_POD_SSH_ACCESS_KEY not configured; cannot request stage skip.")
+
+    status_code, body = _perform_management_ssh_request(
+        host=host,
+        port=port,
+        payload={"reason": reason or "Skip stage requested via dashboard."},
+        endpoint="/skip-stage",
+        private_key=private_key,
+        timeout=30,
+        error_cls=RuntimeError,
+    )
+
+    if status_code != 200:
+        raise RuntimeError(
+            f"Stage skip request rejected: status={status_code} body={body or '<empty>'}"
+        )
+
+    logger.info("Stage skip request acknowledged by management server: %s", body or "<empty>")

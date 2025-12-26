@@ -86,7 +86,7 @@ def _build_pod_response(record: PodRecord) -> Dict[str, object]:
         "createdAt": "2025-12-16 17:44:56.726 +0000 UTC",
         "RUN_ID": record.run_id,
         "gpuCount": 1,
-        "imageName": "newtonsander/runpod_pytorch_texdeps:v1.1",
+        "imageName": "newtonsander/runpod_pytorch_texdeps:v1",
         "lastStartedAt": "2025-12-16 17:44:56.715 +0000 UTC",
         "lastStatusChange": "Rented by User: Tue Dec 16 2025 17:44:56 GMT+0000 (Coordinated Universal Time)",
         "machine": {
@@ -409,7 +409,7 @@ class FakeRunner:
         self._heartbeat_stop = threading.Event()
         self._log_stop = threading.Event()
         self._log_thread: Optional[threading.Thread] = None
-        self._data_dir = Path(__file__).parent / "data"
+        self._data_dir = Path(__file__).parent / "fake_run_pod" / "data"
         self._plot_filename: str | None = None
         self._random_exec_time_seconds = 12.0
         self._code_event_delay_seconds = 12.0

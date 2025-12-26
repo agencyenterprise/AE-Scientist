@@ -20,6 +20,7 @@ from app.models.research_pipeline import (
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
+    ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
     TreeVizItem,
@@ -227,6 +228,10 @@ class ResearchRunInitialEventData(BaseModel):
     events: List[ResearchRunEvent]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
     best_node_selections: List[ResearchRunBestNodeSelection]
+    stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
+        default_factory=list,
+        description="Recorded windows when stages became skippable.",
+    )
     hw_cost_estimate: ResearchRunHwCostEstimateData | None = Field(
         None,
         description="Hardware cost estimate available when the initial snapshot was emitted.",
@@ -304,6 +309,18 @@ class ResearchRunCodeExecutionCompletedEvent(BaseModel):
     data: ResearchRunCodeExecutionCompletedData
 
 
+class ResearchRunStageSkipWindowUpdate(BaseModel):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: str
+    reason: Optional[str] = None
+
+
+class ResearchRunStageSkipWindowEvent(BaseModel):
+    type: Literal["stage_skip_window"]
+    data: ResearchRunStageSkipWindowUpdate
+
+
 class ResearchRunSubstageCompletedEvent(BaseModel):
     type: Literal["substage_completed"]
     data: ResearchRunSubstageEvent
@@ -348,6 +365,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunSubstageSummaryEvent,
         ResearchRunCodeExecutionStartedEvent,
         ResearchRunCodeExecutionCompletedEvent,
+        ResearchRunStageSkipWindowEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunHwCostEstimateEvent,
         ResearchRunHwCostActualEvent,
