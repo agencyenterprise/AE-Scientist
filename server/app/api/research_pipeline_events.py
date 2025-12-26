@@ -666,6 +666,9 @@ def ingest_run_finished(
                 payload.message,
                 run.pod_id,
             )
+            # This call is also performed by the research pipeline when the paper was generated.
+            # But we want to be sure to upload the log file and workspace archive so we call it again here.
+            _upload_pod_artifacts_if_possible(run)
             terminate_pod(pod_id=run.pod_id)
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:
