@@ -125,7 +125,7 @@ def extract_user_first_name(*, full_name: str) -> str:
     return f"{alnum_only[0].upper()}{alnum_only[1:]}"
 
 
-def _record_pod_billing_event(
+async def _record_pod_billing_event(
     db: DatabaseManager,
     *,
     run_id: str,
@@ -133,7 +133,7 @@ def _record_pod_billing_event(
     context: str,
 ) -> None:
     try:
-        summary = fetch_pod_billing_summary(pod_id=pod_id)
+        summary = await fetch_pod_billing_summary(pod_id=pod_id)
     except (RuntimeError, RunPodError):
         logger.exception("Failed to fetch billing summary for pod %s", pod_id)
         return
@@ -174,13 +174,18 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
+async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    upload_runpod_artifacts_via_ssh(host=host, port=port, run_id=run.run_id)
+    await asyncio.to_thread(
+        upload_runpod_artifacts_via_ssh,
+        host=host,
+        port=port,
+        run_id=run.run_id,
+    )
 
 
 def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
@@ -689,7 +694,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
 
     pod_id = run.pod_id
     if pod_id:
-        _upload_pod_artifacts_if_possible(run)
+        await _upload_pod_artifacts_if_possible(run)
         try:
             await terminate_pod(pod_id=pod_id)
         except RunPodError as exc:
@@ -706,7 +711,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
                     status_code=502, detail="Failed to terminate the research run pod."
                 ) from exc
         finally:
-            _record_pod_billing_event(
+            await _record_pod_billing_event(
                 db,
                 run_id=run_id,
                 pod_id=pod_id,
