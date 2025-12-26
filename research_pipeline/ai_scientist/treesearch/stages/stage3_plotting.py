@@ -16,7 +16,8 @@ class Stage3Plotting(Stage):
         "- Explore novel improvements\n"
         "- Come up with experiments to reveal new insights\n"
         "- Be creative and think outside the box\n"
-        "- Test your models on multiple HuggingFace datasets to demonstrate generalization. Use dataset sizes appropriate to the experiment. Usually THREE datasets are enough."
+        "- Test your models on multiple datasets from appropriate sources to demonstrate generalization.\n"
+        "- Use dataset sizes appropriate to the experiment. Usually THREE datasets are enough."
     )
     # Memoization cache for substage-completion queries:
     # key -> (is_complete, message)
