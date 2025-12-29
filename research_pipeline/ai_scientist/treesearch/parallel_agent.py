@@ -24,12 +24,13 @@ from typing import List, Optional
 
 from ai_scientist.llm import query, structured_query_with_schema
 
-from . import execution_registry, stage_control
+from . import execution_registry
 from .codegen_agent import PlanAndCodeSchema
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
 from .stage_identifiers import StageIdentifier
+from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
@@ -38,16 +39,6 @@ from .utils.metric import WorstMetricValue
 from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, process_node
 
 logger = logging.getLogger("ai-scientist")
-
-
-class SkipInProgressError(RuntimeError):
-    """Raised when a stage skip is pending during agent iteration."""
-
-    def __init__(self, *, stage_identifier: StageIdentifier, reason: str):
-        super().__init__(reason)
-        self.stage_identifier = stage_identifier
-        self.stage_name = stage_identifier.prefixed_name
-        self.reason = reason
 
 
 def _executor_initializer(shared_state: DictProxy | None) -> None:
@@ -85,6 +76,7 @@ class ParallelAgent:
         self.cfg = cfg
         self.journal = journal
         self.stage_identifier = stage_identifier
+        self.stage_skip = StageSkipCoordinator(stage_identifier=stage_identifier)
         self.event_callback = event_callback
         # Best nodes carried from previous stages to seed new work
         self.best_stage1_node = best_stage1_node  # to initialize hyperparam tuning (stage 2)
@@ -132,19 +124,6 @@ class ParallelAgent:
     def stage_name(self) -> str:
         return self.stage_identifier.prefixed_name
 
-    def _ensure_no_skip_pending(self) -> None:
-        state = stage_control.get_stage_state()
-        if not state:
-            return
-        if state.get("skip_pending") and state.get("stage_name") == self.stage_name:
-            reason = state.get("skip_reason") or "Stage skip requested by operator."
-            logger.info(
-                "Skip pending detected for stage %s (reason=%s)",
-                self.stage_name,
-                reason,
-            )
-            raise SkipInProgressError(stage_identifier=self.stage_identifier, reason=reason)
-
     def abort_active_executions(self, *, reason: str) -> None:
         pending_ids = list(self._future_execution_ids.values())
         if not pending_ids:
@@ -154,17 +133,7 @@ class ParallelAgent:
                 reason,
             )
             return
-        logger.info(
-            "Flagging %s active execution(s) for skip in stage %s (reason=%s)",
-            len(pending_ids),
-            self.stage_name,
-            reason,
-        )
-        for execution_id in pending_ids:
-            execution_registry.flag_skip_pending(
-                execution_id=execution_id,
-                reason=reason,
-            )
+        self.stage_skip.flag_executions_for_skip(pending_ids, reason=reason)
 
     def _cancel_pending_futures(self, futures: list[Future]) -> None:
         if not futures:
@@ -556,7 +525,7 @@ class ParallelAgent:
 
     def step(self) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
-        self._ensure_no_skip_pending()
+        self.stage_skip.ensure_no_skip_pending()
         stage_identifier = self.stage_identifier
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
@@ -623,7 +592,7 @@ class ParallelAgent:
         futures: list[Future] = []
         try:
             for node, node_data in zip(nodes_to_process, node_data_list):
-                self._ensure_no_skip_pending()
+                self.stage_skip.ensure_no_skip_pending()
                 gpu_id = None
                 process_id = f"worker_{len(futures)}"
                 if self.gpu_manager is not None:
@@ -705,7 +674,7 @@ class ParallelAgent:
             # Collect results as they complete and update journal/state
             logger.debug("Waiting for results")
             for idx, future in enumerate(futures):
-                self._ensure_no_skip_pending()
+                self.stage_skip.ensure_no_skip_pending()
                 current_execution_id: str | None
                 current_execution_id = (
                     self._future_execution_ids.pop(future)

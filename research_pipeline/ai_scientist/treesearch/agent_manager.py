@@ -35,9 +35,10 @@ from . import stage_control
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
-from .parallel_agent import ParallelAgent, SkipInProgressError
+from .parallel_agent import ParallelAgent
 from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stage_identifiers import StageIdentifier
+from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -722,6 +723,9 @@ Your research idea:\n\n
           (or stop if there is none).
         - If False and next_substage is provided, the caller should continue with that sub-stage.
         """
+        stage_skip = StageSkipCoordinator(stage_identifier=current_substage.identifier)
+        skip_reason_default = "Stage skipped by operator."
+
         while True:
             # Emit iteration log before each step; progress events are handled in step_callback.
             stage_name = current_substage.name
@@ -729,9 +733,8 @@ Your research idea:\n\n
             max_iters = current_substage.max_iterations
             node_count = len(journal.nodes)
             self._publish_stage_control_state(current_substage)
-            skip_reason = stage_control.consume_skip_request(stage_name=stage_name)
-            skip_requested = skip_reason is not None
-            skip_reason_text = skip_reason or "Stage skipped by operator."
+            skip_requested, skip_reason = stage_skip.consume_pending_request()
+            skip_reason_text = skip_reason or skip_reason_default
             if not skip_requested:
                 current_iter = self._attempt_iteration_by_stage.get(stage_name, 0) + 1
                 self._attempt_iteration_by_stage[stage_name] = current_iter
