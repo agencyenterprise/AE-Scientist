@@ -144,6 +144,8 @@ def _collect_disk_usage() -> list[dict[str, int | str]]:
             mountpoint = Path(partition.mountpoint)
             if not mountpoint.exists() or not mountpoint.is_dir():
                 continue
+            if (partition.fstype or "").lower() == "tmpfs":
+                continue
             mount_key = str(mountpoint)
             if "nvidia" in mount_key.lower():
                 continue
