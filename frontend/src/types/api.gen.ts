@@ -158,6 +158,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/clerk-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clerk Session Exchange
+         * @description Exchange Clerk session token for internal session token.
+         *
+         *     This allows the frontend to use Clerk for auth UI,
+         *     but still use our internal session system for API calls.
+         *
+         *     Args:
+         *         request: Request with Authorization header containing Clerk session token
+         *
+         *     Returns:
+         *         Dict with internal session_token and user info
+         */
+        post: operations["clerk_session_exchange_api_auth_clerk_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/billing/wallet": {
         parameters: {
             query?: never;
@@ -1861,9 +1890,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
+            metadata?: Record<string, never>;
             /** Stripe Session Id */
             stripe_session_id?: string | null;
             /** Created At */
@@ -2593,9 +2620,7 @@ export interface components {
             /** Step Progress */
             step_progress: number;
             /** Details */
-            details?: {
-                [key: string]: unknown;
-            } | null;
+            details?: Record<string, never> | null;
         };
         /** PaperGenerationProgressPayload */
         PaperGenerationProgressPayload: {
@@ -2907,9 +2932,7 @@ export interface components {
              * Metadata
              * @description Structured metadata captured for the event
              */
-            metadata?: {
-                [key: string]: unknown;
-            };
+            metadata?: Record<string, never>;
             /**
              * Occurred At
              * @description ISO timestamp when the event was recorded
@@ -2924,9 +2947,7 @@ export interface components {
              */
             type: "heartbeat";
             /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
+            data?: Record<string, never> | null;
         };
         /** ResearchRunHwCostActualData */
         ResearchRunHwCostActualData: {
@@ -2944,9 +2965,7 @@ export interface components {
              * Billing Summary
              * @description Raw billing summary metadata returned by RunPod.
              */
-            billing_summary?: {
-                [key: string]: unknown;
-            };
+            billing_summary?: Record<string, never>;
         };
         /** ResearchRunHwCostActualEvent */
         ResearchRunHwCostActualEvent: {
@@ -3285,9 +3304,7 @@ export interface components {
              * Details
              * @description Step-specific metadata (figures, citations, scores, etc.)
              */
-            details?: {
-                [key: string]: unknown;
-            } | null;
+            details?: Record<string, never> | null;
             /**
              * Created At
              * @description ISO timestamp when the event was recorded
@@ -3414,9 +3431,7 @@ export interface components {
              * Summary
              * @description Summary payload stored for this sub-stage
              */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: Record<string, never>;
             /**
              * Created At
              * @description ISO timestamp of the event
@@ -3448,9 +3463,7 @@ export interface components {
              * Summary
              * @description LLM-generated summary payload
              */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: Record<string, never>;
             /**
              * Created At
              * @description ISO timestamp when the summary was recorded
@@ -3670,9 +3683,7 @@ export interface components {
             /** Reason */
             reason: string;
             /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: Record<string, never>;
         };
         /** SubstageCompletedPayload */
         SubstageCompletedPayload: {
@@ -3685,9 +3696,7 @@ export interface components {
             /** Stage */
             stage: string;
             /** Summary */
-            summary: {
-                [key: string]: unknown;
-            };
+            summary: Record<string, never>;
         };
         /** SubstageSummaryPayload */
         SubstageSummaryPayload: {
@@ -3750,9 +3759,7 @@ export interface components {
              * Viz
              * @description Tree visualization payload
              */
-            viz: {
-                [key: string]: unknown;
-            };
+            viz: Record<string, never>;
             /**
              * Created At
              * @description ISO timestamp when the viz was stored
@@ -3847,9 +3854,7 @@ export interface components {
              */
             type: "heartbeat";
             /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
+            data?: Record<string, never> | null;
         };
         /**
          * WalletStreamEvent
@@ -4001,6 +4006,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    clerk_session_exchange_api_auth_clerk_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };
