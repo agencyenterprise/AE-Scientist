@@ -16,9 +16,11 @@ import queue
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
+import psutil
 import psycopg2
 import psycopg2.extras
 import requests
@@ -96,7 +98,11 @@ class WebhookClient:
         self._post(path=self._RUN_FINISHED_PATH, payload=payload)
 
     def publish_heartbeat(self) -> None:
-        self._post(path=self._HEARTBEAT_PATH, payload={"run_id": self._run_id})
+        payload = {
+            "run_id": self._run_id,
+            "disk_usage": _collect_disk_usage(),
+        }
+        self._post(path=self._HEARTBEAT_PATH, payload=payload)
 
     def publish_gpu_shortage(
         self,
@@ -124,6 +130,44 @@ def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:
         sanitized_raw = json.dumps(data, default=str)
         sanitized: dict[str, Any] = json.loads(sanitized_raw)
         return sanitized
+
+
+def _collect_disk_usage() -> list[dict[str, int | str]]:
+    """
+    Gather disk usage per partition (best-effort).
+    Each entry contains partition identifier, total bytes, and used bytes.
+    """
+    partitions: list[dict[str, int | str]] = []
+    seen_devices: set[str] = set()
+    try:
+        for partition in psutil.disk_partitions(all=True):
+            mountpoint = Path(partition.mountpoint)
+            if not mountpoint.exists() or not mountpoint.is_dir():
+                continue
+            mount_key = str(mountpoint)
+            if "nvidia" in mount_key.lower():
+                continue
+            device_key = partition.device or mount_key
+            if device_key in seen_devices:
+                continue
+            seen_devices.add(device_key)
+            try:
+                usage = psutil.disk_usage(mount_key)
+            except PermissionError:
+                continue
+            if usage.total <= 0:
+                continue
+            partitions.append(
+                {
+                    "partition": device_key,
+                    "total_bytes": int(usage.total),
+                    "used_bytes": int(usage.used),
+                }
+            )
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Failed to collect disk usage information for heartbeat.")
+        return []
+    return partitions
 
 
 def _parse_database_url(database_url: str) -> dict[str, Any]:
