@@ -108,11 +108,18 @@ OPENAI_BASE_URL="https://your-custom-endpoint.com/v1"
 # Anthropic API key - only required if using Claude models
 # (e.g., when using bfts_config_claude-haiku.yaml)
 ANTHROPIC_API_KEY=your-anthropic-key
+
+# Sentry crash reporting (optional)
+# Set these to forward pipeline exceptions to Sentry
+SENTRY_DSN=https://examplePublicKey@o123456.ingest.sentry.io/123456
+SENTRY_ENVIRONMENT=production
+# If SENTRY_ENVIRONMENT is omitted, the pipeline falls back to RAILWAY_ENVIRONMENT_NAME
 ```
 
 **Important:**
 - `OPENAI_BASE_URL` should **only** be set if you're using a custom OpenAI-compatible endpoint (like a local LLM server or RunPod inference). Leave it unset to use the default OpenAI API.
 - `ANTHROPIC_API_KEY` is **only** required if you plan to use Claude models (e.g., `bfts_config_claude-haiku.yaml`).
+- `SENTRY_DSN` enables monitoring for every research pipeline entry point (launcher, worker processes, artifact upload helpers). Leave it unset to disable error reporting. When set, the pipeline automatically tags every Sentry event with the active `run_id` (from your telemetry config or `RUN_ID` env var) so crashes are traceable per run.
 
 ## Running Experiments
 
@@ -176,6 +183,7 @@ telemetry:
 
 `database_url` + `run_id` enables Postgres persistence; `webhook_url` + `webhook_token` (plus the same `run_id`) enable live callbacks to the server. Leave any of them blank to disable that destination.
 Set `webhook_url` to the base endpoint (e.g., `https://your-server/api/research-pipeline/events`); the pipeline appends the specific event path automatically.
+If `SENTRY_DSN` is present, the launcher copies `run_id` into the Sentry scope so every exception emitted during that execution is tagged and easy to correlate with dashboard state.
 
 **Optional Argument:**
 - `--resume RUN_NAME_OR_NUMBER`: Resume from a specific run folder (e.g., `4` or `4-run`); the launcher runs only the next missing stage for that run, or skips stages entirely if summaries exist, then performs aggregation/writeup per config.

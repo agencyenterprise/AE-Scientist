@@ -37,6 +37,7 @@ from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
+from ai_scientist.sentry_config import set_sentry_run_context
 from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
@@ -842,6 +843,8 @@ def run_review_stage(
 def execute_launcher(args: argparse.Namespace) -> None:
     base_config_path = Path(args.config_file)
     base_cfg = load_base_config(config_path=base_config_path)
+    if base_cfg.telemetry and base_cfg.telemetry.run_id:
+        set_sentry_run_context(run_id=base_cfg.telemetry.run_id)
     workspace_dir = base_cfg.workspace_dir
     os.environ["WORKSPACE_DIR"] = str(workspace_dir)
     apply_log_level(level_name=str(base_cfg.log_level))
