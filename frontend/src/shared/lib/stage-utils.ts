@@ -83,7 +83,7 @@ export function stageLabel(stageId: string): string {
   if (match && match[1]) {
     return STAGE_LABELS[match[1]] ?? `Stage ${match[1]}`;
   }
-  
+
   // Fallback: just replace underscore with space
   return stageId.replace(/_/g, " ");
 }
@@ -150,4 +150,3 @@ export function getSummaryText(summary: SubstageSummary): string {
   }
   return JSON.stringify(summary.summary, null, 2);
 }
-

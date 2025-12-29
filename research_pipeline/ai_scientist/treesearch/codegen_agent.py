@@ -22,6 +22,7 @@ from ai_scientist.llm import structured_query_with_schema
 from .gpu_manager import GPUSpec
 from .interpreter import ExecutionResult
 from .journal import Node
+from .stage_identifiers import StageIdentifier
 from .types import PromptType
 from .utils.config import Config
 from .utils.response import wrap_code
@@ -69,7 +70,7 @@ class MinimalAgent:
         self,
         task_desc: str,
         cfg: Config,
-        stage_name: str,
+        stage_identifier: StageIdentifier,
         gpu_id: int | None = None,
         gpu_spec: GPUSpec | None = None,
         memory_summary: str | None = None,
@@ -81,7 +82,11 @@ class MinimalAgent:
         self.gpu_id = gpu_id
         self.gpu_spec = gpu_spec
         self.evaluation_metrics = evaluation_metrics
-        self.stage_name = stage_name
+        self.stage_identifier = stage_identifier
+
+    @property
+    def stage_name(self) -> str:
+        return self.stage_identifier.prefixed_name
 
     @property
     def _prompt_environment(self) -> dict[str, str]:

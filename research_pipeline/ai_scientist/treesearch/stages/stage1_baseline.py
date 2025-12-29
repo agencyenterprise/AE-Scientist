@@ -5,6 +5,7 @@ from ai_scientist.llm import structured_query_with_schema
 
 from ..codegen_agent import MinimalAgent
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Stage1Baseline(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "initial_implementation"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE1.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Focus on getting basic working implementation\n"
         "- Use a dataset appropriate to the experiment\n"
@@ -135,3 +136,22 @@ class Stage1Baseline(Stage):
 
     def evaluate_stage_completion(self) -> tuple[bool, str]:
         return Stage1Baseline.compute_stage_completion(journal=self._context.journal)
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        total_nodes = len(journal.nodes)
+        good_nodes = len(journal.good_nodes)
+        logger.info(
+            "Stage 1 skip evaluation: total_nodes=%s good_nodes=%s",
+            total_nodes,
+            good_nodes,
+        )
+        if journal.good_nodes:
+            reason = "Stage 1 has at least one working implementation."
+            logger.info("Stage 1 skip allowed: %s", reason)
+            self._set_skip_state(can_skip=True, reason=reason)
+            return
+        reason = "Produce a working baseline implementation before skipping."
+        logger.info("Stage 1 skip blocked: %s", reason)
+        self._set_skip_state(can_skip=False, reason=reason)

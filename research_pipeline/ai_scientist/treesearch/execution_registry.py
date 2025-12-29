@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import logging
 import threading
 import time
 from dataclasses import dataclass
 from multiprocessing.managers import DictProxy
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Tuple
 
 if TYPE_CHECKING:
     from .journal import Node
@@ -19,6 +17,7 @@ logger = logging.getLogger(__name__)
 class ExecutionEntry:
     node_id: str
     node: Optional["Node"]
+    stage_name: Optional[str]
     status: RegistryStatus = "running"
     payload: Optional[str] = None
 
@@ -39,19 +38,23 @@ def get_shared_pid_state() -> DictProxy | None:
     return _shared_pid_state
 
 
-def register_execution(*, execution_id: str, node: Optional["Node"]) -> None:
+def register_execution(
+    *, execution_id: str, node: Optional["Node"], stage_name: Optional[str]
+) -> None:
     """Register a new execution with the controller."""
     with _lock:
         _entries[execution_id] = ExecutionEntry(
             node_id=node.id if node is not None else execution_id,
             node=node,
+            stage_name=stage_name,
             status="running",
             payload=None,
         )
     logger.info(
-        "Registered execution_id=%s for node=%s (feedback_pending=%s)",
+        "Registered execution_id=%s for node=%s stage=%s (feedback_pending=%s)",
         execution_id,
         node.id if node is not None else "standalone",
+        stage_name or "unknown",
         bool(node.user_feedback_pending) if node is not None else False,
     )
 
@@ -152,6 +155,28 @@ def mark_terminated(*, execution_id: str, payload: str) -> Optional["Node"]:
     return node
 
 
+def flag_skip_pending(*, execution_id: str, reason: str) -> None:
+    """Mark an execution as pending skip so workers can exit before running code."""
+    with _lock:
+        entry = _entries.get(execution_id)
+        if entry is None:
+            logger.debug(
+                "flag_skip_pending called for unknown execution_id=%s; ignoring.",
+                execution_id,
+            )
+            return
+        entry.status = "terminated"
+        entry.payload = reason
+    shared = _shared_pid_state
+    if shared is not None:
+        shared_entry = shared.get(execution_id) or {}
+        shared_entry["skip_pending"] = True
+        shared_entry["payload"] = reason
+        shared_entry["terminated"] = True
+        shared[execution_id] = shared_entry
+    logger.info("Flagged skip pending for execution_id=%s", execution_id)
+
+
 def get_termination_payload(execution_id: str) -> Optional[str]:
     """
     Retrieve the stored termination payload for an execution, if any.
@@ -181,6 +206,7 @@ def get_entry(execution_id: str) -> Optional[ExecutionEntry]:
         return ExecutionEntry(
             node_id=entry.node_id,
             node=entry.node,
+            stage_name=entry.stage_name,
             status=entry.status,
             payload=entry.payload,
         )
@@ -214,6 +240,18 @@ def has_active_execution(execution_id: str) -> bool:
         is_active = entry is not None and entry.status == "running"
     logger.debug("has_active_execution(%s) -> %s", execution_id, is_active)
     return is_active
+
+
+def list_active_executions(*, stage_name: Optional[str] = None) -> list[str]:
+    """Return IDs of executions that are currently running, optionally filtered by stage."""
+    with _lock:
+        active = [
+            exec_id
+            for exec_id, entry in _entries.items()
+            if entry.status == "running" and (stage_name is None or entry.stage_name == stage_name)
+        ]
+    logger.debug("list_active_executions(stage_name=%s) -> %s", stage_name, len(active))
+    return active
 
 
 def begin_termination(
@@ -263,3 +301,16 @@ def is_terminated(execution_id: str) -> bool:
     if not shared_entry:
         return False
     return bool(shared_entry.get("terminated"))
+
+
+def is_skip_pending(execution_id: str) -> Tuple[bool, Optional[str]]:
+    shared = _shared_pid_state
+    if shared is None:
+        return False, None
+    entry = shared.get(execution_id)
+    if not entry:
+        return False, None
+    if entry.get("skip_pending"):
+        reason = entry.get("payload")
+        return True, str(reason) if reason is not None else None
+    return False, None

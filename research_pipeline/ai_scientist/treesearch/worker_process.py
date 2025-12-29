@@ -19,6 +19,7 @@ from .gpu_manager import GPUSpec, get_gpu_specs
 from .interpreter import ExecutionResult, Interpreter
 from .journal import Node
 from .plotting import analyze_plots_with_vlm, generate_plotting_code
+from .stage_identifiers import StageIdentifier
 from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import HyperparamTuningIdea, Stage2Tuning
 from .stages.stage4_ablation import AblationIdea, Stage4Ablation
@@ -82,10 +83,10 @@ def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[str, str]:
     return str(workspace_path), str(working_dir_path)
 
 
-def _should_run_plotting_and_vlm(*, stage_name: str) -> bool:
+def _should_run_plotting_and_vlm(*, stage_identifier: StageIdentifier) -> bool:
     """Return True if plotting + VLM analysis should run for this stage."""
     # Skip plotting and VLM for Stage 1 and Stage 2; only run for later stages
-    return not (stage_name.startswith("1_") or stage_name.startswith("2_"))
+    return stage_identifier not in (StageIdentifier.STAGE1, StageIdentifier.STAGE2)
 
 
 def _configure_gpu_for_worker(*, gpu_id: int | None) -> GPUSpec | None:
@@ -141,7 +142,7 @@ def _create_worker_agent(
     gpu_spec: GPUSpec | None,
     memory_summary: str,
     evaluation_metrics: str,
-    stage_name: str,
+    stage_identifier: StageIdentifier,
 ) -> MinimalAgent:
     return MinimalAgent(
         task_desc=task_desc,
@@ -150,7 +151,7 @@ def _create_worker_agent(
         gpu_spec=gpu_spec,
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
-        stage_name=stage_name,
+        stage_identifier=stage_identifier,
     )
 
 
@@ -169,6 +170,17 @@ def _load_parent_node(*, node_data: dict[str, object] | None) -> Node | None:
     return None
 
 
+def _abort_if_skip_requested(*, execution_id: str) -> None:
+    skip_pending, reason = execution_registry.is_skip_pending(execution_id)
+    if skip_pending:
+        logger.info(
+            "Skip pending for execution_id=%s (reason=%s); aborting before code generation.",
+            execution_id,
+            reason,
+        )
+        raise ExecutionTerminatedError(execution_id=execution_id, exec_time=0.0)
+
+
 def _create_child_node(
     *,
     worker_agent: MinimalAgent,
@@ -179,6 +191,7 @@ def _create_child_node(
     event_callback: Callable[[BaseEvent], None],
     execution_id: str,
 ) -> Node:
+    _abort_if_skip_requested(execution_id=execution_id)
     if seed_eval:
         assert parent_node is not None, "parent_node must be provided for seed evaluation"
         event_callback(RunLogEvent(message="Running multi-seed evaluation", level="info"))
@@ -292,6 +305,7 @@ def _execute_experiment(
     stage_name: str,
     execution_id: str,
 ) -> ExecutionResult:
+    _abort_if_skip_requested(execution_id=execution_id)
     logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
     logger.debug("Starting first interpreter: executing experiment code")
     event_callback(RunLogEvent(message="Executing experiment code on GPU...", level="info"))
@@ -415,11 +429,7 @@ def _select_plotting_code(
         return parent_node.plot_code or ""
 
     plot_code_from_prev_stage: str | None
-    if (
-        worker_agent.stage_name
-        and worker_agent.stage_name.startswith("4_")
-        and best_stage3_plot_code
-    ):
+    if worker_agent.stage_identifier is StageIdentifier.STAGE4 and best_stage3_plot_code:
         plot_code_from_prev_stage = best_stage3_plot_code
     else:
         plot_code_from_prev_stage = None
@@ -806,7 +816,7 @@ def process_node(
     cfg: AppConfig,
     evaluation_metrics: str,
     memory_summary: str,
-    stage_name: str,
+    stage_identifier: StageIdentifier,
     seed_eval: bool,
     event_callback: Callable[[BaseEvent], None],
     gpu_id: Optional[int] = None,
@@ -823,6 +833,7 @@ def process_node(
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
 
     parent_node = _load_parent_node(node_data=node_data)
+    stage_name = stage_identifier.prefixed_name
     logger.info(
         "Worker process %s handling execution_id=%s stage=%s (parent_node=%s, user_feedback=%s)",
         process_id,
@@ -839,7 +850,7 @@ def process_node(
         gpu_spec=gpu_spec,
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
-        stage_name=stage_name,
+        stage_identifier=stage_identifier,
     )
     parent_feedback = parent_node.user_feedback_payload if parent_node else None
     logger.info(
@@ -863,6 +874,7 @@ def process_node(
             seed_eval,
             stage_name,
         )
+        _abort_if_skip_requested(execution_id=execution_id)
         child_node = _create_child_node(
             worker_agent=worker_agent,
             parent_node=parent_node,
@@ -884,6 +896,7 @@ def process_node(
         terminated_by_user = False
         failure_reason: str | None = None
         try:
+            _abort_if_skip_requested(execution_id=execution_id)
             exec_result = _execute_experiment(
                 child_node=child_node,
                 cfg=cfg,
@@ -961,7 +974,7 @@ def process_node(
             )
 
             if not child_node.is_buggy:
-                if _should_run_plotting_and_vlm(stage_name=worker_agent.stage_name):
+                if _should_run_plotting_and_vlm(stage_identifier=worker_agent.stage_identifier):
                     _run_plotting_and_vlm(
                         worker_agent=worker_agent,
                         child_node=child_node,

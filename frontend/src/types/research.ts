@@ -147,6 +147,15 @@ export interface BestNodeSelectionApi {
   created_at: string;
 }
 
+export interface StageSkipWindowApi {
+  id: number;
+  stage: string;
+  opened_at: string;
+  opened_reason: string | null;
+  closed_at: string | null;
+  closed_reason: string | null;
+}
+
 export interface ResearchRunDetailsApi {
   run: ResearchRunInfoApi;
   stage_progress: StageProgressApi[];
@@ -157,6 +166,7 @@ export interface ResearchRunDetailsApi {
   paper_generation_progress: PaperGenerationEventApi[];
   tree_viz: TreeVizItemApi[];
   best_node_selections?: BestNodeSelectionApi[];
+  stage_skip_windows?: StageSkipWindowApi[];
   code_execution?: ResearchRunCodeExecution | null;
 }
 
@@ -284,6 +294,22 @@ export interface BestNodeSelection {
   created_at: string;
 }
 
+export interface StageSkipWindow {
+  id: number;
+  stage: string;
+  opened_at: string;
+  opened_reason: string | null;
+  closed_at: string | null;
+  closed_reason: string | null;
+}
+
+export interface StageSkipWindowUpdate {
+  stage: string;
+  state: "opened" | "closed";
+  timestamp: string;
+  reason?: string | null;
+}
+
 export interface ResearchRunDetails {
   run: ResearchRunInfo;
   stage_progress: StageProgress[];
@@ -294,6 +320,7 @@ export interface ResearchRunDetails {
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];
   best_node_selections?: BestNodeSelection[];
+  stage_skip_windows?: StageSkipWindow[];
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
   code_execution?: ResearchRunCodeExecution | null;

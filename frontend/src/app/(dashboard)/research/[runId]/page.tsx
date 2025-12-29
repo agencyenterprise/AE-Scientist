@@ -44,6 +44,8 @@ export default function ResearchRunDetailPage() {
     stopPending,
     stopError,
     handleStopRun,
+    stageSkipState,
+    handleSkipStage,
   } = useResearchRunDetails({ runId });
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
@@ -182,9 +184,11 @@ export default function ResearchRunDetailPage() {
               substageSummaries={substage_summaries}
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
+              stageSkipState={stageSkipState}
               currentCodeExecution={code_execution ?? null}
               runStatus={run.status}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
+              onSkipStage={conversationId ? handleSkipStage : undefined}
               className="max-h-[600px] overflow-y-auto"
             />
           </div>

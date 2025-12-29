@@ -38,7 +38,8 @@ from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
-from app.models.sse import ResearchRunSubstageCompletedEvent
+from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
+from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -137,6 +138,18 @@ class BestNodeSelectionEvent(BaseModel):
 class BestNodeSelectionPayload(BaseModel):
     run_id: str
     event: BestNodeSelectionEvent
+
+
+class StageSkipWindowEventModel(BaseModel):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: str
+    reason: Optional[str] = None
+
+
+class StageSkipWindowPayload(BaseModel):
+    run_id: str
+    event: StageSkipWindowEventModel
 
 
 class TreeVizStoredEvent(BaseModel):
@@ -417,6 +430,41 @@ def ingest_best_node_selection(
         event=SSEBestNodeEvent(
             type="best_node_selection",
             data=best_node,
+        ),
+    )
+
+
+@router.post("/stage-skip-window", status_code=status.HTTP_204_NO_CONTENT)
+def ingest_stage_skip_window(
+    payload: StageSkipWindowPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = get_database()
+    run = db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    logger.info(
+        "RP stage skip window event: run=%s stage=%s state=%s reason=%s",
+        payload.run_id,
+        event.stage,
+        event.state,
+        event.reason,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSEStageSkipWindowEvent(
+                type="stage_skip_window",
+                data=ResearchRunStageSkipWindowUpdate(
+                    stage=event.stage,
+                    state=event.state,
+                    timestamp=event.timestamp,
+                    reason=event.reason,
+                ),
+            ),
         ),
     )
 

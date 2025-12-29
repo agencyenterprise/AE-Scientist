@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
@@ -34,7 +35,7 @@ class SupportsStage4Agent(Protocol):
 
 
 class Stage4Ablation(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "ablation_studies"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE4.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Conduct systematic component analysis that reveals the contribution of each part\n"
         "- Use the same datasets you used from the previous stage"
@@ -140,8 +141,10 @@ class Stage4Ablation(Stage):
         return AblationIdea(name="add one more layer", description="add one more layer")
 
     @staticmethod
-    def update_ablation_state(*, stage_name: str, result_node: Node, state_set: set[str]) -> None:
-        if not stage_name or not stage_name.startswith("4_"):
+    def update_ablation_state(
+        *, stage_identifier: StageIdentifier, result_node: Node, state_set: set[str]
+    ) -> None:
+        if stage_identifier is not StageIdentifier.STAGE4:
             return
         ablation_name = result_node.ablation_name
         if ablation_name is None:
@@ -210,3 +213,25 @@ class Stage4Ablation(Stage):
 
     def evaluate_stage_completion(self) -> tuple[bool, str]:
         return Stage4Ablation.compute_stage_completion()
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        good_nodes = len(journal.good_nodes)
+        logger.info(
+            "Stage 4 skip evaluation: total_nodes=%s good_nodes=%s",
+            len(journal.nodes),
+            good_nodes,
+        )
+        best_node = journal.get_best_node()
+        if best_node and not best_node.is_buggy:
+            reason = "Stage 4 has at least one ablation-ready node."
+            logger.info("Stage 4 skip allowed: %s", reason)
+            self._set_skip_state(can_skip=True, reason=reason)
+            return
+        if best_node and best_node.is_buggy:
+            reason = "Best node is buggy; fix execution before skipping."
+        else:
+            reason = "Run at least one ablation node before skipping final stage."
+        logger.info("Stage 4 skip blocked: %s", reason)
+        self._set_skip_state(can_skip=False, reason=reason)

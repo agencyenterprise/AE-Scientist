@@ -1,7 +1,5 @@
 """Helpers for working with bearer auth tokens."""
 
-from __future__ import annotations
-
 from typing import Optional
 
 

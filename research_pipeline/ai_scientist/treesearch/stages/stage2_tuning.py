@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
@@ -34,7 +35,7 @@ class SupportsStage2Agent(Protocol):
 
 
 class Stage2Tuning(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "baseline_tuning"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE2.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"
@@ -147,8 +148,10 @@ class Stage2Tuning(Stage):
         )
 
     @staticmethod
-    def update_hyperparam_state(*, stage_name: str, result_node: Node, state_set: set[str]) -> None:
-        if not stage_name or not stage_name.startswith("2_"):
+    def update_hyperparam_state(
+        *, stage_identifier: StageIdentifier, result_node: Node, state_set: set[str]
+    ) -> None:
+        if stage_identifier is not StageIdentifier.STAGE2:
             return
         hyperparam_name = result_node.hyperparam_name
         if hyperparam_name is None:
@@ -277,3 +280,28 @@ class Stage2Tuning(Stage):
         return Stage2Tuning.compute_stage_completion(
             journal=self._context.journal, cfg=self._context.cfg
         )
+
+    def reset_skip_state(self) -> None:
+        super().reset_skip_state()
+        journal = self._context.journal
+        best_node = journal.get_best_node()
+        total_nodes = len(journal.nodes)
+        best_node_id = best_node.id[:8] if best_node else "None"
+        logger.info(
+            "Stage 2 skip evaluation: total_nodes=%s best_node=%s good_nodes=%s",
+            total_nodes,
+            best_node_id,
+            len(journal.good_nodes),
+        )
+        if not best_node:
+            reason = "Stage 2 skipping requires a best node."
+            logger.info("Stage 2 skip blocked: %s", reason)
+            self._set_skip_state(can_skip=False, reason=reason)
+            return
+        reason = "Stage 2 has a working node."
+        logger.info(
+            "Stage 2 skip allowed: %s (best_node=%s)",
+            reason,
+            best_node_id,
+        )
+        self._set_skip_state(can_skip=True, reason=reason)

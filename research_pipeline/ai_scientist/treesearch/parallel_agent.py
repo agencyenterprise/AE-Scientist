@@ -29,6 +29,8 @@ from .codegen_agent import PlanAndCodeSchema
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
+from .stage_identifiers import StageIdentifier
+from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
@@ -63,7 +65,7 @@ class ParallelAgent:
         task_desc: str,
         cfg: Config,
         journal: Journal,
-        stage_name: str,
+        stage_identifier: StageIdentifier,
         best_stage3_node: Node | None,
         best_stage2_node: Node | None,
         best_stage1_node: Node | None,
@@ -73,7 +75,8 @@ class ParallelAgent:
         self.task_desc = task_desc
         self.cfg = cfg
         self.journal = journal
-        self.stage_name = stage_name
+        self.stage_identifier = stage_identifier
+        self.stage_skip = StageSkipCoordinator(stage_identifier=stage_identifier)
         self.event_callback = event_callback
         # Best nodes carried from previous stages to seed new work
         self.best_stage1_node = best_stage1_node  # to initialize hyperparam tuning (stage 2)
@@ -115,6 +118,54 @@ class ParallelAgent:
         }
         self._shared_pid_state = execution_registry.get_shared_pid_state()
         self._future_execution_ids: dict[Future, str] = {}
+        self._future_process_ids: dict[Future, str] = {}
+
+    @property
+    def stage_name(self) -> str:
+        return self.stage_identifier.prefixed_name
+
+    def abort_active_executions(self, *, reason: str) -> None:
+        pending_ids = list(self._future_execution_ids.values())
+        if not pending_ids:
+            logger.debug(
+                "No active executions to abort for stage %s (reason=%s)",
+                self.stage_name,
+                reason,
+            )
+            return
+        self.stage_skip.flag_executions_for_skip(pending_ids, reason=reason)
+
+    def _cancel_pending_futures(self, futures: list[Future]) -> None:
+        if not futures:
+            return
+        for future in futures:
+            execution_id = (
+                self._future_execution_ids.pop(future)
+                if future in self._future_execution_ids
+                else None
+            )
+            process_id = (
+                self._future_process_ids.pop(future) if future in self._future_process_ids else None
+            )
+            if not future.done():
+                if future.cancel():
+                    logger.info(
+                        "Cancelled pending future for execution_id=%s (stage=%s)",
+                        execution_id,
+                        self.stage_name,
+                    )
+                else:
+                    logger.debug(
+                        "Pending future could not be cancelled (execution_id=%s stage=%s)",
+                        execution_id,
+                        self.stage_name,
+                    )
+            if execution_id:
+                execution_registry.clear_execution(execution_id)
+            if self.gpu_manager is not None and process_id is not None:
+                if process_id in self.gpu_manager.gpu_assignments:
+                    self.gpu_manager.release_gpu(process_id)
+                    logger.info("Released GPU for process %s due to skip", process_id)
 
     def _handle_gpu_shortage(self, *, available_gpus: int, required_gpus: int) -> None:
         message = (
@@ -248,7 +299,11 @@ class ParallelAgent:
                 seed,
                 node.id,
             )
-            execution_registry.register_execution(execution_id=execution_id, node=node)
+            execution_registry.register_execution(
+                execution_id=execution_id,
+                node=node,
+                stage_name=self.stage_name,
+            )
             future = executor.submit(
                 process_node,
                 node_data=node_data,
@@ -257,7 +312,7 @@ class ParallelAgent:
                 gpu_id=gpu_id,
                 memory_summary=memory_summary,
                 evaluation_metrics=self.evaluation_metrics,
-                stage_name=self.stage_name,
+                stage_identifier=self.stage_identifier,
                 new_ablation_idea=new_ablation_idea,
                 new_hyperparam_idea=new_hyperparam_idea,
                 best_stage3_plot_code=best_stage3_plot_code,
@@ -331,6 +386,7 @@ class ParallelAgent:
                 level="info",
             )
         )
+        stage_identifier = self.stage_identifier
         # For Stage 2/4 we generate ideas on main process to avoid duplicates;
         # for Stage 1/3 generation happens in workers.
         nodes_to_process: list[Optional[Node]] = []
@@ -414,7 +470,7 @@ class ParallelAgent:
 
             # Stage-specific selection: Ablation Studies
             logger.debug(f"self.stage_name: {self.stage_name}")
-            if self.stage_name and self.stage_name.startswith("4_"):
+            if stage_identifier is StageIdentifier.STAGE4:
                 self.event_callback(
                     RunLogEvent(
                         message=f"🧪 Running ablation study variation #{len(self.journal) + 1}",
@@ -424,7 +480,7 @@ class ParallelAgent:
                 nodes_to_process.append(self.best_stage3_node)
                 continue
             # Stage-specific selection: Hyperparameter Tuning
-            elif self.stage_name and self.stage_name.startswith("2_"):
+            elif stage_identifier is StageIdentifier.STAGE2:
                 nodes_to_process.append(self.best_stage1_node)
                 continue
             else:  # Stage 1, 3: normal best-first search
@@ -469,6 +525,8 @@ class ParallelAgent:
 
     def step(self) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
+        self.stage_skip.ensure_no_skip_pending()
+        stage_identifier = self.stage_identifier
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
         logger.debug(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")
@@ -532,206 +590,226 @@ class ParallelAgent:
 
         executor = self._ensure_executor()
         futures: list[Future] = []
-        for node, node_data in zip(nodes_to_process, node_data_list):
-            gpu_id = None
-            if self.gpu_manager is not None:
-                try:
-                    # Get current process ID for GPU assignment
-                    process_id = f"worker_{len(futures)}"
-                    gpu_id = self.gpu_manager.acquire_gpu(process_id)
-                    logger.info(f"Assigned GPU {gpu_id} to process {process_id}")
-                except RuntimeError as e:
-                    logger.warning(f"Could not acquire GPU: {e}. Running on CPU")
+        try:
+            for node, node_data in zip(nodes_to_process, node_data_list):
+                self.stage_skip.ensure_no_skip_pending()
+                gpu_id = None
+                process_id = f"worker_{len(futures)}"
+                if self.gpu_manager is not None:
+                    try:
+                        gpu_id = self.gpu_manager.acquire_gpu(process_id)
+                        logger.info(f"Assigned GPU {gpu_id} to process {process_id}")
+                    except RuntimeError as e:
+                        logger.warning(f"Could not acquire GPU: {e}. Running on CPU")
 
-            is_not_buggy = (
-                node_data is not None
-                and isinstance(node_data, dict)
-                and node_data.get("is_buggy") is False
-            )
-            if self.stage_name and self.stage_name.startswith("2_") and is_not_buggy:
-                base_stage1_code = self.best_stage1_node.code if self.best_stage1_node else ""
-                tried_list = list(self._hyperparam_tuning_state["tried_hyperparams"])
-                new_hyperparam_idea = Stage2Tuning.propose_next_hyperparam_idea(
-                    base_stage1_code=base_stage1_code,
-                    tried=tried_list,
-                    model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temperature,
+                is_not_buggy = (
+                    node_data is not None
+                    and isinstance(node_data, dict)
+                    and node_data.get("is_buggy") is False
                 )
-                self._hyperparam_tuning_state["tried_hyperparams"].add(new_hyperparam_idea.name)
-                new_ablation_idea = None
-            elif self.stage_name and self.stage_name.startswith("4_") and is_not_buggy:
-                base_stage3_code = self.best_stage3_node.code if self.best_stage3_node else ""
-                completed_list = list(self._ablation_state["completed_ablations"])
-                new_ablation_idea = Stage4Ablation.propose_next_ablation_idea(
-                    base_stage3_code=base_stage3_code,
-                    completed=completed_list,
-                    model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temperature,
-                )
-                self._ablation_state["completed_ablations"].add(new_ablation_idea.name)
-                new_hyperparam_idea = None
-            else:
-                new_ablation_idea = None
-                new_hyperparam_idea = None
-
-            best_stage3_plot_code = (
-                self.best_stage3_node.plot_code if self.best_stage3_node else None
-            )
-            seed_eval = False
-            execution_id = uuid.uuid4().hex
-            node_label = node.id if node else "draft"
-            logger.info(
-                "ParallelAgent registering execution %s for node %s (stage=%s, feedback=%s)",
-                execution_id,
-                node_label,
-                self.stage_name,
-                bool(node.user_feedback_payload) if node else False,
-            )
-            execution_registry.register_execution(execution_id=execution_id, node=node)
-            future = executor.submit(
-                process_node,
-                node_data=node_data,
-                task_desc=self.task_desc,
-                cfg=self.cfg,
-                gpu_id=gpu_id,
-                memory_summary=memory_summary,
-                evaluation_metrics=self.evaluation_metrics,
-                stage_name=self.stage_name,
-                new_ablation_idea=new_ablation_idea,
-                new_hyperparam_idea=new_hyperparam_idea,
-                best_stage3_plot_code=best_stage3_plot_code,
-                seed_eval=seed_eval,
-                event_callback=self.event_callback,
-                execution_id=execution_id,
-            )
-            futures.append(future)
-            self._future_execution_ids[future] = execution_id
-
-        # Collect results as they complete and update journal/state
-        logger.debug("Waiting for results")
-        for i, future in enumerate(futures):
-            current_execution_id: str | None
-            current_execution_id = (
-                self._future_execution_ids.pop(future)
-                if future in self._future_execution_ids
-                else None
-            )
-            try:
-                logger.debug("About to get result from future")
-                result_data = future.result(timeout=self.timeout)
-                if "metric" in result_data:
-                    logger.debug(f"metric type: {type(result_data['metric'])}")
-                    logger.debug(f"metric contents: {result_data['metric']}")
-
-                # Create node and restore relationships using journal.
-                # Journal acts as a database to look up a parent node,
-                # and add the result node as a child.
-                result_node = Node.from_dict(result_data, self.journal)
-                if current_execution_id is not None:
-                    entry = execution_registry.get_entry(current_execution_id)
-                    if entry and entry.status == "terminated" and entry.payload:
-                        result_node.is_user_feedback = True
-                        result_node.user_feedback_payload = entry.payload
-                        result_node.user_feedback_pending = True
-                        logger.info(
-                            "Result node %s inherited termination payload (%s chars) from execution %s.",
-                            result_node.id[:8],
-                            len(entry.payload),
-                            current_execution_id,
-                        )
-                logger.debug("Investigating if result node has metric")
-                logger.debug(str(result_node.metric))
-                # Update hyperparam tuning state if in Stage 2
-                Stage2Tuning.update_hyperparam_state(
-                    stage_name=self.stage_name,
-                    result_node=result_node,
-                    state_set=self._hyperparam_tuning_state["tried_hyperparams"],
-                )
-                # Update ablation state if in Stage 4
-                Stage4Ablation.update_ablation_state(
-                    stage_name=self.stage_name,
-                    result_node=result_node,
-                    state_set=self._ablation_state["completed_ablations"],
-                )
-
-                # Add node to journal's list and assign its step number
-                self.journal.append(result_node)
-                logger.debug("Added result node to journal")
-
-                if result_node.is_buggy:
-                    self.event_callback(
-                        RunLogEvent(
-                            message=f"Node {i + 1}/{len(futures)} completed (buggy, will retry)",
-                            level="info",
-                        )
+                if stage_identifier is StageIdentifier.STAGE2 and is_not_buggy:
+                    base_stage1_code = self.best_stage1_node.code if self.best_stage1_node else ""
+                    tried_list = list(self._hyperparam_tuning_state["tried_hyperparams"])
+                    new_hyperparam_idea = Stage2Tuning.propose_next_hyperparam_idea(
+                        base_stage1_code=base_stage1_code,
+                        tried=tried_list,
+                        model=self.cfg.agent.code.model,
+                        temperature=self.cfg.agent.code.temperature,
                     )
+                    self._hyperparam_tuning_state["tried_hyperparams"].add(new_hyperparam_idea.name)
+                    new_ablation_idea = None
+                elif stage_identifier is StageIdentifier.STAGE4 and is_not_buggy:
+                    base_stage3_code = self.best_stage3_node.code if self.best_stage3_node else ""
+                    completed_list = list(self._ablation_state["completed_ablations"])
+                    new_ablation_idea = Stage4Ablation.propose_next_ablation_idea(
+                        base_stage3_code=base_stage3_code,
+                        completed=completed_list,
+                        model=self.cfg.agent.code.model,
+                        temperature=self.cfg.agent.code.temperature,
+                    )
+                    self._ablation_state["completed_ablations"].add(new_ablation_idea.name)
+                    new_hyperparam_idea = None
                 else:
-                    metric_str = str(result_node.metric)[:50] if result_node.metric else "N/A"
+                    new_ablation_idea = None
+                    new_hyperparam_idea = None
+
+                best_stage3_plot_code = (
+                    self.best_stage3_node.plot_code if self.best_stage3_node else None
+                )
+                seed_eval = False
+                execution_id = uuid.uuid4().hex
+                node_label = node.id if node else "draft"
+                logger.info(
+                    "ParallelAgent registering execution %s for node %s (stage=%s, feedback=%s)",
+                    execution_id,
+                    node_label,
+                    self.stage_name,
+                    bool(node.user_feedback_payload) if node else False,
+                )
+                execution_registry.register_execution(
+                    execution_id=execution_id,
+                    node=node,
+                    stage_name=self.stage_name,
+                )
+                future = executor.submit(
+                    process_node,
+                    node_data=node_data,
+                    task_desc=self.task_desc,
+                    cfg=self.cfg,
+                    gpu_id=gpu_id,
+                    memory_summary=memory_summary,
+                    evaluation_metrics=self.evaluation_metrics,
+                    stage_identifier=self.stage_identifier,
+                    new_ablation_idea=new_ablation_idea,
+                    new_hyperparam_idea=new_hyperparam_idea,
+                    best_stage3_plot_code=best_stage3_plot_code,
+                    seed_eval=seed_eval,
+                    event_callback=self.event_callback,
+                    execution_id=execution_id,
+                )
+                futures.append(future)
+                self._future_execution_ids[future] = execution_id
+                self._future_process_ids[future] = process_id
+
+            # Collect results as they complete and update journal/state
+            logger.debug("Waiting for results")
+            for idx, future in enumerate(futures):
+                self.stage_skip.ensure_no_skip_pending()
+                current_execution_id: str | None
+                current_execution_id = (
+                    self._future_execution_ids.pop(future)
+                    if future in self._future_execution_ids
+                    else None
+                )
+                try:
+                    logger.debug("About to get result from future")
+                    result_data = future.result(timeout=self.timeout)
+
+                    if "metric" in result_data:
+                        logger.debug(f"metric type: {type(result_data['metric'])}")
+                        logger.debug(f"metric contents: {result_data['metric']}")
+
+                    result_node = Node.from_dict(result_data, self.journal)
+                    if current_execution_id is not None:
+                        entry = execution_registry.get_entry(current_execution_id)
+                        if entry and entry.status == "terminated" and entry.payload:
+                            result_node.is_user_feedback = True
+                            result_node.user_feedback_payload = entry.payload
+                            result_node.user_feedback_pending = True
+                            logger.info(
+                                "Result node %s inherited termination payload (%s chars) from execution %s.",
+                                result_node.id[:8],
+                                len(entry.payload),
+                                current_execution_id,
+                            )
+                    logger.debug("Investigating if result node has metric")
+                    logger.debug(str(result_node.metric))
+                    Stage2Tuning.update_hyperparam_state(
+                        stage_identifier=stage_identifier,
+                        result_node=result_node,
+                        state_set=self._hyperparam_tuning_state["tried_hyperparams"],
+                    )
+                    Stage4Ablation.update_ablation_state(
+                        stage_identifier=stage_identifier,
+                        result_node=result_node,
+                        state_set=self._ablation_state["completed_ablations"],
+                    )
+
+                    self.journal.append(result_node)
+                    logger.debug("Added result node to journal")
+
+                    if result_node.is_buggy:
+                        self.event_callback(
+                            RunLogEvent(
+                                message=f"Node {idx + 1}/{len(futures)} completed (buggy, will retry)",
+                                level="info",
+                            )
+                        )
+                    else:
+                        metric_str = str(result_node.metric)[:50] if result_node.metric else "N/A"
+                        self.event_callback(
+                            RunLogEvent(
+                                message=(
+                                    f"Node {idx + 1}/{len(futures)} completed successfully "
+                                    f"(metric: {metric_str})"
+                                ),
+                                level="info",
+                            )
+                        )
+
+                except TimeoutError:
+                    logger.warning("Worker process timed out, couldn't get the result")
                     self.event_callback(
                         RunLogEvent(
-                            message=f"Node {i + 1}/{len(futures)} completed successfully (metric: {metric_str})",
-                            level="info",
+                            message=f"Node {idx + 1}/{len(futures)} timed out after {self.timeout}s",
+                            level="warn",
                         )
                     )
-
-            except TimeoutError:
-                logger.warning("Worker process timed out, couldn't get the result")
-                self.event_callback(
-                    RunLogEvent(
-                        message=f"Node {i + 1}/{len(futures)} timed out after {self.timeout}s",
-                        level="warn",
-                    )
-                )
-                self._handle_worker_timeout(future=future)
-            except ExecutionTerminatedError:
-                logger.info(
-                    "Execution %s was terminated intentionally; deferring node re-run.",
-                    current_execution_id,
-                )
-                self.event_callback(
-                    RunLogEvent(
-                        message=f"Node {i + 1}/{len(futures)} was terminated intentionally",
-                        level="info",
-                    )
-                )
-                continue
-            except ExecutionCrashedError as exc:
-                logger.error(
-                    "Execution %s crashed unexpectedly: %s",
-                    current_execution_id,
-                    exc,
-                )
-                self.event_callback(
-                    RunLogEvent(
-                        message=(
-                            f"Node {i + 1}/{len(futures)} crashed unexpectedly: {exc}. "
-                            "Marking as buggy."
-                        ),
-                        level="error",
-                    )
-                )
-                if current_execution_id is not None:
-                    entry = execution_registry.get_entry(current_execution_id)
-                    if entry and entry.node is not None:
-                        entry.node.is_buggy = True
-                continue
-            except Exception as e:
-                logger.exception(f"Error processing node: {str(e)}")
-
-                traceback.print_exc()
-                raise
-            finally:
-                if current_execution_id is not None:
+                    self._handle_worker_timeout(future=future)
+                except ExecutionTerminatedError:
                     logger.info(
-                        "ParallelAgent clearing execution %s after future completion",
+                        "Execution %s was terminated intentionally; deferring node re-run.",
                         current_execution_id,
                     )
-                    execution_registry.clear_execution(current_execution_id)
-                # Release GPU for this process if it was using one
-                process_id = f"worker_{i}"
-                if self.gpu_manager is not None and process_id in self.gpu_manager.gpu_assignments:
-                    self.gpu_manager.release_gpu(process_id)
-                    logger.info(f"Released GPU for process {process_id}")
+                    self.event_callback(
+                        RunLogEvent(
+                            message=f"Node {idx + 1}/{len(futures)} was terminated intentionally",
+                            level="info",
+                        )
+                    )
+                    continue
+                except ExecutionCrashedError as exc:
+                    logger.error(
+                        "Execution %s crashed unexpectedly: %s",
+                        current_execution_id,
+                        exc,
+                    )
+                    self.event_callback(
+                        RunLogEvent(
+                            message=(
+                                f"Node {idx + 1}/{len(futures)} crashed unexpectedly: {exc}. "
+                                "Marking as buggy."
+                            ),
+                            level="error",
+                        )
+                    )
+                    if current_execution_id is not None:
+                        entry = execution_registry.get_entry(current_execution_id)
+                        if entry and entry.node is not None:
+                            entry.node.is_buggy = True
+                    continue
+                except Exception as e:
+                    logger.exception(f"Error processing node: {str(e)}")
+                    traceback.print_exc()
+                    raise
+                finally:
+                    if current_execution_id is not None:
+                        logger.info(
+                            "ParallelAgent clearing execution %s after future completion",
+                            current_execution_id,
+                        )
+                        execution_registry.clear_execution(current_execution_id)
+                    completed_process_id = (
+                        self._future_process_ids.pop(future)
+                        if future in self._future_process_ids
+                        else None
+                    )
+                    if (
+                        self.gpu_manager is not None
+                        and completed_process_id is not None
+                        and completed_process_id in self.gpu_manager.gpu_assignments
+                    ):
+                        self.gpu_manager.release_gpu(completed_process_id)
+                        logger.info(f"Released GPU for process {completed_process_id}")
+        except SkipInProgressError as exc:
+            logger.info(
+                "Skip detected while processing stage %s inside ParallelAgent: %s",
+                self.stage_name,
+                exc.reason,
+            )
+            self.abort_active_executions(reason=exc.reason)
+            self._cancel_pending_futures(futures)
+            raise
 
     def __enter__(self) -> "ParallelAgent":
         return self

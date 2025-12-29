@@ -12,6 +12,7 @@ EventKind = Literal[
     "tree_viz_stored",
     "running_code",
     "run_completed",
+    "stage_skip_window",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
@@ -311,3 +312,34 @@ class RunCompletedEvent(BaseEvent):
                 "completed_at": self.completed_at.isoformat(),
             },
         )
+
+
+@dataclass(frozen=True)
+class StageSkipWindowEvent(BaseEvent):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: datetime
+    reason: Optional[str] = None
+
+    def type(self) -> str:
+        return "ai.run.stage_skip_window"
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "stage": self.stage,
+            "state": self.state,
+            "timestamp": self.timestamp.isoformat(),
+        }
+        if self.reason:
+            payload["reason"] = self.reason
+        return payload
+
+    def persistence_record(self) -> PersistenceRecord:
+        record: Dict[str, Any] = {
+            "stage": self.stage,
+            "state": self.state,
+            "timestamp": self.timestamp.isoformat(),
+        }
+        if self.reason:
+            record["reason"] = self.reason
+        return ("stage_skip_window", record)

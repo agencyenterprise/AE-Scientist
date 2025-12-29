@@ -25,6 +25,7 @@ from app.models import (
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
+    ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
     TreeVizItem,
@@ -45,6 +46,7 @@ from app.services.research_pipeline.runpod_manager import (
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     launch_research_pipeline_run,
+    request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
     terminate_pod,
     upload_runpod_artifacts_via_ssh,
@@ -86,6 +88,16 @@ class TerminateExecutionRequest(BaseModel):
 class TerminateExecutionResponse(BaseModel):
     execution_id: str
     status: Literal["terminating"]
+
+
+class SkipStageRequest(BaseModel):
+    stage: str | None = None
+    reason: str | None = None
+
+
+class SkipStageResponse(BaseModel):
+    status: Literal["pending"]
+    message: str
 
 
 class IdeaPayloadSource(Protocol):
@@ -424,6 +436,10 @@ def get_research_run_details(
         ResearchRunPaperGenerationProgress.from_db_record(event)
         for event in db.list_paper_generation_events(run_id=run_id)
     ]
+    stage_skip_windows = [
+        ResearchRunStageSkipWindow.from_db_record(record)
+        for record in db.list_stage_skip_windows(run_id=run_id)
+    ]
 
     return ResearchRunDetailsResponse(
         run=ResearchRunInfo.from_db_record(run),
@@ -436,6 +452,7 @@ def get_research_run_details(
         artifacts=artifacts,
         paper_generation_progress=paper_gen_events,
         tree_viz=tree_viz,
+        stage_skip_windows=stage_skip_windows,
     )
 
 
@@ -591,6 +608,70 @@ def terminate_code_execution(
     )
 
     return TerminateExecutionResponse(execution_id=execution_id, status="terminating")
+
+
+@router.post(
+    "/{conversation_id}/idea/research-run/{run_id}/skip-stage",
+    response_model=SkipStageResponse,
+)
+def skip_active_stage(
+    conversation_id: int,
+    run_id: str,
+    payload: SkipStageRequest,
+    request: Request,
+) -> SkipStageResponse:
+    """Request the running pipeline to skip the current stage."""
+    if conversation_id <= 0:
+        raise HTTPException(status_code=400, detail="conversation_id must be positive")
+
+    user = get_current_user(request)
+    db = get_database()
+
+    conversation = db.get_conversation_by_id(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this conversation")
+
+    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    if run.status != "running":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Run is {run.status}; skipping stages is only available while running.",
+        )
+    if not run.public_ip or not run.ssh_port:
+        raise HTTPException(
+            status_code=409,
+            detail="Run is missing management server access details.",
+        )
+
+    reason = payload.reason or (
+        f"Skip stage requested via dashboard (stage={payload.stage or 'active'})"
+    )
+    try:
+        request_stage_skip_via_ssh(host=run.public_ip, port=run.ssh_port, reason=reason)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="stage_skip_requested",
+        metadata={
+            "requested_by": user.email,
+            "stage": payload.stage,
+            "reason": reason,
+        },
+        occurred_at=datetime.now(timezone.utc),
+    )
+
+    logger.info("User %s requested stage skip for run %s", user.email, run_id)
+
+    return SkipStageResponse(status="pending", message="Stage skip request sent to pipeline.")
 
 
 @router.post(

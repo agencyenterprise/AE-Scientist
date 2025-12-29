@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/shared/lib/api-client";
+import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -16,6 +17,8 @@ import type {
   HwCostEstimateData,
   HwCostActualData,
   ResearchRunCodeExecution,
+  StageSkipWindow,
+  StageSkipWindowUpdate,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
@@ -34,6 +37,8 @@ interface UseResearchRunDetailsReturn {
   stopPending: boolean;
   stopError: string | null;
   handleStopRun: () => Promise<void>;
+  stageSkipState: StageSkipStateMap;
+  handleSkipStage: (stageSlug: string) => Promise<void>;
 }
 
 interface CodeExecutionCompletionPayload {
@@ -42,6 +47,13 @@ interface CodeExecutionCompletionPayload {
   exec_time: number;
   completed_at: string;
 }
+
+export interface StageSkipStateEntry {
+  reason: string | null;
+  updatedAt: string;
+}
+
+export type StageSkipStateMap = Record<string, StageSkipStateEntry>;
 
 /**
  * Hook that manages research run details state including SSE updates
@@ -58,20 +70,48 @@ export function useResearchRunDetails({
   const [hwCostPerHourCents, setHwCostPerHourCents] = useState<number | null>(null);
   const [stopPending, setStopPending] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [stageSkipState, setStageSkipState] = useState<StageSkipStateMap>({});
 
   // SSE callback handlers
-  const handleInitialData = useCallback((data: ResearchRunDetails) => {
-    setDetails(data);
-    setLoading(false);
-    setError(null);
-    if (data.hw_cost_estimate) {
-      setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
-      setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
-    }
-    if (data.hw_cost_actual) {
-      setHwActualCostCents(data.hw_cost_actual.hw_actual_cost_cents);
-    }
+  const syncStageSkipState = useCallback((windows: StageSkipWindow[] | undefined) => {
+    setStageSkipState(() => {
+      if (!windows) {
+        return {};
+      }
+      const next: StageSkipStateMap = {};
+      windows.forEach(window => {
+        if (window.closed_at) {
+          return;
+        }
+        const slug = extractStageSlug(window.stage);
+        if (!slug) {
+          return;
+        }
+        next[slug] = {
+          reason: window.opened_reason ?? null,
+          updatedAt: window.opened_at,
+        };
+      });
+      return next;
+    });
   }, []);
+
+  const handleInitialData = useCallback(
+    (data: ResearchRunDetails) => {
+      setDetails(data);
+      setLoading(false);
+      setError(null);
+      if (data.hw_cost_estimate) {
+        setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
+        setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
+      }
+      if (data.hw_cost_actual) {
+        setHwActualCostCents(data.hw_cost_actual.hw_actual_cost_cents);
+      }
+      syncStageSkipState(data.stage_skip_windows);
+    },
+    [syncStageSkipState]
+  );
 
   const handleStageProgress = useCallback((event: StageProgress) => {
     setDetails(prev =>
@@ -186,9 +226,7 @@ export function useResearchRunDetails({
             ? (metadata.start_deadline_at as string)
             : null;
         const errorMessage =
-          typeof metadata.error_message === "string"
-            ? (metadata.error_message as string)
-            : null;
+          typeof metadata.error_message === "string" ? (metadata.error_message as string) : null;
         if (!toStatus) {
           return;
         }
@@ -320,6 +358,25 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  const handleStageSkipWindowUpdate = useCallback((event: StageSkipWindowUpdate) => {
+    const slug = extractStageSlug(event.stage);
+    if (!slug) {
+      return;
+    }
+    setStageSkipState(prev => {
+      const next = { ...prev };
+      if (event.state === "opened") {
+        next[slug] = {
+          reason: event.reason ?? null,
+          updatedAt: event.timestamp,
+        };
+      } else {
+        delete next[slug];
+      }
+      return next;
+    });
+  }, []);
+
   const handleSSEError = useCallback((errorMsg: string) => {
     // eslint-disable-next-line no-console
     console.error("SSE error:", errorMsg);
@@ -348,6 +405,7 @@ export function useResearchRunDetails({
     onError: handleSSEError,
     onCodeExecutionStarted: handleCodeExecutionStarted,
     onCodeExecutionCompleted: handleCodeExecutionCompleted,
+    onStageSkipWindow: handleStageSkipWindowUpdate,
   });
 
   // Initial load to get conversation_id (SSE takes over after that)
@@ -396,6 +454,21 @@ export function useResearchRunDetails({
     }
   }, [conversationId, runId, stopPending]);
 
+  const handleSkipStage = useCallback(
+    async (stageSlug: string) => {
+      if (!conversationId) {
+        throw new Error("Conversation not available yet. Please try again.");
+      }
+      await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/skip-stage`, {
+        method: "POST",
+        body: {
+          stage: stageSlug,
+        },
+      });
+    },
+    [conversationId, runId]
+  );
+
   return {
     details,
     loading,
@@ -407,5 +480,7 @@ export function useResearchRunDetails({
     stopPending,
     stopError,
     handleStopRun,
+    stageSkipState,
+    handleSkipStage,
   };
 }
