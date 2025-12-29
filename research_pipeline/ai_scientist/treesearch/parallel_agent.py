@@ -13,7 +13,6 @@ import logging
 import multiprocessing
 import pickle
 import random
-import traceback
 import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -21,6 +20,8 @@ from functools import partial
 from multiprocessing.managers import DictProxy
 from types import TracebackType
 from typing import List, Optional
+
+import sentry_sdk
 
 from ai_scientist.llm import query, structured_query_with_schema
 
@@ -778,10 +779,25 @@ class ParallelAgent:
                         if entry and entry.node is not None:
                             entry.node.is_buggy = True
                     continue
-                except Exception as e:
-                    logger.exception(f"Error processing node: {str(e)}")
-                    traceback.print_exc()
-                    raise
+                except Exception as exc:
+                    logger.exception(
+                        "Unhandled worker exception for execution %s", current_execution_id
+                    )
+                    sentry_sdk.capture_exception(exc)
+                    self.event_callback(
+                        RunLogEvent(
+                            message=(
+                                f"Node {idx + 1}/{len(futures)} crashed with unexpected error: {exc}. "
+                                "Marking as buggy."
+                            ),
+                            level="error",
+                        )
+                    )
+                    if current_execution_id is not None:
+                        entry = execution_registry.get_entry(current_execution_id)
+                        if entry and entry.node is not None:
+                            entry.node.is_buggy = True
+                    continue
                 finally:
                     if current_execution_id is not None:
                         logger.info(

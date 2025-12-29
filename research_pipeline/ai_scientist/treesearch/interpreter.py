@@ -475,24 +475,47 @@ class Interpreter:
             except Exception:
                 break
 
+    def _wait_for_process_exit(self, *, proc: SpawnProcess, timeout_seconds: float) -> bool:
+        """
+        Wait for a process to exit up to timeout_seconds.
+        Returns True if the process exited, False otherwise.
+        """
+        deadline = time.monotonic() + timeout_seconds
+        while proc.is_alive():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            wait_interval = min(0.5, remaining)
+            proc.join(timeout=wait_interval)
+        return not proc.is_alive()
+
     def cleanup_session(self) -> None:
-        if self.process is None:
+        proc = self.process
+        if proc is None:
             return
-        # give the child process a chance to terminate gracefully
-        logger.debug(f"Terminating child process (pid={self.process.pid})")
-        self.process.terminate()
-        self._drain_queues()
-        self.process.join(timeout=2)
-        # kill the child process if it's still alive
-        if self.process.exitcode is None:
-            logger.warning("Child process failed to terminate gracefully, killing it..")
-            self.process.kill()
+        try:
+            logger.debug(f"Terminating child process (pid={proc.pid})")
+            proc.terminate()
             self._drain_queues()
-            self.process.join(timeout=2)
-        # don't wait for gc, clean up immediately
-        self.process.close()
-        logger.debug("Child process resources released")
-        self.process = None
+            terminated = self._wait_for_process_exit(proc=proc, timeout_seconds=2.0)
+
+            if not terminated:
+                logger.warning("Child process failed to terminate gracefully, killing it..")
+                proc.kill()
+                self._drain_queues()
+                terminated = self._wait_for_process_exit(proc=proc, timeout_seconds=5.0)
+
+            if not terminated:
+                logger.error(
+                    "Child process %s remained alive after SIGKILL; skipping close to avoid ValueError.",
+                    proc.pid,
+                )
+                return
+
+            proc.close()
+            logger.debug("Child process resources released")
+        finally:
+            self.process = None
 
     def run(self, code: str, reset_session: bool = True) -> ExecutionResult:
         """
