@@ -456,7 +456,6 @@ export function ResearchPipelineStages({
           const canShowSkipButton = Boolean(
             stageSkipState[stage.key] &&
               runStatus === "running" &&
-              info.status === "in_progress" &&
               typeof onSkipStage === "function" &&
               !isPaperGeneration
           );
