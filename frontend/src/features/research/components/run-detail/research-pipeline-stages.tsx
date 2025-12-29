@@ -28,6 +28,7 @@ interface ResearchPipelineStagesProps {
   runStatus: string;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
   onSkipStage?: (stageSlug: string) => Promise<void>;
+  skipPendingStage?: string | null;
   className?: string;
 }
 
@@ -255,12 +256,15 @@ export function ResearchPipelineStages({
   runStatus,
   onTerminateExecution,
   onSkipStage,
+  skipPendingStage,
   className,
 }: ResearchPipelineStagesProps) {
-  const [skipPendingStage, setSkipPendingStage] = useState<string | null>(null);
+  const [skipSubmittingStage, setSkipSubmittingStage] = useState<string | null>(null);
   const [skipErrorStage, setSkipErrorStage] = useState<string | null>(null);
   const [skipErrorMessage, setSkipErrorMessage] = useState<string | null>(null);
   const [skipDialogStage, setSkipDialogStage] = useState<string | null>(null);
+
+  const effectiveSkipStage = skipPendingStage ?? skipSubmittingStage;
 
   const openSkipDialog = (stageKey: string) => {
     if (!onSkipStage) {
@@ -272,7 +276,7 @@ export function ResearchPipelineStages({
   };
 
   const closeSkipDialog = () => {
-    if (skipPendingStage && skipPendingStage === skipDialogStage) {
+    if (effectiveSkipStage && effectiveSkipStage === skipDialogStage) {
       return;
     }
     setSkipDialogStage(null);
@@ -283,19 +287,20 @@ export function ResearchPipelineStages({
       return;
     }
     const stageKey = skipDialogStage;
-    setSkipPendingStage(stageKey);
+    setSkipSubmittingStage(stageKey);
     setSkipErrorStage(null);
     setSkipErrorMessage(null);
     try {
       await onSkipStage(stageKey);
       setSkipDialogStage(null);
+      setSkipSubmittingStage(null);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to request stage skip. Please try again.";
       setSkipErrorStage(stageKey);
       setSkipErrorMessage(message);
-    } finally {
-      setSkipPendingStage(null);
+      setSkipSubmittingStage(null);
+      return;
     }
   };
   /**
@@ -512,14 +517,19 @@ export function ResearchPipelineStages({
                         IN PROGRESS
                       </span>
                     )}
+                    {effectiveSkipStage === stage.key && (
+                      <span className="text-sm font-medium uppercase tracking-wide text-amber-300 whitespace-nowrap">
+                        SKIPPING…
+                      </span>
+                    )}
                     {canShowSkipButton && (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => openSkipDialog(stage.key)}
-                        disabled={skipPendingStage === stage.key}
+                        disabled={effectiveSkipStage === stage.key}
                       >
-                        {skipPendingStage === stage.key ? "Skipping…" : "Skip Stage"}
+                        {effectiveSkipStage === stage.key ? "Skipping…" : "Skip Stage"}
                       </Button>
                     )}
                   </div>
@@ -610,7 +620,7 @@ export function ResearchPipelineStages({
             variant="ghost"
             size="sm"
             onClick={closeSkipDialog}
-            disabled={skipPendingStage !== null && skipPendingStage === skipDialogStage}
+            disabled={effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage}
           >
             Cancel
           </Button>
@@ -620,10 +630,10 @@ export function ResearchPipelineStages({
             onClick={confirmSkipStage}
             disabled={
               !skipDialogStage ||
-              (skipPendingStage !== null && skipPendingStage === skipDialogStage)
+              (effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage)
             }
           >
-            {skipPendingStage !== null && skipPendingStage === skipDialogStage
+            {effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage
               ? "Skipping..."
               : "Skip Stage"}
           </Button>

@@ -45,6 +45,7 @@ export default function ResearchRunDetailPage() {
     stopError,
     handleStopRun,
     stageSkipState,
+    skipPendingStage,
     handleSkipStage,
   } = useResearchRunDetails({ runId });
 
@@ -189,6 +190,7 @@ export default function ResearchRunDetailPage() {
               runStatus={run.status}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
               onSkipStage={conversationId ? handleSkipStage : undefined}
+              skipPendingStage={skipPendingStage}
               className="max-h-[600px] overflow-y-auto"
             />
           </div>

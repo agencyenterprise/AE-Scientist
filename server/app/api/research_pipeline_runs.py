@@ -658,6 +658,7 @@ def skip_active_stage(
             detail=str(exc),
         ) from exc
 
+    now = datetime.now(timezone.utc)
     db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="stage_skip_requested",
@@ -666,7 +667,7 @@ def skip_active_stage(
             "stage": payload.stage,
             "reason": reason,
         },
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=now,
     )
 
     logger.info("User %s requested stage skip for run %s", user.email, run_id)

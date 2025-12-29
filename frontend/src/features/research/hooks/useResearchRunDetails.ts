@@ -38,6 +38,7 @@ interface UseResearchRunDetailsReturn {
   stopError: string | null;
   handleStopRun: () => Promise<void>;
   stageSkipState: StageSkipStateMap;
+  skipPendingStage: string | null;
   handleSkipStage: (stageSlug: string) => Promise<void>;
 }
 
@@ -71,29 +72,31 @@ export function useResearchRunDetails({
   const [stopPending, setStopPending] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const [stageSkipState, setStageSkipState] = useState<StageSkipStateMap>({});
+  const [skipPendingStage, setSkipPendingStage] = useState<string | null>(null);
 
   // SSE callback handlers
   const syncStageSkipState = useCallback((windows: StageSkipWindow[] | undefined) => {
-    setStageSkipState(() => {
-      if (!windows) {
-        return {};
+    if (!windows) {
+      setStageSkipState({});
+      setSkipPendingStage(null);
+      return;
+    }
+    const next: StageSkipStateMap = {};
+    windows.forEach(window => {
+      if (window.closed_at) {
+        return;
       }
-      const next: StageSkipStateMap = {};
-      windows.forEach(window => {
-        if (window.closed_at) {
-          return;
-        }
-        const slug = extractStageSlug(window.stage);
-        if (!slug) {
-          return;
-        }
-        next[slug] = {
-          reason: window.opened_reason ?? null,
-          updatedAt: window.opened_at,
-        };
-      });
-      return next;
+      const slug = extractStageSlug(window.stage);
+      if (!slug) {
+        return;
+      }
+      next[slug] = {
+        reason: window.opened_reason ?? null,
+        updatedAt: window.opened_at,
+      };
     });
+    setStageSkipState(next);
+    setSkipPendingStage(prev => (prev && !next[prev] ? null : prev));
   }, []);
 
   const handleInitialData = useCallback(
@@ -375,6 +378,9 @@ export function useResearchRunDetails({
       }
       return next;
     });
+    if (event.state === "closed") {
+      setSkipPendingStage(prev => (prev === slug ? null : prev));
+    }
   }, []);
 
   const handleSSEError = useCallback((errorMsg: string) => {
@@ -465,6 +471,7 @@ export function useResearchRunDetails({
           stage: stageSlug,
         },
       });
+      setSkipPendingStage(stageSlug);
     },
     [conversationId, runId]
   );
@@ -481,6 +488,7 @@ export function useResearchRunDetails({
     stopError,
     handleStopRun,
     stageSkipState,
+    skipPendingStage,
     handleSkipStage,
   };
 }

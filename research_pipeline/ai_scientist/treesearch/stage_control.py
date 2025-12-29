@@ -3,9 +3,10 @@ import os
 import signal
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from . import execution_registry
+from .events import BaseEvent, RunLogEvent
 
 logger = logging.getLogger(__name__)
 _lock = threading.RLock()
@@ -25,6 +26,24 @@ def _default_state() -> Dict[str, Any]:
 
 _stage_state: Dict[str, Any] = _default_state()
 _skip_request: Optional[Dict[str, Any]] = None
+_event_callback: Optional[Callable[[BaseEvent], None]] = None
+
+
+def register_event_callback(callback: Optional[Callable[[BaseEvent], None]]) -> None:
+    """Register a callback for emitting run events (e.g., telemetry)."""
+    global _event_callback
+    _event_callback = callback
+
+
+def _emit_skip_log(stage_name: str, reason: str) -> None:
+    """Emit a structured run log event when a skip request is accepted."""
+    if _event_callback is None:
+        return
+    message = f"Skip request accepted for {stage_name}: {reason}"
+    try:
+        _event_callback(RunLogEvent(message=message, level="info"))
+    except Exception:
+        logger.exception("Failed to emit skip run log event for stage %s", stage_name)
 
 
 def _terminate_active_executions_for_stage(*, stage_name: str, reason: str) -> None:
@@ -188,6 +207,7 @@ def request_stage_skip(*, reason: Optional[str] = None) -> Tuple[bool, str]:
             stage_name,
             _skip_request["reason"],
         )
+        _emit_skip_log(stage_name=stage_name, reason=_skip_request["reason"])
         return True, f"Skip requested for stage {stage_name}."
 
 

@@ -875,6 +875,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
         telemetry_hooks.event_callback,
         webhook_client=webhook_client,
     )
+    stage_control.register_event_callback(event_callback)
     artifact_callback: ArtifactCallback
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
