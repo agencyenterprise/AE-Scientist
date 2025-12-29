@@ -35,7 +35,7 @@ from . import stage_control
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .multi_seed_evaluation import run_plot_aggregation
-from .parallel_agent import ParallelAgent
+from .parallel_agent import ParallelAgent, SkipInProgressError
 from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
@@ -782,23 +782,41 @@ Your research idea:\n\n
                         pass
 
             # Drive one iteration of the agent to make forward progress.
-            if skip_requested:
-                logger.info("Skip requested for stage %s: %s", stage_name, skip_reason_text)
-                self._force_stage_completion(stage_name=stage_name, reason=skip_reason_text)
+            skip_effective = skip_requested
+            skip_reason_effective = skip_reason_text
+            if skip_effective:
+                agent.abort_active_executions(reason=skip_reason_effective)
+            else:
+                try:
+                    agent.step()
+                except SkipInProgressError as exc:
+                    logger.info(
+                        "Skip detected mid-iteration for stage %s: %s",
+                        stage_name,
+                        exc.reason,
+                    )
+                    skip_effective = True
+                    skip_reason_effective = exc.reason
+                    agent.abort_active_executions(reason=skip_reason_effective)
+                else:
+                    if step_callback:
+                        step_callback(current_substage, self.journals[current_substage.name])
+
+            if skip_effective:
+                logger.info("Skip requested for stage %s: %s", stage_name, skip_reason_effective)
+                self._force_stage_completion(stage_name=stage_name, reason=skip_reason_effective)
                 try:
                     self.event_callback(
                         RunLogEvent(
-                            message=f"Skipping stage {stage_name}: {skip_reason_text}",
+                            message=f"Skipping stage {stage_name}: {skip_reason_effective}",
                             level="warn",
                         )
                     )
                 except Exception:
                     pass
-            else:
-                agent.step()
 
-                if step_callback:
-                    step_callback(current_substage, self.journals[current_substage.name])
+            skip_requested = skip_effective
+            skip_reason_text = skip_reason_effective
 
             # Check if sub-stage is complete (check this before main stage completion)
             if skip_requested:

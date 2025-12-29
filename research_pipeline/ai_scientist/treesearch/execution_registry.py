@@ -3,7 +3,7 @@ import threading
 import time
 from dataclasses import dataclass
 from multiprocessing.managers import DictProxy
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Tuple
 
 if TYPE_CHECKING:
     from .journal import Node
@@ -155,6 +155,28 @@ def mark_terminated(*, execution_id: str, payload: str) -> Optional["Node"]:
     return node
 
 
+def flag_skip_pending(*, execution_id: str, reason: str) -> None:
+    """Mark an execution as pending skip so workers can exit before running code."""
+    with _lock:
+        entry = _entries.get(execution_id)
+        if entry is None:
+            logger.debug(
+                "flag_skip_pending called for unknown execution_id=%s; ignoring.",
+                execution_id,
+            )
+            return
+        entry.status = "terminated"
+        entry.payload = reason
+    shared = _shared_pid_state
+    if shared is not None:
+        shared_entry = shared.get(execution_id) or {}
+        shared_entry["skip_pending"] = True
+        shared_entry["payload"] = reason
+        shared_entry["terminated"] = True
+        shared[execution_id] = shared_entry
+    logger.info("Flagged skip pending for execution_id=%s", execution_id)
+
+
 def get_termination_payload(execution_id: str) -> Optional[str]:
     """
     Retrieve the stored termination payload for an execution, if any.
@@ -279,3 +301,16 @@ def is_terminated(execution_id: str) -> bool:
     if not shared_entry:
         return False
     return bool(shared_entry.get("terminated"))
+
+
+def is_skip_pending(execution_id: str) -> Tuple[bool, Optional[str]]:
+    shared = _shared_pid_state
+    if shared is None:
+        return False, None
+    entry = shared.get(execution_id)
+    if not entry:
+        return False, None
+    if entry.get("skip_pending"):
+        reason = entry.get("payload")
+        return True, str(reason) if reason is not None else None
+    return False, None

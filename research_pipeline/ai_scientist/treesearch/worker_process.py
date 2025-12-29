@@ -169,6 +169,17 @@ def _load_parent_node(*, node_data: dict[str, object] | None) -> Node | None:
     return None
 
 
+def _abort_if_skip_requested(*, execution_id: str) -> None:
+    skip_pending, reason = execution_registry.is_skip_pending(execution_id)
+    if skip_pending:
+        logger.info(
+            "Skip pending for execution_id=%s (reason=%s); aborting before code generation.",
+            execution_id,
+            reason,
+        )
+        raise ExecutionTerminatedError(execution_id=execution_id, exec_time=0.0)
+
+
 def _create_child_node(
     *,
     worker_agent: MinimalAgent,
@@ -179,6 +190,7 @@ def _create_child_node(
     event_callback: Callable[[BaseEvent], None],
     execution_id: str,
 ) -> Node:
+    _abort_if_skip_requested(execution_id=execution_id)
     if seed_eval:
         assert parent_node is not None, "parent_node must be provided for seed evaluation"
         event_callback(RunLogEvent(message="Running multi-seed evaluation", level="info"))
@@ -292,6 +304,7 @@ def _execute_experiment(
     stage_name: str,
     execution_id: str,
 ) -> ExecutionResult:
+    _abort_if_skip_requested(execution_id=execution_id)
     logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
     logger.debug("Starting first interpreter: executing experiment code")
     event_callback(RunLogEvent(message="Executing experiment code on GPU...", level="info"))
@@ -863,6 +876,7 @@ def process_node(
             seed_eval,
             stage_name,
         )
+        _abort_if_skip_requested(execution_id=execution_id)
         child_node = _create_child_node(
             worker_agent=worker_agent,
             parent_node=parent_node,
@@ -884,6 +898,7 @@ def process_node(
         terminated_by_user = False
         failure_reason: str | None = None
         try:
+            _abort_if_skip_requested(execution_id=execution_id)
             exec_result = _execute_experiment(
                 child_node=child_node,
                 cfg=cfg,
