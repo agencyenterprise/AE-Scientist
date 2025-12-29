@@ -69,12 +69,14 @@ class BaseDatabaseManager(ConnectionProvider):
         """Context manager that provides a pooled PostgreSQL connection."""
         assert BaseDatabaseManager._pool is not None, "Connection pool not initialized"
         conn = BaseDatabaseManager._pool.getconn()
+        logger.debug("Fetched DB connection %s from pool", id(conn))
         try:
-            yield conn
-        except Exception:
-            conn.rollback()
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        finally:
             BaseDatabaseManager._pool.putconn(conn)
-            raise
-        else:
-            conn.commit()
-            BaseDatabaseManager._pool.putconn(conn)
+            logger.debug("Returned DB connection %s to pool", id(conn))
