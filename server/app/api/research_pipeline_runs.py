@@ -180,8 +180,7 @@ async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    await asyncio.to_thread(
-        upload_runpod_artifacts_via_ssh,
+    await upload_runpod_artifacts_via_ssh(
         host=host,
         port=port,
         run_id=run.run_id,

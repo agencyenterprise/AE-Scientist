@@ -37,6 +37,8 @@ _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_S3_BUCKET_NAME",
 ]
 
+ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 10 * 60
+
 
 @dataclass
 class RunPodEnvironment:
@@ -680,7 +682,26 @@ def _write_temp_key_file(raw_key: str) -> str:
     return path
 
 
-def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
+async def upload_runpod_artifacts_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    run_id: str,
+) -> None:
+    await asyncio.to_thread(
+        _upload_runpod_artifacts_via_ssh_sync,
+        host=host,
+        port=port,
+        run_id=run_id,
+    )
+
+
+def _upload_runpod_artifacts_via_ssh_sync(
+    *,
+    host: str,
+    port: str | int,
+    run_id: str,
+) -> None:
     if not host or not port:
         logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
         return
@@ -723,7 +744,7 @@ def upload_runpod_artifacts_via_ssh(*, host: str, port: str | int, run_id: str) 
             ssh_command,
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
             check=False,
         )
         if result.returncode != 0:

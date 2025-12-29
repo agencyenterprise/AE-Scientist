@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import time
@@ -115,6 +114,9 @@ class DiskUsagePartition(BaseModel):
 class HeartbeatPayload(BaseModel):
     run_id: str
     disk_usage: List[DiskUsagePartition] = Field(default_factory=list)
+
+
+LOW_FREE_DISK_THRESHOLD_BYTES = 50 * 1024**3
 
 
 class GPUShortagePayload(BaseModel):
@@ -254,8 +256,7 @@ async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
     if not host or not port:
         logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
         return
-    await asyncio.to_thread(
-        upload_runpod_artifacts_via_ssh,
+    await upload_runpod_artifacts_via_ssh(
         host=host,
         port=port,
         run_id=run.run_id,
@@ -764,31 +765,32 @@ def ingest_heartbeat(
         heartbeat_failures=0,
     )
     if payload.disk_usage:
-        partitions = [
-            {
-                "partition": partition.partition,
-                "total_bytes": partition.total_bytes,
-                "used_bytes": partition.used_bytes,
-            }
-            for partition in payload.disk_usage
-        ]
+        partitions = []
+        low_free_partitions: list[tuple[str, int]] = []
+        for partition in payload.disk_usage:
+            free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
+            partitions.append(
+                {
+                    "partition": partition.partition,
+                    "total_bytes": partition.total_bytes,
+                    "used_bytes": partition.used_bytes,
+                    "free_bytes": free_bytes,
+                }
+            )
+            if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
+                low_free_partitions.append((partition.partition, free_bytes))
         db.insert_research_pipeline_run_event(
             run_id=payload.run_id,
             event_type="disk_usage",
             metadata={"partitions": partitions},
             occurred_at=now,
         )
-        threshold_partitions = [
-            p
-            for p in payload.disk_usage
-            if p.total_bytes > 0 and (p.used_bytes / p.total_bytes) > 0.60
-        ]
-        if threshold_partitions:
+        if low_free_partitions:
             details = ", ".join(
-                f"{p.partition}={int((p.used_bytes / p.total_bytes) * 100)}%"
-                for p in threshold_partitions
+                f"{name}={free_bytes / (1024**3):.1f} GiB free"
+                for name, free_bytes in low_free_partitions
             )
-            message = f"High disk usage detected for run {payload.run_id}: {details}"
+            message = f"Low disk space detected for run {payload.run_id}: {details}"
             logger.warning(message)
             sentry_sdk.capture_message(message, level="warning")
     logger.debug("RP heartbeat received for run=%s", payload.run_id)

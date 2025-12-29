@@ -281,7 +281,7 @@ class ResearchPipelineMonitor:
             ),
         )
         if run.pod_id:
-            self._upload_pod_artifacts(run)
+            await self._upload_pod_artifacts(run=run)
             try:
                 await terminate_pod(pod_id=run.pod_id)
             except RuntimeError:
@@ -388,12 +388,12 @@ class ResearchPipelineMonitor:
             occurred_at=datetime.now(timezone.utc),
         )
 
-    def _upload_pod_artifacts(self, run: ResearchPipelineRun) -> None:
+    async def _upload_pod_artifacts(self, run: ResearchPipelineRun) -> None:
         if not run.public_ip or not run.ssh_port:
             logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
             return
         try:
-            upload_runpod_artifacts_via_ssh(
+            await upload_runpod_artifacts_via_ssh(
                 host=run.public_ip,
                 port=run.ssh_port,
                 run_id=run.run_id,
