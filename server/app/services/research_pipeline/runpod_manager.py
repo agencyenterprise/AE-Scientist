@@ -50,6 +50,8 @@ class RunPodEnvironment:
     aws_secret_access_key: str
     aws_region: str
     aws_s3_bucket_name: str
+    sentry_dsn: str
+    sentry_environment: str
 
 
 class RunPodError(Exception):
@@ -364,6 +366,10 @@ def _load_runpod_environment() -> RunPodEnvironment:
             raise RuntimeError(f"Environment variable {name} is required to launch RunPod.")
         return value
 
+    def _optional(name: str) -> str:
+        value = os.environ.get(name)
+        return value or ""
+
     return RunPodEnvironment(
         git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
@@ -375,6 +381,8 @@ def _load_runpod_environment() -> RunPodEnvironment:
         aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
         aws_region=_require("AWS_REGION"),
         aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
+        sentry_dsn=_optional("SENTRY_DSN"),
+        sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
     )
 
 
@@ -448,6 +456,20 @@ def _build_remote_script(
     run_id: str,
 ) -> str:
     script_parts: list[str] = ["set -euo pipefail", ""]
+    env_file_lines = [
+        f"OPENAI_API_KEY={env.openai_api_key}",
+        f"HF_TOKEN={env.hf_token}",
+        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
+        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
+        f"AWS_REGION={env.aws_region}",
+        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        f"RUN_ID={run_id}",
+        f"DATABASE_PUBLIC_URL={env.database_public_url}",
+    ]
+    if env.sentry_dsn:
+        env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
+    if env.sentry_environment:
+        env_file_lines.append(f"SENTRY_ENVIRONMENT={env.sentry_environment}")
     script_parts += [
         "# === GPU Validation ===",
         'echo "Validating GPU..."',
@@ -462,14 +484,9 @@ def _build_remote_script(
         'echo "Creating .env file..."',
         "cd /workspace/AE-Scientist/research_pipeline",
         "cat > .env << 'EOF'",
-        f"OPENAI_API_KEY={env.openai_api_key}",
-        f"HF_TOKEN={env.hf_token}",
-        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
-        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
-        f"AWS_REGION={env.aws_region}",
-        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
-        f"RUN_ID={run_id}",
-        f"DATABASE_PUBLIC_URL={env.database_public_url}",
+    ]
+    script_parts += env_file_lines
+    script_parts += [
         "EOF",
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
@@ -570,6 +587,10 @@ async def launch_research_pipeline_run(
         "RUN_ID": run_id,
         "DATABASE_PUBLIC_URL": env.database_public_url,
     }
+    if env.sentry_dsn:
+        metadata_env["SENTRY_DSN"] = env.sentry_dsn
+    if env.sentry_environment:
+        metadata_env["SENTRY_ENVIRONMENT"] = env.sentry_environment
     gpu_types = [
         "NVIDIA RTX PRO 6000 Blackwell Server Edition"
         # "NVIDIA GeForce RTX 5090",
