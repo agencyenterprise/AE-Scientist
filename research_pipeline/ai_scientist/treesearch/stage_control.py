@@ -52,6 +52,10 @@ def _terminate_active_executions_for_stage(*, stage_name: str, reason: str) -> N
                 stage_name,
                 status,
             )
+            execution_registry.flag_skip_pending(
+                execution_id=execution_id,
+                reason=payload,
+            )
             continue
         try:
             os.kill(pid, signal.SIGKILL)
