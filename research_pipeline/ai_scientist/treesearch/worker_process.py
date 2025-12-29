@@ -143,6 +143,7 @@ def _create_worker_agent(
     memory_summary: str,
     evaluation_metrics: str,
     stage_identifier: StageIdentifier,
+    skip_checker: Callable[[], None],
 ) -> MinimalAgent:
     return MinimalAgent(
         task_desc=task_desc,
@@ -152,6 +153,7 @@ def _create_worker_agent(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_identifier=stage_identifier,
+        skip_checker=skip_checker,
     )
 
 
@@ -851,6 +853,7 @@ def process_node(
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
         stage_identifier=stage_identifier,
+        skip_checker=lambda: _abort_if_skip_requested(execution_id=execution_id),
     )
     parent_feedback = parent_node.user_feedback_payload if parent_node else None
     logger.info(

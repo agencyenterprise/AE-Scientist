@@ -13,6 +13,7 @@ Scope:
 
 import logging
 import random
+from typing import Callable
 
 import humanize
 from pydantic import BaseModel, Field
@@ -71,10 +72,12 @@ class MinimalAgent:
         task_desc: str,
         cfg: Config,
         stage_identifier: StageIdentifier,
+        *,
         gpu_id: int | None = None,
         gpu_spec: GPUSpec | None = None,
-        memory_summary: str | None = None,
-        evaluation_metrics: str | list[str] | None = None,
+        memory_summary: str,
+        evaluation_metrics: str,
+        skip_checker: Callable[[], None],
     ) -> None:
         self.task_desc = task_desc
         self.memory_summary = memory_summary
@@ -83,10 +86,15 @@ class MinimalAgent:
         self.gpu_spec = gpu_spec
         self.evaluation_metrics = evaluation_metrics
         self.stage_identifier = stage_identifier
+        self._skip_checker = skip_checker
 
     @property
     def stage_name(self) -> str:
         return self.stage_identifier.prefixed_name
+
+    def _check_for_skip(self) -> None:
+        if self._skip_checker is not None:
+            self._skip_checker()
 
     @property
     def _prompt_environment(self) -> dict[str, str]:
@@ -308,6 +316,7 @@ class MinimalAgent:
         last_completion: str = ""
         logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):
+            self._check_for_skip()
             logger.debug(
                 "Calling code-generation LLM with gpu_id=%s, gpu_spec=%s",
                 self.gpu_id,
@@ -323,15 +332,19 @@ class MinimalAgent:
             except Exception as exc:
                 logger.warning("Structured plan + code query failed, retrying...")
                 logger.warning("Details: %s", exc)
+                self._check_for_skip()
                 continue
 
             nl_text = response.plan.strip()
             code = response.code.strip()
             last_completion = f"{nl_text}\n\n{code}"
+            self._check_for_skip()
 
             if code and nl_text:
                 if self.gpu_id is not None:
+                    self._check_for_skip()
                     is_valid, validation_msg = self._validate_code_uses_gpu_id(code)
+                    self._check_for_skip()
                     if not is_valid:
                         logger.warning("GPU id enforcement validation failed")
                         logger.warning("GPU validation details: %s", validation_msg)
@@ -350,6 +363,7 @@ class MinimalAgent:
     def _validate_code_uses_gpu_id(self, code: str) -> tuple[bool, str]:
         """Use an LLM review to ensure the code enforces the configured GPU index."""
         assert self.gpu_id is not None
+        self._check_for_skip()
         validation_prompt: PromptType = {
             "Role": (
                 "You lightly review ML scripts just to confirm they actually try to use "
