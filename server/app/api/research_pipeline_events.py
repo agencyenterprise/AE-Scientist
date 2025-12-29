@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional, Sequence, cast
 
+import sentry_sdk
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.research_pipeline_runs import (
     REQUESTER_NAME_FALLBACK,
@@ -105,8 +106,15 @@ class RunFinishedPayload(BaseModel):
     message: Optional[str] = None
 
 
+class DiskUsagePartition(BaseModel):
+    partition: str
+    total_bytes: int
+    used_bytes: int
+
+
 class HeartbeatPayload(BaseModel):
     run_id: str
+    disk_usage: List[DiskUsagePartition] = Field(default_factory=list)
 
 
 class GPUShortagePayload(BaseModel):
@@ -755,6 +763,34 @@ def ingest_heartbeat(
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
+    if payload.disk_usage:
+        partitions = [
+            {
+                "partition": partition.partition,
+                "total_bytes": partition.total_bytes,
+                "used_bytes": partition.used_bytes,
+            }
+            for partition in payload.disk_usage
+        ]
+        db.insert_research_pipeline_run_event(
+            run_id=payload.run_id,
+            event_type="disk_usage",
+            metadata={"partitions": partitions},
+            occurred_at=now,
+        )
+        threshold_partitions = [
+            p
+            for p in payload.disk_usage
+            if p.total_bytes > 0 and (p.used_bytes / p.total_bytes) > 0.60
+        ]
+        if threshold_partitions:
+            details = ", ".join(
+                f"{p.partition}={int((p.used_bytes / p.total_bytes) * 100)}%"
+                for p in threshold_partitions
+            )
+            message = f"High disk usage detected for run {payload.run_id}: {details}"
+            logger.warning(message)
+            sentry_sdk.capture_message(message, level="warning")
     logger.debug("RP heartbeat received for run=%s", payload.run_id)
 
 
