@@ -29,6 +29,7 @@ from .codegen_agent import PlanAndCodeSchema
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
+from .stage_identifiers import StageIdentifier
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
@@ -42,9 +43,10 @@ logger = logging.getLogger("ai-scientist")
 class SkipInProgressError(RuntimeError):
     """Raised when a stage skip is pending during agent iteration."""
 
-    def __init__(self, *, stage_name: str, reason: str):
+    def __init__(self, *, stage_identifier: StageIdentifier, reason: str):
         super().__init__(reason)
-        self.stage_name = stage_name
+        self.stage_identifier = stage_identifier
+        self.stage_name = stage_identifier.prefixed_name
         self.reason = reason
 
 
@@ -72,7 +74,7 @@ class ParallelAgent:
         task_desc: str,
         cfg: Config,
         journal: Journal,
-        stage_name: str,
+        stage_identifier: StageIdentifier,
         best_stage3_node: Node | None,
         best_stage2_node: Node | None,
         best_stage1_node: Node | None,
@@ -82,7 +84,7 @@ class ParallelAgent:
         self.task_desc = task_desc
         self.cfg = cfg
         self.journal = journal
-        self.stage_name = stage_name
+        self.stage_identifier = stage_identifier
         self.event_callback = event_callback
         # Best nodes carried from previous stages to seed new work
         self.best_stage1_node = best_stage1_node  # to initialize hyperparam tuning (stage 2)
@@ -126,6 +128,10 @@ class ParallelAgent:
         self._future_execution_ids: dict[Future, str] = {}
         self._future_process_ids: dict[Future, str] = {}
 
+    @property
+    def stage_name(self) -> str:
+        return self.stage_identifier.prefixed_name
+
     def _ensure_no_skip_pending(self) -> None:
         state = stage_control.get_stage_state()
         if not state:
@@ -137,7 +143,7 @@ class ParallelAgent:
                 self.stage_name,
                 reason,
             )
-            raise SkipInProgressError(stage_name=self.stage_name, reason=reason)
+            raise SkipInProgressError(stage_identifier=self.stage_identifier, reason=reason)
 
     def abort_active_executions(self, *, reason: str) -> None:
         pending_ids = list(self._future_execution_ids.values())
@@ -337,7 +343,7 @@ class ParallelAgent:
                 gpu_id=gpu_id,
                 memory_summary=memory_summary,
                 evaluation_metrics=self.evaluation_metrics,
-                stage_name=self.stage_name,
+                stage_identifier=self.stage_identifier,
                 new_ablation_idea=new_ablation_idea,
                 new_hyperparam_idea=new_hyperparam_idea,
                 best_stage3_plot_code=best_stage3_plot_code,
@@ -411,6 +417,7 @@ class ParallelAgent:
                 level="info",
             )
         )
+        stage_identifier = self.stage_identifier
         # For Stage 2/4 we generate ideas on main process to avoid duplicates;
         # for Stage 1/3 generation happens in workers.
         nodes_to_process: list[Optional[Node]] = []
@@ -494,7 +501,7 @@ class ParallelAgent:
 
             # Stage-specific selection: Ablation Studies
             logger.debug(f"self.stage_name: {self.stage_name}")
-            if self.stage_name and self.stage_name.startswith("4_"):
+            if stage_identifier is StageIdentifier.STAGE4:
                 self.event_callback(
                     RunLogEvent(
                         message=f"🧪 Running ablation study variation #{len(self.journal) + 1}",
@@ -504,7 +511,7 @@ class ParallelAgent:
                 nodes_to_process.append(self.best_stage3_node)
                 continue
             # Stage-specific selection: Hyperparameter Tuning
-            elif self.stage_name and self.stage_name.startswith("2_"):
+            elif stage_identifier is StageIdentifier.STAGE2:
                 nodes_to_process.append(self.best_stage1_node)
                 continue
             else:  # Stage 1, 3: normal best-first search
@@ -550,6 +557,7 @@ class ParallelAgent:
     def step(self) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
         self._ensure_no_skip_pending()
+        stage_identifier = self.stage_identifier
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
         logger.debug(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")
@@ -630,7 +638,7 @@ class ParallelAgent:
                     and isinstance(node_data, dict)
                     and node_data.get("is_buggy") is False
                 )
-                if self.stage_name and self.stage_name.startswith("2_") and is_not_buggy:
+                if stage_identifier is StageIdentifier.STAGE2 and is_not_buggy:
                     base_stage1_code = self.best_stage1_node.code if self.best_stage1_node else ""
                     tried_list = list(self._hyperparam_tuning_state["tried_hyperparams"])
                     new_hyperparam_idea = Stage2Tuning.propose_next_hyperparam_idea(
@@ -641,7 +649,7 @@ class ParallelAgent:
                     )
                     self._hyperparam_tuning_state["tried_hyperparams"].add(new_hyperparam_idea.name)
                     new_ablation_idea = None
-                elif self.stage_name and self.stage_name.startswith("4_") and is_not_buggy:
+                elif stage_identifier is StageIdentifier.STAGE4 and is_not_buggy:
                     base_stage3_code = self.best_stage3_node.code if self.best_stage3_node else ""
                     completed_list = list(self._ablation_state["completed_ablations"])
                     new_ablation_idea = Stage4Ablation.propose_next_ablation_idea(
@@ -682,7 +690,7 @@ class ParallelAgent:
                     gpu_id=gpu_id,
                     memory_summary=memory_summary,
                     evaluation_metrics=self.evaluation_metrics,
-                    stage_name=self.stage_name,
+                    stage_identifier=self.stage_identifier,
                     new_ablation_idea=new_ablation_idea,
                     new_hyperparam_idea=new_hyperparam_idea,
                     best_stage3_plot_code=best_stage3_plot_code,
@@ -728,12 +736,12 @@ class ParallelAgent:
                     logger.debug("Investigating if result node has metric")
                     logger.debug(str(result_node.metric))
                     Stage2Tuning.update_hyperparam_state(
-                        stage_name=self.stage_name,
+                        stage_identifier=stage_identifier,
                         result_node=result_node,
                         state_set=self._hyperparam_tuning_state["tried_hyperparams"],
                     )
                     Stage4Ablation.update_ablation_state(
-                        stage_name=self.stage_name,
+                        stage_identifier=stage_identifier,
                         result_node=result_node,
                         state_set=self._ablation_state["completed_ablations"],
                     )

@@ -4,6 +4,7 @@ from typing import ClassVar
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class Stage3Plotting(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "creative_research"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE3.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Explore novel improvements\n"
         "- Come up with experiments to reveal new insights\n"

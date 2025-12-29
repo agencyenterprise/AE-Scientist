@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from ..events import BaseEvent
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..utils.config import Config
 
 
@@ -17,29 +18,44 @@ class StageCompletionEvaluation(BaseModel):
 
 @dataclass
 class StageMeta:
-    name: str
-    number: int
-    slug: str
+    identifier: StageIdentifier
     goals: str
     max_iterations: int
     num_drafts: int
+
+    @property
+    def number(self) -> int:
+        return self.identifier.number
+
+    @property
+    def slug(self) -> str:
+        return self.identifier.slug
+
+    @property
+    def name(self) -> str:
+        return self.identifier.prefixed_name
 
 
 @dataclass
 class StageContext:
     cfg: Config
     task_desc: str
-    stage_name: str
+    stage_identifier: StageIdentifier
     journal: Journal
     workspace_dir: Path
     event_callback: Callable[[BaseEvent], None]
     best_nodes_by_stage: Dict[int, Node]
+
+    @property
+    def stage_name(self) -> str:
+        return self.stage_identifier.prefixed_name
 
 
 class Stage:
     def __init__(self, *, meta: StageMeta, context: StageContext) -> None:
         self._meta = meta
         self._context = context
+        self._stage_identifier = meta.identifier
         self.can_be_skipped: bool = False
         self.skip_reason: str = "Stage cannot be skipped yet."
 
@@ -48,6 +64,10 @@ class Stage:
 
     def context(self) -> StageContext:
         return self._context
+
+    @property
+    def stage_identifier(self) -> StageIdentifier:
+        return self._stage_identifier
 
     def prepare_substage(self) -> bool:
         return True

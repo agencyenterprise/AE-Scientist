@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from .journal import Node
+from .stage_identifiers import StageIdentifier
 from .types import PromptType
 from .utils.config import Config as AppConfig
 from .vlm_function_specs import PLOT_SELECTION_SCHEMA, VLM_FEEDBACK_SCHEMA
@@ -16,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class SupportsPlottingAgent(Protocol):
-    stage_name: str
+    stage_identifier: StageIdentifier
+
+    @property
+    def stage_name(self) -> str: ...
+
     cfg: AppConfig
 
     def plan_and_code_query(self, *, prompt: PromptType, retries: int) -> Tuple[str, str]: ...
@@ -92,7 +97,7 @@ def generate_plotting_code(
     plotting_prompt["Instructions"] = plotting_instructions
 
     # If provided, allow seeding from a prior stage's plotting code (currently used for Stage 4).
-    if agent.stage_name.startswith("4_") and plot_code_from_prev_stage:
+    if agent.stage_identifier is StageIdentifier.STAGE4 and plot_code_from_prev_stage:
         prompt_guideline.extend(
             [
                 "IMPORTANT: This is an ablation study. Use the following base plotting code as a starting point:",

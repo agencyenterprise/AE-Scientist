@@ -5,6 +5,7 @@ from ai_scientist.llm import structured_query_with_schema
 
 from ..codegen_agent import MinimalAgent
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class Stage1Baseline(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "initial_implementation"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE1.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Focus on getting basic working implementation\n"
         "- Use a dataset appropriate to the experiment\n"

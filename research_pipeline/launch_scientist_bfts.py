@@ -46,6 +46,7 @@ from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
 )
+from ai_scientist.treesearch.stage_identifiers import StageIdentifier
 from ai_scientist.treesearch.stages.base import StageMeta
 from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
@@ -419,12 +420,17 @@ def resume_run(
             stage1_name, stage1_journal = load_stage_journal(stage_dir=stage1_dir)
             if cfg_obj.telemetry:
                 stage1_journal.run_id = cfg_obj.telemetry.run_id
+            identifier = StageIdentifier.STAGE1
+            if stage1_name != identifier.prefixed_name:
+                logger.warning(
+                    "Stage 1 journal name %s did not match expected identifier %s",
+                    stage1_name,
+                    identifier.prefixed_name,
+                )
             stage1_meta = StageMeta(
-                name=stage1_name,
-                number=1,
-                slug=Stage1Baseline.MAIN_STAGE_SLUG,
+                identifier=identifier,
                 goals=Stage1Baseline.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(1),
+                max_iterations=manager.get_max_iterations(identifier.number),
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
@@ -437,12 +443,17 @@ def resume_run(
                 stage2_name, stage2_journal = load_stage_journal(stage_dir=stage2_dir)
                 if cfg_obj.telemetry:
                     stage2_journal.run_id = cfg_obj.telemetry.run_id
+                identifier = StageIdentifier.STAGE2
+                if stage2_name != identifier.prefixed_name:
+                    logger.warning(
+                        "Stage 2 journal name %s did not match expected identifier %s",
+                        stage2_name,
+                        identifier.prefixed_name,
+                    )
                 stage2_meta = StageMeta(
-                    name=stage2_name,
-                    number=2,
-                    slug=Stage2Tuning.MAIN_STAGE_SLUG,
+                    identifier=identifier,
                     goals=Stage2Tuning.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(2),
+                    max_iterations=manager.get_max_iterations(identifier.number),
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
@@ -457,12 +468,17 @@ def resume_run(
                 stage3_name, stage3_journal = load_stage_journal(stage_dir=stage3_dir)
                 if cfg_obj.telemetry:
                     stage3_journal.run_id = cfg_obj.telemetry.run_id
+                identifier = StageIdentifier.STAGE3
+                if stage3_name != identifier.prefixed_name:
+                    logger.warning(
+                        "Stage 3 journal name %s did not match expected identifier %s",
+                        stage3_name,
+                        identifier.prefixed_name,
+                    )
                 stage3_meta = StageMeta(
-                    name=stage3_name,
-                    number=3,
-                    slug=Stage3Plotting.MAIN_STAGE_SLUG,
+                    identifier=identifier,
                     goals=Stage3Plotting.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(3),
+                    max_iterations=manager.get_max_iterations(identifier.number),
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
@@ -472,32 +488,21 @@ def resume_run(
                 pass
 
         if next_stage == 2:
-            next_meta = StageMeta(
-                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG,
-                number=2,
-                slug=Stage2Tuning.MAIN_STAGE_SLUG,
-                goals=Stage2Tuning.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(2),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE2
+            next_goals = Stage2Tuning.DEFAULT_GOALS
         elif next_stage == 3:
-            next_meta = StageMeta(
-                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG,
-                number=3,
-                slug=Stage3Plotting.MAIN_STAGE_SLUG,
-                goals=Stage3Plotting.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(3),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE3
+            next_goals = Stage3Plotting.DEFAULT_GOALS
         else:
-            next_meta = StageMeta(
-                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG,
-                number=4,
-                slug=Stage4Ablation.MAIN_STAGE_SLUG,
-                goals=Stage4Ablation.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(4),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE4
+            next_goals = Stage4Ablation.DEFAULT_GOALS
+
+        next_meta = StageMeta(
+            identifier=next_identifier,
+            goals=next_goals,
+            max_iterations=manager.get_max_iterations(next_identifier.number),
+            num_drafts=0,
+        )
 
         manager.stages.append(next_meta)
         manager.register_phase_definition(stage_meta=next_meta)

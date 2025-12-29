@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal, Node
+from ..stage_identifiers import StageIdentifier
 from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from ..utils.response import wrap_code
@@ -34,7 +35,7 @@ class SupportsStage2Agent(Protocol):
 
 
 class Stage2Tuning(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = "baseline_tuning"
+    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE2.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"
@@ -147,8 +148,10 @@ class Stage2Tuning(Stage):
         )
 
     @staticmethod
-    def update_hyperparam_state(*, stage_name: str, result_node: Node, state_set: set[str]) -> None:
-        if not stage_name or not stage_name.startswith("2_"):
+    def update_hyperparam_state(
+        *, stage_identifier: StageIdentifier, result_node: Node, state_set: set[str]
+    ) -> None:
+        if stage_identifier is not StageIdentifier.STAGE2:
             return
         hyperparam_name = result_node.hyperparam_name
         if hyperparam_name is None:

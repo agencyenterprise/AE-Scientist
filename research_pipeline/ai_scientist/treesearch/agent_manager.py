@@ -37,6 +37,7 @@ from .metrics_extraction import analyze_progress, gather_stage_metrics, identify
 from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent, SkipInProgressError
 from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
+from .stage_identifiers import StageIdentifier
 from .stages.base import Stage as StageImpl
 from .stages.base import StageContext, StageMeta
 from .stages.stage1_baseline import Stage1Baseline
@@ -55,6 +56,14 @@ class SubstageGoalResponse(BaseModel):
 class StageClass(Protocol):
     MAIN_STAGE_SLUG: str
     DEFAULT_GOALS: str
+
+
+STAGE_CLASS_BY_IDENTIFIER: Dict[StageIdentifier, StageClass] = {
+    StageIdentifier.STAGE1: Stage1Baseline,
+    StageIdentifier.STAGE2: Stage2Tuning,
+    StageIdentifier.STAGE3: Stage3Plotting,
+    StageIdentifier.STAGE4: Stage4Ablation,
+}
 
 
 @dataclass
@@ -82,7 +91,6 @@ class AgentManager:
         self.workspace_dir = workspace_dir
         self.event_callback = event_callback
         self.task_desc = task_desc
-        self.current_stage_number = 0
         # Stage bookkeeping and experiment state
         self.stages: List[StageMeta] = []
         self.current_stage: Optional[StageMeta] = None
@@ -144,13 +152,11 @@ Your research idea:\n\n
     def _create_initial_stage(self) -> None:
         """Create the initial stage configuration"""
         # Seed Stage 1 (baseline) with defaults defined by the stage class
-        self.current_stage_number += 1
+        identifier = StageIdentifier.STAGE1
         initial_stage = StageMeta(
-            name=f"1_{Stage1Baseline.MAIN_STAGE_SLUG}",
-            number=self.current_stage_number,
-            slug=Stage1Baseline.MAIN_STAGE_SLUG,
+            identifier=identifier,
             goals=Stage1Baseline.DEFAULT_GOALS,
-            max_iterations=self.get_max_iterations(self.current_stage_number),
+            max_iterations=self.get_max_iterations(identifier.number),
             num_drafts=self.cfg.agent.search.num_drafts,
         )
 
@@ -185,21 +191,21 @@ Your research idea:\n\n
         return None
 
     def _stage_impl_from_meta(self, *, stage_meta: StageMeta, context: StageContext) -> StageImpl:
-        if stage_meta.number == 1:
+        if stage_meta.identifier is StageIdentifier.STAGE1:
             return Stage1Baseline(meta=stage_meta, context=context)
-        if stage_meta.number == 2:
+        if stage_meta.identifier is StageIdentifier.STAGE2:
             return Stage2Tuning(meta=stage_meta, context=context)
-        if stage_meta.number == 3:
+        if stage_meta.identifier is StageIdentifier.STAGE3:
             return Stage3Plotting(meta=stage_meta, context=context)
-        if stage_meta.number == 4:
+        if stage_meta.identifier is StageIdentifier.STAGE4:
             return Stage4Ablation(meta=stage_meta, context=context)
-        raise ValueError(f"Unknown stage number: {stage_meta.number}")
+        raise ValueError(f"Unknown stage identifier: {stage_meta.identifier}")
 
     def _build_stage_impl(self, stage_meta: StageMeta, journal: Journal) -> StageImpl:
         ctx = StageContext(
             cfg=self.cfg,
             task_desc=self._curate_task_desc(stage_meta),
-            stage_name=stage_meta.name,
+            stage_identifier=stage_meta.identifier,
             journal=journal,
             workspace_dir=self.workspace_dir,
             event_callback=self.event_callback,
@@ -358,23 +364,23 @@ Your research idea:\n\n
         task_desc += f"Sub-stage goals: {stage.goals}"
 
         # Determine carryover best nodes based on current main stage
-        if stage.number == 2:
-            stage1_substages = [s for s in self.stages if s.number == 1]
+        if stage.identifier is StageIdentifier.STAGE2:
+            stage1_substages = [s for s in self.stages if s.identifier is StageIdentifier.STAGE1]
             if not stage1_substages:
                 raise ValueError(f"No stage 1 substages found in {self.stages}")
             best_stage1_node = self._get_best_implementation(stage1_substages[-1].name)
             best_stage2_node = None
             best_stage3_node = None
-        elif stage.number == 3:
-            stage2_substages = [s for s in self.stages if s.number == 2]
+        elif stage.identifier is StageIdentifier.STAGE3:
+            stage2_substages = [s for s in self.stages if s.identifier is StageIdentifier.STAGE2]
             if not stage2_substages:
                 raise ValueError(f"No stage 2 substages found in {self.stages}")
             best_stage2_node = self._get_best_implementation(stage2_substages[-1].name)
             best_stage1_node = None
             best_stage3_node = None
-        elif stage.number == 4:
+        elif stage.identifier is StageIdentifier.STAGE4:
             # Use the last (sub-)stage's best node
-            stage3_substages = [s for s in self.stages if s.number == 3]
+            stage3_substages = [s for s in self.stages if s.identifier is StageIdentifier.STAGE3]
             if stage3_substages:
                 last_substage = stage3_substages[-1]
                 best_stage3_node = self._get_best_implementation(last_substage.name)
@@ -392,7 +398,7 @@ Your research idea:\n\n
             task_desc=task_desc,
             cfg=stage_cfg,
             journal=self.journals[stage.name],
-            stage_name=stage.name,
+            stage_identifier=stage.identifier,
             best_stage3_node=best_stage3_node,
             best_stage2_node=best_stage2_node,
             best_stage1_node=best_stage1_node,
@@ -418,7 +424,7 @@ Your research idea:\n\n
         limit = stage.max_iterations
         if len(journal.nodes) >= limit:
             logger.info(f"Stage {stage.name} completed: reached max iterations")
-            if stage.number == 1:
+            if stage.identifier is StageIdentifier.STAGE1:
                 # For initial stage, if it didn't even find a working implementation until max iterations,
                 # end gracefully and stop the experiment.
                 logger.error(
@@ -537,31 +543,18 @@ Your research idea:\n\n
         based on what has been done so far.
         """
         # Build the next substage metadata using stage class defaults and LLM goal
-        main_stage_num = current_substage.number
-        # Get goals and slug from the corresponding stage class
-        if main_stage_num == 1:
-            current_stage_cls: StageClass = Stage1Baseline
-        elif main_stage_num == 2:
-            current_stage_cls = Stage2Tuning
-        elif main_stage_num == 3:
-            current_stage_cls = Stage3Plotting
-        elif main_stage_num == 4:
-            current_stage_cls = Stage4Ablation
-        else:
-            raise ValueError(f"Unknown stage number: {main_stage_num}")
+        current_stage_cls = STAGE_CLASS_BY_IDENTIFIER[current_substage.identifier]
         main_stage_goal = current_stage_cls.DEFAULT_GOALS
-        main_stage_name = current_stage_cls.MAIN_STAGE_SLUG
+        identifier = current_substage.identifier
         sub_stage_goal = self._generate_substage_goal(main_stage_goal, journal)
 
         return StageMeta(
-            name=f"{main_stage_num}_{main_stage_name}",
-            number=current_substage.number,
-            slug=main_stage_name,
+            identifier=identifier,
             goals="Main stage goals:\n"
             + main_stage_goal
             + "\n\nSub-stage goals:\n"
             + sub_stage_goal,
-            max_iterations=self.get_max_iterations(main_stage_num),
+            max_iterations=self.get_max_iterations(identifier.number),
             num_drafts=0,
         )
 
@@ -573,30 +566,18 @@ Your research idea:\n\n
         self._journal_history.setdefault(stage_name, []).append(journal)
 
     def _create_next_main_stage(self, current_substage: StageMeta) -> Optional[StageMeta]:
-        main_stage_num = current_substage.number
-        if main_stage_num == 4:
+        current_identifier = current_substage.identifier
+        next_identifier = current_identifier.next_stage()
+        if next_identifier is None:
             return None
-        # Determine next stage class and its slug/goals
-        next_num = main_stage_num + 1
-        if next_num == 2:
-            next_stage_cls: StageClass = Stage2Tuning
-        elif next_num == 3:
-            next_stage_cls = Stage3Plotting
-        elif next_num == 4:
-            next_stage_cls = Stage4Ablation
-        else:
-            raise ValueError(f"Unknown next stage number: {next_num}")
-        next_main_stage_name = next_stage_cls.MAIN_STAGE_SLUG
+        next_stage_cls = STAGE_CLASS_BY_IDENTIFIER[next_identifier]
         num_drafts = 0
-        stage_number = next_num
         main_stage_goal = next_stage_cls.DEFAULT_GOALS
 
         return StageMeta(
-            name=f"{main_stage_num + 1}_{next_main_stage_name}",
-            number=stage_number,
-            slug=next_main_stage_name,
+            identifier=next_identifier,
             goals=main_stage_goal,
-            max_iterations=self.get_max_iterations(main_stage_num + 1),
+            max_iterations=self.get_max_iterations(next_identifier.number),
             num_drafts=num_drafts,
         )
 
@@ -630,21 +611,20 @@ Your research idea:\n\n
 
         Returns True on success, False if a required best node could not be found.
         """
-        if current_substage.number in [1, 2, 3, 4]:
-            best_node = self._get_best_implementation(current_substage.name)
-            if not best_node:
-                logger.error(
-                    f"No best node found for {current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
-                )
-                return False
+        best_node = self._get_best_implementation(current_substage.name)
+        if not best_node:
+            logger.error(
+                f"No best node found for {current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
+            )
+            return False
 
-            seed_nodes = agent._run_multi_seed_evaluation(best_node)
-            if step_callback:
-                step_callback(current_substage, self.journals[current_substage.name])
-            run_plot_aggregation(agent=agent, node=best_node, seed_nodes=seed_nodes)
-            if step_callback:
-                step_callback(current_substage, self.journals[current_substage.name])
-            logger.info(f"Stage {current_substage.name} multi-seed eval done.")
+        seed_nodes = agent._run_multi_seed_evaluation(best_node)
+        if step_callback:
+            step_callback(current_substage, self.journals[current_substage.name])
+        run_plot_aggregation(agent=agent, node=best_node, seed_nodes=seed_nodes)
+        if step_callback:
+            step_callback(current_substage, self.journals[current_substage.name])
+        logger.info(f"Stage {current_substage.name} multi-seed eval done.")
 
         return True
 
