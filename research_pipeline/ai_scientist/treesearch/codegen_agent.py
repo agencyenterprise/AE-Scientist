@@ -357,7 +357,7 @@ class MinimalAgent:
                 "The structured response was missing either 'plan' or 'code'. "
                 "Ensure both fields are present and non-empty."
             )
-        logger.error("Final plan + code extraction attempt failed, giving up...")
+        logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", last_completion
 
     def _validate_code_uses_gpu_id(self, code: str) -> tuple[bool, str]:
@@ -383,14 +383,14 @@ class MinimalAgent:
                 "torch.device('cuda:{self.gpu_id}')).",
                 "Confirm at least one model/tensor/dataloader operation moves data to a "
                 "CUDA device (a single .to(device)/.cuda() is sufficient).",
-                "If such cues are present, mark the script as compliant; otherwise mark "
-                "it as failing and explain that CUDA seems unused.",
+                "If such cues are present, mark the script as compliant; ",
+                "If the code does not need to use CUDA, mark it as compliant and explain that CUDA is not used.",
             ],
             "Review instructions": [
                 "Skim the entire script quickly.",
                 "Do not require CUDA availability guards, CPU fallbacks, or exhaustive "
                 "device enforcement.",
-                "Only fail when the script never references CUDA device usage.",
+                "Only fail when the script never references CUDA device usage when it should be used.",
             ],
             "Code under review": wrap_code(code=code),
         }

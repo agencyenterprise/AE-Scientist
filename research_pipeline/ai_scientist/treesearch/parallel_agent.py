@@ -253,7 +253,7 @@ class ParallelAgent:
                 "The structured response was missing either 'plan' or 'code'. "
                 "Ensure both fields are present and non-empty."
             )
-        logger.error("Final plan + code extraction attempt failed, giving up...")
+        logger.info("Final plan + code extraction attempt failed, giving up...")
         return "", last_completion
 
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
