@@ -56,7 +56,7 @@ export default function ResearchRunDetailPage() {
     staleTime: 60 * 1000,
   });
 
-  const { runs: conversationRuns } = useConversationResearchRuns(conversationId ?? 0);
+  const { runs: conversationRuns } = useConversationResearchRuns(conversationId);
 
   const {
     review,
