@@ -457,23 +457,41 @@ class Interpreter:
 
     def _drain_queues(self) -> None:
         """Quickly drain all in-flight messages to prevent blocking."""
-        while not self.result_outq.empty():
-            try:
-                self.result_outq.get_nowait()
-            except Exception:
-                break
+        self._drain_queue(queue=self.result_outq)
+        self._drain_queue(queue=self.event_outq)
+        self._drain_queue(queue=self.code_inq)
 
-        while not self.event_outq.empty():
+    def _drain_queue(self, *, target_queue: Queue) -> list[Any]:
+        drained: list[Any] = []
+        while not target_queue.empty():
             try:
-                self.event_outq.get_nowait()
+                drained.append(target_queue.get_nowait())
             except Exception:
                 break
+        return drained
 
-        while not self.code_inq.empty():
-            try:
-                self.code_inq.get_nowait()
-            except Exception:
-                break
+    def _log_queue_dump(self, *, header: str, entries: list[Any]) -> None:
+        if not entries:
+            logger.error("%s: <empty>", header)
+            return
+        formatted = "\n".join(
+            f"{idx + 1:02d}: {repr(entry)}" for idx, entry in enumerate(entries)
+        )
+        logger.error("%s (%d entries):\n%s", header, len(entries), formatted)
+
+    def _log_failure_context(self, *, reason: str) -> None:
+        pid = self.process.pid if self.process is not None else None
+        exitcode = self.process.exitcode if self.process is not None else None
+        logger.error(
+            "Interpreter failure context (reason=%s, pid=%s, exitcode=%s)",
+            reason,
+            pid,
+            exitcode,
+        )
+        result_entries = self._drain_queue(target_queue=self.result_outq)
+        self._log_queue_dump(header="REPL output queue dump", entries=result_entries)
+        event_entries = self._drain_queue(target_queue=self.event_outq)
+        self._log_queue_dump(header="REPL event queue dump", entries=event_entries)
 
     def _wait_for_process_exit(self, *, proc: SpawnProcess, timeout_seconds: float) -> bool:
         """
@@ -566,8 +584,7 @@ class Interpreter:
                     logger.critical(
                         f"REPL child died before start (pid={self.process.pid}, exitcode={self.process.exitcode})"
                     )
-                while not self.result_outq.empty():
-                    logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                self._log_failure_context(reason=msg)
                 raise RuntimeError(msg) from None
             try:
                 state = self.event_outq.get(timeout=min(1.0, max(0.0, remaining)))
@@ -576,8 +593,7 @@ class Interpreter:
                 if self.process is not None and not self.process.is_alive():
                     msg = "REPL child process died before signaling readiness"
                     logger.critical(msg)
-                    while not self.result_outq.empty():
-                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                    self._log_failure_context(reason=msg)
                     raise RuntimeError(msg) from None
                 continue
         assert state[0] == "state:ready", state
@@ -612,8 +628,7 @@ class Interpreter:
                 ):
                     msg = "REPL child process died unexpectedly"
                     logger.critical(msg)
-                    while not self.result_outq.empty():
-                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                    self._log_failure_context(reason=msg)
                     raise RuntimeError(msg) from None
 
                 # child is alive and still executing -> check if we should sigint..
