@@ -24,7 +24,13 @@ class SupportsPlottingAgent(Protocol):
 
     cfg: AppConfig
 
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int) -> Tuple[str, str]: ...
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int,
+        enforce_gpu: bool,
+    ) -> Tuple[str, str]: ...
 
 
 def generate_plotting_code(
@@ -111,7 +117,7 @@ def generate_plotting_code(
             ]
         )
 
-    plan, code = agent.plan_and_code_query(prompt=plotting_prompt, retries=3)
+    plan, code = agent.plan_and_code_query(prompt=plotting_prompt, retries=3, enforce_gpu=False)
     logger.debug("----- LLM code start (stage3 plotting) -----")
     logger.debug(code)
     logger.debug("----- LLM code end (stage3 plotting) -----")

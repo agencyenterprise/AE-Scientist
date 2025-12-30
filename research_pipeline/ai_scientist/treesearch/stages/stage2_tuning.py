@@ -31,7 +31,13 @@ class HyperparamTuningIdea(BaseModel):
 
 
 class SupportsStage2Agent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool,
+    ) -> Tuple[str, str]: ...
 
 
 class Stage2Tuning(Stage):
@@ -86,7 +92,7 @@ class Stage2Tuning(Stage):
             ]
         }
         prompt["Instructions"] = hp_instructions
-        plan, code = agent.plan_and_code_query(prompt=prompt)
+        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
         logger.debug("----- LLM code start (stage2 tuning) -----")
         logger.debug(code)
         logger.debug("----- LLM code end (stage2 tuning) -----")

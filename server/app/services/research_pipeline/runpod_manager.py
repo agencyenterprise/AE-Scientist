@@ -31,6 +31,11 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
 RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
+CONTAINER_DISK_GB = 100
+VOLUME_DISK_GB = 200
+DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
+_DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
+_LEGACY_HW_STATS_ENV_NAME = "HW_STATS_PATHS"
 
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
@@ -205,8 +210,8 @@ class RunPodManager:
             "cloudType": "SECURE",
             "gpuCount": 1,
             "gpuTypeIds": [gpu_type],
-            "containerDiskInGb": 100,
-            "volumeInGb": 200,
+            "containerDiskInGb": CONTAINER_DISK_GB,
+            "volumeInGb": VOLUME_DISK_GB,
             "env": env,
             "ports": ["22/tcp"],
             "dockerStartCmd": ["bash", "-c", docker_cmd],
@@ -434,6 +439,17 @@ def _encode_multiline(value: str) -> str:
     return base64.b64encode(value.encode("utf-8")).decode("utf-8")
 
 
+def _resolve_disk_stats_paths() -> str:
+    raw = (
+        os.environ.get(_DISK_STATS_ENV_NAME)
+        or os.environ.get(_LEGACY_HW_STATS_ENV_NAME)
+        or DEFAULT_COLLECT_DISK_STATS_PATHS
+    )
+    paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
+    sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
+    return sanitized
+
+
 def _repository_setup_commands() -> list[str]:
     script_text = _load_repo_setup_script()
     return [
@@ -477,6 +493,7 @@ def _build_remote_script(
     run_id: str,
 ) -> str:
     script_parts: list[str] = ["set -euo pipefail", ""]
+    hw_stats_paths = _resolve_disk_stats_paths()
     env_file_lines = [
         f"OPENAI_API_KEY={env.openai_api_key}",
         f"HF_TOKEN={env.hf_token}",
@@ -486,6 +503,8 @@ def _build_remote_script(
         f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
         f"RUN_ID={run_id}",
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
+        f"{_DISK_STATS_ENV_NAME}={hw_stats_paths}",
+        f"{_LEGACY_HW_STATS_ENV_NAME}={hw_stats_paths}",
     ]
     if env.sentry_dsn:
         env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
@@ -594,6 +613,7 @@ async def launch_research_pipeline_run(
 
     creator = RunPodManager(api_key=runpod_api_key)
     github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
+    hw_stats_paths = _resolve_disk_stats_paths()
     metadata_env = {
         "GIT_SSH_KEY_B64": github_key_b64,
         "REPO_NAME": "AE-Scientist",
@@ -607,6 +627,8 @@ async def launch_research_pipeline_run(
         "AWS_S3_BUCKET_NAME": env.aws_s3_bucket_name,
         "RUN_ID": run_id,
         "DATABASE_PUBLIC_URL": env.database_public_url,
+        _DISK_STATS_ENV_NAME: hw_stats_paths,
+        _LEGACY_HW_STATS_ENV_NAME: hw_stats_paths,
     }
     if env.sentry_dsn:
         metadata_env["SENTRY_DSN"] = env.sentry_dsn

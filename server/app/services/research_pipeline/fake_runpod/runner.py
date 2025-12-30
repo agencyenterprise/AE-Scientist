@@ -291,6 +291,13 @@ def telemetry_heartbeat(payload: Dict[str, object] = Body(...)) -> None:
     )
 
 
+@app.post("/telemetry/hw-stats", status_code=204)
+def telemetry_hw_stats(payload: Dict[str, object] = Body(...)) -> None:
+    _telemetry_events.append(
+        TelemetryRecord(path="/telemetry/hw-stats", payload=payload, received_at=time.time())
+    )
+
+
 @app.post("/telemetry/stage-progress", status_code=204)
 def telemetry_stage_progress(payload: Dict[str, object] = Body(...)) -> None:
     _telemetry_events.append(

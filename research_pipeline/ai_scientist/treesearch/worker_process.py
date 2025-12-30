@@ -287,7 +287,7 @@ def _improve_existing_implementation(
     prompt["Instructions"] = improve_instructions
 
     logger.debug("Improve prompt for stage=%s: %s", worker_agent.stage_name, prompt)
-    plan, code = worker_agent.plan_and_code_query(prompt=prompt)
+    plan, code = worker_agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
     logger.debug("----- LLM code start (improve) -----")
     logger.debug(code)
     logger.debug("----- LLM code end (improve) -----")
@@ -722,7 +722,8 @@ def parse_and_assign_metrics(
                 "Generating metric parsing code to extract metrics from experiment results"
             )
             parse_metrics_plan, parse_metrics_code = worker_agent.plan_and_code_query(
-                prompt=parse_metrics_prompt
+                prompt=parse_metrics_prompt,
+                enforce_gpu=False,
             )
         child_node.parse_metrics_plan = parse_metrics_plan
         child_node.parse_metrics_code = parse_metrics_code

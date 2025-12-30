@@ -241,6 +241,15 @@ def _repl_run_session(
     Using a module-level function avoids pickling the Interpreter instance
     which can fail under the 'spawn' start method.
     """
+    # Create a dedicated process group for this interpreter process so any
+    # forked/spawned subprocesses (e.g., DataLoader workers) can be terminated
+    # together via os.killpg(pid, ...).
+    try:
+        if hasattr(os, "setsid"):
+            os.setsid()
+    except Exception:
+        pass
+
     # Child process setup (mirrors Interpreter.child_proc_setup)
     shutup.mute_warnings()
     # Suppress PyMuPDF layout warning

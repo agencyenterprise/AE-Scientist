@@ -297,7 +297,7 @@ class MinimalAgent:
         debug_instructions |= self.prompt_impl_guideline
         prompt["Instructions"] = debug_instructions
         logger.debug("Debugging prompt for stage=%s: %s", self.stage_name, prompt)
-        plan, code = self.plan_and_code_query(prompt)
+        plan, code = self.plan_and_code_query(prompt=prompt, enforce_gpu=True)
         logger.debug("----- LLM code start (debug) -----")
         logger.debug(code)
         logger.debug("----- LLM code end (debug) -----")
@@ -311,9 +311,16 @@ class MinimalAgent:
             is_seed_node=True,
         )
 
-    def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool,
+    ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
+        should_enforce_gpu = enforce_gpu and self.gpu_id is not None
         logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):
             self._check_for_skip()
@@ -341,7 +348,7 @@ class MinimalAgent:
             self._check_for_skip()
 
             if code and nl_text:
-                if self.gpu_id is not None:
+                if should_enforce_gpu and self.gpu_id is not None:
                     self._check_for_skip()
                     is_valid, validation_msg = self._validate_code_uses_gpu_id(code)
                     self._check_for_skip()

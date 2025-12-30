@@ -16,7 +16,13 @@ from .utils.config import Config as AppConfig
 
 
 class SupportsSeedAgent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool,
+    ) -> Tuple[str, str]: ...
 
     @property
     def cfg(
@@ -87,7 +93,7 @@ def aggregate_seed_eval_results(*, agent: SupportsSeedAgent, seed_nodes: List[No
     }
     plotting_prompt["Instructions"] = plotting_instructions
     # Attach instructions and call the LLM to produce aggregation code
-    plan, code = agent.plan_and_code_query(prompt=plotting_prompt)
+    plan, code = agent.plan_and_code_query(prompt=plotting_prompt, enforce_gpu=False)
     return code
 
 

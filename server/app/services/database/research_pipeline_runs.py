@@ -82,6 +82,8 @@ class ResearchPipelineRun(NamedTuple):
     public_ip: Optional[str]
     ssh_port: Optional[str]
     pod_host_id: Optional[str]
+    container_disk_gb: Optional[int]
+    volume_disk_gb: Optional[int]
     error_message: Optional[str]
     cost: float
     started_running_at: Optional[datetime]
@@ -113,6 +115,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         start_deadline_at: Optional[datetime],
         cost: float,
         last_billed_at: datetime,
+        container_disk_gb: int,
+        volume_disk_gb: int,
         started_running_at: Optional[datetime] = None,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
@@ -131,6 +135,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         cost,
                         start_deadline_at,
                         last_billed_at,
+                        container_disk_gb,
+                        volume_disk_gb,
                         created_at,
                         updated_at
                     )
@@ -145,6 +151,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         cost,
                         deadline,
                         last_billed_at,
+                        container_disk_gb,
+                        volume_disk_gb,
                         now,
                         now,
                     ),
@@ -417,6 +425,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             public_ip=row.get("public_ip"),
             ssh_port=row.get("ssh_port"),
             pod_host_id=row.get("pod_host_id"),
+            container_disk_gb=row.get("container_disk_gb"),
+            volume_disk_gb=row.get("volume_disk_gb"),
             error_message=row.get("error_message"),
             cost=float(row.get("cost", 0)),
             started_running_at=row.get("started_running_at"),
