@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import os
 import re
 import shlex
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 POD_NAME_PREFIX = "aeScientist"
 _POD_USER_FALLBACK = "Scientist"
 _POD_USER_MAX_LEN = 24
+DEFAULT_STARTUP_GRACE_SECONDS = 600
+POD_READY_POLL_INTERVAL_SECONDS = 5
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
@@ -341,6 +344,22 @@ class RunPodManager:
         raise RunPodError("Pod did not become ready in time")
 
 
+def get_pipeline_startup_grace_seconds() -> int:
+    raw_value = os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
+    if raw_value is None:
+        return DEFAULT_STARTUP_GRACE_SECONDS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid PIPELINE_MONITOR_STARTUP_GRACE_SECONDS=%s; defaulting to %s seconds.",
+            raw_value,
+            DEFAULT_STARTUP_GRACE_SECONDS,
+        )
+        return DEFAULT_STARTUP_GRACE_SECONDS
+    return max(parsed, 1)
+
+
 def _sanitize_pod_user_component(*, value: str) -> str:
     trimmed = value.strip()
     if not trimmed:
@@ -624,7 +643,14 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
-    ready_pod = await manager.wait_for_pod_ready(pod_id=pod_id)
+    poll_interval_seconds = POD_READY_POLL_INTERVAL_SECONDS
+    startup_grace_seconds = get_pipeline_startup_grace_seconds()
+    max_attempts = max(1, math.ceil(startup_grace_seconds / poll_interval_seconds))
+    ready_pod = await manager.wait_for_pod_ready(
+        pod_id=pod_id,
+        poll_interval=poll_interval_seconds,
+        max_attempts=max_attempts,
+    )
     pod_host_id = await manager.get_pod_host_id(pod_id=pod_id)
     return PodReadyMetadata(
         public_ip=cast(str, ready_pod.get("publicIp")),

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import os
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
 from uuid import uuid4
@@ -38,6 +38,7 @@ from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.research_pipeline.runpod_manager import (
+    POD_READY_POLL_INTERVAL_SECONDS,
     PodLaunchInfo,
     RunPodError,
     TerminationConflictError,
@@ -45,6 +46,7 @@ from app.services.research_pipeline.runpod_manager import (
     TerminationRequestError,
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
+    get_pipeline_startup_grace_seconds,
     launch_research_pipeline_run,
     request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
@@ -202,6 +204,45 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
     }
 
 
+def _notify_pod_ready_failure(
+    *,
+    db: DatabaseManager,
+    run_id: str,
+    pod_info: PodLaunchInfo,
+    event_type: str,
+    reason: str,
+    metadata: dict[str, object],
+) -> None:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "pod_id": pod_info.pod_id,
+        "pod_name": pod_info.pod_name,
+        "gpu_type": pod_info.gpu_type,
+        "reason": reason,
+        **metadata,
+    }
+    db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type=event_type,
+        metadata=payload,
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type=event_type,
+        metadata=payload,
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
+
+
 async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_id: str) -> None:
     logger.info(
         "Waiting for pod readiness for run_id=%s (pod_id=%s, pod_name=%s)",
@@ -209,7 +250,54 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
         pod_info.pod_id,
         pod_info.pod_name,
     )
-    ready_metadata = await fetch_pod_ready_metadata(pod_id=pod_info.pod_id)
+    poll_interval_seconds = POD_READY_POLL_INTERVAL_SECONDS
+    startup_grace_seconds = get_pipeline_startup_grace_seconds()
+    max_attempts = max(1, math.ceil(startup_grace_seconds / poll_interval_seconds))
+    try:
+        ready_metadata = await fetch_pod_ready_metadata(
+            pod_id=pod_info.pod_id,
+        )
+    except asyncio.CancelledError:
+        raise
+    except RunPodError as exc:
+        logger.warning(
+            "Pod readiness timed out for run_id=%s (pod_id=%s): %s",
+            run_id,
+            pod_info.pod_id,
+            exc,
+        )
+        _notify_pod_ready_failure(
+            db=db,
+            run_id=run_id,
+            pod_info=pod_info,
+            event_type="pod_ready_timeout",
+            reason="pod_ready_timeout",
+            metadata={
+                "error_message": str(exc),
+                "poll_interval_seconds": poll_interval_seconds,
+                "max_attempts": max_attempts,
+                "timeout_seconds": poll_interval_seconds * max_attempts,
+            },
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Unexpected error while fetching pod readiness for run_id=%s (pod_id=%s)",
+            run_id,
+            pod_info.pod_id,
+        )
+        _notify_pod_ready_failure(
+            db=db,
+            run_id=run_id,
+            pod_info=pod_info,
+            event_type="pod_ready_error",
+            reason="pod_ready_error",
+            metadata={
+                "error_message": str(exc),
+                "error_type": exc.__class__.__name__,
+            },
+        )
+        return
     logger.info(
         "Pod ready for run_id=%s (pod_id=%s). public_ip=%s ssh_port=%s host_id=%s",
         run_id,
@@ -281,7 +369,7 @@ async def create_and_launch_research_run(
     try:
         logger.info("Launching research pipeline job in background for run_id=%s", run_id)
 
-        startup_grace_seconds = int(os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS", "600"))
+        startup_grace_seconds = get_pipeline_startup_grace_seconds()
         db.update_research_pipeline_run(
             run_id=run_id,
             start_deadline_at=datetime.now(timezone.utc) + timedelta(seconds=startup_grace_seconds),
