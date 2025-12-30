@@ -517,11 +517,6 @@ export function ResearchPipelineStages({
                         IN PROGRESS
                       </span>
                     )}
-                    {effectiveSkipStage === stage.key && (
-                      <span className="text-sm font-medium uppercase tracking-wide text-amber-300 whitespace-nowrap">
-                        SKIPPING…
-                      </span>
-                    )}
                     {canShowSkipButton && (
                       <Button
                         variant="outline"
