@@ -3,7 +3,7 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Dict, Optional, Protocol, cast
 
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
@@ -12,7 +12,7 @@ from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
-from app.services.database import DatabaseManager
+from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.research_pipeline import (
     RunPodError,
@@ -20,6 +20,49 @@ from app.services.research_pipeline import (
     upload_runpod_artifacts_via_ssh,
 )
 from app.services.research_pipeline.runpod_manager import RunPodManager
+
+
+class ResearchRunStore(Protocol):
+    async def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]: ...
+
+    async def update_research_pipeline_run(
+        self,
+        *,
+        run_id: str,
+        status: Optional[str] = None,
+        pod_update_info: Optional[PodUpdateInfo] = None,
+        error_message: Optional[str] = None,
+        last_heartbeat_at: Optional[datetime] = None,
+        heartbeat_failures: Optional[int] = None,
+        start_deadline_at: Optional[datetime] = None,
+        last_billed_at: Optional[datetime] = None,
+        started_running_at: Optional[datetime] = None,
+    ) -> None: ...
+
+    async def insert_research_pipeline_run_event(
+        self,
+        *,
+        run_id: str,
+        event_type: str,
+        metadata: Dict[str, object],
+        occurred_at: datetime,
+    ) -> None: ...
+
+    async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
+
+    async def get_user_wallet_balance(self, user_id: int) -> int: ...
+
+    async def add_completed_transaction(
+        self,
+        *,
+        user_id: int,
+        amount: int,
+        transaction_type: str,
+        description: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        stripe_session_id: Optional[str] = None,
+    ) -> CreditTransaction: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +133,8 @@ class ResearchPipelineMonitor:
 
     async def _check_runs(self) -> None:
         try:
-            db = get_database()
-            runs = db.list_active_research_pipeline_runs()
+            db = cast("ResearchRunStore", get_database())
+            runs = await db.list_active_research_pipeline_runs()
             if not runs:
                 logger.debug("Pipeline monitor heartbeat: no active runs.")
                 return
@@ -110,7 +153,7 @@ class ResearchPipelineMonitor:
             raise PipelineMonitorError from exc
 
     async def _handle_pending_run(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         deadline = run.start_deadline_at
         if deadline is None:
@@ -136,7 +179,7 @@ class ResearchPipelineMonitor:
             )
 
     async def _handle_running_run(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         runtime = now - run.created_at
         if runtime > self._max_runtime:
@@ -177,7 +220,7 @@ class ResearchPipelineMonitor:
         delta = now - run.last_heartbeat_at
         if delta > self._heartbeat_timeout:
             failures = run.heartbeat_failures + 1
-            db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=failures)
+            await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=failures)
             logger.warning(
                 "Run %s missed heartbeat (delta %.0fs). Failure count %s/%s.",
                 run.run_id,
@@ -195,7 +238,7 @@ class ResearchPipelineMonitor:
             return
 
         if run.heartbeat_failures > 0:
-            db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
+            await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
 
         if run.pod_id:
             try:
@@ -227,19 +270,19 @@ class ResearchPipelineMonitor:
 
     async def _fail_run(
         self,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         run: ResearchPipelineRun,
         message: str,
         reason: str,
     ) -> None:
         logger.warning("Marking run %s as failed: %s", run.run_id, message)
         now = datetime.now(timezone.utc)
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run.run_id,
             status="failed",
             error_message=message,
         )
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="status_changed",
             metadata={
@@ -294,7 +337,7 @@ class ResearchPipelineMonitor:
             )
 
     async def _bill_run_if_needed(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         rate = max(0, settings.RESEARCH_RUN_CREDITS_PER_MINUTE)
         if rate == 0:
@@ -305,12 +348,12 @@ class ResearchPipelineMonitor:
         if elapsed_minutes <= 0:
             return
 
-        user_id = db.get_run_owner_user_id(run.run_id)
+        user_id = await db.get_run_owner_user_id(run.run_id)
         if user_id is None:
             logger.warning("Unable to determine owner for run %s; skipping billing.", run.run_id)
             return
 
-        available = db.get_user_wallet_balance(user_id)
+        available = await db.get_user_wallet_balance(user_id)
         if available < rate:
             await self._fail_run(
                 db,
@@ -331,7 +374,7 @@ class ResearchPipelineMonitor:
             return
 
         charge_amount = billable_minutes * rate
-        db.add_completed_transaction(
+        await db.add_completed_transaction(
             user_id=user_id,
             amount=-charge_amount,
             transaction_type="debit",
@@ -339,7 +382,7 @@ class ResearchPipelineMonitor:
             metadata={"run_id": run.run_id, "minutes_billed": billable_minutes},
         )
         new_balance = available - charge_amount
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="billing_debit",
             metadata={
@@ -350,7 +393,7 @@ class ResearchPipelineMonitor:
             },
             occurred_at=now,
         )
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run.run_id,
             last_billed_at=last_billed + timedelta(minutes=billable_minutes),
         )
@@ -365,7 +408,7 @@ class ResearchPipelineMonitor:
 
     async def _record_pod_billing_event(
         self,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         *,
         run_id: str,
         pod_id: str,
@@ -381,7 +424,7 @@ class ResearchPipelineMonitor:
         metadata = summary._asdict()
         metadata["records"] = [record._asdict() for record in summary.records]
         metadata["context"] = context
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run_id,
             event_type="pod_billing_summary",
             metadata=metadata,
@@ -398,12 +441,12 @@ class ResearchPipelineMonitor:
                 port=run.ssh_port,
                 run_id=run.run_id,
             )
-        except Exception as exc:  # noqa: BLE001
+        except (RuntimeError, OSError) as exc:
             logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
 
     async def _maybe_backfill_ssh_info(
         self,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         run: ResearchPipelineRun,
         now: datetime,
     ) -> None:
@@ -426,7 +469,7 @@ class ResearchPipelineMonitor:
     async def _refresh_pod_connection_info(
         self,
         *,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         run: ResearchPipelineRun,
     ) -> None:
         assert run.pod_id  # mypy appeasement
@@ -466,7 +509,7 @@ class ResearchPipelineMonitor:
         machine = pod.get("machine") or {}
         gpu_type = run.gpu_type or machine.get("gpuTypeId") or "unknown"
 
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run.run_id,
             pod_update_info=PodUpdateInfo(
                 pod_id=run.pod_id,
@@ -478,7 +521,7 @@ class ResearchPipelineMonitor:
                 pod_host_id=pod_host_id,
             ),
         )
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="pod_info_backfilled",
             metadata={

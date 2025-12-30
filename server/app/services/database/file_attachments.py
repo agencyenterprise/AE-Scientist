@@ -8,8 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, NamedTuple, Optional
 
-import psycopg2
-import psycopg2.extras
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 
@@ -42,7 +41,7 @@ class AttachmentTexts(NamedTuple):
 class FileAttachmentsMixin(ConnectionProvider):
     """Database operations for file attachments."""
 
-    def create_file_attachment_upload(
+    async def create_file_attachment_upload(
         self,
         conversation_id: int,
         filename: str,
@@ -68,9 +67,9 @@ class FileAttachmentsMixin(ConnectionProvider):
         Raises:
             Exception: If database operation fails
         """
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO file_attachments (conversation_id, filename, file_size, file_type, s3_key, uploaded_by_user_id)
                     VALUES (%s, %s, %s, %s, %s, %s)
@@ -78,12 +77,14 @@ class FileAttachmentsMixin(ConnectionProvider):
                     """,
                     (conversation_id, filename, file_size, file_type, s3_key, uploaded_by_user_id),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 attachment_id = int(result[0]) if result else 0
-                conn.commit()
+                await conn.commit()
                 return attachment_id
 
-    def update_file_attachment_message_id(self, attachment_id: int, chat_message_id: int) -> bool:
+    async def update_file_attachment_message_id(
+        self, attachment_id: int, chat_message_id: int
+    ) -> bool:
         """
         Update an existing file attachment to link it to a chat message.
 
@@ -97,9 +98,9 @@ class FileAttachmentsMixin(ConnectionProvider):
         Raises:
             Exception: If database operation fails
         """
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     """
                     UPDATE file_attachments
                     SET chat_message_id = %s
@@ -107,10 +108,10 @@ class FileAttachmentsMixin(ConnectionProvider):
                     """,
                     (chat_message_id, attachment_id),
                 )
-                conn.commit()
+                await conn.commit()
                 return bool(cursor.rowcount > 0)
 
-    def get_file_attachments_by_message_ids(
+    async def get_file_attachments_by_message_ids(
         self, chat_message_ids: List[int]
     ) -> List[FileAttachmentData]:
         """
@@ -128,9 +129,9 @@ class FileAttachmentsMixin(ConnectionProvider):
         if not chat_message_ids:
             return []
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT id, chat_message_id, conversation_id, filename, file_size, file_type, s3_key, created_at, uploaded_by_user_id, extracted_text, summary_text
                     FROM file_attachments
@@ -139,10 +140,12 @@ class FileAttachmentsMixin(ConnectionProvider):
                     """,
                     (chat_message_ids,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
                 return [FileAttachmentData(**row) for row in rows]
 
-    def get_file_attachments_by_ids(self, attachment_ids: List[int]) -> List[FileAttachmentData]:
+    async def get_file_attachments_by_ids(
+        self, attachment_ids: List[int]
+    ) -> List[FileAttachmentData]:
         """
         Get multiple file attachments by their IDs.
 
@@ -158,23 +161,23 @@ class FileAttachmentsMixin(ConnectionProvider):
         if not attachment_ids:
             return []
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                # Use tuple for IN clause
-                placeholders = ",".join(["%s"] * len(attachment_ids))
-                cursor.execute(
-                    f"""
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
                     SELECT id, chat_message_id, conversation_id, filename, file_size, file_type, s3_key, created_at, uploaded_by_user_id, extracted_text, summary_text
                     FROM file_attachments
-                    WHERE id IN ({placeholders})
+                    WHERE id = ANY(%s)
                     ORDER BY created_at ASC
                     """,
-                    attachment_ids,
+                    (attachment_ids,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
                 return [FileAttachmentData(**row) for row in rows]
 
-    def get_conversation_file_attachments(self, conversation_id: int) -> List[FileAttachmentData]:
+    async def get_conversation_file_attachments(
+        self, conversation_id: int
+    ) -> List[FileAttachmentData]:
         """
         Get all file attachments for a conversation.
 
@@ -187,9 +190,9 @@ class FileAttachmentsMixin(ConnectionProvider):
         Raises:
             Exception: If database operation fails
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT id, chat_message_id, conversation_id, filename, file_size, file_type, s3_key, created_at, uploaded_by_user_id
                     FROM file_attachments
@@ -198,10 +201,10 @@ class FileAttachmentsMixin(ConnectionProvider):
                     """,
                     (conversation_id,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
                 return [FileAttachmentData(**row) for row in rows]
 
-    def update_attachment_texts(
+    async def update_attachment_texts(
         self, attachment_id: int, extracted_text: str, summary_text: str
     ) -> bool:
         """
@@ -215,9 +218,9 @@ class FileAttachmentsMixin(ConnectionProvider):
         Returns:
             True if the record was updated, False otherwise
         """
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     """
                     UPDATE file_attachments
                     SET extracted_text = %s, summary_text = %s
@@ -225,5 +228,5 @@ class FileAttachmentsMixin(ConnectionProvider):
                     """,
                     (extracted_text, summary_text, attachment_id),
                 )
-                conn.commit()
+                await conn.commit()
                 return bool(cursor.rowcount > 0)

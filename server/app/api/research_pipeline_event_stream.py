@@ -201,7 +201,7 @@ def _extract_terminal_transition_time_from_run_event(
     return _parse_iso_timestamp(timestamp=run_event.get("occurred_at"))
 
 
-def _get_authorized_run_context(
+async def _get_authorized_run_context(
     *,
     conversation_id: int,
     run_id: str,
@@ -212,13 +212,13 @@ def _get_authorized_run_context(
 
     user = get_current_user(request)
     db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
@@ -277,27 +277,27 @@ def _build_hw_cost_estimate_event_data(
     }
 
 
-def _build_initial_stream_payload(
+async def _build_initial_stream_payload(
     *,
     db: DatabaseManager,
     run_id: str,
     conversation_id: int,
     current_run: ResearchPipelineRun,
 ) -> dict:
-    raw_run_events = db.list_research_pipeline_run_events(run_id=run_id)
+    raw_run_events = await db.list_research_pipeline_run_events(run_id=run_id)
     stage_events = [
         ResearchRunStageProgress.from_db_record(event).model_dump()
-        for event in db.list_stage_progress_events(run_id=run_id)
+        for event in await db.list_stage_progress_events(run_id=run_id)
     ]
     log_events = [
         ResearchRunLogEntry.from_db_record(event).model_dump()
-        for event in db.list_run_log_events(run_id=run_id)
+        for event in await db.list_run_log_events(run_id=run_id)
     ]
     substage_events = [
         ResearchRunSubstageEvent.from_db_record(event).model_dump()
-        for event in db.list_substage_completed_events(run_id=run_id)
+        for event in await db.list_substage_completed_events(run_id=run_id)
     ]
-    substage_summary_records = db.list_substage_summary_events(run_id=run_id)
+    substage_summary_records = await db.list_substage_summary_events(run_id=run_id)
     substage_summaries = [
         ResearchRunSubstageSummary.from_db_record(event).model_dump()
         for event in substage_summary_records
@@ -308,22 +308,22 @@ def _build_initial_stream_payload(
             conversation_id=conversation_id,
             run_id=run_id,
         ).model_dump()
-        for artifact in db.list_run_artifacts(run_id=run_id)
+        for artifact in await db.list_run_artifacts(run_id=run_id)
     ]
     tree_viz = [
         TreeVizItem.from_db_record(record).model_dump()
-        for record in db.list_tree_viz_for_run(run_id=run_id)
+        for record in await db.list_tree_viz_for_run(run_id=run_id)
     ]
     paper_gen_events = [
         ResearchRunPaperGenerationProgress.from_db_record(event).model_dump()
-        for event in db.list_paper_generation_events(run_id=run_id)
+        for event in await db.list_paper_generation_events(run_id=run_id)
     ]
     run_events = [ResearchRunEvent.from_db_record(event).model_dump() for event in raw_run_events]
     best_node_payload = [
         ResearchRunBestNodeSelection.from_db_record(event).model_dump()
-        for event in db.list_best_node_reasoning_events(run_id=run_id)
+        for event in await db.list_best_node_reasoning_events(run_id=run_id)
     ]
-    latest_code_execution = db.get_latest_code_execution_event(run_id=run_id)
+    latest_code_execution = await db.get_latest_code_execution_event(run_id=run_id)
     code_execution_snapshot = (
         ResearchRunCodeExecution.from_db_record(latest_code_execution).model_dump()
         if latest_code_execution
@@ -331,7 +331,7 @@ def _build_initial_stream_payload(
     )
     stage_skip_windows = [
         ResearchRunStageSkipWindow.from_db_record(record).model_dump()
-        for record in db.list_stage_skip_windows(run_id=run_id)
+        for record in await db.list_stage_skip_windows(run_id=run_id)
     ]
 
     return {
@@ -414,7 +414,7 @@ async def stream_research_run_events(
     run_id: str,
     request: Request,
 ) -> StreamingResponse:
-    db, run = _get_authorized_run_context(
+    db, run = await _get_authorized_run_context(
         conversation_id=conversation_id,
         run_id=run_id,
         request=request,
@@ -425,7 +425,7 @@ async def stream_research_run_events(
     hw_cost_actual_payload: dict[str, object] | None = None
     hw_cost_actual_dirty = False
     if run.status not in RUN_ACTIVE_STATUSES:
-        completed_run_events = db.list_research_pipeline_run_events(run_id=run_id)
+        completed_run_events = await db.list_research_pipeline_run_events(run_id=run_id)
         hw_stopped_running_at = _extract_terminal_transition_time_from_events(
             events=completed_run_events,
         )
@@ -441,7 +441,7 @@ async def stream_research_run_events(
         nonlocal hw_cost_actual_payload
         nonlocal hw_cost_actual_dirty
         queue = register_stream_queue(run_id=run_id)
-        current_run = db.get_research_pipeline_run(run_id)
+        current_run = await db.get_research_pipeline_run(run_id)
         if current_run is None:
             yield _format_stream_event(event={"type": "error", "data": "Run not found"})
             return
@@ -458,11 +458,11 @@ async def stream_research_run_events(
                     break
 
                 if hw_started_running_at is None:
-                    refreshed_run = db.get_research_pipeline_run(run_id=run_id)
+                    refreshed_run = await db.get_research_pipeline_run(run_id=run_id)
                     if refreshed_run is not None:
                         hw_started_running_at = refreshed_run.started_running_at
                 if hw_cost_per_hour_cents is None or hw_cost_per_hour_cents <= 0:
-                    refreshed_run = db.get_research_pipeline_run(run_id=run_id)
+                    refreshed_run = await db.get_research_pipeline_run(run_id=run_id)
                     if refreshed_run is not None:
                         hw_cost_per_hour_cents = _run_cost_per_hour_cents(refreshed_run)
 
@@ -546,18 +546,18 @@ async def stream_research_run_events(
     "/{conversation_id}/idea/research-run/{run_id}/snapshot",
     response_model=ResearchRunInitialEventData,
 )
-def get_research_run_snapshot(
+async def get_research_run_snapshot(
     conversation_id: int,
     run_id: str,
     request: Request,
 ) -> ORJSONResponse:
-    db, current_run = _get_authorized_run_context(
+    db, current_run = await _get_authorized_run_context(
         conversation_id=conversation_id,
         run_id=run_id,
         request=request,
     )
 
-    initial_payload = _build_initial_stream_payload(
+    initial_payload = await _build_initial_stream_payload(
         db=db,
         run_id=run_id,
         conversation_id=conversation_id,

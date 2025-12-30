@@ -6,11 +6,10 @@ Handles CRUD operations for chat_messages table.
 
 import logging
 from datetime import datetime
-from typing import List, NamedTuple
+from typing import Any, List, NamedTuple
 
-import psycopg2
-import psycopg2.extras
-from psycopg2.extensions import cursor
+from psycopg import AsyncCursor
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 
@@ -34,11 +33,11 @@ class ChatMessageData(NamedTuple):
 class ChatMessagesMixin(ConnectionProvider):
     """Database operations for chat messages."""
 
-    def get_chat_messages(self, idea_id: int) -> List[ChatMessageData]:
+    async def get_chat_messages(self, idea_id: int) -> List[ChatMessageData]:
         """Get all chat messages for an idea, ordered by sequence number."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT cm.id, cm.idea_id, cm.role, cm.content,
                            cm.sequence_number, cm.created_at, cm.sent_by_user_id,
@@ -50,42 +49,42 @@ class ChatMessagesMixin(ConnectionProvider):
                     """,
                     (idea_id,),
                 )
-                return [ChatMessageData(**row) for row in cursor.fetchall()]
+                rows = await cursor.fetchall()
+                return [ChatMessageData(**row) for row in rows]
 
-    def create_chat_message(
+    async def create_chat_message(
         self, idea_id: int, role: str, content: str, sent_by_user_id: int
     ) -> int:
         """Create a new chat message with the next sequence number."""
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                # Get the next sequence number
-                sequence_number = self._get_next_sequence_number(cursor, idea_id)
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                sequence_number = await self._get_next_sequence_number(cursor, idea_id)
 
-                cursor.execute(
+                await cursor.execute(
                     "INSERT INTO chat_messages (idea_id, role, content, sequence_number, sent_by_user_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                     (idea_id, role, content, sequence_number, sent_by_user_id),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 message_id = int(result[0]) if result else 0
-                conn.commit()
+                await conn.commit()
                 return message_id
 
-    def _get_next_sequence_number(self, cursor: cursor, idea_id: int) -> int:
+    async def _get_next_sequence_number(self, cursor: AsyncCursor[Any], idea_id: int) -> int:
         """Get the next sequence number for an idea."""
-        cursor.execute(
+        await cursor.execute(
             "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM chat_messages WHERE idea_id = %s",
             (idea_id,),
         )
-        result = cursor.fetchone()
+        result = await cursor.fetchone()
         return int(result[0]) if result else 1
 
-    def get_chat_messages_for_ids(self, message_ids: List[int]) -> List[ChatMessageData]:
+    async def get_chat_messages_for_ids(self, message_ids: List[int]) -> List[ChatMessageData]:
         """Get chat messages by a list of ids."""
         if not message_ids:
             return []
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT cm.id, cm.idea_id, cm.role, cm.content,
                            cm.sequence_number, cm.created_at, cm.sent_by_user_id,
@@ -97,4 +96,5 @@ class ChatMessagesMixin(ConnectionProvider):
                     """,
                     (message_ids,),
                 )
-                return [ChatMessageData(**row) for row in cursor.fetchall()]
+                rows = await cursor.fetchall()
+                return [ChatMessageData(**row) for row in rows]

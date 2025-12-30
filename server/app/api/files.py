@@ -127,7 +127,7 @@ async def process_attachment_background(
         logger.info(
             f"Storing summary text for attachment {attachment_id}: {summary_text}, {extracted_text}"
         )
-        db.update_attachment_texts(
+        await db.update_attachment_texts(
             attachment_id=attachment_id,
             extracted_text=extracted_text,
             summary_text=summary_text,
@@ -173,7 +173,7 @@ async def upload_file(
 
     try:
         # Validate conversation exists
-        existing_conversation = db.get_conversation_by_id(conversation_id)
+        existing_conversation = await db.get_conversation_by_id(conversation_id)
         if not existing_conversation:
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
@@ -203,7 +203,7 @@ async def upload_file(
 
         # Create file attachment record (without chat_message_id)
         # The file will be linked to a message when the user sends a chat message with attachment_ids
-        attachment_id = db.create_file_attachment_upload(
+        attachment_id = await db.create_file_attachment_upload(
             conversation_id=conversation_id,
             filename=file.filename,
             file_size=file_size,
@@ -273,7 +273,7 @@ async def download_file(
 
     try:
         # Get file attachment metadata
-        file_attachments = db.get_file_attachments_by_ids([file_id])
+        file_attachments = await db.get_file_attachments_by_ids([file_id])
         if not file_attachments:
             response.status_code = 404
             return ErrorResponse(error="File not found", detail="File not found")
@@ -337,18 +337,20 @@ async def list_conversation_files(
 
     try:
         # Validate conversation exists
-        existing_conversation = db.get_conversation_by_id(conversation_id)
+        existing_conversation = await db.get_conversation_by_id(conversation_id)
         if not existing_conversation:
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
         # Get all chat messages for this conversation's idea
-        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not idea_data:
             return FileListResponse(files=[], file_count=0)
 
         # Get all file attachments for this conversation
-        file_attachments = db.get_conversation_file_attachments(conversation_id=conversation_id)
+        file_attachments = await db.get_conversation_file_attachments(
+            conversation_id=conversation_id
+        )
 
         # Collect all file attachments from all messages
         all_attachments = []

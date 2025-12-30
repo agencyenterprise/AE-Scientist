@@ -69,16 +69,16 @@ async def stream_chat_with_idea(
 
     try:
         # Validate conversation exists
-        existing_conversation = db.get_conversation_by_id(conversation_id)
+        existing_conversation = await db.get_conversation_by_id(conversation_id)
         if not existing_conversation:
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
         user = get_current_user(request)
         # Get idea
-        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not idea_data:
-            idea_id = db.create_idea(
+            idea_id = await db.create_idea(
                 conversation_id=conversation_id,
                 title="Failed to Generate Idea",
                 short_hypothesis="Idea generation failed.",
@@ -92,17 +92,17 @@ async def stream_chat_with_idea(
         else:
             idea_id = idea_data.idea_id
 
-        enforce_minimum_credits(
+        await enforce_minimum_credits(
             user_id=user.id,
             required=settings.CHAT_MESSAGE_CREDIT_COST,
             action="chat_message",
         )
 
         # Get chat history
-        chat_history = db.get_chat_messages(idea_id)
+        chat_history = await db.get_chat_messages(idea_id)
 
         # Store user message in database
-        user_msg_id = db.create_chat_message(
+        user_msg_id = await db.create_chat_message(
             idea_id=idea_id,
             role="user",
             content=request_data.message,
@@ -110,7 +110,7 @@ async def stream_chat_with_idea(
         )
         logger.info(f"Stored user message with ID: {user_msg_id}")
 
-        charge_user_credits(
+        await charge_user_credits(
             user_id=user.id,
             cost=settings.CHAT_MESSAGE_CREDIT_COST,
             action="chat_message",
@@ -128,7 +128,7 @@ async def stream_chat_with_idea(
             logger.info(f"Processing {len(request_data.attachment_ids)} file attachments")
 
             # Get file attachments from database
-            file_attachments = db.get_file_attachments_by_ids(request_data.attachment_ids)
+            file_attachments = await db.get_file_attachments_by_ids(request_data.attachment_ids)
 
             # Validate that all requested attachments were found
             found_ids = {fa.id for fa in file_attachments}
@@ -143,7 +143,7 @@ async def stream_chat_with_idea(
             # Link file attachments to the user message
             for file_attachment in file_attachments:
                 # Update existing file attachment record to link to this message (first-send only)
-                success = db.update_file_attachment_message_id(
+                success = await db.update_file_attachment_message_id(
                     attachment_id=file_attachment.id,
                     chat_message_id=user_msg_id,
                 )
@@ -159,7 +159,7 @@ async def stream_chat_with_idea(
             # After linking, upload/link documents to summarizer using extracted_text from DB
             try:
                 # Re-read attachments to include latest extracted_text/summary_text
-                refreshed = db.get_file_attachments_by_ids(request_data.attachment_ids)
+                refreshed = await db.get_file_attachments_by_ids(request_data.attachment_ids)
                 attached_files = refreshed
                 for fa in attached_files:
                     content = fa.extracted_text or fa.summary_text or ""
@@ -259,7 +259,7 @@ async def stream_chat_with_idea(
                             yield error_json
                             return
 
-                        db.create_chat_message(
+                        await db.create_chat_message(
                             idea_id=idea_id,
                             role="assistant",
                             content=event_data.data.assistant_response,

@@ -154,7 +154,7 @@ async def _record_pod_billing_event(
     if actual_cost_cents is not None:
         metadata["actual_cost_cents"] = actual_cost_cents
     now = datetime.now(timezone.utc)
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_billing_summary",
         metadata=metadata,
@@ -204,7 +204,7 @@ def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
     }
 
 
-def _notify_pod_ready_failure(
+async def _notify_pod_ready_failure(
     *,
     db: DatabaseManager,
     run_id: str,
@@ -221,7 +221,7 @@ def _notify_pod_ready_failure(
         "reason": reason,
         **metadata,
     }
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type=event_type,
         metadata=payload,
@@ -266,7 +266,7 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
             pod_info.pod_id,
             exc,
         )
-        _notify_pod_ready_failure(
+        await _notify_pod_ready_failure(
             db=db,
             run_id=run_id,
             pod_info=pod_info,
@@ -286,7 +286,7 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
             run_id,
             pod_info.pod_id,
         )
-        _notify_pod_ready_failure(
+        await _notify_pod_ready_failure(
             db=db,
             run_id=run_id,
             pod_info=pod_info,
@@ -306,7 +306,7 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
         ready_metadata.ssh_port,
         ready_metadata.pod_host_id,
     )
-    db.update_research_pipeline_run(
+    await db.update_research_pipeline_run(
         run_id=run_id,
         pod_update_info=PodUpdateInfo(
             pod_id=pod_info.pod_id,
@@ -325,7 +325,7 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
         ready_metadata.ssh_port,
         ready_metadata.pod_host_id,
     )
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_info_updated",
         metadata={
@@ -354,7 +354,7 @@ async def create_and_launch_research_run(
 ) -> tuple[str, PodLaunchInfo]:
     db = get_database()
     run_id = f"rp-{uuid4().hex[:10]}"
-    db.create_research_pipeline_run(
+    await db.create_research_pipeline_run(
         run_id=run_id,
         idea_id=idea_data.idea_id,
         idea_version_id=idea_data.version_id,
@@ -370,7 +370,7 @@ async def create_and_launch_research_run(
         logger.info("Launching research pipeline job in background for run_id=%s", run_id)
 
         startup_grace_seconds = get_pipeline_startup_grace_seconds()
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run_id,
             start_deadline_at=datetime.now(timezone.utc) + timedelta(seconds=startup_grace_seconds),
         )
@@ -381,7 +381,7 @@ async def create_and_launch_research_run(
             run_id=run_id,
             requested_by_first_name=requested_by_first_name,
         )
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run_id,
             pod_update_info=PodUpdateInfo(
                 pod_id=pod_info.pod_id,
@@ -398,9 +398,11 @@ async def create_and_launch_research_run(
 
     except (RunPodError, FileNotFoundError, ValueError, RuntimeError) as exc:
         logger.exception("Failed to launch research pipeline run.")
-        run_before = db.get_research_pipeline_run(run_id)
-        db.update_research_pipeline_run(run_id=run_id, status="failed", error_message=str(exc))
-        db.insert_research_pipeline_run_event(
+        run_before = await db.get_research_pipeline_run(run_id)
+        await db.update_research_pipeline_run(
+            run_id=run_id, status="failed", error_message=str(exc)
+        )
+        await db.insert_research_pipeline_run_event(
             run_id=run_id,
             event_type="status_changed",
             metadata={
@@ -429,17 +431,17 @@ async def submit_idea_for_research(
     user = get_current_user(request)
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
 
-    enforce_minimum_credits(
+    await enforce_minimum_credits(
         user_id=user.id,
         required=settings.MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE,
         action="research_pipeline",
@@ -466,7 +468,7 @@ async def submit_idea_for_research(
     "/{conversation_id}/idea/research-run/{run_id}",
     response_model=ResearchRunDetailsResponse,
 )
-def get_research_run_details(
+async def get_research_run_details(
     conversation_id: int,
     run_id: str,
     request: Request,
@@ -475,34 +477,35 @@ def get_research_run_details(
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
     db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
     stage_events = [
         ResearchRunStageProgress.from_db_record(event)
-        for event in db.list_stage_progress_events(run_id=run_id)
+        for event in await db.list_stage_progress_events(run_id=run_id)
     ]
     log_events = [
-        ResearchRunLogEntry.from_db_record(event) for event in db.list_run_log_events(run_id=run_id)
+        ResearchRunLogEntry.from_db_record(event)
+        for event in await db.list_run_log_events(run_id=run_id)
     ]
     substage_events = [
         ResearchRunSubstageEvent.from_db_record(event)
-        for event in db.list_substage_completed_events(run_id=run_id)
+        for event in await db.list_substage_completed_events(run_id=run_id)
     ]
     substage_summaries = [
         ResearchRunSubstageSummary.from_db_record(event)
-        for event in db.list_substage_summary_events(run_id=run_id)
+        for event in await db.list_substage_summary_events(run_id=run_id)
     ]
     best_node_selections = [
         ResearchRunBestNodeSelection.from_db_record(event)
-        for event in db.list_best_node_reasoning_events(run_id=run_id)
+        for event in await db.list_best_node_reasoning_events(run_id=run_id)
     ]
     artifacts = [
         ResearchRunArtifactMetadata.from_db_record(
@@ -510,22 +513,23 @@ def get_research_run_details(
             conversation_id=conversation_id,
             run_id=run_id,
         )
-        for artifact in db.list_run_artifacts(run_id=run_id)
+        for artifact in await db.list_run_artifacts(run_id=run_id)
     ]
     run_events = [
         ResearchRunEvent.from_db_record(event)
-        for event in db.list_research_pipeline_run_events(run_id=run_id)
+        for event in await db.list_research_pipeline_run_events(run_id=run_id)
     ]
     tree_viz = [
-        TreeVizItem.from_db_record(record) for record in db.list_tree_viz_for_run(run_id=run_id)
+        TreeVizItem.from_db_record(record)
+        for record in await db.list_tree_viz_for_run(run_id=run_id)
     ]
     paper_gen_events = [
         ResearchRunPaperGenerationProgress.from_db_record(event)
-        for event in db.list_paper_generation_events(run_id=run_id)
+        for event in await db.list_paper_generation_events(run_id=run_id)
     ]
     stage_skip_windows = [
         ResearchRunStageSkipWindow.from_db_record(record)
-        for record in db.list_stage_skip_windows(run_id=run_id)
+        for record in await db.list_stage_skip_windows(run_id=run_id)
     ]
 
     return ResearchRunDetailsResponse(
@@ -547,7 +551,7 @@ def get_research_run_details(
     "/{conversation_id}/idea/research-run/{run_id}/review",
     response_model=Union[LlmReviewResponse, LlmReviewNotFoundResponse],
 )
-def get_research_run_review(
+async def get_research_run_review(
     conversation_id: int,
     run_id: str,
     request: Request,
@@ -559,17 +563,17 @@ def get_research_run_review(
     user = get_current_user(request)
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    review = db.get_review_by_run_id(run_id)
+    review = await db.get_review_by_run_id(run_id)
     if review is None:
         return LlmReviewNotFoundResponse(
             run_id=run_id,
@@ -605,7 +609,7 @@ def get_research_run_review(
     "/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
     response_model=TerminateExecutionResponse,
 )
-def terminate_code_execution(
+async def terminate_code_execution(
     conversation_id: int,
     run_id: str,
     execution_id: str,
@@ -618,13 +622,13 @@ def terminate_code_execution(
     user = get_current_user(request)
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
     if run.status not in ("pending", "running"):
@@ -662,7 +666,7 @@ def terminate_code_execution(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     now = datetime.now(timezone.utc)
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="termination_requested",
         metadata={
@@ -701,7 +705,7 @@ def terminate_code_execution(
     "/{conversation_id}/idea/research-run/{run_id}/skip-stage",
     response_model=SkipStageResponse,
 )
-def skip_active_stage(
+async def skip_active_stage(
     conversation_id: int,
     run_id: str,
     payload: SkipStageRequest,
@@ -714,13 +718,13 @@ def skip_active_stage(
     user = get_current_user(request)
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
     if run.status != "running":
@@ -746,7 +750,7 @@ def skip_active_stage(
         ) from exc
 
     now = datetime.now(timezone.utc)
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="stage_skip_requested",
         metadata={
@@ -772,11 +776,11 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
 
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
@@ -850,8 +854,10 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         )
 
     stop_message = "Research run was stopped by the user."
-    db.update_research_pipeline_run(run_id=run_id, status="failed", error_message=stop_message)
-    db.insert_research_pipeline_run_event(
+    await db.update_research_pipeline_run(
+        run_id=run_id, status="failed", error_message=stop_message
+    )
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="status_changed",
         metadata={
@@ -904,7 +910,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
     "/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/download",
     status_code=status.HTTP_307_TEMPORARY_REDIRECT,
 )
-def download_research_run_artifact(
+async def download_research_run_artifact(
     conversation_id: int,
     run_id: str,
     artifact_id: int,
@@ -914,15 +920,15 @@ def download_research_run_artifact(
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
     db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
-    artifact = db.get_run_artifact(artifact_id)
+    artifact = await db.get_run_artifact(artifact_id)
     if artifact is None or artifact.run_id != run_id:
         raise HTTPException(status_code=404, detail="Artifact not found")
     s3 = get_s3_service()
@@ -942,7 +948,7 @@ def download_research_run_artifact(
     "/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign",
     response_model=ArtifactPresignedUrlResponse,
 )
-def get_artifact_presigned_url(
+async def get_artifact_presigned_url(
     conversation_id: int,
     run_id: str,
     artifact_id: int,
@@ -958,17 +964,17 @@ def get_artifact_presigned_url(
     user = get_current_user(request)
     db = get_database()
 
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    artifact = db.get_run_artifact(artifact_id)
+    artifact = await db.get_run_artifact(artifact_id)
     if artifact is None or artifact.run_id != run_id:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
@@ -993,7 +999,7 @@ def get_artifact_presigned_url(
     "/{conversation_id}/idea/research-run/{run_id}/tree-viz",
     response_model=list[TreeVizItem],
 )
-def list_tree_viz(
+async def list_tree_viz(
     conversation_id: int,
     run_id: str,
     request: Request,
@@ -1003,15 +1009,15 @@ def list_tree_viz(
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
     db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
-    records = db.list_tree_viz_for_run(run_id=run_id)
+    records = await db.list_tree_viz_for_run(run_id=run_id)
     return [TreeVizItem.from_db_record(record) for record in records]
 
 
@@ -1019,7 +1025,7 @@ def list_tree_viz(
     "/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}",
     response_model=TreeVizItem,
 )
-def get_tree_viz(
+async def get_tree_viz(
     conversation_id: int,
     run_id: str,
     stage_id: str,
@@ -1030,15 +1036,15 @@ def get_tree_viz(
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
     db = get_database()
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
-    run = db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
+    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
-    record = db.get_tree_viz(run_id=run_id, stage_id=stage_id)
+    record = await db.get_tree_viz(run_id=run_id, stage_id=stage_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Tree viz not found")
     return TreeVizItem.from_db_record(record)

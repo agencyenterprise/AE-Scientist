@@ -8,8 +8,7 @@ import logging
 from datetime import datetime
 from typing import List, NamedTuple, Optional
 
-import psycopg2
-import psycopg2.extras
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 
@@ -35,10 +34,10 @@ class LlmTokenUsage(BaseLlmTokenUsage):
     updated_at: datetime
 
 
-class LlmTokenUsagesMixin(ConnectionProvider):
+class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Database operations for LLM token usages."""
 
-    def create_llm_token_usage(
+    async def create_llm_token_usage(
         self,
         conversation_id: int,
         provider: str,
@@ -50,9 +49,9 @@ class LlmTokenUsagesMixin(ConnectionProvider):
         """Create a new LLM token usage record in the database."""
         now = datetime.now()
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO llm_token_usages
                     (conversation_id, run_id, provider, model, input_tokens, output_tokens, created_at, updated_at)
@@ -70,16 +69,13 @@ class LlmTokenUsagesMixin(ConnectionProvider):
                         now,
                     ),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to create LLM token usage record: no ID returned")
 
-                token_usage_id = int(result["id"])
-                conn.commit()
+                return int(result["id"])
 
-        return token_usage_id
-
-    def get_llm_token_usages_by_conversation_aggregated_by_model(
+    async def get_llm_token_usages_by_conversation_aggregated_by_model(
         self, conversation_id: int
     ) -> List[BaseLlmTokenUsage]:
         """
@@ -92,9 +88,9 @@ class LlmTokenUsagesMixin(ConnectionProvider):
         Returns:
             List of LlmTokenUsage objects
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT conversation_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
@@ -105,16 +101,16 @@ class LlmTokenUsagesMixin(ConnectionProvider):
                 """,
                     (conversation_id,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
         return [BaseLlmTokenUsage(**row) for row in rows]
 
-    def get_llm_token_usages_by_conversation_aggregated_by_run_and_model(
+    async def get_llm_token_usages_by_conversation_aggregated_by_run_and_model(
         self, conversation_id: int
     ) -> List[BaseLlmTokenUsage]:
         """Get all LLM token usages for a conversation aggregated by run_id and model."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT conversation_id, run_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
@@ -125,16 +121,16 @@ class LlmTokenUsagesMixin(ConnectionProvider):
                 """,
                     (conversation_id,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
         return [BaseLlmTokenUsage(**row) for row in rows]
 
-    def get_llm_token_usages_by_run_aggregated_by_model(
+    async def get_llm_token_usages_by_run_aggregated_by_model(
         self, run_id: str
     ) -> List[BaseLlmTokenUsage]:
         """Get all LLM token usages for a run aggregated by model."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT conversation_id, run_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
@@ -144,5 +140,5 @@ class LlmTokenUsagesMixin(ConnectionProvider):
                 """,
                     (run_id,),
                 )
-                rows = cursor.fetchall()
+                rows = await cursor.fetchall()
         return [BaseLlmTokenUsage(**row) for row in rows]

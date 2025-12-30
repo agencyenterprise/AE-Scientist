@@ -4,8 +4,9 @@ import logging
 from datetime import datetime
 from typing import Any
 
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg import Connection
+from psycopg.types.json import Jsonb
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,8 @@ class FakeRunPodPersistence:
         self._database_url = database_url
         self._run_id = run_id
 
-    def _connect(self) -> psycopg2.extensions.connection:
-        return psycopg2.connect(self._database_url)
+    def _connect(self) -> Connection:
+        return psycopg.connect(self._database_url)
 
     def record_code_execution_start(
         self,
@@ -226,7 +227,7 @@ class FakeRunPodPersistence:
                         updated_at = now()
                     RETURNING id
                     """,
-                    (self._run_id, stage_id, psycopg2.extras.Json(payload), version),
+                    (self._run_id, stage_id, Jsonb(payload), version),
                 )
                 row = cursor.fetchone()
                 if not row:
@@ -240,7 +241,7 @@ class FakeRunPodPersistence:
                     (
                         self._run_id,
                         "tree_viz_stored",
-                        psycopg2.extras.Json(
+                        Jsonb(
                             {"stage_id": stage_id, "tree_viz_id": tree_viz_id, "version": version}
                         ),
                     ),
@@ -266,5 +267,5 @@ class FakeRunPodPersistence:
                     INSERT INTO rp_substage_summary_events (run_id, stage, summary)
                     VALUES (%s, %s, %s)
                     """,
-                    (self._run_id, stage_name, psycopg2.extras.Json(summary)),
+                    (self._run_id, stage_name, Jsonb(summary)),
                 )

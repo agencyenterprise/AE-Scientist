@@ -457,9 +457,9 @@ class Interpreter:
 
     def _drain_queues(self) -> None:
         """Quickly drain all in-flight messages to prevent blocking."""
-        self._drain_queue(queue=self.result_outq)
-        self._drain_queue(queue=self.event_outq)
-        self._drain_queue(queue=self.code_inq)
+        self._drain_queue(target_queue=self.result_outq)
+        self._drain_queue(target_queue=self.event_outq)
+        self._drain_queue(target_queue=self.code_inq)
 
     def _drain_queue(self, *, target_queue: Queue) -> list[Any]:
         drained: list[Any] = []
@@ -474,9 +474,7 @@ class Interpreter:
         if not entries:
             logger.error("%s: <empty>", header)
             return
-        formatted = "\n".join(
-            f"{idx + 1:02d}: {repr(entry)}" for idx, entry in enumerate(entries)
-        )
+        formatted = "\n".join(f"{idx + 1:02d}: {repr(entry)}" for idx, entry in enumerate(entries))
         logger.error("%s (%d entries):\n%s", header, len(entries), formatted)
 
     def _log_failure_context(self, *, reason: str) -> None:

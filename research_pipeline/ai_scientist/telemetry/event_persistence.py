@@ -5,8 +5,7 @@ Designed to be fork-safe: worker processes simply enqueue events while a single
 writer thread in the launcher process performs the inserts.
 """
 
-# pylint: disable=broad-except
-
+from __future__ import annotations
 
 import json
 import logging
@@ -14,6 +13,7 @@ import multiprocessing
 import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is imported
 import queue
 import threading
+from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,8 +25,12 @@ import psycopg2
 import psycopg2.extras
 import requests
 from psycopg2.extensions import connection as PGConnection
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceRecord
+
+# pylint: disable=broad-except
+
 
 logger = logging.getLogger("ai-scientist.telemetry")
 
@@ -63,46 +67,99 @@ class WebhookClient:
         self._token = token
         self._run_id = run_id
 
-    def _post(self, *, path: str, payload: dict[str, Any]) -> None:
+    def _post(self, *, path: str, payload: dict[str, Any]) -> Future[None]:
         url = f"{self._base_url}{path}"
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json",
         }
+        future: Future[None] = Future()
+        thread = threading.Thread(
+            target=self._post_async,
+            kwargs={
+                "url": url,
+                "headers": headers,
+                "payload": payload,
+                "future": future,
+            },
+            name=f"WebhookPost:{path}",
+            daemon=True,
+        )
+        thread.start()
+        return future
+
+    def _post_async(
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+        future: Future[None],
+    ) -> None:
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=5)
-            response.raise_for_status()
-        except requests.RequestException:
+            self._post_with_retry(url=url, headers=headers, payload=payload)
+        except Exception as exc:
             logger.exception(
-                "Failed to publish telemetry webhook: url=%s auth=%s payload=%s",
+                "Failed to publish telemetry webhook after retries: url=%s auth=%s payload=%s",
                 url,
                 headers.get("Authorization"),
                 payload,
             )
+            if not future.done():
+                future.set_exception(exception=exc)
+        else:
+            if not future.done():
+                future.set_result(result=None)
 
-    def publish(self, *, kind: EventKind, payload: dict[str, Any]) -> None:
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
+    def _post_with_retry(
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+    ) -> None:
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=5,
+        )
+        response.raise_for_status()
+
+    def publish(self, *, kind: EventKind, payload: dict[str, Any]) -> Optional[Future[None]]:
         endpoint = self._EVENT_PATHS.get(kind)
         if not endpoint:
             logger.debug("No webhook endpoint configured for kind=%s", kind)
-            return
+            return None
         body = {"run_id": self._run_id, "event": payload}
-        self._post(path=endpoint, payload=body)
+        return self._post(path=endpoint, payload=body)
 
-    def publish_run_started(self) -> None:
-        self._post(path=self._RUN_STARTED_PATH, payload={"run_id": self._run_id})
+    def publish_run_started(self) -> Future[None]:
+        return self._post(path=self._RUN_STARTED_PATH, payload={"run_id": self._run_id})
 
-    def publish_run_finished(self, *, success: bool, message: Optional[str] = None) -> None:
+    def publish_run_finished(
+        self,
+        *,
+        success: bool,
+        message: Optional[str] = None,
+    ) -> Future[None]:
         payload: dict[str, Any] = {"run_id": self._run_id, "success": success}
         if message:
             payload["message"] = message
-        self._post(path=self._RUN_FINISHED_PATH, payload=payload)
+        return self._post(path=self._RUN_FINISHED_PATH, payload=payload)
 
-    def publish_heartbeat(self) -> None:
+    def publish_heartbeat(self) -> Future[None]:
         payload = {
             "run_id": self._run_id,
             "disk_usage": _collect_disk_usage(),
         }
-        self._post(path=self._HEARTBEAT_PATH, payload=payload)
+        return self._post(path=self._HEARTBEAT_PATH, payload=payload)
 
     def publish_gpu_shortage(
         self,
@@ -110,7 +167,7 @@ class WebhookClient:
         required_gpus: int,
         available_gpus: int,
         message: Optional[str] = None,
-    ) -> None:
+    ) -> Future[None]:
         payload: dict[str, Any] = {
             "run_id": self._run_id,
             "required_gpus": required_gpus,
@@ -118,7 +175,7 @@ class WebhookClient:
         }
         if message:
             payload["message"] = message
-        self._post(path=self._GPU_SHORTAGE_PATH, payload=payload)
+        return self._post(path=self._GPU_SHORTAGE_PATH, payload=payload)
 
 
 def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:

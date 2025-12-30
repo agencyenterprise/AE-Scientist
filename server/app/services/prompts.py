@@ -36,7 +36,7 @@ def get_default_idea_generation_prompt() -> str:
     )
 
 
-def get_idea_generation_prompt(db: DatabaseManager) -> str:
+async def get_idea_generation_prompt(db: DatabaseManager) -> str:
     """
     Get the system prompt for research idea generation.
 
@@ -49,7 +49,7 @@ def get_idea_generation_prompt(db: DatabaseManager) -> str:
         str: The system prompt to use for idea generation
     """
     try:
-        prompt_data = db.get_active_prompt(PromptTypes.IDEA_GENERATION.value)
+        prompt_data = await db.get_active_prompt(PromptTypes.IDEA_GENERATION.value)
         if prompt_data:
             base_prompt = prompt_data.system_prompt
         else:
@@ -81,7 +81,7 @@ def get_default_manual_seed_prompt() -> str:
     )
 
 
-def get_manual_seed_prompt(db: DatabaseManager) -> str:
+async def get_manual_seed_prompt(db: DatabaseManager) -> str:
     """
     Retrieve the system prompt for manual idea seed generation, falling back to defaults.
 
@@ -92,7 +92,7 @@ def get_manual_seed_prompt(db: DatabaseManager) -> str:
         str: The system prompt to use for manual seed idea generation.
     """
     try:
-        prompt_data = db.get_active_prompt(PromptTypes.MANUAL_IDEA_GENERATION.value)
+        prompt_data = await db.get_active_prompt(PromptTypes.MANUAL_IDEA_GENERATION.value)
         if prompt_data and prompt_data.system_prompt:
             return prompt_data.system_prompt
     except Exception as exc:
@@ -172,7 +172,7 @@ def format_pdf_content_for_context(
     return formatted_content
 
 
-def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
+async def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
     """
     Get the system prompt for idea chat.
 
@@ -187,7 +187,7 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
         str: The system prompt to use for chat
     """
     try:
-        prompt_data = db.get_active_prompt(PromptTypes.IDEA_CHAT.value)
+        prompt_data = await db.get_active_prompt(PromptTypes.IDEA_CHAT.value)
         if prompt_data and prompt_data.system_prompt:
             base_prompt = prompt_data.system_prompt
         else:
@@ -199,7 +199,7 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
     # Retrieve the current research idea
     current_idea_text = ""
     try:
-        idea = db.get_idea_by_conversation_id(conversation_id)
+        idea = await db.get_idea_by_conversation_id(conversation_id)
         if idea:
             experiments_formatted = "\n".join([f"  - {exp}" for exp in idea.experiments])
             risks_formatted = "\n".join(
@@ -221,10 +221,12 @@ def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> str:
         current_idea_text = "Error retrieving research idea."
 
     # Retrieve the original conversation summary
-    generated_summary = db.get_imported_conversation_summary_by_conversation_id(conversation_id)
+    generated_summary = await db.get_imported_conversation_summary_by_conversation_id(
+        conversation_id
+    )
     if generated_summary is None:
         # Summary was not generated yet, we need to use the imported chat content
-        conversation = db.get_conversation_by_id(conversation_id)
+        conversation = await db.get_conversation_by_id(conversation_id)
         assert conversation is not None and conversation.imported_chat is not None
         messages = conversation.imported_chat
         summary = "\n\n".join([f"{msg.role}: {msg.content}" for msg in messages])

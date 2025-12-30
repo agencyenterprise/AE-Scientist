@@ -1,6 +1,5 @@
 """LangChain-powered base service that removes per-provider duplication."""
 
-import asyncio
 import json
 import logging
 import re
@@ -74,7 +73,7 @@ class TrackUsageSchema(BaseModel):
 
 
 @after_model
-def track_usage_middleware(
+async def track_usage_middleware(
     state: AgentState, runtime: Runtime[TrackUsageSchema]
 ) -> dict | None:  # noqa: ARG001
     """Track usage metadata for the LLM model."""
@@ -88,7 +87,7 @@ def track_usage_middleware(
                 input_tokens = metadata.get("input_tokens", 0)
                 output_tokens = metadata.get("output_tokens", 0)
 
-                db.create_llm_token_usage(
+                await db.create_llm_token_usage(
                     conversation_id=ctx.conversation_id,
                     provider=ctx.llm_provider,
                     model=ctx.llm_model,
@@ -282,7 +281,7 @@ class LangChainLLMService(BaseLLMService, ABC):
     ) -> AsyncGenerator[str, None]:
         del user_id
         db = get_database()
-        system_prompt = get_idea_generation_prompt(db=db)
+        system_prompt = await get_idea_generation_prompt(db=db)
         user_prompt = (
             "Analyze this conversation and generate a research idea based on the discussion below.\n\n"
             f"{conversation_text}"
@@ -315,7 +314,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         Generate an idea from a manual title and hypothesis seed.
         """
         db = get_database()
-        system_prompt = get_manual_seed_prompt(db=db)
+        system_prompt = await get_manual_seed_prompt(db=db)
         messages = [
             SystemMessage(content=self._text_content_block(text=system_prompt)),
             HumanMessage(content=self._text_content_block(text=user_prompt)),
@@ -362,7 +361,7 @@ class LangChainLLMService(BaseLLMService, ABC):
                 if metadata:
                     input_tokens = metadata.get("input_tokens", 0)
                     output_tokens = metadata.get("output_tokens", 0)
-                    db.create_llm_token_usage(
+                    await db.create_llm_token_usage(
                         conversation_id=conversation_id,
                         provider=self.provider_name,
                         model=llm_model,
@@ -716,7 +715,7 @@ class LangChainChatWithIdeaStream:
                 if metadata:
                     input_tokens = metadata.get("input_tokens", 0)
                     output_tokens = metadata.get("output_tokens", 0)
-                    self.db.create_llm_token_usage(
+                    await self.db.create_llm_token_usage(
                         conversation_id=conversation_id,
                         provider=llm_model.provider,
                         model=llm_model.id,
@@ -811,7 +810,7 @@ class LangChainChatWithIdeaStream:
         attached_files: List[LLMFileAttachmentData],
         llm_model: LLMModel,
     ) -> List[BaseMessage]:
-        system_prompt = get_chat_system_prompt(db, conversation_id=conversation_id)
+        system_prompt = await get_chat_system_prompt(db, conversation_id=conversation_id)
         messages: List[BaseMessage] = [
             SystemMessage(content=self.service._text_content_block(text=system_prompt))
         ]
@@ -831,8 +830,8 @@ class LangChainChatWithIdeaStream:
                 )
             )
 
-        all_file_attachments: List[DBFileAttachmentData] = db.get_file_attachments_by_message_ids(
-            [msg.id for msg in recent_chat_messages]
+        all_file_attachments: List[DBFileAttachmentData] = (
+            await db.get_file_attachments_by_message_ids([msg.id for msg in recent_chat_messages])
         )
         attachment_by_message: Dict[int, List[DBFileAttachmentData]] = {}
         for file in all_file_attachments:
@@ -888,21 +887,18 @@ class LangChainChatWithIdeaStream:
                     "update_idea requires non-empty title, short_hypothesis, and abstract"
                 )
 
-            def _persist_update() -> None:
-                db.create_idea_version(
-                    idea_id=idea_id,
-                    title=title,
-                    short_hypothesis=short_hypothesis,
-                    related_work=related_work,
-                    abstract=abstract,
-                    experiments=experiments,
-                    expected_outcome=expected_outcome,
-                    risk_factors_and_limitations=risk_factors_and_limitations,
-                    is_manual_edit=False,
-                    created_by_user_id=user_id,
-                )
-
-            await asyncio.to_thread(_persist_update)
+            await db.create_idea_version(
+                idea_id=idea_id,
+                title=title,
+                short_hypothesis=short_hypothesis,
+                related_work=related_work,
+                abstract=abstract,
+                experiments=experiments,
+                expected_outcome=expected_outcome,
+                risk_factors_and_limitations=risk_factors_and_limitations,
+                is_manual_edit=False,
+                created_by_user_id=user_id,
+            )
             return {
                 "status": "success",
                 "message": f"✅ Idea updated successfully: {title}",

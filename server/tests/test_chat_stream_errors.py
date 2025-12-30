@@ -39,12 +39,13 @@ def patch_chat_stream_common(mock_user_data: object) -> Iterator[MagicMock]:
         ),
     ):
         db = MagicMock()
-        db.get_conversation_by_id.return_value = MagicMock()
-        db.get_idea_by_conversation_id.return_value = MagicMock(idea_id=1)
-        db.create_idea.return_value = 1
-        db.get_chat_messages.return_value = []
-        db.create_chat_message.return_value = 101
-        db.get_file_attachments_by_ids.return_value = []
+        db.get_conversation_by_id = AsyncMock(return_value=MagicMock())
+        db.get_idea_by_conversation_id = AsyncMock(return_value=MagicMock(idea_id=1))
+        db.create_idea = AsyncMock(return_value=1)
+        db.get_chat_messages = AsyncMock(return_value=[])
+        db.create_chat_message = AsyncMock(return_value=101)
+        db.get_file_attachments_by_ids = AsyncMock(return_value=[])
+        db.update_file_attachment_message_id = AsyncMock(return_value=True)
         mock_get_db.return_value = db
         mock_get_user.return_value = mock_user_data
         mock_get_by_session.return_value = mock_user_data

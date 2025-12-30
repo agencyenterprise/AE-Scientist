@@ -330,11 +330,12 @@ def _handle_gpu_shortage_event(
         logger.warning("Telemetry webhook not configured; cannot notify server about GPU shortage.")
         return
     try:
-        webhook_client.publish_gpu_shortage(
+        shortage_future = webhook_client.publish_gpu_shortage(
             required_gpus=event.required_gpus,
             available_gpus=event.available_gpus,
             message=event.message,
         )
+        shortage_future.result(timeout=None)
     except Exception:
         logger.exception("Failed to publish GPU shortage notification.")
 
@@ -1004,7 +1005,14 @@ def execute_launcher(args: argparse.Namespace) -> None:
     finally:
         try:
             if webhook_client is not None:
-                webhook_client.publish_run_finished(success=run_success, message=failure_message)
+                try:
+                    run_finished_future = webhook_client.publish_run_finished(
+                        success=run_success,
+                        message=failure_message,
+                    )
+                    run_finished_future.result(timeout=None)
+                except Exception:
+                    logger.exception("Failed to publish run finished notification.")
             if heartbeat_stop is not None:
                 heartbeat_stop.set()
             if heartbeat_thread is not None:

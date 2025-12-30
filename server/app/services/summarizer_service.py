@@ -49,7 +49,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
             )
         ]
 
-    def _save_usage_metadata(self, response: AIMessage) -> None:
+    async def _save_usage_metadata(self, response: AIMessage) -> None:
         """Save the usage metadata to the database."""
 
         metadata = response.usage_metadata
@@ -60,7 +60,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
         model_name, provider_name = extract_model_name_and_provider(self.model)
 
         db = DatabaseManager()
-        db.create_llm_token_usage(
+        await db.create_llm_token_usage(
             conversation_id=self.conversation_id,
             provider=provider_name,
             model=model_name,
@@ -82,7 +82,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
                 self.summary_prompt.format(messages=trimmed_messages)
             )
 
-            self._save_usage_metadata(response)
+            await self._save_usage_metadata(response)
 
             return response.text.strip()
         except Exception as e:  # noqa: BLE001
@@ -207,7 +207,7 @@ class SummarizerService:
 
             if latest_summary:
                 # Persist record immediately
-                imported_summary_id = self.db.create_imported_conversation_summary(
+                imported_summary_id = await self.db.create_imported_conversation_summary(
                     conversation_id=conversation_id,
                     summary=latest_summary,
                 )
@@ -260,7 +260,7 @@ class SummarizerService:
         self, conversation_id: int, chat_history: list[ChatMessageData]
     ) -> tuple[Optional[str], list[ChatMessageData]]:
         """Return rolling summary and recent messages not covered by it."""
-        summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+        summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
 
         if summary_row is None or summary_row.summary is None:
             return None, chat_history
@@ -278,14 +278,14 @@ class SummarizerService:
         correct starting index.
         """
         try:
-            all_messages = self.db.get_chat_messages(idea_id)
+            all_messages = await self.db.get_chat_messages(idea_id)
 
             # Filter messages to allowed roles and produce index mapping by ID
             allowed_roles = {"user", "assistant", "system"}
             filtered_messages = [m for m in all_messages if m.role in allowed_roles]
 
             # If no summary row yet, create one with full history
-            summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+            summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
             if summary_row is None:
                 model_messages = [
                     ChatMessageData(
@@ -393,7 +393,7 @@ class SummarizerService:
                             pass
                     if summary:
                         # Upsert the chat summary
-                        self._upsert_chat_summary(
+                        await self._upsert_chat_summary(
                             conversation_id=conversation_id,
                             summary=summary,
                             latest_message_id=last_message_id,
@@ -450,23 +450,23 @@ class SummarizerService:
             logger.exception("Failed to add messages to chat summary")
             return
 
-    def _upsert_chat_summary(
+    async def _upsert_chat_summary(
         self, conversation_id: int, summary: str, latest_message_id: int | None = None
     ) -> None:
         """Upsert the chat summary in the database."""
         try:
             # get the latest chat summary
-            summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+            summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
             if summary_row is not None:
                 # update the summary
-                self.db.update_chat_summary(
+                await self.db.update_chat_summary(
                     conversation_id=conversation_id,
                     new_summary=summary,
                     latest_message_id=latest_message_id or summary_row.latest_message_id,
                 )
             else:
                 # create a new chat summary
-                self.db.create_chat_summary(
+                await self.db.create_chat_summary(
                     conversation_id=conversation_id,
                     summary=summary,
                     latest_message_id=latest_message_id or -1,

@@ -74,7 +74,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         authorization_header = request.headers.get("authorization")
         session_token = extract_bearer_token(authorization_header)
         if session_token:
-            user = self.auth_service.get_user_by_session(session_token=session_token)
+            user = await self.auth_service.get_user_by_session(session_token=session_token)
             if user:
                 request.state.auth_type = "user"
                 request.state.user = user

@@ -49,20 +49,20 @@ async def get_chat_history(
 
     try:
         # Check if conversation exists
-        existing_conversation = db.get_conversation_by_id(conversation_id)
+        existing_conversation = await db.get_conversation_by_id(conversation_id)
         if not existing_conversation:
             response.status_code = 404
             return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
         # Check if idea exists
-        idea_data = db.get_idea_by_conversation_id(conversation_id)
+        idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not idea_data:
             # Return empty chat history if no idea exists yet
             return ChatHistoryResponse(chat_messages=[])
 
         # Get chat messages from database
-        chat_messages_data = db.get_chat_messages(idea_data.idea_id)
-        file_attachments = db.get_file_attachments_by_message_ids(
+        chat_messages_data = await db.get_chat_messages(idea_data.idea_id)
+        file_attachments = await db.get_file_attachments_by_message_ids(
             [msg.id for msg in chat_messages_data]
         )
 

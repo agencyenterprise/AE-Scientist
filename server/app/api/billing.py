@@ -37,7 +37,7 @@ def _get_service() -> BillingService:
 
 
 @router.get("/wallet", response_model=BillingWalletResponse)
-def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWalletResponse:
+async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWalletResponse:
     """Return wallet balance plus recent transactions for the authenticated user."""
     if limit <= 0 or limit > 100:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid limit")
@@ -47,7 +47,7 @@ def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWal
     user = get_current_user(request)
     logger.info("Wallet requested for user_id=%s (limit=%s offset=%s)", user.id, limit, offset)
     service = _get_service()
-    wallet, transactions = service.get_wallet(user_id=user.id, limit=limit, offset=offset)
+    wallet, transactions = await service.get_wallet(user_id=user.id, limit=limit, offset=offset)
     transaction_models = [
         CreditTransactionModel(
             id=tx.id,
@@ -65,7 +65,7 @@ def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWal
 
 
 @router.get("/packs", response_model=CreditPackListResponse)
-def list_credit_packs(request: Request) -> CreditPackListResponse:
+async def list_credit_packs(request: Request) -> CreditPackListResponse:
     """Expose the configured Stripe price IDs and their associated credit amounts."""
     user = get_current_user(request)
     logger.info("Credit packs requested by user_id=%s", user.id)
@@ -78,13 +78,13 @@ def list_credit_packs(request: Request) -> CreditPackListResponse:
             unit_amount=int(pack["unit_amount"]),
             nickname=str(pack["nickname"]),
         )
-        for pack in service.list_credit_packs()
+        for pack in await service.list_credit_packs()
     ]
     return CreditPackListResponse(packs=packs)
 
 
 @router.post("/checkout-session", response_model=CheckoutSessionCreateResponse)
-def create_checkout_session(
+async def create_checkout_session(
     payload: CheckoutSessionCreateRequest,
     request: Request,
 ) -> CheckoutSessionCreateResponse:
@@ -92,7 +92,7 @@ def create_checkout_session(
     user = get_current_user(request)
     logger.info("Creating checkout session for user_id=%s price_id=%s", user.id, payload.price_id)
     service = _get_service()
-    checkout_url = service.create_checkout_session(
+    checkout_url = await service.create_checkout_session(
         user=user,
         price_id=payload.price_id,
         success_url=str(payload.success_url),
@@ -133,7 +133,7 @@ async def stream_wallet(request: Request) -> StreamingResponse:
                 logger.info("Wallet SSE client disconnected for user_id=%s", user.id)
                 break
 
-            balance = db.get_user_wallet_balance(user.id)
+            balance = await db.get_user_wallet_balance(user.id)
             if last_balance is None or balance != last_balance:
                 payload = {"type": "credits", "data": {"balance": balance}}
                 yield f"data: {json.dumps(payload)}\n\n"
@@ -178,7 +178,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
     try:
         event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
         logger.info("Stripe webhook event received: %s", event["type"])
-        service.handle_webhook(event)
+        await service.handle_webhook(event)
     except ValueError as exc:
         logger.warning("Stripe webhook signature invalid: %s", exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

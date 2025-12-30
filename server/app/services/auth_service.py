@@ -4,6 +4,7 @@ Authentication service.
 Handles user authentication, session management, and service key validation.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -23,7 +24,7 @@ class AuthService:
         self.db = get_database()
         self.google_oauth = GoogleOAuthService()
 
-    def authenticate_with_google(
+    async def authenticate_with_google(
         self, authorization_code: str, state: Optional[str] = None
     ) -> Optional[dict]:
         """
@@ -38,17 +39,19 @@ class AuthService:
         """
         try:
             # Exchange code for user info
-            user_info = self.google_oauth.exchange_code_for_tokens(authorization_code, state)
+            user_info = await asyncio.to_thread(
+                self.google_oauth.exchange_code_for_tokens, authorization_code, state
+            )
             if not user_info:
                 logger.warning("Failed to exchange authorization code")
                 return None
 
             # Check if user already exists
-            user = self.db.get_user_by_google_id(user_info["google_id"])
+            user = await self.db.get_user_by_google_id(user_info["google_id"])
 
             if user:
                 # Update existing user info
-                updated_user = self.db.update_user(
+                updated_user = await self.db.update_user(
                     user_id=user.id, email=user_info["email"], name=user_info["name"]
                 )
                 if not updated_user:
@@ -57,7 +60,7 @@ class AuthService:
                 user = updated_user
             else:
                 # Create new user
-                user = self.db.create_user(
+                user = await self.db.create_user(
                     google_id=user_info["google_id"],
                     email=user_info["email"],
                     name=user_info["name"],
@@ -67,7 +70,7 @@ class AuthService:
                     return None
 
             # Create session
-            session_token = self.db.create_user_session(
+            session_token = await self.db.create_user_session(
                 user_id=user.id, expires_in_hours=settings.SESSION_EXPIRE_HOURS
             )
             if not session_token:
@@ -81,7 +84,7 @@ class AuthService:
             logger.exception(f"Error authenticating with Google: {e}")
             return None
 
-    def get_user_by_session(self, session_token: str) -> Optional[UserData]:
+    async def get_user_by_session(self, session_token: str) -> Optional[UserData]:
         """
         Get user by session token.
 
@@ -92,13 +95,13 @@ class AuthService:
             UserData if valid session, None otherwise
         """
         try:
-            user = self.db.get_user_by_session_token(session_token)
+            user = await self.db.get_user_by_session_token(session_token)
             return user
         except Exception as e:
             logger.exception(f"Error getting user by session: {e}")
             return None
 
-    def logout_user(self, session_token: str) -> bool:
+    async def logout_user(self, session_token: str) -> bool:
         """
         Log out user by invalidating session.
 
@@ -109,7 +112,7 @@ class AuthService:
             True if successful, False otherwise
         """
         try:
-            success = self.db.delete_user_session(session_token)
+            success = await self.db.delete_user_session(session_token)
             if success:
                 logger.info("User logged out successfully")
             return success
@@ -117,7 +120,7 @@ class AuthService:
             logger.exception(f"Error logging out user: {e}")
             return False
 
-    def cleanup_expired_sessions(self) -> int:
+    async def cleanup_expired_sessions(self) -> int:
         """
         Clean up expired sessions.
 
@@ -125,7 +128,7 @@ class AuthService:
             Number of sessions cleaned up
         """
         try:
-            count = self.db.delete_expired_sessions()
+            count = await self.db.delete_expired_sessions()
             if count > 0:
                 logger.info(f"Cleaned up {count} expired sessions")
             return count
