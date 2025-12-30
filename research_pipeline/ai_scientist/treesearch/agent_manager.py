@@ -715,6 +715,7 @@ Your research idea:\n\n
         current_substage: StageMeta,
         agent: ParallelAgent,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
+        iteration_started_callback: Callable[[StageMeta, Journal], None],
     ) -> Tuple[bool, Optional[StageMeta]]:
         """Execute iterations for a sub-stage until it completes or the main stage finishes.
 
@@ -771,6 +772,9 @@ Your research idea:\n\n
                 agent.abort_active_executions(reason=skip_reason_effective)
             else:
                 try:
+                    iteration_started_callback(
+                        current_substage, self.journals[current_substage.name]
+                    )
                     agent.step()
                 except SkipInProgressError as exc:
                     logger.info(
@@ -936,7 +940,8 @@ Your research idea:\n\n
 
     def run(
         self,
-        step_callback: Optional[Callable[[StageMeta, Journal], None]] = None,
+        step_callback: Optional[Callable[[StageMeta, Journal], None]],
+        iteration_started_callback: Callable[[StageMeta, Journal], None],
     ) -> None:
         """Run the experiment through generated stages"""
         # Main stage loop
@@ -947,6 +952,7 @@ Your research idea:\n\n
             self.run_stage(
                 initial_substage=self.current_stage,
                 step_callback=step_callback,
+                iteration_started_callback=iteration_started_callback,
             )
             # Main stage complete - create next main stage
             self._advance_to_next_main_stage()
@@ -955,6 +961,7 @@ Your research idea:\n\n
         self,
         initial_substage: StageMeta,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
+        iteration_started_callback: Callable[[StageMeta, Journal], None],
     ) -> None:
         """Run a single main stage starting from the given sub-stage.
 
@@ -998,6 +1005,7 @@ Your research idea:\n\n
                     current_substage=current_substage,
                     agent=agent,
                     step_callback=step_callback,
+                    iteration_started_callback=iteration_started_callback,
                 )
                 if main_done:
                     # Don't set self.current_stage = None here - let _advance_to_next_main_stage() handle it
