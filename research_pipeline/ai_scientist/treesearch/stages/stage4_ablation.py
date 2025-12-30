@@ -31,7 +31,13 @@ class AblationIdea(BaseModel):
 
 
 class SupportsStage4Agent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool,
+    ) -> Tuple[str, str]: ...
 
 
 class Stage4Ablation(Stage):
@@ -83,7 +89,7 @@ class Stage4Ablation(Stage):
             ]
         }
         prompt["Instructions"] = abl_instructions
-        plan, code = agent.plan_and_code_query(prompt=prompt)
+        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
         logger.debug("----- LLM code start (stage4 ablation) -----")
         logger.debug(code)
         logger.debug("----- LLM code end (stage4 ablation) -----")

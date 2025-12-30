@@ -92,8 +92,24 @@ def _create_app() -> FastAPI:
             raise HTTPException(status_code=409, detail="Process already exited")
 
         try:
-            logger.info("Sending SIGKILL to pid=%s for execution_id=%s", pid, execution_id)
-            os.kill(pid, signal.SIGKILL)
+            # Kill the entire interpreter process group (the interpreter process calls
+            # os.setsid() on startup). This ensures any forked subprocesses (e.g.,
+            # DataLoader workers) are also terminated.
+            try:
+                pgid = os.getpgid(pid)
+            except Exception:
+                pgid = None
+
+            if pgid is not None and pgid == pid and hasattr(os, "killpg"):
+                logger.info(
+                    "Sending SIGKILL to process group pgid=%s for execution_id=%s",
+                    pgid,
+                    execution_id,
+                )
+                os.killpg(pgid, signal.SIGKILL)
+            else:
+                logger.info("Sending SIGKILL to pid=%s for execution_id=%s", pid, execution_id)
+                os.kill(pid, signal.SIGKILL)
         except ProcessLookupError as exc:
             execution_registry.clear_execution(execution_id)
             logger.warning(

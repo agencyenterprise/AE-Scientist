@@ -61,7 +61,7 @@ class Stage1Baseline(Stage):
         prompt["Instructions"] = instructions
 
         logger.debug("MinimalAgent: Getting plan and code")
-        plan, code = agent.plan_and_code_query(prompt=prompt)
+        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
         logger.debug("MinimalAgent: Draft complete")
         logger.debug("----- LLM code start -----")
         logger.debug(code)

@@ -926,6 +926,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/hw-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Hw Stats */
+        post: operations["ingest_hw_stats_api_research_pipeline_events_hw_stats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/gpu-shortage": {
         parameters: {
             query?: never;
@@ -2047,6 +2064,20 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HardwareStatsPartition */
+        HardwareStatsPartition: {
+            /** Partition */
+            partition: string;
+            /** Used Bytes */
+            used_bytes: number;
+        };
+        /** HardwareStatsPayload */
+        HardwareStatsPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Partitions */
+            partitions?: components["schemas"]["HardwareStatsPartition"][];
         };
         /** HeartbeatPayload */
         HeartbeatPayload: {
@@ -5515,6 +5546,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["HeartbeatPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_hw_stats_api_research_pipeline_events_hw_stats_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HardwareStatsPayload"];
             };
         };
         responses: {

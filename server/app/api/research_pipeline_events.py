@@ -146,12 +146,42 @@ class DiskUsagePartition(BaseModel):
     used_bytes: int
 
 
+class HardwareStatsPartition(BaseModel):
+    partition: str
+    used_bytes: int
+
+
 class HeartbeatPayload(BaseModel):
     run_id: str
     disk_usage: List[DiskUsagePartition] = Field(default_factory=list)
 
 
+class HardwareStatsPayload(BaseModel):
+    run_id: str
+    partitions: List[HardwareStatsPartition] = Field(default_factory=list)
+
+
 LOW_FREE_DISK_THRESHOLD_BYTES = 50 * 1024**3
+BYTES_PER_GB = 1024**3
+
+
+def _resolve_partition_capacity_bytes(
+    *,
+    run: ResearchPipelineRun,
+    partition: str,
+) -> Optional[int]:
+    normalized = partition if partition == "/" else partition.rstrip("/")
+    if not normalized:
+        normalized = "/"
+    if normalized == "/":
+        capacity_gb = run.container_disk_gb
+    elif normalized == "/workspace":
+        capacity_gb = run.volume_disk_gb
+    else:
+        return None
+    if capacity_gb is None:
+        return None
+    return int(capacity_gb) * BYTES_PER_GB
 
 
 class GPUShortagePayload(BaseModel):
@@ -800,35 +830,64 @@ async def ingest_heartbeat(
         heartbeat_failures=0,
     )
     if payload.disk_usage:
-        partitions = []
-        low_free_partitions: list[tuple[str, int]] = []
-        for partition in payload.disk_usage:
-            free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
-            partitions.append(
-                {
-                    "partition": partition.partition,
-                    "total_bytes": partition.total_bytes,
-                    "used_bytes": partition.used_bytes,
-                    "free_bytes": free_bytes,
-                }
-            )
-            if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
-                low_free_partitions.append((partition.partition, free_bytes))
-        await db.insert_research_pipeline_run_event(
+        await _record_disk_usage_event(
+            db=db,
             run_id=payload.run_id,
-            event_type="disk_usage",
-            metadata={"partitions": partitions},
+            partitions=payload.disk_usage,
             occurred_at=now,
+            event_type="disk_usage",
         )
-        if low_free_partitions:
-            details = ", ".join(
-                f"{name}={free_bytes / (1024**3):.1f} GiB free"
-                for name, free_bytes in low_free_partitions
-            )
-            message = f"Low disk space detected for run {payload.run_id}: {details}"
-            logger.warning(message)
-            sentry_sdk.capture_message(message, level="warning")
     logger.debug("RP heartbeat received for run=%s", payload.run_id)
+
+
+@router.post("/hw-stats", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_hw_stats(
+    payload: HardwareStatsPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(payload.run_id)
+    if run is None:
+        logger.warning(
+            "Received hardware stats for unknown run_id=%s; ignoring but returning 204.",
+            payload.run_id,
+        )
+        return
+    now = datetime.now(timezone.utc)
+    resolved_partitions: list[DiskUsagePartition] = []
+    for partition in payload.partitions:
+        total_bytes = _resolve_partition_capacity_bytes(
+            run=run,
+            partition=partition.partition,
+        )
+        if total_bytes is None:
+            logger.debug(
+                "Skipping hw_stats partition without capacity mapping: run=%s partition=%s",
+                payload.run_id,
+                partition.partition,
+            )
+            continue
+        resolved_partitions.append(
+            DiskUsagePartition(
+                partition=partition.partition,
+                total_bytes=total_bytes,
+                used_bytes=partition.used_bytes,
+            )
+        )
+    if not resolved_partitions:
+        logger.debug(
+            "No recognized partitions in hw_stats payload for run=%s; skipping record.",
+            payload.run_id,
+        )
+        return
+    await _record_disk_usage_event(
+        db=db,
+        run_id=payload.run_id,
+        partitions=resolved_partitions,
+        occurred_at=now,
+        event_type="hw_stats",
+    )
+    logger.debug("RP hardware stats received for run=%s", payload.run_id)
 
 
 @router.post("/gpu-shortage", status_code=status.HTTP_204_NO_CONTENT)
@@ -899,6 +958,46 @@ async def ingest_gpu_shortage(
                 context="gpu_shortage",
             )
     await _retry_run_after_gpu_shortage(db=db, failed_run=run)
+
+
+async def _record_disk_usage_event(
+    *,
+    db: ResearchRunStore,
+    run_id: str,
+    partitions: Sequence[DiskUsagePartition],
+    occurred_at: datetime,
+    event_type: str,
+) -> None:
+    if not partitions:
+        return
+    partitions_payload = []
+    low_free_partitions: list[tuple[str, int]] = []
+    for partition in partitions:
+        free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
+        partitions_payload.append(
+            {
+                "partition": partition.partition,
+                "total_bytes": partition.total_bytes,
+                "used_bytes": partition.used_bytes,
+                "free_bytes": free_bytes,
+            }
+        )
+        if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
+            low_free_partitions.append((partition.partition, free_bytes))
+    await db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type=event_type,
+        metadata={"partitions": partitions_payload},
+        occurred_at=occurred_at,
+    )
+    if low_free_partitions:
+        details = ", ".join(
+            f"{name}={free_bytes / (1024**3):.1f} GiB free"
+            for name, free_bytes in low_free_partitions
+        )
+        message = f"Low disk space detected for run {run_id}: {details}"
+        logger.warning(message)
+        sentry_sdk.capture_message(message, level="warning")
 
 
 async def _retry_run_after_gpu_shortage(

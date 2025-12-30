@@ -2247,6 +2247,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/hw-stats": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Hw Stats",
+        "operationId": "ingest_hw_stats_api_research_pipeline_events_hw_stats_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareStatsPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/gpu-shortage": {
       "post": {
         "tags": [
@@ -4720,6 +4765,44 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HardwareStatsPartition": {
+        "properties": {
+          "partition": {
+            "type": "string",
+            "title": "Partition"
+          },
+          "used_bytes": {
+            "type": "integer",
+            "title": "Used Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partition",
+          "used_bytes"
+        ],
+        "title": "HardwareStatsPartition"
+      },
+      "HardwareStatsPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "partitions": {
+            "items": {
+              "$ref": "#/components/schemas/HardwareStatsPartition"
+            },
+            "type": "array",
+            "title": "Partitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "HardwareStatsPayload"
       },
       "HeartbeatPayload": {
         "properties": {

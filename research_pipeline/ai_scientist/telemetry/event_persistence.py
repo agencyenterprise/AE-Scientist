@@ -60,6 +60,7 @@ class WebhookClient:
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
     _HEARTBEAT_PATH = "/heartbeat"
+    _HW_STATS_PATH = "/hw-stats"
     _GPU_SHORTAGE_PATH = "/gpu-shortage"
 
     def __init__(self, *, base_url: str, token: str, run_id: str) -> None:
@@ -160,6 +161,15 @@ class WebhookClient:
             "disk_usage": _collect_disk_usage(),
         }
         return self._post(path=self._HEARTBEAT_PATH, payload=payload)
+
+    def publish_hw_stats(self, *, partitions: list[dict[str, int | str]]) -> Optional[Future[None]]:
+        if not partitions:
+            return None
+        payload = {
+            "run_id": self._run_id,
+            "partitions": partitions,
+        }
+        return self._post(path=self._HW_STATS_PATH, payload=payload)
 
     def publish_gpu_shortage(
         self,

@@ -38,7 +38,12 @@ from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
 from ai_scientist.sentry_config import set_sentry_run_context
-from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
+from ai_scientist.telemetry import (
+    EventPersistenceManager,
+    EventQueueEmitter,
+    HardwareStatsReporter,
+    WebhookClient,
+)
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
@@ -900,6 +905,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
     heartbeat_thread: threading.Thread | None = None
     heartbeat_stop: threading.Event | None = None
+    hw_stats_reporter: HardwareStatsReporter | None = None
     if webhook_client is not None:
         try:
             webhook_client.publish_run_started()
@@ -916,6 +922,19 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         heartbeat_thread.start()
+
+        hw_paths_env = os.environ.get("COLLECT_DISK_STATS_PATHS")
+        if not hw_paths_env:
+            hw_paths_env = os.environ.get("HW_STATS_PATHS", "")
+        hw_paths = [path.strip() for path in hw_paths_env.split(",") if path.strip()]
+        if hw_paths:
+            hw_interval = int(os.environ.get("HW_STATS_INTERVAL_SECONDS", "600"))
+            hw_stats_reporter = HardwareStatsReporter(
+                webhook_client=webhook_client,
+                paths=hw_paths,
+                interval_seconds=hw_interval,
+            )
+            hw_stats_reporter.start()
 
     run_success = False
     failure_message: str | None = None
@@ -1023,6 +1042,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
                 heartbeat_thread.join(timeout=5)
             if event_persistence is not None:
                 event_persistence.stop()
+            if hw_stats_reporter is not None:
+                hw_stats_reporter.stop()
             if artifact_publisher is not None:
                 artifact_publisher.close()
             stop_termination_server()

@@ -23,10 +23,10 @@ from typing import List, Optional
 
 import sentry_sdk
 
-from ai_scientist.llm import query, structured_query_with_schema
+from ai_scientist.llm import query
 
 from . import execution_registry
-from .codegen_agent import PlanAndCodeSchema
+from .codegen_agent import MinimalAgent
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
@@ -111,6 +111,16 @@ class ParallelAgent:
         self._is_shutdown = False
         # Define the evaluation metric once at initialization
         self.evaluation_metrics = self._define_global_metrics()
+        self._local_agent = MinimalAgent(
+            task_desc=self.task_desc,
+            cfg=self.cfg,
+            gpu_id=None,
+            gpu_spec=None,
+            memory_summary="",
+            evaluation_metrics=self.evaluation_metrics,
+            stage_identifier=self.stage_identifier,
+            skip_checker=lambda: None,
+        )
         self._ablation_state: dict[str, set[str]] = {  # store ablation names
             "completed_ablations": set(),
         }
@@ -135,6 +145,23 @@ class ParallelAgent:
             )
             return
         self.stage_skip.flag_executions_for_skip(pending_ids, reason=reason)
+
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool = False,
+    ) -> tuple[str, str]:
+        """
+        Proxy plan/code generation to a local MinimalAgent so ParallelAgent can act
+        as a SupportsSeedAgent for aggregation routines.
+        """
+        return self._local_agent.plan_and_code_query(
+            prompt=prompt,
+            retries=retries,
+            enforce_gpu=enforce_gpu,
+        )
 
     def _cancel_pending_futures(self, futures: list[Future]) -> None:
         if not futures:
@@ -221,40 +248,6 @@ class ParallelAgent:
         logger.debug(f"Defined eval metrics: {response}")
         response_text: str = response if isinstance(response, str) else str(response)
         return response_text
-
-    def plan_and_code_query(self, prompt: PromptType, retries: int = 3) -> tuple[str, str]:
-        """Generate a natural language plan + code in the same LLM call and split them apart."""
-        last_completion: str = ""
-        for _ in range(retries):
-            logger.debug("ParallelAgent: calling structured plan_and_code_query")
-            try:
-                response = structured_query_with_schema(
-                    system_message=prompt,
-                    model=self.cfg.agent.code.model,
-                    temperature=self.cfg.agent.code.temperature,
-                    schema_class=PlanAndCodeSchema,
-                )
-            except Exception as exc:
-                logger.warning("ParallelAgent: structured plan + code query failed, retrying...")
-                logger.warning("ParallelAgent: failure details: %s", exc)
-                continue
-
-            nl_text = response.plan.strip()
-            code = response.code.strip()
-            last_completion = f"{nl_text}\n\n{code}"
-
-            if nl_text and code:
-                return nl_text, code
-
-            logger.warning(
-                "ParallelAgent: structured plan + code missing 'plan' or 'code', retrying...",
-            )
-            prompt["Parsing Feedback"] = (
-                "The structured response was missing either 'plan' or 'code'. "
-                "Ensure both fields are present and non-empty."
-            )
-        logger.info("Final plan + code extraction attempt failed, giving up...")
-        return "", last_completion
 
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
         """Run multiple seeds of the same node to get statistical metrics.
