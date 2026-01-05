@@ -324,7 +324,13 @@ class ResearchPipelineMonitor:
             ),
         )
         if run.pod_id:
-            await self._upload_pod_artifacts(run=run)
+            logger.info(
+                "Triggering pod artifacts upload for run %s before pod termination (trigger=%s, pod_id=%s).",
+                run.run_id,
+                reason,
+                run.pod_id,
+            )
+            await self._upload_pod_artifacts(run=run, reason=reason)
             try:
                 await terminate_pod(pod_id=run.pod_id)
             except RuntimeError:
@@ -431,15 +437,27 @@ class ResearchPipelineMonitor:
             occurred_at=datetime.now(timezone.utc),
         )
 
-    async def _upload_pod_artifacts(self, run: ResearchPipelineRun) -> None:
+    async def _upload_pod_artifacts(self, run: ResearchPipelineRun, *, reason: str) -> None:
         if not run.public_ip or not run.ssh_port:
-            logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
+            logger.info(
+                "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
+                run.run_id,
+                reason,
+            )
             return
         try:
+            logger.info(
+                "Uploading pod artifacts for run %s (trigger=%s, host=%s, port=%s).",
+                run.run_id,
+                reason,
+                run.public_ip,
+                run.ssh_port,
+            )
             await upload_runpod_artifacts_via_ssh(
                 host=run.public_ip,
                 port=run.ssh_port,
                 run_id=run.run_id,
+                trigger=f"pipeline_monitor_failure:{reason}",
             )
         except (RuntimeError, OSError) as exc:
             logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)

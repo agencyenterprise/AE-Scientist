@@ -178,16 +178,29 @@ async def _record_pod_billing_event(
     )
 
 
-async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun) -> None:
+async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun, *, trigger: str) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
-        logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
+        logger.info(
+            "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
+            run.run_id,
+            trigger,
+        )
         return
+    logger.info(
+        "Triggering pod artifacts upload for run %s (trigger=%s, pod_id=%s, host=%s, port=%s).",
+        run.run_id,
+        trigger,
+        run.pod_id,
+        host,
+        port,
+    )
     await upload_runpod_artifacts_via_ssh(
         host=host,
         port=port,
         run_id=run.run_id,
+        trigger=trigger,
     )
 
 
@@ -790,7 +803,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
 
     pod_id = run.pod_id
     if pod_id:
-        await _upload_pod_artifacts_if_possible(run)
+        await _upload_pod_artifacts_if_possible(run, trigger="user_stop")
         try:
             await terminate_pod(pod_id=pod_id)
         except RunPodError as exc:

@@ -687,8 +687,11 @@ async def terminate_pod(*, pod_id: str) -> None:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     creator = RunPodManager(api_key=runpod_api_key)
     try:
+        logger.info("Terminating RunPod pod %s...", pod_id)
         await creator.delete_pod(pod_id=pod_id)
+        logger.info("Terminated RunPod pod %s.", pod_id)
     except RunPodError as exc:
+        logger.warning("Failed to terminate RunPod pod %s: %s", pod_id, exc)
         raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc
 
 
@@ -735,12 +738,14 @@ async def upload_runpod_artifacts_via_ssh(
     host: str,
     port: str | int,
     run_id: str,
+    trigger: str,
 ) -> None:
     await asyncio.to_thread(
         _upload_runpod_artifacts_via_ssh_sync,
         host=host,
         port=port,
         run_id=run_id,
+        trigger=trigger,
     )
 
 
@@ -749,17 +754,33 @@ def _upload_runpod_artifacts_via_ssh_sync(
     host: str,
     port: str | int,
     run_id: str,
+    trigger: str,
 ) -> None:
     if not host or not port:
-        logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
+        logger.info(
+            "Skipping pod artifacts upload for run %s (trigger=%s); missing host/port.",
+            run_id,
+            trigger,
+        )
         return
     private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
     if not private_key:
-        logger.info("RUN_POD_SSH_ACCESS_KEY is not configured; skipping pod log upload.")
+        logger.info(
+            "Skipping pod artifacts upload for run %s (trigger=%s); RUN_POD_SSH_ACCESS_KEY is not configured.",
+            run_id,
+            trigger,
+        )
         return
     env_values = _gather_log_env(run_id)
     if env_values is None:
         return
+    logger.info(
+        "Starting pod artifacts upload via SSH (run=%s trigger=%s host=%s port=%s)",
+        run_id,
+        trigger,
+        host,
+        port,
+    )
     key_path = _write_temp_key_file(private_key)
     remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
     remote_command = (
@@ -797,20 +818,24 @@ def _upload_runpod_artifacts_via_ssh_sync(
         )
         if result.returncode != 0:
             logger.warning(
-                "Pod log upload via SSH failed for run %s (exit %s): %s",
+                "Pod artifacts upload via SSH failed for run %s (trigger=%s, exit %s): %s",
                 run_id,
+                trigger,
                 result.returncode,
                 result.stderr.strip(),
             )
         else:
             if result.stdout:
                 logger.info(
-                    "Pod log upload output for run %s: %s",
+                    "Pod artifacts upload output for run %s (trigger=%s): %s",
                     run_id,
+                    trigger,
                     result.stdout.strip(),
                 )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Error uploading pod log for run %s: %s", run_id, exc)
+        logger.exception(
+            "Error uploading pod artifacts for run %s (trigger=%s): %s", run_id, trigger, exc
+        )
     finally:
         try:
             Path(key_path).unlink(missing_ok=True)
