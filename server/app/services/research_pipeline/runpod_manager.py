@@ -21,7 +21,7 @@ from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)
 
-POD_NAME_PREFIX = "aeScientist"
+POD_NAME_PREFIX = "automation_aeScientist"
 _POD_USER_FALLBACK = "Scientist"
 _POD_USER_MAX_LEN = 24
 DEFAULT_STARTUP_GRACE_SECONDS = 600
