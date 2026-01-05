@@ -38,6 +38,14 @@ _POD_VOLUME_DISK_ENV = "POD_VOLUME_DISK_GB"
 DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
 _DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
 _LEGACY_HW_STATS_ENV_NAME = "HW_STATS_PATHS"
+RUNPOD_GPU_TYPES: tuple[str, ...] = (
+    "NVIDIA GeForce RTX 5090",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA GeForce RTX 3090",
+    "NVIDIA RTX A4000",
+    "NVIDIA RTX A4500",
+    "NVIDIA RTX A5000",
+)
 
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
@@ -367,6 +375,11 @@ def get_pipeline_startup_grace_seconds() -> int:
     return max(parsed, 1)
 
 
+def get_supported_gpu_types() -> list[str]:
+    """Return the GPU types that can be targeted when launching RunPod jobs."""
+    return list(RUNPOD_GPU_TYPES)
+
+
 def _sanitize_pod_user_component(*, value: str) -> str:
     trimmed = value.strip()
     if not trimmed:
@@ -580,6 +593,7 @@ async def launch_research_pipeline_run(
     config_name: str,
     run_id: str,
     requested_by_first_name: str,
+    gpu_types: list[str],
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -640,14 +654,8 @@ async def launch_research_pipeline_run(
         metadata_env["SENTRY_DSN"] = env.sentry_dsn
     if env.sentry_environment:
         metadata_env["SENTRY_ENVIRONMENT"] = env.sentry_environment
-    gpu_types = [
-        "NVIDIA RTX PRO 6000 Blackwell Server Edition"
-        # "NVIDIA GeForce RTX 5090",
-        # "NVIDIA GeForce RTX 3090",
-        # "NVIDIA RTX A4000",
-        # "NVIDIA RTX A4500",
-        # "NVIDIA RTX A5000",
-    ]
+    if not gpu_types:
+        raise ValueError("At least one GPU type must be provided when launching a pod.")
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
     pod_name = f"{POD_NAME_PREFIX}_{user_component}_{run_id}"
     pod = await creator.create_pod(

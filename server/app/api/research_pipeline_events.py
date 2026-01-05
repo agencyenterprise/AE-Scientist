@@ -51,6 +51,7 @@ from app.services.research_pipeline import (
     terminate_pod,
     upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
 
 
 class ResearchRunStore(Protocol):
@@ -1042,6 +1043,7 @@ async def _retry_run_after_gpu_shortage(
         new_run_id, _pod_info = await create_and_launch_research_run(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
+            gpu_types=get_supported_gpu_types(),
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",

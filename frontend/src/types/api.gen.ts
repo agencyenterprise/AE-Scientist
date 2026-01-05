@@ -994,6 +994,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/research/gpu-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Research Gpu Types */
+        get: operations["list_research_gpu_types_api_conversations_research_gpu_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run": {
         parameters: {
             query?: never;
@@ -2060,6 +2077,11 @@ export interface components {
             /** Message */
             message?: string | null;
         };
+        /** GpuTypeListResponse */
+        GpuTypeListResponse: {
+            /** Gpu Types */
+            gpu_types: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2488,6 +2510,11 @@ export interface components {
             providers: {
                 [key: string]: components["schemas"]["LLMModel"][];
             };
+        };
+        /** LaunchResearchRunRequest */
+        LaunchResearchRunRequest: {
+            /** Gpu Type */
+            gpu_type: string;
         };
         /**
          * LlmReviewNotFoundResponse
@@ -5698,6 +5725,26 @@ export interface operations {
             };
         };
     };
+    list_research_gpu_types_api_conversations_research_gpu_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GpuTypeListResponse"];
+                };
+            };
+        };
+    };
     submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post: {
         parameters: {
             query?: never;
@@ -5707,7 +5754,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchResearchRunRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

@@ -2444,6 +2444,27 @@
         }
       }
     },
+    "/api/conversations/research/gpu-types": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "List Research Gpu Types",
+        "operationId": "list_research_gpu_types_api_conversations_research_gpu_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuTypeListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [
@@ -2462,6 +2483,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaunchResearchRunRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -4753,6 +4784,22 @@
         ],
         "title": "GPUShortagePayload"
       },
+      "GpuTypeListResponse": {
+        "properties": {
+          "gpu_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gpu Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gpu_types"
+        ],
+        "title": "GpuTypeListResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5401,6 +5448,19 @@
         ],
         "title": "LLMProvidersResponse",
         "description": "Response model for getting available LLM providers."
+      },
+      "LaunchResearchRunRequest": {
+        "properties": {
+          "gpu_type": {
+            "type": "string",
+            "title": "Gpu Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gpu_type"
+        ],
+        "title": "LaunchResearchRunRequest"
       },
       "LlmReviewNotFoundResponse": {
         "properties": {
