@@ -12,6 +12,7 @@ Scope:
 """
 
 import logging
+import os
 import random
 from typing import Callable
 
@@ -129,8 +130,35 @@ class MinimalAgent:
 
             gpu_info += f"\n\n**GPU Selection**: Use GPU index {self.gpu_id}. Set the device to `cuda:{self.gpu_id}` and enforce using this GPU (do not fall back)."
 
+        storage_details: list[str] = []
+        volume_disk_gb = os.environ.get("POD_VOLUME_DISK_GB")
+        container_disk_gb = os.environ.get("POD_CONTAINER_DISK_GB")
+        free_disk_bytes = os.environ.get("PIPELINE_FREE_DISK_BYTES")
+        if volume_disk_gb:
+            storage_details.append(f"a dedicated workspace volume of ~{volume_disk_gb}GB")
+        if container_disk_gb:
+            storage_details.append(f"{container_disk_gb}GB of container-local storage")
+        if free_disk_bytes:
+            try:
+                free_bytes_val = int(free_disk_bytes)
+                free_human = humanize.naturalsize(free_bytes_val, binary=True)
+                storage_details.append(f"{free_human} free right now on /workspace")
+            except (TypeError, ValueError):
+                pass
+        storage_info = ""
+        if storage_details:
+            storage_info = (
+                "\n\n**Storage Availability**: "
+                + "; ".join(storage_details)
+                + ". Use disk space responsibly when downloading datasets."
+            )
+
         env_prompt = {
-            "Installed Packages": f"Your solution can use any relevant machine learning packages such as: {pkg_str}. Feel free to use any other packages too (all packages are already installed!). For neural networks we suggest using PyTorch rather than TensorFlow.{gpu_info}"
+            "Installed Packages": (
+                "Your solution can use any relevant machine learning packages such as: "
+                f"{pkg_str}. Feel free to use any other packages too (all packages are already installed!). "
+                f"For neural networks we suggest using PyTorch rather than TensorFlow.{gpu_info}{storage_info}"
+            )
         }
         # Debug: show GPU context fed to the LLM
         logger.debug(
