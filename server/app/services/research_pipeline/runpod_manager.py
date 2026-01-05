@@ -33,6 +33,8 @@ RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.
 RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 CONTAINER_DISK_GB = 100
 VOLUME_DISK_GB = 200
+_POD_CONTAINER_DISK_ENV = "POD_CONTAINER_DISK_GB"
+_POD_VOLUME_DISK_ENV = "POD_VOLUME_DISK_GB"
 DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
 _DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
 _LEGACY_HW_STATS_ENV_NAME = "HW_STATS_PATHS"
@@ -505,6 +507,8 @@ def _build_remote_script(
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
         f"{_DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"{_LEGACY_HW_STATS_ENV_NAME}={hw_stats_paths}",
+        f"{_POD_CONTAINER_DISK_ENV}={CONTAINER_DISK_GB}",
+        f"{_POD_VOLUME_DISK_ENV}={VOLUME_DISK_GB}",
     ]
     if env.sentry_dsn:
         env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
@@ -629,6 +633,8 @@ async def launch_research_pipeline_run(
         "DATABASE_PUBLIC_URL": env.database_public_url,
         _DISK_STATS_ENV_NAME: hw_stats_paths,
         _LEGACY_HW_STATS_ENV_NAME: hw_stats_paths,
+        _POD_CONTAINER_DISK_ENV: str(CONTAINER_DISK_GB),
+        _POD_VOLUME_DISK_ENV: str(VOLUME_DISK_GB),
     }
     if env.sentry_dsn:
         metadata_env["SENTRY_DSN"] = env.sentry_dsn

@@ -11,6 +11,7 @@ import json
 import logging
 import multiprocessing
 import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is imported
+import os
 import queue
 import threading
 from concurrent.futures import Future
@@ -33,6 +34,9 @@ from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceReco
 
 
 logger = logging.getLogger("ai-scientist.telemetry")
+
+_DISK_USAGE_ENV_NAME = "PIPELINE_DISK_USAGE_JSON"
+_DISK_FREE_ENV_NAME = "PIPELINE_FREE_DISK_BYTES"
 
 
 @dataclass(frozen=True)
@@ -229,6 +233,7 @@ def _collect_disk_usage() -> list[dict[str, int | str]]:
             partitions.append(
                 {
                     "partition": device_key,
+                    "mountpoint": mount_key,
                     "total_bytes": int(usage.total),
                     "used_bytes": int(usage.used),
                 }
@@ -236,7 +241,34 @@ def _collect_disk_usage() -> list[dict[str, int | str]]:
     except Exception:  # pragma: no cover - defensive
         logger.exception("Failed to collect disk usage information for heartbeat.")
         return []
+    _store_disk_usage_env(partitions)
     return partitions
+
+
+def _store_disk_usage_env(partitions: list[dict[str, int | str]]) -> None:
+    try:
+        os.environ[_DISK_USAGE_ENV_NAME] = json.dumps(partitions)
+        best_free: int | None = None
+        workspace_free: int | None = None
+
+        def _free_bytes(entry: dict[str, int | str]) -> int:
+            total = int(entry.get("total_bytes", 0) or 0)
+            used = int(entry.get("used_bytes", 0) or 0)
+            return max(total - used, 0)
+
+        for entry in partitions:
+            free_value = _free_bytes(entry)
+            mountpoint = str(entry.get("mountpoint") or "")
+            if mountpoint.startswith("/workspace"):
+                workspace_free = free_value
+                break
+            best_free = free_value if best_free is None else max(best_free, free_value)
+
+        free_bytes = workspace_free if workspace_free is not None else best_free
+        if free_bytes is not None:
+            os.environ[_DISK_FREE_ENV_NAME] = str(int(free_bytes))
+    except Exception:
+        logger.debug("Failed to update disk usage environment variables.", exc_info=True)
 
 
 def _parse_database_url(database_url: str) -> dict[str, Any]:
