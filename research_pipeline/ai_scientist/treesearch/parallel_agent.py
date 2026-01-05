@@ -907,10 +907,24 @@ class ParallelAgent:
         future.cancel()
         if execution_id is not None:
             reason = f"Execution timed out after {self.timeout}s"
+            entry = execution_registry.get_entry(execution_id)
+            node_ref = entry.node if entry is not None else None
             status, pid, _node = execution_registry.begin_termination(
                 execution_id=execution_id,
                 payload=reason,
             )
+            if node_ref is None and _node is not None:
+                node_ref = _node
+            if node_ref is not None:
+                existing_feedback = (node_ref.exec_time_feedback or "").strip()
+                node_ref.exec_time_feedback = (
+                    f"{existing_feedback}\n{reason}" if existing_feedback else reason
+                )
+                logger.info(
+                    "Recorded timeout feedback for node %s: %s",
+                    node_ref.id[:8],
+                    reason,
+                )
             if status == "ok" and pid is not None:
                 try:
                     os.kill(pid, signal.SIGKILL)
