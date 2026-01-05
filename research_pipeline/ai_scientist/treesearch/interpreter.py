@@ -340,6 +340,28 @@ class Interpreter:
             ]
         ]
         self._pid_callback: Callable[[int], None] | None = None
+        # Set by callers for log correlation (useful when multiple workers interleave logs).
+        # Keys: execution_id, stage_name, purpose
+        self._run_context: dict[str, str] = {}
+
+    def set_run_context(self, *, execution_id: str, stage_name: str, purpose: str) -> None:
+        self._run_context = {
+            "execution_id": execution_id,
+            "stage_name": stage_name,
+            "purpose": purpose,
+        }
+
+    def clear_run_context(self) -> None:
+        self._run_context = {}
+
+    def _format_run_context(self) -> str:
+        if not self._run_context:
+            return "execution_id=<unknown> stage=<unknown> purpose=<unknown>"
+        return (
+            f"execution_id={self._run_context.get('execution_id', '<unknown>')} "
+            f"stage={self._run_context.get('stage_name', '<unknown>')} "
+            f"purpose={self._run_context.get('purpose', '<unknown>')}"
+        )
 
     def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
@@ -556,7 +578,11 @@ class Interpreter:
         """
 
         logger.debug(
-            f"Interpreter.run called (reset_session={reset_session}, timeout={self.timeout}, parent_executable={sys.executable})"
+            "Interpreter.run called (%s, reset_session=%s, timeout=%s, parent_executable=%s)",
+            self._format_run_context(),
+            reset_session,
+            self.timeout,
+            sys.executable,
         )
         logger.debug("Starting Python interpreter process...")
 
@@ -605,7 +631,8 @@ class Interpreter:
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
-        logger.debug("Code is now executing...")
+        pid = self.process.pid if self.process is not None else None
+        logger.debug("Code is now executing... (%s, pid=%s)", self._format_run_context(), pid)
         last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent

@@ -120,7 +120,15 @@ def run_plot_aggregation(*, agent: SupportsSeedAgent, node: Node, seed_nodes: Li
         )
         try:
             working_dir = process_interpreter.working_dir
-            _ = process_interpreter.run(agg_plotting_code, True)
+            process_interpreter.set_run_context(
+                execution_id=agg_node.id,
+                stage_name="seed_aggregation",
+                purpose="plot_aggregation",
+            )
+            try:
+                _ = process_interpreter.run(code=agg_plotting_code, reset_session=True)
+            finally:
+                process_interpreter.clear_run_context()
             process_interpreter.cleanup_session()
             # Save aggregated plots
             plots_dir = Path(working_dir) / "working"

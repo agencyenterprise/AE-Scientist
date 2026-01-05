@@ -328,6 +328,11 @@ def _execute_experiment(
 
     process_interpreter.set_pid_callback(_pid_tracker)
     try:
+        process_interpreter.set_run_context(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            purpose="experiment",
+        )
         exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
     except Exception as exc:
         process_interpreter.set_pid_callback(None)
@@ -363,6 +368,7 @@ def _execute_experiment(
             exec_time=duration,
         ) from exc
     finally:
+        process_interpreter.clear_run_context()
         process_interpreter.set_pid_callback(None)
     process_interpreter.cleanup_session()
     logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
@@ -399,7 +405,7 @@ def _analyze_results_and_metrics(
     exec_result: ExecutionResult,
     event_callback: Callable[[BaseEvent], None],
 ) -> None:
-    logger.info("→ Analyzing results and extracting metrics...")
+    logger.info("→ Analyzing results and extracting metrics (execution_id=%s)...", child_node.id)
     event_callback(RunLogEvent(message="Analyzing results and extracting metrics", level="info"))
     worker_agent.parse_exec_result(
         node=child_node,
@@ -415,7 +421,11 @@ def _analyze_results_and_metrics(
         seed_eval=seed_eval,
         event_callback=event_callback,
     )
-    logger.info(f"✓ Metrics extracted. Buggy: {child_node.is_buggy}")
+    logger.info(
+        "✓ Metrics extracted (execution_id=%s). Buggy: %s",
+        child_node.id,
+        child_node.is_buggy,
+    )
 
 
 def _select_plotting_code(
@@ -466,10 +476,18 @@ def _execute_plotting_with_retries(
             best_stage3_plot_code=best_stage3_plot_code,
         )
         event_callback(RunLogEvent(message="Executing plotting code", level="info"))
-        plot_exec_result = process_interpreter.run(
-            code=plotting_code,
-            reset_session=True,
+        process_interpreter.set_run_context(
+            execution_id=child_node.id,
+            stage_name=worker_agent.stage_name,
+            purpose="plotting",
         )
+        try:
+            plot_exec_result = process_interpreter.run(
+                code=plotting_code,
+                reset_session=True,
+            )
+        finally:
+            process_interpreter.clear_run_context()
         process_interpreter.cleanup_session()
         child_node.absorb_plot_exec_result(plot_exec_result)
         if child_node.plot_exc_type and retry_count < 3:
@@ -730,9 +748,21 @@ def parse_and_assign_metrics(
 
         # Execute metric parsing code
         logger.debug(
-            "Starting second interpreter: executing metric parsing code to load .npy files and extract metrics"
+            "Starting second interpreter: executing metric parsing code (execution_id=%s, stage=%s)",
+            child_node.id,
+            worker_agent.stage_name,
         )
-        metrics_exec_result = process_interpreter.run(code=parse_metrics_code, reset_session=True)
+        process_interpreter.set_run_context(
+            execution_id=child_node.id,
+            stage_name=worker_agent.stage_name,
+            purpose="metrics_parsing",
+        )
+        try:
+            metrics_exec_result = process_interpreter.run(
+                code=parse_metrics_code, reset_session=True
+            )
+        finally:
+            process_interpreter.clear_run_context()
         process_interpreter.cleanup_session()
         child_node.parse_term_out = metrics_exec_result.term_out
         child_node.parse_exc_type = metrics_exec_result.exc_type

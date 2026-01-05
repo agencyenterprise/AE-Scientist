@@ -231,6 +231,13 @@ def prep_cfg(cfg: object) -> Config:
     if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
 
+    if cfg_obj.agent.type == "sequential" and cfg_obj.agent.num_workers != 1:
+        logger.warning(
+            "agent.type is 'sequential' but agent.num_workers=%s; forcing num_workers=1",
+            cfg_obj.agent.num_workers,
+        )
+        cfg_obj.agent.num_workers = 1
+
     if cfg_obj.min_num_gpus < 0:
         raise ValueError("min_num_gpus must be non-negative")
 
