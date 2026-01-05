@@ -21,7 +21,7 @@ from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)
 
-POD_NAME_PREFIX = "automation_aeScientist"
+POD_NAME_PREFIX = "aescientist"
 _POD_USER_FALLBACK = "Scientist"
 _POD_USER_MAX_LEN = 24
 DEFAULT_STARTUP_GRACE_SECONDS = 600
@@ -375,7 +375,7 @@ def _sanitize_pod_user_component(*, value: str) -> str:
     if not sanitized:
         return _POD_USER_FALLBACK
     truncated = sanitized[:_POD_USER_MAX_LEN]
-    return f"{truncated[0].upper()}{truncated[1:]}"
+    return truncated.lower()
 
 
 def _load_repo_setup_script() -> str:
@@ -649,7 +649,7 @@ async def launch_research_pipeline_run(
         # "NVIDIA RTX A5000",
     ]
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
-    pod_name = f"{POD_NAME_PREFIX}-{user_component}-{run_id}"
+    pod_name = f"{POD_NAME_PREFIX}_{user_component}_{run_id}"
     pod = await creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1.1",
