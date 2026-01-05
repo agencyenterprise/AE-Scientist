@@ -4566,29 +4566,6 @@
         ],
         "title": "CreditTransactionModel"
       },
-      "DiskUsagePartition": {
-        "properties": {
-          "partition": {
-            "type": "string",
-            "title": "Partition"
-          },
-          "total_bytes": {
-            "type": "integer",
-            "title": "Total Bytes"
-          },
-          "used_bytes": {
-            "type": "integer",
-            "title": "Used Bytes"
-          }
-        },
-        "type": "object",
-        "required": [
-          "partition",
-          "total_bytes",
-          "used_bytes"
-        ],
-        "title": "DiskUsagePartition"
-      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -4856,13 +4833,6 @@
           "run_id": {
             "type": "string",
             "title": "Run Id"
-          },
-          "disk_usage": {
-            "items": {
-              "$ref": "#/components/schemas/DiskUsagePartition"
-            },
-            "type": "array",
-            "title": "Disk Usage"
           }
         },
         "type": "object",

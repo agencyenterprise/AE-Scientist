@@ -37,6 +37,10 @@ logger = logging.getLogger("ai-scientist.telemetry")
 
 _DISK_USAGE_ENV_NAME = "PIPELINE_DISK_USAGE_JSON"
 _DISK_FREE_ENV_NAME = "PIPELINE_FREE_DISK_BYTES"
+_VOLUME_DISK_ENV_NAME = "POD_VOLUME_DISK_GB"
+_CONTAINER_DISK_ENV_NAME = "POD_CONTAINER_DISK_GB"
+_WORKSPACE_ROOT = Path("/workspace")
+_CONTAINER_ROOT = Path("/")
 
 
 @dataclass(frozen=True)
@@ -203,6 +207,35 @@ def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:
         return sanitized
 
 
+def _gb_env_to_bytes(*, env_name: str) -> int | None:
+    raw_value = os.environ.get(env_name)
+    if raw_value is None:
+        return None
+    try:
+        capacity_gb = int(raw_value)
+    except ValueError:
+        logger.debug("Invalid disk capacity env %s=%s", env_name, raw_value)
+        return None
+    if capacity_gb <= 0:
+        return None
+    return capacity_gb * (1024**3)
+
+
+def _capacity_override_for_mount(
+    *,
+    mountpoint: Path,
+    volume_capacity_bytes: int | None,
+    container_capacity_bytes: int | None,
+) -> int | None:
+    if (
+        mountpoint == _WORKSPACE_ROOT or _WORKSPACE_ROOT in mountpoint.parents
+    ) and volume_capacity_bytes is not None:
+        return volume_capacity_bytes
+    if mountpoint == _CONTAINER_ROOT and container_capacity_bytes is not None:
+        return container_capacity_bytes
+    return None
+
+
 def _collect_disk_usage() -> list[dict[str, int | str]]:
     """
     Gather disk usage per partition (best-effort).
@@ -250,16 +283,24 @@ def _store_disk_usage_env(partitions: list[dict[str, int | str]]) -> None:
         os.environ[_DISK_USAGE_ENV_NAME] = json.dumps(partitions)
         best_free: int | None = None
         workspace_free: int | None = None
-
-        def _free_bytes(entry: dict[str, int | str]) -> int:
-            total = int(entry.get("total_bytes", 0) or 0)
-            used = int(entry.get("used_bytes", 0) or 0)
-            return max(total - used, 0)
+        volume_capacity_bytes = _gb_env_to_bytes(env_name=_VOLUME_DISK_ENV_NAME)
+        container_capacity_bytes = _gb_env_to_bytes(env_name=_CONTAINER_DISK_ENV_NAME)
 
         for entry in partitions:
-            free_value = _free_bytes(entry)
-            mountpoint = str(entry.get("mountpoint") or "")
-            if mountpoint.startswith("/workspace"):
+            mountpoint_str = str(entry.get("mountpoint") or "")
+            if not mountpoint_str:
+                continue
+            mountpoint_path = Path(mountpoint_str)
+            total_bytes = int(entry.get("total_bytes", 0) or 0)
+            used_bytes = int(entry.get("used_bytes", 0) or 0)
+            capacity_override = _capacity_override_for_mount(
+                mountpoint=mountpoint_path,
+                volume_capacity_bytes=volume_capacity_bytes,
+                container_capacity_bytes=container_capacity_bytes,
+            )
+            effective_total = capacity_override if capacity_override is not None else total_bytes
+            free_value = max(effective_total - used_bytes, 0)
+            if mountpoint_path == _WORKSPACE_ROOT or _WORKSPACE_ROOT in mountpoint_path.parents:
                 workspace_free = free_value
                 break
             best_free = free_value if best_free is None else max(best_free, free_value)

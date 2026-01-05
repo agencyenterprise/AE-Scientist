@@ -154,7 +154,6 @@ class HardwareStatsPartition(BaseModel):
 
 class HeartbeatPayload(BaseModel):
     run_id: str
-    disk_usage: List[DiskUsagePartition] = Field(default_factory=list)
 
 
 class HardwareStatsPayload(BaseModel):
@@ -843,14 +842,6 @@ async def ingest_heartbeat(
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
-    if payload.disk_usage:
-        await _record_disk_usage_event(
-            db=db,
-            run_id=payload.run_id,
-            partitions=payload.disk_usage,
-            occurred_at=now,
-            event_type="disk_usage",
-        )
     logger.debug("RP heartbeat received for run=%s", payload.run_id)
 
 

@@ -1940,15 +1940,6 @@ export interface components {
             /** Created At */
             created_at: string;
         };
-        /** DiskUsagePartition */
-        DiskUsagePartition: {
-            /** Partition */
-            partition: string;
-            /** Total Bytes */
-            total_bytes: number;
-            /** Used Bytes */
-            used_bytes: number;
-        };
         /**
          * ErrorResponse
          * @description Standard error response schema.
@@ -2105,8 +2096,6 @@ export interface components {
         HeartbeatPayload: {
             /** Run Id */
             run_id: string;
-            /** Disk Usage */
-            disk_usage?: components["schemas"]["DiskUsagePartition"][];
         };
         /**
          * Idea
