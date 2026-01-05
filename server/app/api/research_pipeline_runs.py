@@ -49,6 +49,7 @@ from app.services.research_pipeline.runpod_manager import (
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     get_pipeline_startup_grace_seconds,
+    get_supported_gpu_types,
     launch_research_pipeline_run,
     request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
@@ -77,6 +78,22 @@ class ResearchRunAcceptedResponse(BaseModel):
     pod_name: str
     gpu_type: str
     cost: float
+
+
+class LaunchResearchRunRequest(BaseModel):
+    gpu_type: str
+
+
+class GpuTypeListResponse(BaseModel):
+    gpu_types: list[str]
+
+
+@router.get(
+    "/research/gpu-types",
+    response_model=GpuTypeListResponse,
+)
+async def list_research_gpu_types() -> GpuTypeListResponse:
+    return GpuTypeListResponse(gpu_types=get_supported_gpu_types())
 
 
 class ResearchRunStopResponse(BaseModel):
@@ -366,8 +383,11 @@ async def create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
     requested_by_first_name: str,
+    gpu_types: list[str],
 ) -> tuple[str, PodLaunchInfo]:
     db = get_database()
+    if not gpu_types:
+        raise PodLaunchError("At least one GPU type must be provided.")
     run_id = f"rp-{uuid4().hex[:10]}"
     await db.create_research_pipeline_run(
         run_id=run_id,
@@ -397,6 +417,7 @@ async def create_and_launch_research_run(
             config_name=config_name,
             run_id=run_id,
             requested_by_first_name=requested_by_first_name,
+            gpu_types=gpu_types,
         )
         await db.update_research_pipeline_run(
             run_id=run_id,
@@ -441,6 +462,7 @@ async def create_and_launch_research_run(
 async def submit_idea_for_research(
     conversation_id: int,
     request: Request,
+    payload: LaunchResearchRunRequest,
 ) -> ResearchRunAcceptedResponse:
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
@@ -465,10 +487,14 @@ async def submit_idea_for_research(
     )
 
     requester_first_name = extract_user_first_name(full_name=user.name)
+    available_gpu_types = get_supported_gpu_types()
+    if payload.gpu_type not in available_gpu_types:
+        raise HTTPException(status_code=400, detail="Selected GPU type is not supported.")
     try:
         run_id, pod_info = await create_and_launch_research_run(
             idea_data=cast(IdeaPayloadSource, idea_data),
             requested_by_first_name=requester_first_name,
+            gpu_types=[payload.gpu_type],
         )
         return ResearchRunAcceptedResponse(
             run_id=run_id,

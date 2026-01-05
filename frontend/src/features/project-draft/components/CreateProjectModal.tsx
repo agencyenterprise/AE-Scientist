@@ -8,6 +8,10 @@ interface CreateProjectModalProps {
   onClose: () => void;
   onConfirm: () => Promise<void>;
   isLoading?: boolean;
+  availableGpuTypes: string[];
+  selectedGpuType: string | null;
+  onSelectGpuType: (gpuType: string) => void;
+  isGpuTypeLoading?: boolean;
 }
 
 export function CreateProjectModal({
@@ -15,11 +19,20 @@ export function CreateProjectModal({
   onClose,
   onConfirm,
   isLoading = false,
+  availableGpuTypes,
+  selectedGpuType,
+  onSelectGpuType,
+  isGpuTypeLoading = false,
 }: CreateProjectModalProps) {
   const [error, setError] = useState("");
+  const isConfirmDisabled = isLoading || isGpuTypeLoading || !selectedGpuType;
 
   const handleConfirm = async () => {
     setError("");
+    if (!selectedGpuType) {
+      setError("Select a GPU type before launching research.");
+      return;
+    }
     try {
       await onConfirm();
     } catch (err) {
@@ -54,10 +67,46 @@ export function CreateProjectModal({
           </div>
 
           {/* Content */}
-          <div className="mb-6">
+          <div className="mb-6 space-y-4">
             <p className="text-sm text-muted-foreground mb-4">
               This will launch a new research run based on your current work.
             </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="gpu-type-select">
+                GPU type
+              </label>
+              {isGpuTypeLoading ? (
+                <div className="text-sm text-muted-foreground">Loading GPU options...</div>
+              ) : availableGpuTypes.length > 0 ? (
+                <select
+                  id="gpu-type-select"
+                  className="w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--ring)]"
+                  value={selectedGpuType ?? ""}
+                  onChange={event => {
+                    const value = event.target.value;
+                    if (value) {
+                      onSelectGpuType(value);
+                    }
+                  }}
+                  disabled={isLoading || availableGpuTypes.length === 0}
+                >
+                  {selectedGpuType === null && (
+                    <option value="" disabled>
+                      Select a GPU
+                    </option>
+                  )}
+                  {availableGpuTypes.map(gpuType => (
+                    <option key={gpuType} value={gpuType}>
+                      {gpuType}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-sm text-[var(--danger)]">
+                  No GPU types are currently available. Please try again later.
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Error Message */}
@@ -72,7 +121,7 @@ export function CreateProjectModal({
         <div className="bg-muted px-6 py-3 flex flex-row-reverse gap-3">
           <button
             onClick={handleConfirm}
-            disabled={isLoading}
+            disabled={isConfirmDisabled}
             className="inline-flex items-center justify-center px-4 py-2 bg-[var(--success)] text-[var(--success-foreground)] text-sm font-medium rounded-md hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--success)] disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed"
           >
             {isLoading ? (
