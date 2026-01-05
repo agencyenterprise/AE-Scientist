@@ -32,6 +32,7 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.19.0",
     "psycopg[binary,pool]>=3.3.1",
     "psycopg2-binary>=2.9.11",
+    "psutil>=7.2.1",
 ]
 
 [dependency-groups]
