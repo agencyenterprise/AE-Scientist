@@ -326,7 +326,11 @@ def _execute_experiment(
         logger.info("Worker recorded pid=%s for execution_id=%s", pid, execution_id)
         execution_registry.update_pid(execution_id=execution_id, pid=pid)
 
+    def _termination_checker() -> bool:
+        return execution_registry.is_terminated(execution_id=execution_id)
+
     process_interpreter.set_pid_callback(_pid_tracker)
+    process_interpreter.set_termination_checker(checker=_termination_checker)
     try:
         process_interpreter.set_run_context(
             execution_id=execution_id,
@@ -370,6 +374,7 @@ def _execute_experiment(
     finally:
         process_interpreter.clear_run_context()
         process_interpreter.set_pid_callback(None)
+        process_interpreter.clear_termination_checker()
     process_interpreter.cleanup_session()
     logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
     event_callback(

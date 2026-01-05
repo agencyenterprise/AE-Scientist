@@ -296,6 +296,14 @@ def _repl_run_session(
         result_outq.put("<|EOF|>")
 
 
+class InterpreterTerminated(RuntimeError):
+    """Raised when the interpreter child process was terminated externally."""
+
+    def __init__(self, *, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class Interpreter:
     def __init__(
         self,
@@ -343,6 +351,7 @@ class Interpreter:
         # Set by callers for log correlation (useful when multiple workers interleave logs).
         # Keys: execution_id, stage_name, purpose
         self._run_context: dict[str, str] = {}
+        self._termination_checker: Callable[[], bool] | None = None
 
     def set_run_context(self, *, execution_id: str, stage_name: str, purpose: str) -> None:
         self._run_context = {
@@ -625,9 +634,7 @@ class Interpreter:
             except queue.Empty:
                 if self.process is not None and not self.process.is_alive():
                     msg = "REPL child process died before signaling readiness"
-                    logger.critical(msg)
-                    self._log_failure_context(reason=msg)
-                    raise RuntimeError(msg) from None
+                    self._raise_child_exit(message=msg)
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
@@ -661,9 +668,7 @@ class Interpreter:
                     and not self.process.is_alive()
                 ):
                     msg = "REPL child process died unexpectedly"
-                    logger.critical(msg)
-                    self._log_failure_context(reason=msg)
-                    raise RuntimeError(msg) from None
+                    self._raise_child_exit(message=msg)
 
                 # child is alive and still executing -> check if we should sigint..
                 if self.timeout is None:
@@ -721,3 +726,32 @@ class Interpreter:
     def set_pid_callback(self, callback: Callable[[int], None] | None) -> None:
         """Register a callback invoked when a new interpreter process starts."""
         self._pid_callback = callback
+
+    def set_termination_checker(self, *, checker: Callable[[], bool]) -> None:
+        """Register a callback that reports whether an external termination was requested."""
+        self._termination_checker = checker
+
+    def clear_termination_checker(self) -> None:
+        """Clear any previously registered termination checker."""
+        self._termination_checker = None
+
+    def _termination_expected(self) -> bool:
+        if self._termination_checker is None:
+            return False
+        try:
+            return bool(self._termination_checker())
+        except Exception:
+            logger.exception("Termination checker raised an exception; treating as unexpected")
+            return False
+
+    def _raise_child_exit(self, *, message: str) -> None:
+        if self._termination_expected():
+            logger.info(
+                "%s; interpreter termination expected (%s)",
+                message,
+                self._format_run_context(),
+            )
+            raise InterpreterTerminated(reason=message)
+        logger.critical(message)
+        self._log_failure_context(reason=message)
+        raise RuntimeError(message)
