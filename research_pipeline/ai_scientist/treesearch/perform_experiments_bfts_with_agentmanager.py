@@ -197,9 +197,13 @@ def perform_experiments_bfts(
         except Exception as e:
             logger.exception(f"Error in step callback: {e}")
 
+        nodes_saved = len(journal)
         logger.info(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
         logger.debug(
-            f"Step {min(len(journal), stage.max_iterations)}/{stage.max_iterations} at stage_{stage.name}"
+            msg=(
+                f"Saved run snapshot at stage_{stage.name} "
+                f"(nodes={nodes_saved}, max_iterations={stage.max_iterations})"
+            )
         )
 
     manager.run(

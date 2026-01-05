@@ -923,7 +923,6 @@ def process_node(
             event_callback=event_callback,
             execution_id=execution_id,
         )
-        execution_registry.attach_node(execution_id=execution_id, node=child_node)
         logger.info(
             "Child node %s prepared (feedback=%s)",
             child_node.id,

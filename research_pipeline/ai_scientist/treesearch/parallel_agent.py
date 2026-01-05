@@ -11,8 +11,10 @@ High-level responsibilities:
 
 import logging
 import multiprocessing
+import os
 import pickle
 import random
+import signal
 import uuid
 from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -323,6 +325,10 @@ class ParallelAgent:
             try:
                 result_data = future.result(timeout=self.timeout)
                 result_node = Node.from_dict(result_data, self.journal)
+                execution_registry.attach_node(
+                    execution_id=execution_id,
+                    node=result_node,
+                )
                 parent_id_str = result_node.parent.id if result_node.parent is not None else "N/A"
                 logger.debug(f"Parent node id: {parent_id_str}")
                 logger.debug(f"Sanity check: actual parent node id: {node.id}")
@@ -685,6 +691,10 @@ class ParallelAgent:
 
                     result_node = Node.from_dict(result_data, self.journal)
                     if current_execution_id is not None:
+                        execution_registry.attach_node(
+                            execution_id=current_execution_id,
+                            node=result_node,
+                        )
                         entry = execution_registry.get_entry(current_execution_id)
                         if entry and entry.status == "terminated" and entry.payload:
                             result_node.is_user_feedback = True
@@ -739,7 +749,13 @@ class ParallelAgent:
                             level="warn",
                         )
                     )
-                    self._handle_worker_timeout(future=future)
+                    if current_execution_id is not None:
+                        self._handle_worker_timeout(
+                            future=future,
+                            execution_id=current_execution_id,
+                        )
+                    else:
+                        self._handle_worker_timeout(future=future)
                 except ExecutionTerminatedError:
                     logger.info(
                         "Execution %s was terminated intentionally; deferring node re-run.",
@@ -887,8 +903,42 @@ class ParallelAgent:
         self._shutdown_executor()
         self.executor = self._create_executor()
 
-    def _handle_worker_timeout(self, *, future: Future) -> None:
+    def _handle_worker_timeout(self, *, future: Future, execution_id: str | None = None) -> None:
         future.cancel()
+        if execution_id is not None:
+            reason = f"Execution timed out after {self.timeout}s"
+            status, pid, _node = execution_registry.begin_termination(
+                execution_id=execution_id,
+                payload=reason,
+            )
+            if status == "ok" and pid is not None:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    logger.info(
+                        "Sent SIGKILL to pid=%s for timed-out execution_id=%s",
+                        pid,
+                        execution_id,
+                    )
+                except ProcessLookupError:
+                    logger.info(
+                        "Timed-out execution_id=%s already exited before SIGKILL.",
+                        execution_id,
+                    )
+                except PermissionError:
+                    logger.exception(
+                        "Permission error when terminating pid=%s for execution_id=%s",
+                        pid,
+                        execution_id,
+                    )
+                finally:
+                    execution_registry.clear_execution(execution_id)
+            else:
+                logger.warning(
+                    "Unable to terminate timed-out execution_id=%s (status=%s); flagging skip pending.",
+                    execution_id,
+                    status,
+                )
+                execution_registry.flag_skip_pending(execution_id=execution_id, reason=reason)
         self._restart_executor()
 
     def _ensure_executor(self) -> ProcessPoolExecutor:
