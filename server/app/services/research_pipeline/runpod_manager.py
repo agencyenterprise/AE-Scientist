@@ -545,6 +545,10 @@ def _build_remote_script(
     script_parts += env_file_lines
     script_parts += [
         "EOF",
+        'echo "Exporting environment variables from .env..."',
+        "set -a",
+        "source .env",
+        "set +a",
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
         "python - <<'PY'",

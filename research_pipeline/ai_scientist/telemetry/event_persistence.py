@@ -308,6 +308,15 @@ def _store_disk_usage_env(partitions: list[dict[str, int | str]]) -> None:
         free_bytes = workspace_free if workspace_free is not None else best_free
         if free_bytes is not None:
             os.environ[_DISK_FREE_ENV_NAME] = str(int(free_bytes))
+        logger.debug(
+            "Disk usage snapshot: partitions=%s volume_capacity_bytes=%s container_capacity_bytes=%s workspace_free_bytes=%s best_free_bytes=%s selected_free_bytes=%s",
+            partitions,
+            volume_capacity_bytes,
+            container_capacity_bytes,
+            workspace_free,
+            best_free,
+            free_bytes,
+        )
     except Exception:
         logger.debug("Failed to update disk usage environment variables.", exc_info=True)
 

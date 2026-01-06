@@ -152,6 +152,13 @@ class MinimalAgent:
                 + "; ".join(storage_details)
                 + ". Use disk space responsibly when downloading datasets."
             )
+        logger.debug(
+            "LLM storage context: volume_disk_gb=%s container_disk_gb=%s free_disk_bytes=%s storage_details=%s",
+            volume_disk_gb,
+            container_disk_gb,
+            free_disk_bytes,
+            storage_details,
+        )
 
         env_prompt = {
             "Installed Packages": (
