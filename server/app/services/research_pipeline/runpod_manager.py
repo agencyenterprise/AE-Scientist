@@ -18,6 +18,7 @@ from typing import Any, Dict, NamedTuple, Type, cast
 
 import httpx
 from omegaconf import OmegaConf
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_S3_BUCKET_NAME",
 ]
 
-ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 10 * 60
+ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 20 * 60
 
 
 @dataclass
@@ -372,6 +373,24 @@ def get_pipeline_startup_grace_seconds() -> int:
     return max(parsed, 1)
 
 
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(subprocess.TimeoutExpired),
+)
+def _run_artifact_upload_command(
+    *, command: list[str], timeout_seconds: int
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
 def get_supported_gpu_types() -> list[str]:
     """Return the GPU types that can be targeted when launching RunPod jobs."""
     return list(RUNPOD_GPU_TYPES)
@@ -512,7 +531,7 @@ def _build_remote_script(
         f"RUN_ID={run_id}",
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
-        f"PIPELINE_WORKSPACE_DISK_CAPACITY_GB={WORKSPACE_DISK_GB}",
+        f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
         "PIPELINE_WORKSPACE_PATH=/workspace",
     ]
     if env.sentry_dsn:
@@ -802,12 +821,9 @@ def _upload_runpod_artifacts_via_ssh_sync(
         shlex.quote(remote_command),
     ]
     try:
-        result = subprocess.run(
-            ssh_command,
-            capture_output=True,
-            text=True,
-            timeout=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
-            check=False,
+        result = _run_artifact_upload_command(
+            command=ssh_command,
+            timeout_seconds=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
         )
         if result.returncode != 0:
             logger.warning(

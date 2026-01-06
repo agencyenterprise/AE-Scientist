@@ -74,10 +74,10 @@ def _collect_hw_stats(paths: Sequence[str]) -> list[PartitionUsage]:
         stats.append(PartitionUsage(partition=str(path), used_bytes=used_bytes))
         if path == workspace_root or workspace_root in path.parents:
             try:
-                os.environ["PIPELINE_WORKSPACE_USED_GB"] = str(used_bytes // 1024**3)
+                os.environ["PIPELINE_WORKSPACE_USED_BYTES"] = str(used_bytes)
                 logger.debug(
-                    "Updated workspace used bytes env: PIPELINE_WORKSPACE_USED_GB=%s",
-                    used_bytes // 1024**3,
+                    "Updated workspace used bytes env: PIPELINE_WORKSPACE_USED_BYTES=%s",
+                    used_bytes,
                 )
             except Exception:
                 logger.exception("Failed to update workspace used bytes env.")

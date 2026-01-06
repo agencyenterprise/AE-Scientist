@@ -131,14 +131,17 @@ class MinimalAgent:
             gpu_info += f"\n\n**GPU Selection**: Use GPU index {self.gpu_id}. Set the device to `cuda:{self.gpu_id}` and enforce using this GPU (do not fall back)."
 
         storage_details: list[str] = []
-        workspace_disk_capacity_gb = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_GB")
-        workspace_disk_used_gb = os.environ.get("PIPELINE_WORKSPACE_USED_GB")
+        workspace_disk_capacity_bytes = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES")
+        workspace_disk_used_bytes = os.environ.get("PIPELINE_WORKSPACE_USED_BYTES")
         pipeline_workspace_partition = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
-        if workspace_disk_capacity_gb and workspace_disk_used_gb:
-            storage_details.append(
-                f"a dedicated workspace volume of ~{workspace_disk_capacity_gb}GB"
+        if workspace_disk_capacity_bytes and workspace_disk_used_bytes:
+            humanized_workspace_disk_capacity = humanize.naturalsize(
+                workspace_disk_capacity_bytes, binary=True
             )
-            free_bytes_val = int(workspace_disk_capacity_gb) - int(workspace_disk_used_gb)
+            storage_details.append(
+                f"a dedicated workspace volume of ~{humanized_workspace_disk_capacity}"
+            )
+            free_bytes_val = int(workspace_disk_capacity_bytes) - int(workspace_disk_used_bytes)
             free_human = humanize.naturalsize(free_bytes_val, binary=True)
 
             storage_details.append(f"{free_human} free right now on {pipeline_workspace_partition}")
@@ -150,9 +153,9 @@ class MinimalAgent:
                 + ". Use disk space responsibly when downloading datasets."
             )
         logger.debug(
-            "LLM storage context: workspace_disk_capacity_gb=%s workspace_disk_used_gb=%s pipeline_workspace_partition=%s storage_details=%s",
-            workspace_disk_capacity_gb,
-            workspace_disk_used_gb,
+            "LLM storage context: workspace_disk_capacity_bytes=%s workspace_disk_used_bytes=%s pipeline_workspace_partition=%s storage_details=%s",
+            workspace_disk_capacity_bytes,
+            workspace_disk_used_bytes,
             pipeline_workspace_partition,
             storage_details,
         )
