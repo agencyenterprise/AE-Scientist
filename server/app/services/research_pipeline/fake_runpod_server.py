@@ -211,13 +211,13 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
     webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
     db_url = _require_env("DATABASE_PUBLIC_URL")
-    
+
     if not webhook_url or not webhook_token:
         logger.warning(
             "TELEMETRY_WEBHOOK_URL or TELEMETRY_WEBHOOK_TOKEN not set; "
             "FakeRunner will run without webhook events (artifacts won't trigger SSE)"
         )
-    
+
     _start_fake_runner(
         record=record,
         webhook_url=webhook_url,
@@ -403,7 +403,7 @@ class FakeRunner:
         ]
         self._heartbeat_interval_seconds = 10
         self._periodic_log_interval_seconds = 15
-        
+
         # Only create webhook client if URL and token are provided
         webhook_client: WebhookClient | None = None
         if self._webhook_url and self._webhook_token:
@@ -422,7 +422,7 @@ class FakeRunner:
                 "FakeRunner %s: No webhook URL/token provided; running without webhook events",
                 self._run_id[:8],
             )
-        
+
         self._persistence: EventPersistenceManager | LocalPersistence
         try:
             self._persistence = EventPersistenceManager(

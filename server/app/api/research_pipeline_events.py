@@ -32,7 +32,6 @@ from app.models.research_pipeline import (
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
-from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -42,6 +41,7 @@ from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
+from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
@@ -514,7 +514,7 @@ async def ingest_artifact_uploaded(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     event = payload.event
-    
+
     # Look up conversation_id from database
     db = get_database()
     conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
@@ -524,7 +524,7 @@ async def ingest_artifact_uploaded(
             payload.run_id,
         )
         return
-    
+
     logger.info(
         "Artifact uploaded: run=%s conv=%s type=%s filename=%s size=%d",
         payload.run_id,
@@ -557,7 +557,7 @@ async def ingest_review_completed(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     event = payload.event
-    
+
     # Look up conversation_id from database
     db = get_database()
     conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
@@ -567,7 +567,7 @@ async def ingest_review_completed(
             payload.run_id,
         )
         return
-    
+
     logger.info(
         "Review completed: run=%s conv=%s decision=%s overall=%.2f",
         payload.run_id,
@@ -575,7 +575,7 @@ async def ingest_review_completed(
         event.decision,
         event.overall,
     )
-    
+
     # Create LlmReviewResponse for SSE
     review_data = LlmReviewResponse(
         id=event.review_id,
@@ -599,7 +599,7 @@ async def ingest_review_completed(
         source_path=event.source_path,
         created_at=event.created_at,
     )
-    
+
     publish_stream_event(
         run_id=payload.run_id,
         event=SSEReviewCompletedEvent(
