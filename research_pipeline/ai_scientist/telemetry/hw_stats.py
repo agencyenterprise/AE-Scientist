@@ -15,6 +15,7 @@ logger = logging.getLogger("ai-scientist.telemetry")
 
 WORKSPACE_PATH = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
 workspace_root = Path(WORKSPACE_PATH)
+WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
 
 
 class PartitionUsage(NamedTuple):
@@ -74,14 +75,16 @@ def _collect_hw_stats(paths: Sequence[str]) -> list[PartitionUsage]:
         stats.append(PartitionUsage(partition=str(path), used_bytes=used_bytes))
         if path == workspace_root or workspace_root in path.parents:
             try:
-                os.environ["PIPELINE_WORKSPACE_USED_BYTES"] = str(used_bytes)
-                logger.debug(
-                    "Updated workspace used bytes env: PIPELINE_WORKSPACE_USED_BYTES=%s",
-                    used_bytes,
-                )
+                _write_workspace_usage_file(used_bytes=used_bytes)
             except Exception:
-                logger.exception("Failed to update workspace used bytes env.")
+                logger.exception("Failed to update workspace usage state.")
     return stats
+
+
+def _write_workspace_usage_file(*, used_bytes: int) -> None:
+    tmp_path = WORKSPACE_USAGE_FILE.with_suffix(".tmp")
+    tmp_path.write_text(data=str(used_bytes), encoding="utf-8")
+    tmp_path.replace(target=WORKSPACE_USAGE_FILE)
 
 
 class HardwareStatsReporter:

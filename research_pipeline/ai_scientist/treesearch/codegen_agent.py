@@ -14,6 +14,7 @@ Scope:
 import logging
 import os
 import random
+from pathlib import Path
 from typing import Callable
 
 import humanize
@@ -31,6 +32,28 @@ from .utils.response import wrap_code
 from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, SUMMARY_RESPONSE_SCHEMA
 
 logger = logging.getLogger("ai-scientist")
+WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
+
+
+def _load_workspace_usage_file() -> int | None:
+    if not WORKSPACE_USAGE_FILE.exists():
+        return None
+    try:
+        raw_text = WORKSPACE_USAGE_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.debug(
+            "Could not read workspace usage file at %s", WORKSPACE_USAGE_FILE, exc_info=True
+        )
+        return None
+    if not raw_text:
+        return None
+    try:
+        return int(raw_text)
+    except ValueError:
+        logger.debug(
+            "Malformed workspace usage file contents at %s: %s", WORKSPACE_USAGE_FILE, raw_text
+        )
+        return None
 
 
 class PlanAndCodeSchema(BaseModel):
@@ -131,20 +154,18 @@ class MinimalAgent:
             gpu_info += f"\n\n**GPU Selection**: Use GPU index {self.gpu_id}. Set the device to `cuda:{self.gpu_id}` and enforce using this GPU (do not fall back)."
 
         storage_details: list[str] = []
-        workspace_disk_capacity_bytes = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES")
-        workspace_disk_used_bytes = os.environ.get("PIPELINE_WORKSPACE_USED_BYTES")
-        pipeline_workspace_partition = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
-        if workspace_disk_capacity_bytes and workspace_disk_used_bytes:
+        capacity_int = int(os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES", "0"))
+        used_int = _load_workspace_usage_file()
+        if capacity_int and used_int is not None:
             humanized_workspace_disk_capacity = humanize.naturalsize(
-                workspace_disk_capacity_bytes, binary=True
+                value=capacity_int, binary=True
             )
             storage_details.append(
                 f"a dedicated workspace volume of ~{humanized_workspace_disk_capacity}"
             )
-            free_bytes_val = int(workspace_disk_capacity_bytes) - int(workspace_disk_used_bytes)
-            free_human = humanize.naturalsize(free_bytes_val, binary=True)
-
-            storage_details.append(f"{free_human} free right now on {pipeline_workspace_partition}")
+            free_bytes_val = max(capacity_int - used_int, 0)
+            free_human = humanize.naturalsize(value=free_bytes_val, binary=True)
+            storage_details.append(f"{free_human} free right now on your workspace volume")
         storage_info = ""
         if storage_details:
             storage_info = (
@@ -153,10 +174,9 @@ class MinimalAgent:
                 + ". Use disk space responsibly when downloading datasets."
             )
         logger.debug(
-            "LLM storage context: workspace_disk_capacity_bytes=%s workspace_disk_used_bytes=%s pipeline_workspace_partition=%s storage_details=%s",
-            workspace_disk_capacity_bytes,
-            workspace_disk_used_bytes,
-            pipeline_workspace_partition,
+            "LLM storage context: workspace_disk_capacity_bytes=%s workspace_disk_used_bytes=%s storage_details=%s",
+            capacity_int,
+            used_int,
             storage_details,
         )
 
