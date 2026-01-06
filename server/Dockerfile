@@ -51,4 +51,4 @@ COPY . .
 EXPOSE 8000
 
 # Start the application (run migrations first)
-CMD ["sh", "-c", "uv run migrate.py upgrade && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uv run migrate.py upgrade && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 10"]
