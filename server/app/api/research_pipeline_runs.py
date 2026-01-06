@@ -40,7 +40,7 @@ from app.services.database.research_pipeline_runs import PodUpdateInfo, Research
 from app.services.research_pipeline.runpod_manager import (
     CONTAINER_DISK_GB,
     POD_READY_POLL_INTERVAL_SECONDS,
-    VOLUME_DISK_GB,
+    WORKSPACE_DISK_GB,
     PodLaunchInfo,
     RunPodError,
     TerminationConflictError,
@@ -398,7 +398,7 @@ async def create_and_launch_research_run(
         cost=0.0,
         last_billed_at=datetime.now(timezone.utc),
         container_disk_gb=CONTAINER_DISK_GB,
-        volume_disk_gb=VOLUME_DISK_GB,
+        volume_disk_gb=WORKSPACE_DISK_GB,
     )
     idea_payload = _idea_version_to_payload(idea_data)
 

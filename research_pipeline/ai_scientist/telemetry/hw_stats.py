@@ -3,14 +3,23 @@ Utilities for collecting hardware statistics (disk usage) and reporting them via
 """
 
 import logging
+import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import NamedTuple, Optional, Sequence
 
 from .event_persistence import WebhookClient
 
 logger = logging.getLogger("ai-scientist.telemetry")
+
+WORKSPACE_PATH = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
+workspace_root = Path(WORKSPACE_PATH)
+
+
+class PartitionUsage(NamedTuple):
+    partition: str
+    used_bytes: int
 
 
 def _du_bytes(path: Path) -> Optional[int]:
@@ -53,8 +62,8 @@ def _du_bytes(path: Path) -> Optional[int]:
     return None
 
 
-def _collect_hw_stats(paths: Sequence[str]) -> list[dict[str, int | str]]:
-    stats: list[dict[str, int | str]] = []
+def _collect_hw_stats(paths: Sequence[str]) -> list[PartitionUsage]:
+    stats: list[PartitionUsage] = []
     for raw_path in paths:
         path = Path(raw_path).resolve()
         if not path.exists():
@@ -62,12 +71,16 @@ def _collect_hw_stats(paths: Sequence[str]) -> list[dict[str, int | str]]:
         used_bytes = _du_bytes(path=path)
         if used_bytes is None:
             continue
-        stats.append(
-            {
-                "partition": str(path),
-                "used_bytes": int(used_bytes),
-            }
-        )
+        stats.append(PartitionUsage(partition=str(path), used_bytes=used_bytes))
+        if path == workspace_root or workspace_root in path.parents:
+            try:
+                os.environ["PIPELINE_WORKSPACE_USED_GB"] = str(used_bytes // 1024**3)
+                logger.debug(
+                    "Updated workspace used bytes env: PIPELINE_WORKSPACE_USED_GB=%s",
+                    used_bytes // 1024**3,
+                )
+            except Exception:
+                logger.exception("Failed to update workspace used bytes env.")
     return stats
 
 
@@ -105,7 +118,10 @@ class HardwareStatsReporter:
             try:
                 stats = _collect_hw_stats(self._paths)
                 if stats:
-                    self._webhook.publish_hw_stats(partitions=stats)
+                    partition_payload: list[dict[str, int | str]] = [
+                        dict(entry._asdict()) for entry in stats
+                    ]
+                    self._webhook.publish_hw_stats(partitions=partition_payload)
             except Exception:
                 logger.exception("Failed to publish hardware stats payload.")
             self._stop_event.wait(timeout=self._interval)

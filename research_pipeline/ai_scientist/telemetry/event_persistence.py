@@ -11,17 +11,14 @@ import json
 import logging
 import multiprocessing
 import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is imported
-import os
 import queue
 import threading
 from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable, Optional, cast
 from urllib.parse import parse_qs, unquote, urlparse
 
-import psutil
 import psycopg2
 import psycopg2.extras
 import requests
@@ -34,13 +31,6 @@ from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceReco
 
 
 logger = logging.getLogger("ai-scientist.telemetry")
-
-_DISK_USAGE_ENV_NAME = "PIPELINE_DISK_USAGE_JSON"
-_DISK_FREE_ENV_NAME = "PIPELINE_FREE_DISK_BYTES"
-_VOLUME_DISK_ENV_NAME = "POD_VOLUME_DISK_GB"
-_CONTAINER_DISK_ENV_NAME = "POD_CONTAINER_DISK_GB"
-_WORKSPACE_ROOT = Path("/workspace")
-_CONTAINER_ROOT = Path("/")
 
 
 @dataclass(frozen=True)
@@ -166,7 +156,6 @@ class WebhookClient:
     def publish_heartbeat(self) -> Future[None]:
         payload = {
             "run_id": self._run_id,
-            "disk_usage": _collect_disk_usage(),
         }
         return self._post(path=self._HEARTBEAT_PATH, payload=payload)
 
@@ -205,120 +194,6 @@ def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:
         sanitized_raw = json.dumps(data, default=str)
         sanitized: dict[str, Any] = json.loads(sanitized_raw)
         return sanitized
-
-
-def _gb_env_to_bytes(*, env_name: str) -> int | None:
-    raw_value = os.environ.get(env_name)
-    if raw_value is None:
-        return None
-    try:
-        capacity_gb = int(raw_value)
-    except ValueError:
-        logger.debug("Invalid disk capacity env %s=%s", env_name, raw_value)
-        return None
-    if capacity_gb <= 0:
-        return None
-    return capacity_gb * (1024**3)
-
-
-def _capacity_override_for_mount(
-    *,
-    mountpoint: Path,
-    volume_capacity_bytes: int | None,
-    container_capacity_bytes: int | None,
-) -> int | None:
-    if (
-        mountpoint == _WORKSPACE_ROOT or _WORKSPACE_ROOT in mountpoint.parents
-    ) and volume_capacity_bytes is not None:
-        return volume_capacity_bytes
-    if mountpoint == _CONTAINER_ROOT and container_capacity_bytes is not None:
-        return container_capacity_bytes
-    return None
-
-
-def _collect_disk_usage() -> list[dict[str, int | str]]:
-    """
-    Gather disk usage per partition (best-effort).
-    Each entry contains partition identifier, total bytes, and used bytes.
-    """
-    partitions: list[dict[str, int | str]] = []
-    seen_devices: set[str] = set()
-    try:
-        for partition in psutil.disk_partitions(all=True):
-            mountpoint = Path(partition.mountpoint)
-            if not mountpoint.exists() or not mountpoint.is_dir():
-                continue
-            if (partition.fstype or "").lower() == "tmpfs":
-                continue
-            mount_key = str(mountpoint)
-            if "nvidia" in mount_key.lower():
-                continue
-            device_key = partition.device or mount_key
-            if device_key in seen_devices:
-                continue
-            seen_devices.add(device_key)
-            try:
-                usage = psutil.disk_usage(mount_key)
-            except PermissionError:
-                continue
-            if usage.total <= 0:
-                continue
-            partitions.append(
-                {
-                    "partition": device_key,
-                    "mountpoint": mount_key,
-                    "total_bytes": int(usage.total),
-                    "used_bytes": int(usage.used),
-                }
-            )
-    except Exception:  # pragma: no cover - defensive
-        logger.exception("Failed to collect disk usage information for heartbeat.")
-        return []
-    _store_disk_usage_env(partitions)
-    return partitions
-
-
-def _store_disk_usage_env(partitions: list[dict[str, int | str]]) -> None:
-    try:
-        os.environ[_DISK_USAGE_ENV_NAME] = json.dumps(partitions)
-        best_free: int | None = None
-        workspace_free: int | None = None
-        volume_capacity_bytes = _gb_env_to_bytes(env_name=_VOLUME_DISK_ENV_NAME)
-        container_capacity_bytes = _gb_env_to_bytes(env_name=_CONTAINER_DISK_ENV_NAME)
-
-        for entry in partitions:
-            mountpoint_str = str(entry.get("mountpoint") or "")
-            if not mountpoint_str:
-                continue
-            mountpoint_path = Path(mountpoint_str)
-            total_bytes = int(entry.get("total_bytes", 0) or 0)
-            used_bytes = int(entry.get("used_bytes", 0) or 0)
-            capacity_override = _capacity_override_for_mount(
-                mountpoint=mountpoint_path,
-                volume_capacity_bytes=volume_capacity_bytes,
-                container_capacity_bytes=container_capacity_bytes,
-            )
-            effective_total = capacity_override if capacity_override is not None else total_bytes
-            free_value = max(effective_total - used_bytes, 0)
-            if mountpoint_path == _WORKSPACE_ROOT or _WORKSPACE_ROOT in mountpoint_path.parents:
-                workspace_free = free_value
-                break
-            best_free = free_value if best_free is None else max(best_free, free_value)
-
-        free_bytes = workspace_free if workspace_free is not None else best_free
-        if free_bytes is not None:
-            os.environ[_DISK_FREE_ENV_NAME] = str(int(free_bytes))
-        logger.debug(
-            "Disk usage snapshot: partitions=%s volume_capacity_bytes=%s container_capacity_bytes=%s workspace_free_bytes=%s best_free_bytes=%s selected_free_bytes=%s",
-            partitions,
-            volume_capacity_bytes,
-            container_capacity_bytes,
-            workspace_free,
-            best_free,
-            free_bytes,
-        )
-    except Exception:
-        logger.debug("Failed to update disk usage environment variables.", exc_info=True)
 
 
 def _parse_database_url(database_url: str) -> dict[str, Any]:
