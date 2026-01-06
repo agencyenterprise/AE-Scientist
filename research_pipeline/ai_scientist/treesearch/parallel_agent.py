@@ -132,6 +132,10 @@ class ParallelAgent:
         self._shared_pid_state = execution_registry.get_shared_pid_state()
         self._future_execution_ids: dict[Future, str] = {}
         self._future_process_ids: dict[Future, str] = {}
+        # Execution IDs whose registry entries should be cleared later (not immediately).
+        # This is used to keep termination state available briefly so workers can classify
+        # SIGKILL as expected (e.g., timeout) and avoid Sentry noise.
+        self._deferred_registry_clears: set[str] = set()
 
     @property
     def stage_name(self) -> str:
@@ -754,6 +758,7 @@ class ParallelAgent:
                             future=future,
                             execution_id=current_execution_id,
                         )
+                        self._deferred_registry_clears.add(current_execution_id)
                     else:
                         self._handle_worker_timeout(future=future)
                 except ExecutionTerminatedError:
@@ -769,7 +774,10 @@ class ParallelAgent:
                     )
                     continue
                 except ExecutionCrashedError as exc:
-                    logger.error(
+                    # Emit exactly one Sentry event for a true crash. Avoid error-level logging
+                    # here to prevent multiple Sentry events for the same underlying issue.
+                    sentry_sdk.capture_exception(exc)
+                    logger.warning(
                         "Execution %s crashed unexpectedly: %s",
                         current_execution_id,
                         exc,
@@ -809,11 +817,17 @@ class ParallelAgent:
                     continue
                 finally:
                     if current_execution_id is not None:
-                        logger.info(
-                            "ParallelAgent clearing execution %s after future completion",
-                            current_execution_id,
-                        )
-                        execution_registry.clear_execution(current_execution_id)
+                        if current_execution_id in self._deferred_registry_clears:
+                            logger.info(
+                                "Deferring execution registry clear for %s (timeout/termination).",
+                                current_execution_id,
+                            )
+                        else:
+                            logger.info(
+                                "ParallelAgent clearing execution %s after future completion",
+                                current_execution_id,
+                            )
+                            execution_registry.clear_execution(current_execution_id)
                     completed_process_id = (
                         self._future_process_ids.pop(future)
                         if future in self._future_process_ids
@@ -853,6 +867,16 @@ class ParallelAgent:
                 self._shutdown_executor()
 
                 logger.info("Executor shutdown complete")
+                # Clear any deferred registry entries now that the executor is shut down.
+                for execution_id in list(self._deferred_registry_clears):
+                    try:
+                        execution_registry.clear_execution(execution_id)
+                    except Exception:
+                        logger.debug(
+                            "Failed to clear deferred execution registry entry %s during cleanup",
+                            execution_id,
+                        )
+                self._deferred_registry_clears.clear()
 
             except Exception as e:
                 logger.exception(f"Error during executor shutdown: {e}")
@@ -979,8 +1003,6 @@ class ParallelAgent:
                         pid,
                         execution_id,
                     )
-                finally:
-                    execution_registry.clear_execution(execution_id)
             else:
                 logger.warning(
                     "Unable to terminate timed-out execution_id=%s (status=%s); flagging skip pending.",

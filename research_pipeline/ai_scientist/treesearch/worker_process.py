@@ -366,7 +366,9 @@ def _execute_experiment(
                 execution_id=execution_id,
                 exec_time=duration,
             ) from exc
-        logger.error("Execution %s crashed unexpectedly; propagating failure.", execution_id)
+        # Avoid Sentry log spam: the controller (main process) is responsible for emitting a single
+        # Sentry event for true crashes. Worker logs should remain non-error level.
+        logger.warning("Execution %s crashed unexpectedly; propagating failure.", execution_id)
         raise ExecutionCrashedError(
             execution_id=execution_id,
             exec_time=duration,
