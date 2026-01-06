@@ -14,7 +14,7 @@ import boto3
 import magic
 import psycopg2
 
-from ai_scientist.telemetry.event_persistence import _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient, _parse_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ class ArtifactPublisher:
         aws_region: str,
         aws_s3_bucket_name: str,
         database_url: str,
-        webhook_client: object | None = None,
+        webhook_client: WebhookClient | None = None,
     ) -> None:
         self._run_id = run_id
         self._temp_dir = Path(tempfile.mkdtemp(prefix="rp-artifacts-"))
@@ -199,7 +199,7 @@ class ArtifactPublisher:
             s3_key=s3_key,
             source_path=str(request.source_path),
         )
-        
+
         # Emit SSE event via webhook if available
         if self._webhook_client is not None:
             try:
@@ -219,7 +219,6 @@ class ArtifactPublisher:
                 logger.exception("Failed to emit artifact SSE event (non-fatal)")
         else:
             logger.warning("No webhook client available to emit artifact SSE event")
-
 
     def close(self) -> None:
         shutil.rmtree(self._temp_dir, ignore_errors=True)

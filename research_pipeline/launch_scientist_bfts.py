@@ -763,7 +763,7 @@ def run_review_stage(
     telemetry_cfg: TelemetryConfig | None,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
-    webhook_client: object | None = None,
+    webhook_client: WebhookClient | None = None,
 ) -> None:
     if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
         return

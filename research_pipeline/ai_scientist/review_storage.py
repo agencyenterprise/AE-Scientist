@@ -8,7 +8,7 @@ import psycopg2.extras
 
 from ai_scientist.perform_llm_review import ReviewResponseModel
 from ai_scientist.perform_vlm_review import FigureImageCaptionRefReview
-from ai_scientist.telemetry.event_persistence import _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient, _parse_database_url
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +19,15 @@ class ReviewResponseRecorder:
 
     _pg_config: dict[str, Any]
     _run_id: str
-    _webhook_client: object | None = None
+    _webhook_client: WebhookClient | None = None
 
     @classmethod
     def from_database_url(
-        cls, 
-        *, 
-        database_url: str, 
+        cls,
+        *,
+        database_url: str,
         run_id: str,
-        webhook_client: object | None = None,
+        webhook_client: WebhookClient | None = None,
     ) -> "ReviewResponseRecorder":
         return cls(_parse_database_url(database_url), run_id, webhook_client)
 
@@ -96,10 +96,12 @@ class ReviewResponseRecorder:
                     )
                     result = cursor.fetchone()
                     if result is None:
-                        logger.error("Failed to get review_id after insert for run_id=%s", self._run_id)
+                        logger.error(
+                            "Failed to get review_id after insert for run_id=%s", self._run_id
+                        )
                         return None
                     review_id, created_at = result
-                    
+
             # Emit SSE event via webhook
             if self._webhook_client is not None:
                 try:
@@ -132,9 +134,9 @@ class ReviewResponseRecorder:
                     logger.exception("Failed to emit review SSE event (non-fatal)")
             else:
                 logger.warning("webhook_client is None, skipping review SSE event emission")
-                    
+
             return int(review_id)
-                    
+
         except psycopg2.Error:
             logger.exception("Failed to persist LLM review response for run_id=%s", self._run_id)
             return None
