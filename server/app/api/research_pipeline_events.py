@@ -19,6 +19,7 @@ from app.api.research_pipeline_runs import (
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
 from app.models.research_pipeline import (
+    LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
 )
@@ -31,6 +32,7 @@ from app.models.research_pipeline import (
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
+from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -220,6 +222,33 @@ class ArtifactUploadedEvent(BaseModel):
 class ArtifactUploadedPayload(BaseModel):
     run_id: str
     event: ArtifactUploadedEvent
+
+
+class ReviewCompletedEvent(BaseModel):
+    review_id: int
+    summary: str
+    strengths: List[str]
+    weaknesses: List[str]
+    originality: float
+    quality: float
+    clarity: float
+    significance: float
+    questions: List[str]
+    limitations: List[str]
+    ethical_concerns: bool
+    soundness: float
+    presentation: float
+    contribution: float
+    overall: float
+    confidence: float
+    decision: str
+    source_path: Optional[str]
+    created_at: str
+
+
+class ReviewCompletedPayload(BaseModel):
+    run_id: str
+    event: ReviewCompletedEvent
 
 
 class BestNodeSelectionEvent(BaseModel):
@@ -518,6 +547,64 @@ async def ingest_artifact_uploaded(
         event=SSEArtifactEvent(
             type="artifact",
             data=artifact_metadata,
+        ),
+    )
+
+
+@router.post("/review-completed", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_review_completed(
+    payload: ReviewCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    
+    # Look up conversation_id from database
+    db = get_database()
+    conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
+    if conversation_id is None:
+        logger.warning(
+            "Could not find conversation_id for run %s; review SSE event skipped",
+            payload.run_id,
+        )
+        return
+    
+    logger.info(
+        "Review completed: run=%s conv=%s decision=%s overall=%.2f",
+        payload.run_id,
+        conversation_id,
+        event.decision,
+        event.overall,
+    )
+    
+    # Create LlmReviewResponse for SSE
+    review_data = LlmReviewResponse(
+        id=event.review_id,
+        run_id=payload.run_id,
+        summary=event.summary,
+        strengths=event.strengths,
+        weaknesses=event.weaknesses,
+        originality=event.originality,
+        quality=event.quality,
+        clarity=event.clarity,
+        significance=event.significance,
+        questions=event.questions,
+        limitations=event.limitations,
+        ethical_concerns=event.ethical_concerns,
+        soundness=event.soundness,
+        presentation=event.presentation,
+        contribution=event.contribution,
+        overall=event.overall,
+        confidence=event.confidence,
+        decision=event.decision,
+        source_path=event.source_path,
+        created_at=event.created_at,
+    )
+    
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEReviewCompletedEvent(
+            type="review_completed",
+            data=review_data,
         ),
     )
 

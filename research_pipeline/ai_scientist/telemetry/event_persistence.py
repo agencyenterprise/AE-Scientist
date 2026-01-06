@@ -61,6 +61,7 @@ class WebhookClient:
         "run_completed": "/run-completed",
         "stage_skip_window": "/stage-skip-window",
         "artifact_uploaded": "/artifact-uploaded",
+        "review_completed": "/review-completed",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"

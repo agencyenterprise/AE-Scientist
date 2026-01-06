@@ -16,6 +16,7 @@ interface UseReviewDataReturn {
   error: string | null;
   notFound: boolean;
   fetchReview: () => Promise<void>;
+  setReview: (review: LlmReviewResponse) => void;
 }
 
 /**
@@ -72,11 +73,19 @@ export function useReviewData({
     }
   }, [review, loading, notFound, error, runId, conversationId]);
 
+  const setReviewDirectly = useCallback((newReview: LlmReviewResponse) => {
+    setReview(newReview);
+    setNotFound(false);
+    setError(null);
+    setLoading(false);
+  }, []);
+
   return {
     review,
     loading,
     error,
     notFound,
     fetchReview,
+    setReview: setReviewDirectly,
   };
 }

@@ -48,7 +48,10 @@ export default function ResearchRunDetailPage() {
     stageSkipState,
     skipPendingStage,
     handleSkipStage,
-  } = useResearchRunDetails({ runId });
+  } = useResearchRunDetails({
+    runId,
+    onReviewCompleted: newReview => setReview(newReview),
+  });
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
     queryKey: ["researchRunMeta", runId],
@@ -65,6 +68,7 @@ export default function ResearchRunDetailPage() {
     error: reviewError,
     notFound,
     fetchReview,
+    setReview,
   } = useReviewData({
     runId,
     conversationId,

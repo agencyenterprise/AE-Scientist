@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, RootModel
 from app.models.conversations import ConversationResponse
 from app.models.ideas import Idea
 from app.models.research_pipeline import (
+    LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
     ResearchRunCodeExecution,
@@ -356,6 +357,11 @@ class ResearchRunArtifactEvent(BaseModel):
     data: ResearchRunArtifactMetadata
 
 
+class ResearchRunReviewCompletedEvent(BaseModel):
+    type: Literal["review_completed"]
+    data: "LlmReviewResponse"
+
+
 ResearchRunEventUnion = Annotated[
     Union[
         ResearchRunInitialEvent,
@@ -364,6 +370,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunRunEvent,
         ResearchRunLogEvent,
         ResearchRunArtifactEvent,
+        ResearchRunReviewCompletedEvent,
         ResearchRunBestNodeEvent,
         ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,
