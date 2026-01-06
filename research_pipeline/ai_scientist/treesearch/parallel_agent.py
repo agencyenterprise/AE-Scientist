@@ -925,6 +925,41 @@ class ParallelAgent:
                     node_ref.id[:8],
                     reason,
                 )
+            else:
+                # Draft executions are registered with node=None, and when they time out we never
+                # receive a result_node to append to the journal. Without a journal entry, the
+                # next iteration's memory_summary becomes "No experiments conducted yet." and the
+                # codegen LLM has no signal to reduce runtime.
+                existing = self.journal.get_node_by_id(execution_id)
+                if existing is None:
+                    timeout_node = Node(
+                        id=execution_id,
+                        plan="",
+                        code="",
+                        is_buggy=True,
+                        analysis=reason,
+                        exc_type="TimeoutError",
+                        exec_time=float(self.timeout),
+                        exec_time_feedback=reason,
+                        metric=WorstMetricValue(),
+                    )
+                    self.journal.append(timeout_node)
+                    logger.info(
+                        "Created synthetic timeout node %s to preserve timeout feedback in journal.",
+                        execution_id[:8],
+                    )
+                else:
+                    existing.is_buggy = True
+                    existing.analysis = reason
+                    existing.exc_type = existing.exc_type or "TimeoutError"
+                    existing.exec_time = existing.exec_time or float(self.timeout)
+                    existing.exec_time_feedback = (
+                        f"{existing.exec_time_feedback}\n{reason}".strip()
+                        if existing.exec_time_feedback
+                        else reason
+                    )
+                    existing.metric = existing.metric or WorstMetricValue()
+                    logger.info("Updated existing node %s with timeout feedback.", execution_id[:8])
             if status == "ok" and pid is not None:
                 try:
                     os.kill(pid, signal.SIGKILL)
