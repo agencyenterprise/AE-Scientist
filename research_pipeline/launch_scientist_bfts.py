@@ -346,7 +346,7 @@ def _handle_gpu_shortage_event(
 
 
 def setup_artifact_publisher(
-    *, telemetry_cfg: TelemetryConfig
+    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None = None
 ) -> tuple[ArtifactPublisher, ArtifactCallback]:
     try:
         aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
@@ -364,6 +364,7 @@ def setup_artifact_publisher(
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
         database_url=telemetry_cfg.database_url,
+        webhook_client=webhook_client,
     )
 
     def _callback(spec: ArtifactSpec) -> None:
@@ -892,7 +893,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
     artifact_callback: ArtifactCallback
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
-            telemetry_cfg=base_cfg.telemetry
+            telemetry_cfg=base_cfg.telemetry,
+            webhook_client=webhook_client,
         )
     else:
         artifact_publisher = None

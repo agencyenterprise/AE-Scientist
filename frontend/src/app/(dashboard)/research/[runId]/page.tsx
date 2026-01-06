@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
 import {
   AutoEvaluationCard,
+  CostDetailsCard,
   FinalPdfBanner,
   ResearchArtifactsList,
   ResearchLogsList,
@@ -12,19 +13,19 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
-  CostDetailsCard,
   TreeVizCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
-import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
+import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
 import { PageCard } from "@/shared/components/PageCard";
 import { apiFetch } from "@/shared/lib/api-client";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 
 export default function ResearchRunDetailPage() {
   const params = useParams();
@@ -149,6 +150,13 @@ export default function ResearchRunDetailPage() {
 
   const title = runMeta?.idea_title?.trim() || "Untitled";
 
+  // Compute current stage and progress from real-time SSE data
+  // This replicates the backend's SQL logic and updates immediately without page refresh
+  const { currentStage, progress: overallProgress } = getCurrentStageAndProgress(
+    stage_progress,
+    paper_generation_progress
+  );
+
   return (
     <PageCard>
       <div className="flex flex-col gap-6 p-6">
@@ -171,8 +179,8 @@ export default function ResearchRunDetailPage() {
 
         <ResearchRunStats
           status={run.status}
-          currentStage={runMeta?.current_stage ?? null}
-          progress={runMeta?.progress ?? null}
+          currentStage={currentStage}
+          progress={overallProgress}
           gpuType={run.gpu_type}
           artifactsCount={artifacts.length}
         />

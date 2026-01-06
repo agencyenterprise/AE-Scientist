@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { CheckCircle2, Clock, Loader2, AlertCircle } from "lucide-react";
 import { extractStageNumber } from "@/shared/lib/stage-utils";
+import { PaperGenerationEvent, StageProgress } from "@/types/research";
 
 /**
  * Converts backend stage ids into a human-readable label.
@@ -246,4 +247,63 @@ const LOG_LEVEL_COLORS: Record<string, string> = {
  */
 export function getLogLevelColor(level: string): string {
   return LOG_LEVEL_COLORS[level.toLowerCase()] ?? "text-slate-300";
+}
+
+/**
+ * Replicates backend's progress calculation logic from research_pipeline_runs.py
+ * Combines stage_progress and paper_generation_progress, then finds the latest event.
+ *
+ * This matches the SQL logic:
+ * 1. UNION ALL of rp_run_stage_progress_events and rp_paper_generation_events
+ * 2. ORDER BY created_at DESC to get latest event
+ * 3. Calculate overall progress: (stage_number * 0.2) - (progress >= 1 ? 0 : 0.2)
+ */
+export function getCurrentStageAndProgress(
+  stageProgress: StageProgress[],
+  paperGenerationProgress: PaperGenerationEvent[]
+): { currentStage: string | null; progress: number | null } {
+  // Combine both sources (replicating the SQL UNION ALL)
+  const allProgress: Array<{ stage: string; progress: number; created_at: string }> = [
+    ...stageProgress.map(sp => ({
+      stage: sp.stage,
+      progress: sp.progress,
+      created_at: sp.created_at,
+    })),
+    ...paperGenerationProgress.map(pg => ({
+      stage: "5_paper_generation",
+      progress: pg.progress,
+      created_at: pg.created_at,
+    })),
+  ];
+
+  // If no progress events, return nulls
+  if (allProgress.length === 0) {
+    return { currentStage: null, progress: null };
+  }
+
+  // Find the latest event by created_at (replicating DISTINCT ON ... ORDER BY created_at DESC)
+  const latestEvent = allProgress.reduce((latest, current) => {
+    return new Date(current.created_at) > new Date(latest.created_at) ? current : latest;
+  });
+
+  const currentStage = latestEvent.stage;
+  const stageProgressValue = latestEvent.progress;
+
+  // Calculate overall progress (replicating the CASE statement)
+  const stageNumberMatch = currentStage.match(/^([1-5])_/);
+  let overallProgress: number;
+
+  if (stageNumberMatch && stageNumberMatch[1]) {
+    const stageNumber = parseInt(stageNumberMatch[1], 10);
+    // Formula: (stage_number * 0.2) - (progress >= 1 ? 0 : 0.2)
+    overallProgress = stageNumber * 0.2 - (stageProgressValue >= 1 ? 0 : 0.2);
+  } else {
+    // Fallback: use raw progress
+    overallProgress = stageProgressValue;
+  }
+
+  return {
+    currentStage,
+    progress: Math.max(0, Math.min(1, overallProgress)),
+  };
 }

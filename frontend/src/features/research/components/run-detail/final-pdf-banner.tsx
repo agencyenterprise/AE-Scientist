@@ -4,6 +4,7 @@ import { Download, FileText, FolderArchive } from "lucide-react";
 import type { ArtifactMetadata } from "@/types/research";
 import { formatBytes } from "@/shared/lib/date-utils";
 import { useArtifactDownload } from "@/features/research/hooks/useArtifactDownload";
+import { isDevelopment } from "@/shared/lib/config";
 
 interface FinalPdfBannerProps {
   artifacts: ArtifactMetadata[];
@@ -45,7 +46,13 @@ export function FinalPdfBanner({ artifacts, conversationId, runId }: FinalPdfBan
   const finalPdf = paperPdfs.length > 0 ? paperPdfs[0] : null;
 
   // Find the workspace archive artifact
-  const workspaceArchive = artifacts.find(a => a.artifact_type === "workspace_archive");
+  const workspaceArchive = artifacts.find(a => {
+    if (isDevelopment) {
+      // during dev we create a fake result artifact, need to consider it here too
+      return a.artifact_type === "workspace_archive" || a.artifact_type === "fake_result";
+    }
+    return a.artifact_type === "workspace_archive";
+  });
 
   // Don't render if no final PDF and no workspace archive
   if (!finalPdf && !workspaceArchive) {

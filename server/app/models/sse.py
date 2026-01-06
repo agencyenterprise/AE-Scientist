@@ -351,6 +351,11 @@ class ResearchRunErrorEvent(BaseModel):
     data: str
 
 
+class ResearchRunArtifactEvent(BaseModel):
+    type: Literal["artifact"]
+    data: ResearchRunArtifactMetadata
+
+
 ResearchRunEventUnion = Annotated[
     Union[
         ResearchRunInitialEvent,
@@ -358,6 +363,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunStageProgressEvent,
         ResearchRunRunEvent,
         ResearchRunLogEvent,
+        ResearchRunArtifactEvent,
         ResearchRunBestNodeEvent,
         ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,

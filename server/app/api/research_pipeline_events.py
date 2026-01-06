@@ -18,7 +18,10 @@ from app.api.research_pipeline_runs import (
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
-from app.models.research_pipeline import ResearchRunBestNodeSelection
+from app.models.research_pipeline import (
+    ResearchRunArtifactMetadata,
+    ResearchRunBestNodeSelection,
+)
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
     ResearchRunLogEntry,
@@ -27,6 +30,7 @@ from app.models.research_pipeline import (
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -202,6 +206,20 @@ class PaperGenerationProgressEvent(BaseModel):
 class PaperGenerationProgressPayload(BaseModel):
     run_id: str
     event: PaperGenerationProgressEvent
+
+
+class ArtifactUploadedEvent(BaseModel):
+    artifact_id: int
+    artifact_type: str
+    filename: str
+    file_size: int
+    file_type: str
+    created_at: str
+
+
+class ArtifactUploadedPayload(BaseModel):
+    run_id: str
+    event: ArtifactUploadedEvent
 
 
 class BestNodeSelectionEvent(BaseModel):
@@ -457,6 +475,49 @@ async def ingest_paper_generation_progress(
         event=SSEPaperGenerationEvent(
             type="paper_generation_progress",
             data=paper_event,
+        ),
+    )
+
+
+@router.post("/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_artifact_uploaded(
+    payload: ArtifactUploadedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+    
+    # Look up conversation_id from database
+    db = get_database()
+    conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
+    if conversation_id is None:
+        logger.warning(
+            "Could not find conversation_id for run %s; artifact SSE event skipped",
+            payload.run_id,
+        )
+        return
+    
+    logger.info(
+        "Artifact uploaded: run=%s conv=%s type=%s filename=%s size=%d",
+        payload.run_id,
+        conversation_id,
+        event.artifact_type,
+        event.filename,
+        event.file_size,
+    )
+    artifact_metadata = ResearchRunArtifactMetadata(
+        id=event.artifact_id,
+        artifact_type=event.artifact_type,
+        filename=event.filename,
+        file_size=event.file_size,
+        file_type=event.file_type,
+        created_at=event.created_at,
+        download_path=f"/conversations/{conversation_id}/idea/research-run/{payload.run_id}/artifacts/{event.artifact_id}/presign",
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEArtifactEvent(
+            type="artifact",
+            data=artifact_metadata,
         ),
     )
 

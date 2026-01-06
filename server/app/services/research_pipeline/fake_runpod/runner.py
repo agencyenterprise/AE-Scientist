@@ -808,6 +808,7 @@ class FakeRunner:
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
             database_url=self._database_url,
+            webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
             artifact_type="fake_result",
@@ -841,6 +842,7 @@ class FakeRunner:
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
             database_url=self._database_url,
+            webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
             artifact_type="plot",

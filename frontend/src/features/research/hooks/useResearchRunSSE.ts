@@ -211,7 +211,7 @@ export function useResearchRunSSE({
   onInitialData,
   onStageProgress,
   onLog,
-  onArtifact: _onArtifact,
+  onArtifact,
   onRunUpdate,
   onPaperGenerationProgress,
   onComplete,
@@ -226,7 +226,6 @@ export function useResearchRunSSE({
   onCodeExecutionCompleted,
   onStageSkipWindow,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
-  void _onArtifact;
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -332,6 +331,9 @@ export function useResearchRunSSE({
               case "log":
                 onLog(event.data as LogEntry);
                 break;
+              case "artifact":
+                onArtifact(event.data as ArtifactMetadata);
+                break;
               case "best_node_selection":
                 onBestNodeSelection?.(event.data as BestNodeSelection);
                 break;
@@ -418,6 +420,7 @@ export function useResearchRunSSE({
     ensureInitialSnapshot,
     onStageProgress,
     onLog,
+    onArtifact,
     onSubstageCompleted,
     onRunEvent,
     onBestNodeSelection,

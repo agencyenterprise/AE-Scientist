@@ -1797,6 +1797,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/artifact-uploaded": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Artifact Uploaded",
+        "operationId": "ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactUploadedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/substage-summary": {
       "post": {
         "tags": [
@@ -3288,6 +3333,61 @@
         ],
         "title": "ArtifactPresignedUrlResponse",
         "description": "Response containing presigned S3 download URL."
+      },
+      "ArtifactUploadedEvent": {
+        "properties": {
+          "artifact_id": {
+            "type": "integer",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "filename",
+          "file_size",
+          "file_type",
+          "created_at"
+        ],
+        "title": "ArtifactUploadedEvent"
+      },
+      "ArtifactUploadedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ArtifactUploadedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "ArtifactUploadedPayload"
       },
       "AuthStatus": {
         "properties": {
@@ -5765,6 +5865,24 @@
         ],
         "title": "ResearchRunAcceptedResponse"
       },
+      "ResearchRunArtifactEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "artifact",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunArtifactEvent"
+      },
       "ResearchRunArtifactMetadata": {
         "properties": {
           "id": {
@@ -7291,6 +7409,9 @@
             "$ref": "#/components/schemas/ResearchRunLogEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunArtifactEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
           },
           {
@@ -7332,6 +7453,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "artifact": "#/components/schemas/ResearchRunArtifactEvent",
             "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
             "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
             "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",

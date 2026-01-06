@@ -13,6 +13,7 @@ EventKind = Literal[
     "running_code",
     "run_completed",
     "stage_skip_window",
+    "artifact_uploaded",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 

@@ -60,6 +60,7 @@ class WebhookClient:
         "running_code": "/running-code",
         "run_completed": "/run-completed",
         "stage_skip_window": "/stage-skip-window",
+        "artifact_uploaded": "/artifact-uploaded",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
