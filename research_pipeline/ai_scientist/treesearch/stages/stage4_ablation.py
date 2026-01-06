@@ -63,8 +63,11 @@ class Stage4Ablation(Stage):
                 + ablation_idea.description
             ),
             "Base code you are working on": wrap_code(parent_node.code),
+            "Feedback about execution time": parent_node.exec_time_feedback,
             "Instructions": {},
         }
+        if parent_node.user_feedback_payload:
+            prompt["User feedback"] = parent_node.user_feedback_payload
         abl_instructions: dict[str, str | list[str]] = {}
         abl_instructions |= {
             "Implementation guideline": [

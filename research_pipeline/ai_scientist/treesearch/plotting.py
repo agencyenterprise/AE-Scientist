@@ -37,6 +37,7 @@ def generate_plotting_code(
     *,
     agent: SupportsPlottingAgent,
     node: Node,
+    parent_node: Node | None,
     plot_code_from_prev_stage: str | None,
 ) -> str:
     prompt_guideline: list[str] = [
@@ -93,9 +94,14 @@ def generate_plotting_code(
         """,
     ]
 
-    plotting_prompt: PromptType = {
-        "Instructions": {},
-    }
+    plotting_prompt: PromptType = {"Instructions": {}}
+    exec_time_feedback = (
+        parent_node.exec_time_feedback if parent_node is not None else None
+    ) or node.exec_time_feedback
+    if exec_time_feedback:
+        plotting_prompt["Feedback about execution time"] = exec_time_feedback
+    if parent_node is not None and parent_node.user_feedback_payload:
+        plotting_prompt["User feedback"] = parent_node.user_feedback_payload
     plotting_instructions: dict[str, str | list[str]] = {}
     plotting_instructions |= {
         "Plotting code guideline": prompt_guideline,

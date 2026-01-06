@@ -66,8 +66,11 @@ class Stage2Tuning(Stage):
                 + hyperparam_idea.description
             ),
             "Base code you are working on": wrap_code(parent_node.code),
+            "Feedback about execution time": parent_node.exec_time_feedback,
             "Instructions": {},
         }
+        if parent_node.user_feedback_payload:
+            prompt["User feedback"] = parent_node.user_feedback_payload
         hp_instructions: dict[str, str | list[str]] = {}
         hp_instructions |= {
             "Implementation guideline": [

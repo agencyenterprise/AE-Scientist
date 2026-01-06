@@ -39,7 +39,12 @@ from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, process_node
+from .worker_process import (
+    ExecutionCrashedError,
+    ExecutionTerminatedError,
+    NodeTask,
+    process_node_task,
+)
 
 logger = logging.getLogger("ai-scientist")
 
@@ -136,6 +141,10 @@ class ParallelAgent:
         # This is used to keep termination state available briefly so workers can classify
         # SIGKILL as expected (e.g., timeout) and avoid Sentry noise.
         self._deferred_registry_clears: set[str] = set()
+        # One-shot user feedback payloads scheduled for exactly one next run (per node id).
+        # We clear the payload off the journal node immediately when scheduling, then pass it
+        # to the worker explicitly.
+        self._one_shot_user_feedback_payloads: dict[str, str] = {}
 
     @property
     def stage_name(self) -> str:
@@ -304,22 +313,23 @@ class ParallelAgent:
                 node=node,
                 stage_name=self.stage_name,
             )
-            future = executor.submit(
-                process_node,
-                node_data=node_data,
-                task_desc=self.task_desc,
-                cfg=self.cfg,
-                gpu_id=gpu_id,
-                memory_summary=memory_summary,
-                evaluation_metrics=self.evaluation_metrics,
-                stage_identifier=self.stage_identifier,
-                new_ablation_idea=new_ablation_idea,
-                new_hyperparam_idea=new_hyperparam_idea,
-                best_stage3_plot_code=best_stage3_plot_code,
-                seed_eval=seed_eval,
-                event_callback=self.event_callback,
-                execution_id=execution_id,
-            )
+            task: NodeTask = {
+                "node_data": node_data,
+                "task_desc": self.task_desc,
+                "cfg": self.cfg,
+                "gpu_id": gpu_id,
+                "memory_summary": memory_summary,
+                "evaluation_metrics": self.evaluation_metrics,
+                "stage_identifier": self.stage_identifier,
+                "new_ablation_idea": new_ablation_idea,
+                "new_hyperparam_idea": new_hyperparam_idea,
+                "best_stage3_plot_code": best_stage3_plot_code,
+                "seed_eval": seed_eval,
+                "event_callback": self.event_callback,
+                "execution_id": execution_id,
+                "user_feedback_payload": "",
+            }
+            future = executor.submit(process_node_task, task)
             futures.append(future)
             execution_ids.append(execution_id)
 
@@ -412,6 +422,12 @@ class ParallelAgent:
                 newest_child.user_feedback_payload = node.user_feedback_payload
                 newest_child.user_feedback_pending = True
                 node.user_feedback_pending = False
+                # Consume feedback from the root node so it only impacts the next scheduled run.
+                payload = node.user_feedback_payload or ""
+                if payload:
+                    self._one_shot_user_feedback_payloads[newest_child.id] = payload
+                node.user_feedback_payload = None
+                node.is_user_feedback = False
                 feedback_nodes.append(newest_child)
                 continue
             logger.info(
@@ -420,6 +436,11 @@ class ParallelAgent:
                 (node.user_feedback_payload or "")[:120].replace("\n", " "),
             )
             node.user_feedback_pending = False
+            payload = node.user_feedback_payload or ""
+            if payload:
+                self._one_shot_user_feedback_payloads[node.id] = payload
+            node.user_feedback_payload = None
+            node.is_user_feedback = False
             nodes_to_process.append(node)
 
         while len(nodes_to_process) < self.num_workers:
@@ -655,22 +676,26 @@ class ParallelAgent:
                     node=node,
                     stage_name=self.stage_name,
                 )
-                future = executor.submit(
-                    process_node,
-                    node_data=node_data,
-                    task_desc=self.task_desc,
-                    cfg=self.cfg,
-                    gpu_id=gpu_id,
-                    memory_summary=memory_summary,
-                    evaluation_metrics=self.evaluation_metrics,
-                    stage_identifier=self.stage_identifier,
-                    new_ablation_idea=new_ablation_idea,
-                    new_hyperparam_idea=new_hyperparam_idea,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    seed_eval=seed_eval,
-                    event_callback=self.event_callback,
-                    execution_id=execution_id,
-                )
+                user_feedback_payload = ""
+                if node is not None:
+                    user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
+                task: NodeTask = {
+                    "node_data": node_data,
+                    "task_desc": self.task_desc,
+                    "cfg": self.cfg,
+                    "gpu_id": gpu_id,
+                    "memory_summary": memory_summary,
+                    "evaluation_metrics": self.evaluation_metrics,
+                    "stage_identifier": self.stage_identifier,
+                    "new_ablation_idea": new_ablation_idea,
+                    "new_hyperparam_idea": new_hyperparam_idea,
+                    "best_stage3_plot_code": best_stage3_plot_code,
+                    "seed_eval": seed_eval,
+                    "event_callback": self.event_callback,
+                    "execution_id": execution_id,
+                    "user_feedback_payload": user_feedback_payload,
+                }
+                future = executor.submit(process_node_task, task)
                 futures.append(future)
                 self._future_execution_ids[future] = execution_id
                 self._future_process_ids[future] = process_id
