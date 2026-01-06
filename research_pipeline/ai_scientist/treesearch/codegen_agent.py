@@ -131,20 +131,17 @@ class MinimalAgent:
             gpu_info += f"\n\n**GPU Selection**: Use GPU index {self.gpu_id}. Set the device to `cuda:{self.gpu_id}` and enforce using this GPU (do not fall back)."
 
         storage_details: list[str] = []
-        volume_disk_gb = os.environ.get("POD_VOLUME_DISK_GB")
-        container_disk_gb = os.environ.get("POD_CONTAINER_DISK_GB")
-        free_disk_bytes = os.environ.get("PIPELINE_FREE_DISK_BYTES")
-        if volume_disk_gb:
-            storage_details.append(f"a dedicated workspace volume of ~{volume_disk_gb}GB")
-        if container_disk_gb:
-            storage_details.append(f"{container_disk_gb}GB of container-local storage")
-        if free_disk_bytes:
-            try:
-                free_bytes_val = int(free_disk_bytes)
-                free_human = humanize.naturalsize(free_bytes_val, binary=True)
-                storage_details.append(f"{free_human} free right now on /workspace")
-            except (TypeError, ValueError):
-                pass
+        workspace_disk_capacity_gb = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_GB")
+        workspace_disk_used_gb = os.environ.get("PIPELINE_WORKSPACE_USED_GB")
+        pipeline_workspace_partition = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
+        if workspace_disk_capacity_gb and workspace_disk_used_gb:
+            storage_details.append(
+                f"a dedicated workspace volume of ~{workspace_disk_capacity_gb}GB"
+            )
+            free_bytes_val = int(workspace_disk_capacity_gb) - int(workspace_disk_used_gb)
+            free_human = humanize.naturalsize(free_bytes_val, binary=True)
+
+            storage_details.append(f"{free_human} free right now on {pipeline_workspace_partition}")
         storage_info = ""
         if storage_details:
             storage_info = (
@@ -153,10 +150,10 @@ class MinimalAgent:
                 + ". Use disk space responsibly when downloading datasets."
             )
         logger.debug(
-            "LLM storage context: volume_disk_gb=%s container_disk_gb=%s free_disk_bytes=%s storage_details=%s",
-            volume_disk_gb,
-            container_disk_gb,
-            free_disk_bytes,
+            "LLM storage context: workspace_disk_capacity_gb=%s workspace_disk_used_gb=%s pipeline_workspace_partition=%s storage_details=%s",
+            workspace_disk_capacity_gb,
+            workspace_disk_used_gb,
+            pipeline_workspace_partition,
             storage_details,
         )
 
