@@ -73,9 +73,13 @@ def _collect_hw_stats(paths: Sequence[str]) -> list[PartitionUsage]:
         if used_bytes is None:
             continue
         stats.append(PartitionUsage(partition=str(path), used_bytes=used_bytes))
+        logger.info("Collected hardware stats for path=%s: used_bytes=%s", path, used_bytes)
         if path == workspace_root or workspace_root in path.parents:
             try:
                 _write_workspace_usage_file(used_bytes=used_bytes)
+                logger.info(
+                    "Updated workspace usage state for path=%s: used_bytes=%s", path, used_bytes
+                )
             except Exception:
                 logger.exception("Failed to update workspace usage state.")
     return stats

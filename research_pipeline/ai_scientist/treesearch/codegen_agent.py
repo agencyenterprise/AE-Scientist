@@ -37,9 +37,11 @@ WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
 
 def _load_workspace_usage_file() -> int | None:
     if not WORKSPACE_USAGE_FILE.exists():
+        logger.info("Workspace usage file does not exist at %s", WORKSPACE_USAGE_FILE)
         return None
     try:
         raw_text = WORKSPACE_USAGE_FILE.read_text(encoding="utf-8").strip()
+        logger.info("Workspace usage file exists at %s: %s", WORKSPACE_USAGE_FILE, raw_text)
     except OSError:
         logger.debug(
             "Could not read workspace usage file at %s", WORKSPACE_USAGE_FILE, exc_info=True
@@ -155,7 +157,9 @@ class MinimalAgent:
 
         storage_details: list[str] = []
         capacity_int = int(os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES", "0"))
+        logger.info("Workspace disk capacity: capacity_int=%s", capacity_int)
         used_int = _load_workspace_usage_file()
+        logger.info("Workspace usage file loaded: used_int=%s", used_int)
         if capacity_int and used_int is not None:
             humanized_workspace_disk_capacity = humanize.naturalsize(
                 value=capacity_int, binary=True
