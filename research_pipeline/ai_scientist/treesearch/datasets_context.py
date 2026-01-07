@@ -77,8 +77,12 @@ def _list_local_datasets(*, local_datasets_dir: Path) -> list[LocalDataset]:
 
 
 def _scan_hf_cache() -> list[HFCachedRepo]:
+    hf_home = os.environ.get("HF_HOME", "/workspace/.cache/huggingface/")
+    cache_dir = Path(hf_home) / "hub"
+    if not cache_dir.exists():
+        return []
     try:
-        info = scan_cache_dir()
+        info = scan_cache_dir(str(cache_dir))
     except (OSError, RuntimeError, ValueError):
         return []
     repos: list[HFCachedRepo] = []
@@ -160,6 +164,42 @@ def build_s3_download_snippet(
         "    raise RuntimeError('AWS_S3_BUCKET_NAME is not set')\n"
         "s3_source = f's3://{s3_bucket}/" + folder + "/<CHOOSE_FROM_LIST>'\n"
         "subprocess.run(['s5cmd', 'cp', s3_source, str(destination_dir) + '/'], check=True)\n"
+    )
+
+
+def build_s3_upload_snippet(
+    *,
+    datasets_aws_folder: str,
+    local_datasets_dir: Path,
+    env_file: Path,
+) -> str:
+    folder = datasets_aws_folder.strip("/")
+    local_dir_str = str(local_datasets_dir)
+    env_file_str = str(env_file)
+    return (
+        "Python snippet (paste into your experiment script) to upload a local dataset folder to S3 so future runs can use it:\n"
+        "\n"
+        "from pathlib import Path\n"
+        "import subprocess\n"
+        "import os\n"
+        "from dotenv import load_dotenv\n"
+        "\n"
+        "env_file = Path(" + repr(env_file_str) + ")\n"
+        "load_dotenv(dotenv_path=env_file, override=False)\n"
+        "\n"
+        "datasets_dir = Path(" + repr(local_dir_str) + ")\n"
+        "dataset_name = 'my_dataset'\n"
+        "source_dir = datasets_dir / dataset_name\n"
+        "if not source_dir.exists():\n"
+        "    raise FileNotFoundError(f'Local dataset folder not found: {source_dir}')\n"
+        "\n"
+        "s3_bucket = os.environ.get('AWS_S3_BUCKET_NAME', '')\n"
+        "if not s3_bucket:\n"
+        "    raise RuntimeError('AWS_S3_BUCKET_NAME is not set')\n"
+        "\n"
+        "# Upload the entire dataset folder under the configured S3 datasets directory\n"
+        "s3_destination = f's3://{s3_bucket}/" + folder + "/{dataset_name}/'\n"
+        "subprocess.run(['s5cmd', 'sync', str(source_dir) + '/', s3_destination], check=True)\n"
     )
 
 

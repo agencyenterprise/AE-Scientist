@@ -24,6 +24,7 @@ from ai_scientist.llm import structured_query_with_schema
 
 from .datasets_context import (
     build_s3_download_snippet,
+    build_s3_upload_snippet,
     get_available_datasets,
     get_research_pipeline_env_file,
 )
@@ -238,6 +239,11 @@ class MinimalAgent:
             local_datasets_dir=local_datasets_dir,
             env_file=get_research_pipeline_env_file(),
         )
+        s3_upload_snippet = build_s3_upload_snippet(
+            datasets_aws_folder=dataset_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=get_research_pipeline_env_file(),
+        )
         if s3_lines:
             s3_block = (
                 "\n\n"
@@ -246,6 +252,10 @@ class MinimalAgent:
                 + (
                     "\n\n**How to download from S3 into the local dataset cache (paste into your script):**\n\n"
                     + s3_snippet
+                )
+                + (
+                    "\n\n**How to upload a dataset to S3 for future runs (paste into your script):**\n\n"
+                    + s3_upload_snippet
                 )
             )
 
