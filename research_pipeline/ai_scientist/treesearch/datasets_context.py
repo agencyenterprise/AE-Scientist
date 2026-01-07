@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import NamedTuple, Optional
 
 from dotenv import load_dotenv
-from huggingface_hub import scan_cache_dir
+from huggingface_hub import CacheNotFound, scan_cache_dir
 
 logger = logging.getLogger("ai-scientist")
 _S5CMD_LINE_RE = re.compile(r"^\S+\s+\S+\s+(?P<size>\d+)\s+(?P<uri>s3://\S+)$")
@@ -83,7 +83,7 @@ def _scan_hf_cache() -> list[HFCachedRepo]:
         return []
     try:
         info = scan_cache_dir(str(cache_dir))
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, CacheNotFound):
         return []
     repos: list[HFCachedRepo] = []
     for repo in sorted(info.repos, key=lambda r: (r.repo_type, r.repo_id)):
