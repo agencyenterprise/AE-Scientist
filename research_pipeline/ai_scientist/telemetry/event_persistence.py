@@ -5,8 +5,6 @@ Designed to be fork-safe: worker processes simply enqueue events while a single
 writer thread in the launcher process performs the inserts.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import multiprocessing
