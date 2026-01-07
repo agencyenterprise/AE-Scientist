@@ -586,7 +586,7 @@ def _build_remote_script(
         "fi",
         "pipeline_exit_code=0",
         "set +e",
-        f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
         'if [ "$pipeline_exit_code" -eq 0 ]; then',
