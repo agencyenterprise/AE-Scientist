@@ -118,6 +118,19 @@ class MinimalAgent:
     def stage_name(self) -> str:
         return self.stage_identifier.prefixed_name
 
+    def _inject_prompt_environment(self, *, prompt: PromptType) -> None:
+        """
+        Ensure the LLM prompt always includes the environment context (packages/GPU/storage).
+
+        Stages build their own instruction blocks; injecting here guarantees consistency
+        across all stages that call `plan_and_code_query`.
+        """
+        instructions = prompt.get("Instructions")
+        if isinstance(instructions, dict):
+            instructions |= self._prompt_environment
+            return
+        prompt["Instructions"] = dict(self._prompt_environment)
+
     def _check_for_skip(self) -> None:
         if self._skip_checker is not None:
             self._skip_checker()
@@ -145,9 +158,11 @@ class MinimalAgent:
         # Add GPU info if available in config
         gpu_info = ""
         if self.gpu_spec is not None and self.gpu_id is not None:
+            gpu_name = self.gpu_spec["name"]
+            gpu_mem_mib = self.gpu_spec["memory_total_mib"]
             gpu_info = (
-                f"\n\n**Available Hardware**: You have access to ONE {self.gpu_spec['name']} GPU with {self.gpu_spec['memory_total_mib']}MB VRAM. This is a powerful enterprise GPU that can handle:\n"
-                "  - Large models (up to ~{self.gpu_spec['memory_total_mib']} parameters for inference, ~{self.gpu_spec['memory_total_mib']} for training)\n"
+                f"\n\n**Available Hardware**: You have access to ONE {gpu_name} GPU with {gpu_mem_mib}MiB VRAM. This is a powerful enterprise GPU that can handle:\n"
+                f"  - Large models (size appropriately for ~{gpu_mem_mib}MiB VRAM)\n"
                 "  - Large batch sizes (don't be conservative - use batch sizes of 32-128+)\n"
                 "  - Extensive training (15-20+ epochs is fine)\n"
                 "  - Multiple datasets with thousands of samples"
@@ -379,6 +394,7 @@ class MinimalAgent:
     ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
+        self._inject_prompt_environment(prompt=prompt)
         should_enforce_gpu = enforce_gpu and self.gpu_id is not None
         logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):

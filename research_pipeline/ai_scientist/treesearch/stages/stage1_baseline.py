@@ -57,7 +57,6 @@ class Stage1Baseline(Stage):
             "Evaluation Metric(s)": agent.evaluation_metrics or "",
         }
         instructions |= agent.prompt_impl_guideline
-        instructions |= agent._prompt_environment
         prompt["Instructions"] = instructions
 
         logger.debug("MinimalAgent: Getting plan and code")
