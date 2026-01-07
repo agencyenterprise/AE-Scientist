@@ -471,7 +471,7 @@ class FakeRunner:
         self._heartbeat_stop = threading.Event()
         self._log_stop = threading.Event()
         self._log_thread: Optional[threading.Thread] = None
-        self._data_dir = Path(__file__).parent / "fake_run_pod" / "data"
+        self._data_dir = Path(__file__).parent / "data"
         self._plot_filename: str | None = None
         self._random_exec_time_seconds = 12.0
         self._code_event_delay_seconds = 12.0
