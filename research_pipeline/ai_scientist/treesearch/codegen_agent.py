@@ -22,6 +22,11 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
+from .datasets_context import (
+    build_s3_download_snippet,
+    get_available_datasets,
+    get_research_pipeline_env_file,
+)
 from .gpu_manager import GPUSpec
 from .interpreter import ExecutionResult
 from .journal import Node
@@ -199,12 +204,66 @@ class MinimalAgent:
             storage_details,
         )
 
+        dataset_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
+        local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
+        datasets_info = get_available_datasets(
+            local_datasets_dir=local_datasets_dir, datasets_aws_folder=dataset_aws_folder
+        )
+        hf_lines: list[str] = []
+        for repo in datasets_info.hf_cache:
+            revs = ", ".join(repo.revision_hashes)
+            hf_lines.append(
+                f"- {repo.repo_id} ({repo.repo_type}) | size={repo.size_on_disk_bytes} bytes | revisions=[{revs}]"
+            )
+        if not hf_lines:
+            hf_lines.append("- (none detected)")
+
+        local_lines: list[str] = []
+        for ds in datasets_info.local_datasets:
+            local_lines.append(
+                f"- {ds.dataset_name} | path={ds.path} | size={ds.size_on_disk_bytes} bytes"
+            )
+        if not local_lines:
+            local_lines.append(
+                f"- (empty) Create a subfolder per dataset under {local_datasets_dir}"
+            )
+
+        s3_block = ""
+        s3_lines: list[str] = []
+
+        for entry in datasets_info.s3_folder_entries:
+            s3_lines.append(f"- {entry.s3_uri} | size={entry.size_on_disk_bytes} bytes")
+        s3_snippet = build_s3_download_snippet(
+            datasets_aws_folder=dataset_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=get_research_pipeline_env_file(),
+        )
+        if s3_lines:
+            s3_block = (
+                "\n\n"
+                + "**Some datasets are available on S3, you can download them if you need to (the download is very fast):**\n"
+                + "\n".join(s3_lines)
+                + (
+                    "\n\n**How to download from S3 into the local dataset cache (paste into your script):**\n\n"
+                    + s3_snippet
+                )
+            )
+
         env_prompt = {
             "Installed Packages": (
                 "Your solution can use any relevant machine learning packages such as: "
                 f"{pkg_str}. Feel free to use any other packages too (all packages are already installed!). "
                 f"For neural networks we suggest using PyTorch rather than TensorFlow.{gpu_info}{storage_info}"
-            )
+            ),
+            "Available Datasets": (
+                "You may use any dataset from any source, but avoid re-downloading available data.\n\n"
+                "**Hugging Face cache (already cached):**\n"
+                + "\n".join(hf_lines)
+                + "\n\n"
+                + f"**Local datasets (already downloaded):** (use subfolders per dataset under {local_datasets_dir})\n"
+                + "\n".join(local_lines)
+                + s3_block
+            ),
         }
         # Debug: show GPU context fed to the LLM
         logger.debug(

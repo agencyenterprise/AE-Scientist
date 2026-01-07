@@ -45,6 +45,35 @@ RUNPOD_GPU_TYPES: tuple[str, ...] = (
     "NVIDIA RTX A5000",
 )
 
+DEFAULT_RUNPOD_DATACENTER_IDS: tuple[str, ...] = (
+    # RunPod published dataCenterIds options (full list).
+    "EU-RO-1",
+    "CA-MTL-1",
+    "EU-SE-1",
+    "US-IL-1",
+    "EUR-IS-1",
+    "EU-CZ-1",
+    "US-TX-3",
+    "EUR-IS-2",
+    "US-KS-2",
+    "US-GA-2",
+    "US-WA-1",
+    "US-TX-1",
+    "CA-MTL-3",
+    "EU-NL-1",
+    "US-TX-4",
+    "US-CA-2",
+    "US-NC-1",
+    "OC-AU-1",
+    "US-DE-1",
+    "EUR-IS-3",
+    "CA-MTL-2",
+    "AP-JP-1",
+    "EUR-NO-1",
+    "EU-FR-1",
+    "US-KS-3",
+    "US-GA-1",
+)
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_ACCESS_KEY_ID",
@@ -212,12 +241,15 @@ class RunPodManager:
         pod_env: dict[str, str],
         docker_cmd: str,
     ) -> dict[str, Any]:
+        datacenter_ids = list(DEFAULT_RUNPOD_DATACENTER_IDS)
         payload = {
             "name": name,
             "imageName": image,
             "cloudType": "SECURE",
             "gpuCount": 1,
             "gpuTypeIds": [gpu_type],
+            "dataCenterIds": datacenter_ids,
+            "dataCenterPriority": "custom",
             "containerDiskInGb": CONTAINER_DISK_GB,
             "volumeInGb": WORKSPACE_DISK_GB,
             "env": pod_env,
@@ -528,6 +560,8 @@ def _build_remote_script(
         f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
         f"AWS_REGION={env.aws_region}",
         f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        "DATASETS_AWS_FOLDER=datasets",
+        "DATASETS_LOCAL_DIR=/workspace/datasets",
         f"RUN_ID={run_id}",
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
