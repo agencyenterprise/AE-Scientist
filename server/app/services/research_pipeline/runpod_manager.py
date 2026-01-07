@@ -46,33 +46,41 @@ RUNPOD_GPU_TYPES: tuple[str, ...] = (
 )
 
 DEFAULT_RUNPOD_DATACENTER_IDS: tuple[str, ...] = (
-    # RunPod published dataCenterIds options (full list).
-    "EU-RO-1",
-    "CA-MTL-1",
-    "EU-SE-1",
-    "US-IL-1",
-    "EUR-IS-1",
-    "EU-CZ-1",
-    "US-TX-3",
-    "EUR-IS-2",
-    "US-KS-2",
+    # RunPod published dataCenterIds options (full list), ordered by proximity to AWS us-east-1 (N. Virginia).
+    #
+    # Heuristic ordering:
+    # - US East (closest)
+    # - US Central
+    # - US West
+    # - Canada East
+    # - Europe
+    # - APAC / Oceania (farthest)
+    "US-DE-1",
+    "US-NC-1",
+    "US-GA-1",
     "US-GA-2",
-    "US-WA-1",
+    "US-IL-1",
+    "US-KS-2",
+    "US-KS-3",
     "US-TX-1",
-    "CA-MTL-3",
-    "EU-NL-1",
+    "US-TX-3",
     "US-TX-4",
     "US-CA-2",
-    "US-NC-1",
-    "OC-AU-1",
-    "US-DE-1",
-    "EUR-IS-3",
+    "US-WA-1",
+    "CA-MTL-1",
     "CA-MTL-2",
-    "AP-JP-1",
-    "EUR-NO-1",
+    "CA-MTL-3",
+    "EU-NL-1",
     "EU-FR-1",
-    "US-KS-3",
-    "US-GA-1",
+    "EU-SE-1",
+    "EU-CZ-1",
+    "EU-RO-1",
+    "EUR-NO-1",
+    "EUR-IS-1",
+    "EUR-IS-2",
+    "EUR-IS-3",
+    "AP-JP-1",
+    "OC-AU-1",
 )
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
