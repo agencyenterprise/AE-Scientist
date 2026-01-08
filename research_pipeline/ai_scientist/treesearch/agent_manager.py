@@ -115,9 +115,9 @@ class AgentManager:
         self._stage_skip_states: Dict[str, bool] = {}
         stage_control.reset_stage_state()
 
-    def get_max_iterations(self, stage_number: int) -> int:
-        """Get max iterations for a stage from config or default"""
-        return self.cfg.agent.stages.get(f"stage{stage_number}_max_iters", self.cfg.agent.steps)
+    def get_max_iterations(self, *, stage_identifier: StageIdentifier) -> int:
+        """Get max iterations for a stage from config."""
+        return self.cfg.agent.stages.max_iters_for_stage(stage_identifier=stage_identifier)
 
     def get_attempt_iteration(self, stage_name: str) -> int:
         """Return how many iterations have been attempted for a stage."""
@@ -157,7 +157,7 @@ Your research idea:\n\n
         initial_stage = StageMeta(
             identifier=identifier,
             goals=Stage1Baseline.DEFAULT_GOALS,
-            max_iterations=self.get_max_iterations(identifier.number),
+            max_iterations=self.get_max_iterations(stage_identifier=identifier),
             num_drafts=self.cfg.agent.search.num_drafts,
         )
 
@@ -555,7 +555,7 @@ Your research idea:\n\n
             + main_stage_goal
             + "\n\nSub-stage goals:\n"
             + sub_stage_goal,
-            max_iterations=self.get_max_iterations(identifier.number),
+            max_iterations=self.get_max_iterations(stage_identifier=identifier),
             num_drafts=0,
         )
 
@@ -578,7 +578,7 @@ Your research idea:\n\n
         return StageMeta(
             identifier=next_identifier,
             goals=main_stage_goal,
-            max_iterations=self.get_max_iterations(next_identifier.number),
+            max_iterations=self.get_max_iterations(stage_identifier=next_identifier),
             num_drafts=num_drafts,
         )
 

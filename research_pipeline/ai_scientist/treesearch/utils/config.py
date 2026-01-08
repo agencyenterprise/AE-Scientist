@@ -14,6 +14,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..journal import Journal
+from ..stage_identifiers import StageIdentifier
 from . import serialize, tree_export
 
 shutup.mute_warnings()
@@ -107,9 +108,27 @@ class SearchConfig:
 
 
 @dataclass
+class AgentStagesConfig:
+    stage1_max_iters: int
+    stage2_max_iters: int
+    stage3_max_iters: int
+    stage4_max_iters: int
+
+    def max_iters_for_stage(self, *, stage_identifier: StageIdentifier) -> int:
+        if stage_identifier is StageIdentifier.STAGE1:
+            return self.stage1_max_iters
+        if stage_identifier is StageIdentifier.STAGE2:
+            return self.stage2_max_iters
+        if stage_identifier is StageIdentifier.STAGE3:
+            return self.stage3_max_iters
+        if stage_identifier is StageIdentifier.STAGE4:
+            return self.stage4_max_iters
+        raise ValueError(f"Unsupported stage_identifier: {stage_identifier}")
+
+
+@dataclass
 class AgentConfig:
-    steps: int
-    stages: dict[str, int]
+    stages: AgentStagesConfig
     k_fold_validation: int
 
     code: StageConfig
