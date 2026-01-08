@@ -50,6 +50,9 @@ def configure_logging() -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
     logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+    # Reduce noise from urllib3 (used by requests and some SDKs)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
     # Suppress extremely verbose DEBUG logs from PDF parsers when app LOG_LEVEL=DEBUG
     logging.getLogger("pdfminer").setLevel(logging.WARNING)
     logging.getLogger("pdfminer.psparser").setLevel(logging.WARNING)
