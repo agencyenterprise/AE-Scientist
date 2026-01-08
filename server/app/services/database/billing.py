@@ -4,8 +4,9 @@ Database helpers for billing, wallets, and Stripe checkout metadata.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
+from psycopg import AsyncCursor
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -50,18 +51,28 @@ class StripeCheckoutSession(NamedTuple):
 class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Mixin providing billing-specific persistence helpers."""
 
-    async def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
+    async def ensure_user_wallet_with_cursor(
+        self, *, cursor: AsyncCursor[Any], user_id: int, has_free_credits: bool
+    ) -> None:
         """Create a wallet row for the user if one does not yet exist."""
         balance = 10_000 if has_free_credits else 10
+        await cursor.execute(
+            """
+            INSERT INTO billing_user_wallets (user_id, balance)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id) DO NOTHING
+            """,
+            (user_id, balance),
+        )
+
+    async def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
+        """Create a wallet row for the user if one does not yet exist."""
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(
-                    """
-                    INSERT INTO billing_user_wallets (user_id, balance)
-                    VALUES (%s, %s)
-                    ON CONFLICT (user_id) DO NOTHING
-                    """,
-                    (user_id, balance),
+                await self.ensure_user_wallet_with_cursor(
+                    cursor=cursor,
+                    user_id=user_id,
+                    has_free_credits=has_free_credits,
                 )
 
     async def get_user_wallet(self, user_id: int) -> Optional[BillingWallet]:

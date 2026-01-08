@@ -81,8 +81,10 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     if result:
                         try:
                             if isinstance(self, BillingDatabaseMixin):
-                                await self.ensure_user_wallet(
-                                    int(result["id"]), has_free_credits=has_free_credits
+                                await self.ensure_user_wallet_with_cursor(
+                                    cursor=cursor,
+                                    user_id=int(result["id"]),
+                                    has_free_credits=has_free_credits,
                                 )
                         except Exception as wallet_error:  # noqa: BLE001
                             logger.exception(
