@@ -18,6 +18,7 @@ export interface ResearchRunListItemApi {
   artifacts_count: number;
   error_message: string | null;
   conversation_id: number;
+  conversation_url: string | null;
 }
 
 export interface ResearchRunListResponseApi {
@@ -41,6 +42,7 @@ export interface ResearchRun {
   artifactsCount: number;
   errorMessage: string | null;
   conversationId: number;
+  conversationUrl: string | null;
 }
 
 export interface ResearchRunListResponse {

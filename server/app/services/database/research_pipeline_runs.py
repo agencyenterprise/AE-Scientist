@@ -464,11 +464,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 pc.overall_progress AS progress,
                 pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
-                i.conversation_id
+                i.conversation_id,
+                c.url AS conversation_url
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
+            LEFT JOIN conversations c ON i.conversation_id = c.id
             LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             WHERE r.run_id = %s
@@ -562,11 +564,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 pc.overall_progress AS progress,
                 pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
-                i.conversation_id
+                i.conversation_id,
+                c.url AS conversation_url
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
+            LEFT JOIN conversations c ON i.conversation_id = c.id
             LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             {where_clause}
