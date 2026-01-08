@@ -53,6 +53,8 @@ def configure_logging() -> None:
     # Reduce noise from urllib3 (used by requests and some SDKs)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+    # Reduce noise from requests_oauthlib (used by google-auth-oauthlib)
+    logging.getLogger("requests_oauthlib.oauth2_session").setLevel(logging.WARNING)
     # Suppress extremely verbose DEBUG logs from PDF parsers when app LOG_LEVEL=DEBUG
     logging.getLogger("pdfminer").setLevel(logging.WARNING)
     logging.getLogger("pdfminer.psparser").setLevel(logging.WARNING)

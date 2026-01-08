@@ -527,7 +527,7 @@ async def ingest_stage_skip_window(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -600,7 +600,7 @@ async def ingest_run_log(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -630,7 +630,7 @@ async def ingest_running_code(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -654,12 +654,12 @@ async def ingest_running_code(
 
 
 @router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_run_completed(
+async def ingest_run_completed(
     payload: RunCompletedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -689,7 +689,7 @@ async def ingest_run_started(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     now = datetime.now(timezone.utc)
@@ -741,7 +741,7 @@ async def ingest_run_finished(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -829,7 +829,7 @@ async def ingest_heartbeat(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         logger.warning(
             "Received heartbeat for unknown run_id=%s; ignoring but returning 204.",
@@ -851,7 +851,7 @@ async def ingest_hw_stats(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         logger.warning(
             "Received hardware stats for unknown run_id=%s; ignoring but returning 204.",
@@ -901,7 +901,7 @@ async def ingest_gpu_shortage(
     _: None = Depends(_verify_bearer_token),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
