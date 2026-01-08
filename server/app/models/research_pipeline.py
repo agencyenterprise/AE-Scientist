@@ -55,6 +55,9 @@ class ResearchRunListItem(BaseModel):
     artifacts_count: int = Field(0, description="Number of artifacts produced by this run")
     error_message: Optional[str] = Field(None, description="Error message if the run failed")
     conversation_id: int = Field(..., description="ID of the associated conversation")
+    conversation_url: Optional[str] = Field(
+        None, description="Original conversation share URL (ChatGPT, Claude, etc.) if imported"
+    )
 
 
 class ResearchRunListResponse(BaseModel):
