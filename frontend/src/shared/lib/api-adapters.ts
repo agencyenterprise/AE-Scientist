@@ -189,6 +189,7 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     artifactsCount: apiRun.artifacts_count,
     errorMessage: apiRun.error_message,
     conversationId: apiRun.conversation_id,
+    conversationUrl: apiRun.conversation_url,
   };
 }
 
