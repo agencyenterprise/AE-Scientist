@@ -346,7 +346,7 @@ def _handle_gpu_shortage_event(
 
 
 def setup_artifact_publisher(
-    *, telemetry_cfg: TelemetryConfig
+    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None = None
 ) -> tuple[ArtifactPublisher, ArtifactCallback]:
     try:
         aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
@@ -364,6 +364,7 @@ def setup_artifact_publisher(
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
         database_url=telemetry_cfg.database_url,
+        webhook_client=webhook_client,
     )
 
     def _callback(spec: ArtifactSpec) -> None:
@@ -762,6 +763,7 @@ def run_review_stage(
     telemetry_cfg: TelemetryConfig | None,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
+    webhook_client: WebhookClient | None = None,
 ) -> None:
     if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
         return
@@ -835,6 +837,7 @@ def run_review_stage(
             recorder = ReviewResponseRecorder.from_database_url(
                 database_url=telemetry_cfg.database_url,
                 run_id=telemetry_cfg.run_id,
+                webhook_client=webhook_client,
             )
             recorder.insert_review(review=review, source_path=review_json_path)
             figure_recorder = FigureReviewRecorder.from_database_url(
@@ -892,7 +895,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
     artifact_callback: ArtifactCallback
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
-            telemetry_cfg=base_cfg.telemetry
+            telemetry_cfg=base_cfg.telemetry,
+            webhook_client=webhook_client,
         )
     else:
         artifact_publisher = None
@@ -1000,6 +1004,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
             telemetry_cfg=base_cfg.telemetry,
             event_callback=event_callback,
             run_id=run_id,
+            webhook_client=webhook_client,
         )
 
         if artifact_callback is not None and run_dir_path is not None:

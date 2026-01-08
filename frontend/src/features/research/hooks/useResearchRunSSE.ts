@@ -17,6 +17,7 @@ import type {
   ResearchRunCodeExecution,
   StageSkipWindow,
   StageSkipWindowUpdate,
+  LlmReviewResponse,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -42,6 +43,7 @@ interface UseResearchRunSSEOptions {
   onCodeExecutionStarted?: (execution: ResearchRunCodeExecution) => void;
   onCodeExecutionCompleted?: (event: CodeExecutionCompletionEvent) => void;
   onStageSkipWindow?: (event: StageSkipWindowUpdate) => void;
+  onReviewCompleted?: (review: LlmReviewResponse) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -211,7 +213,7 @@ export function useResearchRunSSE({
   onInitialData,
   onStageProgress,
   onLog,
-  onArtifact: _onArtifact,
+  onArtifact,
   onRunUpdate,
   onPaperGenerationProgress,
   onComplete,
@@ -225,8 +227,8 @@ export function useResearchRunSSE({
   onCodeExecutionStarted,
   onCodeExecutionCompleted,
   onStageSkipWindow,
+  onReviewCompleted,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
-  void _onArtifact;
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -332,6 +334,12 @@ export function useResearchRunSSE({
               case "log":
                 onLog(event.data as LogEntry);
                 break;
+              case "artifact":
+                onArtifact(event.data as ArtifactMetadata);
+                break;
+              case "review_completed":
+                onReviewCompleted?.(event.data as LlmReviewResponse);
+                break;
               case "best_node_selection":
                 onBestNodeSelection?.(event.data as BestNodeSelection);
                 break;
@@ -418,6 +426,7 @@ export function useResearchRunSSE({
     ensureInitialSnapshot,
     onStageProgress,
     onLog,
+    onArtifact,
     onSubstageCompleted,
     onRunEvent,
     onBestNodeSelection,
@@ -430,6 +439,7 @@ export function useResearchRunSSE({
     onStageSkipWindow,
     onCodeExecutionStarted,
     onCodeExecutionCompleted,
+    onReviewCompleted,
   ]);
 
   useEffect(() => {

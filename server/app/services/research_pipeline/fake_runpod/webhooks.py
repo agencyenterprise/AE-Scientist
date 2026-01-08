@@ -36,3 +36,6 @@ class FakeRunPodWebhookPublisher:
 
     def publish_tree_viz_stored(self, payload: dict[str, Any]) -> None:
         self._publish("tree_viz_stored", payload)
+
+    def publish_review_completed(self, payload: dict[str, Any]) -> None:
+        self._publish("review_completed", payload)

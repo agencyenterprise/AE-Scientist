@@ -40,7 +40,14 @@ export function useArtifactDownload({
       );
 
       // Redirect browser to presigned URL (triggers download)
-      window.location.href = response.url;
+      // window.location.href = response.url;
+      const link = document.createElement("a");
+      link.href = response.url;
+      link.download = response.filename;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to download artifact";
       setError(errorMessage);

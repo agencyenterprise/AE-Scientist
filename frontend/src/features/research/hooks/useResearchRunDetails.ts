@@ -19,11 +19,13 @@ import type {
   ResearchRunCodeExecution,
   StageSkipWindow,
   StageSkipWindowUpdate,
+  LlmReviewResponse,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
 interface UseResearchRunDetailsOptions {
   runId: string;
+  onReviewCompleted?: (review: LlmReviewResponse) => void;
 }
 
 interface UseResearchRunDetailsReturn {
@@ -61,6 +63,7 @@ export type StageSkipStateMap = Record<string, StageSkipStateEntry>;
  */
 export function useResearchRunDetails({
   runId,
+  onReviewCompleted,
 }: UseResearchRunDetailsOptions): UseResearchRunDetailsReturn {
   const [details, setDetails] = useState<ResearchRunDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,6 +152,18 @@ export function useResearchRunDetails({
           }
         : null
     );
+  }, []);
+
+  // Use a ref to avoid recreating this callback when onReviewCompleted changes
+  const onReviewCompletedRef = useRef(onReviewCompleted);
+  useEffect(() => {
+    onReviewCompletedRef.current = onReviewCompleted;
+  }, [onReviewCompleted]);
+
+  const handleReviewCompleted = useCallback((review: LlmReviewResponse) => {
+    if (onReviewCompletedRef.current) {
+      onReviewCompletedRef.current(review);
+    }
   }, []);
 
   const handlePaperGenerationProgress = useCallback((event: PaperGenerationEvent) => {
@@ -412,6 +427,7 @@ export function useResearchRunDetails({
     onCodeExecutionStarted: handleCodeExecutionStarted,
     onCodeExecutionCompleted: handleCodeExecutionCompleted,
     onStageSkipWindow: handleStageSkipWindowUpdate,
+    onReviewCompleted: handleReviewCompleted,
   });
 
   // Initial load to get conversation_id (SSE takes over after that)

@@ -1797,6 +1797,96 @@
         }
       }
     },
+    "/api/research-pipeline/events/artifact-uploaded": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Artifact Uploaded",
+        "operationId": "ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactUploadedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/review-completed": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Review Completed",
+        "operationId": "ingest_review_completed_api_research_pipeline_events_review_completed_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCompletedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/substage-summary": {
       "post": {
         "tags": [
@@ -3319,6 +3409,61 @@
         ],
         "title": "ArtifactPresignedUrlResponse",
         "description": "Response containing presigned S3 download URL."
+      },
+      "ArtifactUploadedEvent": {
+        "properties": {
+          "artifact_id": {
+            "type": "integer",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "filename",
+          "file_size",
+          "file_type",
+          "created_at"
+        ],
+        "title": "ArtifactUploadedEvent"
+      },
+      "ArtifactUploadedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ArtifactUploadedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "ArtifactUploadedPayload"
       },
       "AuthStatus": {
         "properties": {
@@ -5795,6 +5940,24 @@
         ],
         "title": "ResearchRunAcceptedResponse"
       },
+      "ResearchRunArtifactEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "artifact",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunArtifactEvent"
+      },
       "ResearchRunArtifactMetadata": {
         "properties": {
           "id": {
@@ -5827,10 +5990,22 @@
             "title": "Created At",
             "description": "ISO timestamp when the artifact was recorded"
           },
-          "download_path": {
+          "run_id": {
             "type": "string",
-            "title": "Download Path",
-            "description": "API path to initiate a download"
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID of the associated conversation"
           }
         },
         "type": "object",
@@ -5841,7 +6016,7 @@
           "file_size",
           "file_type",
           "created_at",
-          "download_path"
+          "run_id"
         ],
         "title": "ResearchRunArtifactMetadata"
       },
@@ -6858,18 +7033,6 @@
             "type": "integer",
             "title": "Conversation Id",
             "description": "ID of the associated conversation"
-          },
-          "conversation_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Url",
-            "description": "Original conversation share URL (ChatGPT, Claude, etc.) if imported"
           }
         },
         "type": "object",
@@ -7045,6 +7208,24 @@
           "created_at"
         ],
         "title": "ResearchRunPaperGenerationProgress"
+      },
+      "ResearchRunReviewCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "review_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LlmReviewResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunReviewCompletedEvent"
       },
       "ResearchRunRunEvent": {
         "properties": {
@@ -7333,6 +7514,12 @@
             "$ref": "#/components/schemas/ResearchRunLogEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunArtifactEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
           },
           {
@@ -7374,6 +7561,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "artifact": "#/components/schemas/ResearchRunArtifactEvent",
             "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
             "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
             "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
@@ -7385,6 +7573,7 @@
             "initial": "#/components/schemas/ResearchRunInitialEvent",
             "log": "#/components/schemas/ResearchRunLogEvent",
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
+            "review_completed": "#/components/schemas/ResearchRunReviewCompletedEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
             "stage_skip_window": "#/components/schemas/ResearchRunStageSkipWindowEvent",
@@ -7678,6 +7867,145 @@
         ],
         "title": "ResearchRunSummary",
         "description": "Lightweight overview of a research pipeline run."
+      },
+      "ReviewCompletedEvent": {
+        "properties": {
+          "review_id": {
+            "type": "integer",
+            "title": "Review Id"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weaknesses"
+          },
+          "originality": {
+            "type": "number",
+            "title": "Originality"
+          },
+          "quality": {
+            "type": "number",
+            "title": "Quality"
+          },
+          "clarity": {
+            "type": "number",
+            "title": "Clarity"
+          },
+          "significance": {
+            "type": "number",
+            "title": "Significance"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          },
+          "ethical_concerns": {
+            "type": "boolean",
+            "title": "Ethical Concerns"
+          },
+          "soundness": {
+            "type": "number",
+            "title": "Soundness"
+          },
+          "presentation": {
+            "type": "number",
+            "title": "Presentation"
+          },
+          "contribution": {
+            "type": "number",
+            "title": "Contribution"
+          },
+          "overall": {
+            "type": "number",
+            "title": "Overall"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "summary",
+          "strengths",
+          "weaknesses",
+          "originality",
+          "quality",
+          "clarity",
+          "significance",
+          "questions",
+          "limitations",
+          "ethical_concerns",
+          "soundness",
+          "presentation",
+          "contribution",
+          "overall",
+          "confidence",
+          "decision",
+          "source_path",
+          "created_at"
+        ],
+        "title": "ReviewCompletedEvent"
+      },
+      "ReviewCompletedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ReviewCompletedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "ReviewCompletedPayload"
       },
       "RunCompletedEventPayload": {
         "properties": {

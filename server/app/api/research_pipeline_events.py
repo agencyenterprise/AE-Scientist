@@ -18,7 +18,11 @@ from app.api.research_pipeline_runs import (
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
-from app.models.research_pipeline import ResearchRunBestNodeSelection
+from app.models.research_pipeline import (
+    LlmReviewResponse,
+    ResearchRunArtifactMetadata,
+    ResearchRunBestNodeSelection,
+)
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
     ResearchRunLogEntry,
@@ -27,6 +31,7 @@ from app.models.research_pipeline import (
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -36,6 +41,7 @@ from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
+from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
@@ -202,6 +208,47 @@ class PaperGenerationProgressEvent(BaseModel):
 class PaperGenerationProgressPayload(BaseModel):
     run_id: str
     event: PaperGenerationProgressEvent
+
+
+class ArtifactUploadedEvent(BaseModel):
+    artifact_id: int
+    artifact_type: str
+    filename: str
+    file_size: int
+    file_type: str
+    created_at: str
+
+
+class ArtifactUploadedPayload(BaseModel):
+    run_id: str
+    event: ArtifactUploadedEvent
+
+
+class ReviewCompletedEvent(BaseModel):
+    review_id: int
+    summary: str
+    strengths: List[str]
+    weaknesses: List[str]
+    originality: float
+    quality: float
+    clarity: float
+    significance: float
+    questions: List[str]
+    limitations: List[str]
+    ethical_concerns: bool
+    soundness: float
+    presentation: float
+    contribution: float
+    overall: float
+    confidence: float
+    decision: str
+    source_path: Optional[str]
+    created_at: str
+
+
+class ReviewCompletedPayload(BaseModel):
+    run_id: str
+    event: ReviewCompletedEvent
 
 
 class BestNodeSelectionEvent(BaseModel):
@@ -457,6 +504,87 @@ async def ingest_paper_generation_progress(
         event=SSEPaperGenerationEvent(
             type="paper_generation_progress",
             data=paper_event,
+        ),
+    )
+
+
+@router.post("/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_artifact_uploaded(
+    payload: ArtifactUploadedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+
+    logger.info(
+        "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
+        payload.run_id,
+        event.artifact_type,
+        event.filename,
+        event.file_size,
+        event.artifact_id,
+    )
+    artifact_metadata = ResearchRunArtifactMetadata(
+        id=event.artifact_id,
+        artifact_type=event.artifact_type,
+        filename=event.filename,
+        file_size=event.file_size,
+        file_type=event.file_type,
+        created_at=event.created_at,
+        run_id=payload.run_id,
+        conversation_id=None,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEArtifactEvent(
+            type="artifact",
+            data=artifact_metadata,
+        ),
+    )
+
+
+@router.post("/review-completed", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_review_completed(
+    payload: ReviewCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+
+    logger.info(
+        "Review completed: run=%s decision=%s overall=%.2f",
+        payload.run_id,
+        event.decision,
+        event.overall,
+    )
+
+    # Create LlmReviewResponse for SSE
+    review_data = LlmReviewResponse(
+        id=event.review_id,
+        run_id=payload.run_id,
+        summary=event.summary,
+        strengths=event.strengths,
+        weaknesses=event.weaknesses,
+        originality=event.originality,
+        quality=event.quality,
+        clarity=event.clarity,
+        significance=event.significance,
+        questions=event.questions,
+        limitations=event.limitations,
+        ethical_concerns=event.ethical_concerns,
+        soundness=event.soundness,
+        presentation=event.presentation,
+        contribution=event.contribution,
+        overall=event.overall,
+        confidence=event.confidence,
+        decision=event.decision,
+        source_path=event.source_path,
+        created_at=event.created_at,
+    )
+
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEReviewCompletedEvent(
+            type="review_completed",
+            data=review_data,
         ),
     )
 

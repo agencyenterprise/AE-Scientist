@@ -41,7 +41,6 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         artifacts_count=row.get("artifacts_count", 0),
         error_message=row.get("error_message"),
         conversation_id=row["conversation_id"],
-        conversation_url=row.get("conversation_url"),
     )
 
 

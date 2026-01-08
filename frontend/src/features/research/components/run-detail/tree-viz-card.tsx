@@ -17,11 +17,12 @@ import { mergeTreeVizItems } from "@/shared/lib/tree-merge-utils";
 interface Props {
   treeViz?: TreeVizItem[] | null;
   conversationId: number | null;
+  runId: string;
   artifacts: ArtifactMetadata[];
   substageSummaries?: SubstageSummary[];
 }
 
-export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummaries }: Props) {
+export function TreeVizCard({ treeViz, conversationId, runId, artifacts, substageSummaries }: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
 
@@ -173,6 +174,8 @@ export function TreeVizCard({ treeViz, conversationId, artifacts, substageSummar
           <TreeVizViewer
             viz={selectedViz}
             artifacts={artifacts}
+            conversationId={conversationId}
+            runId={runId}
             stageId={selectedViz.stage_id}
             bestNodeId={bestNodeForSelectedStage}
           />

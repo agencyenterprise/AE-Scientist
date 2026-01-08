@@ -55,9 +55,6 @@ class ResearchRunListItem(BaseModel):
     artifacts_count: int = Field(0, description="Number of artifacts produced by this run")
     error_message: Optional[str] = Field(None, description="Error message if the run failed")
     conversation_id: int = Field(..., description="ID of the associated conversation")
-    conversation_url: Optional[str] = Field(
-        None, description="Original conversation share URL (ChatGPT, Claude, etc.) if imported"
-    )
 
 
 class ResearchRunListResponse(BaseModel):
@@ -307,11 +304,14 @@ class ResearchRunArtifactMetadata(BaseModel):
     file_size: int = Field(..., description="File size in bytes")
     file_type: str = Field(..., description="MIME type")
     created_at: str = Field(..., description="ISO timestamp when the artifact was recorded")
-    download_path: str = Field(..., description="API path to initiate a download")
+    run_id: str = Field(..., description="Research run identifier")
+    conversation_id: Optional[int] = Field(None, description="ID of the associated conversation")
 
     @staticmethod
     def from_db_record(
-        artifact: ResearchPipelineArtifact, conversation_id: int, run_id: str
+        artifact: ResearchPipelineArtifact,
+        conversation_id: int,
+        run_id: str,
     ) -> "ResearchRunArtifactMetadata":
         return ResearchRunArtifactMetadata(
             id=artifact.id,
@@ -320,9 +320,8 @@ class ResearchRunArtifactMetadata(BaseModel):
             file_size=artifact.file_size,
             file_type=artifact.file_type,
             created_at=artifact.created_at.isoformat(),
-            download_path=(
-                f"/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact.id}/download"
-            ),
+            run_id=run_id,
+            conversation_id=conversation_id,
         )
 
 
