@@ -304,7 +304,6 @@ class ResearchRunArtifactMetadata(BaseModel):
     file_size: int = Field(..., description="File size in bytes")
     file_type: str = Field(..., description="MIME type")
     created_at: str = Field(..., description="ISO timestamp when the artifact was recorded")
-    download_path: str = Field(..., description="API path to initiate a download")
 
     @staticmethod
     def from_db_record(
@@ -317,9 +316,6 @@ class ResearchRunArtifactMetadata(BaseModel):
             file_size=artifact.file_size,
             file_type=artifact.file_type,
             created_at=artifact.created_at.isoformat(),
-            download_path=(
-                f"/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact.id}/download"
-            ),
         )
 
 

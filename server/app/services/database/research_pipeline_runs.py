@@ -197,22 +197,6 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 await conn.commit()
                 return new_id
 
-    async def get_conversation_id_for_run(self, *, run_id: str) -> int | None:
-        """Get conversation_id for a research run via the ideas table."""
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    SELECT i.conversation_id
-                    FROM research_pipeline_runs r
-                    JOIN ideas i ON r.idea_id = i.id
-                    WHERE r.run_id = %s
-                    """,
-                    (run_id,),
-                )
-                row = await cursor.fetchone()
-                return int(row["conversation_id"]) if row else None
-
     async def update_research_pipeline_run(
         self,
         *,

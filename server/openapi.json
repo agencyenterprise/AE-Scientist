@@ -5989,11 +5989,6 @@
             "type": "string",
             "title": "Created At",
             "description": "ISO timestamp when the artifact was recorded"
-          },
-          "download_path": {
-            "type": "string",
-            "title": "Download Path",
-            "description": "API path to initiate a download"
           }
         },
         "type": "object",
@@ -6003,8 +5998,7 @@
           "filename",
           "file_size",
           "file_type",
-          "created_at",
-          "download_path"
+          "created_at"
         ],
         "title": "ResearchRunArtifactMetadata"
       },

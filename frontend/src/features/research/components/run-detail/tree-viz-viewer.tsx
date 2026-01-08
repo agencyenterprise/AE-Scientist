@@ -62,6 +62,8 @@ type TreeVizPayload = TreeVizItem["viz"] & {
 interface Props {
   viz: TreeVizItem | MergedTreeViz;
   artifacts: ArtifactMetadata[];
+  conversationId: number | null;
+  runId: string;
   stageId: string;
   bestNodeId?: number | null;
 }
@@ -85,7 +87,7 @@ const DIVIDER_OFFSET = 2.0; // Offset from calculated position
 const LABEL_BG_HEIGHT = 5;
 const LABEL_BG_PADDING_TOP = 3.5;
 
-export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
+export function TreeVizViewer({ viz, artifacts, conversationId, runId, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
 
   // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
@@ -161,7 +163,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
     let canceled = false;
 
     const loadPlotUrls = async () => {
-      if (!plotList.length) {
+      if (!plotList.length || conversationId === null) {
         setPlotUrls([]);
         return;
       }
@@ -174,12 +176,12 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
             return asString;
           }
           const filename = asString.split("/").pop();
-          const artifact =
-            artifacts.find(a => a.filename === filename) ||
-            artifacts.find(a => a.download_path && a.download_path.endsWith(asString));
-          if (artifact?.download_path) {
+          const artifact = artifacts.find(a => a.filename === filename);
+          if (artifact) {
+            // Compute download path from available context
+            const downloadPath = `/conversations/${conversationId}/idea/research-run/${runId}/artifacts/${artifact.id}/presign`;
             try {
-              return await fetchDownloadUrl(artifact.download_path);
+              return await fetchDownloadUrl(downloadPath);
             } catch {
               return null;
             }
@@ -202,7 +204,7 @@ export function TreeVizViewer({ viz, artifacts, stageId, bestNodeId }: Props) {
     return () => {
       canceled = true;
     };
-  }, [artifacts, plotList]);
+  }, [artifacts, plotList, conversationId, runId]);
 
   // Render stage separators (dividers + labels) for Full Tree view
   const renderStageSeparators = () => {

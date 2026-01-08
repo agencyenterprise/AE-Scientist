@@ -515,23 +515,13 @@ async def ingest_artifact_uploaded(
 ) -> None:
     event = payload.event
 
-    # Look up conversation_id from database
-    db = get_database()
-    conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
-    if conversation_id is None:
-        logger.warning(
-            "Could not find conversation_id for run %s; artifact SSE event skipped",
-            payload.run_id,
-        )
-        return
-
     logger.info(
-        "Artifact uploaded: run=%s conv=%s type=%s filename=%s size=%d",
+        "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
         payload.run_id,
-        conversation_id,
         event.artifact_type,
         event.filename,
         event.file_size,
+        event.artifact_id,
     )
     artifact_metadata = ResearchRunArtifactMetadata(
         id=event.artifact_id,
@@ -540,7 +530,6 @@ async def ingest_artifact_uploaded(
         file_size=event.file_size,
         file_type=event.file_type,
         created_at=event.created_at,
-        download_path=f"/conversations/{conversation_id}/idea/research-run/{payload.run_id}/artifacts/{event.artifact_id}/presign",
     )
     publish_stream_event(
         run_id=payload.run_id,
@@ -558,20 +547,9 @@ async def ingest_review_completed(
 ) -> None:
     event = payload.event
 
-    # Look up conversation_id from database
-    db = get_database()
-    conversation_id = await db.get_conversation_id_for_run(run_id=payload.run_id)
-    if conversation_id is None:
-        logger.warning(
-            "Could not find conversation_id for run %s; review SSE event skipped",
-            payload.run_id,
-        )
-        return
-
     logger.info(
-        "Review completed: run=%s conv=%s decision=%s overall=%.2f",
+        "Review completed: run=%s decision=%s overall=%.2f",
         payload.run_id,
-        conversation_id,
         event.decision,
         event.overall,
     )

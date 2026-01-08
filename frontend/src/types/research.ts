@@ -140,7 +140,6 @@ export interface ArtifactMetadataApi {
   file_size: number;
   file_type: string;
   created_at: string;
-  download_path: string;
 }
 
 export interface BestNodeSelectionApi {
@@ -280,7 +279,6 @@ export interface ArtifactMetadata {
   file_size: number;
   file_type: string;
   created_at: string;
-  download_path: string;
 }
 
 export interface ArtifactPresignedUrlResponse {

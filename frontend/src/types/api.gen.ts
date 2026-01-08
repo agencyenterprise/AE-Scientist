@@ -2819,11 +2819,6 @@ export interface components {
              * @description ISO timestamp when the artifact was recorded
              */
             created_at: string;
-            /**
-             * Download Path
-             * @description API path to initiate a download
-             */
-            download_path: string;
         };
         /** ResearchRunBestNodeEvent */
         ResearchRunBestNodeEvent: {
