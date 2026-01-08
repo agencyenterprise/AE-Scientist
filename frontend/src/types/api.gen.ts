@@ -3355,6 +3355,11 @@ export interface components {
              * @description ID of the associated conversation
              */
             conversation_id: number;
+            /**
+             * Conversation Url
+             * @description Original conversation share URL (ChatGPT, Claude, etc.) if imported
+             */
+            conversation_url?: string | null;
         };
         /**
          * ResearchRunListResponse

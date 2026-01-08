@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
-from typing import Any, AsyncContextManager, AsyncIterator, Iterator, Tuple
+from typing import Any, AsyncContextManager, AsyncIterator, Iterator, Tuple, cast
 
 from psycopg import AsyncConnection, Connection, conninfo
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
@@ -51,7 +51,7 @@ class BaseDatabaseManager(ConnectionProvider):
     """Base database manager with pooled connection logic."""
 
     _pool: ConnectionPool | None = None
-    _async_pool: AsyncConnectionPool | None = None
+    _async_pool: AsyncConnectionPool[AsyncConnection[Any]] | None = None
     _async_pool_lock: asyncio.Lock = asyncio.Lock()
 
     def __init__(self) -> None:
@@ -113,7 +113,7 @@ class BaseDatabaseManager(ConnectionProvider):
 
         return _manager()
 
-    async def _get_async_pool(self) -> AsyncConnectionPool:
+    async def _get_async_pool(self) -> AsyncConnectionPool[AsyncConnection[Any]]:
         if getattr(self, "_skip_db_connections", False):
             raise RuntimeError("Database connections are disabled via SKIP_DB_CONNECTION")
 
@@ -125,12 +125,17 @@ class BaseDatabaseManager(ConnectionProvider):
             pool = BaseDatabaseManager._async_pool
             if pool is None:
                 min_conn, max_conn = self._pool_bounds()
-                BaseDatabaseManager._async_pool = AsyncConnectionPool(
-                    conninfo=self._conninfo,
-                    min_size=min_conn,
-                    max_size=max_conn,
+                pool = cast(
+                    AsyncConnectionPool[AsyncConnection[Any]],
+                    AsyncConnectionPool(
+                        conninfo=self._conninfo,
+                        min_size=min_conn,
+                        max_size=max_conn,
+                        open=False,
+                    ),
                 )
-                pool = BaseDatabaseManager._async_pool
+                await pool.open()
+                BaseDatabaseManager._async_pool = pool
 
         assert pool is not None, "Async connection pool not initialized"
         return pool

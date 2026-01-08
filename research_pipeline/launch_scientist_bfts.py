@@ -438,7 +438,7 @@ def resume_run(
             stage1_meta = StageMeta(
                 identifier=identifier,
                 goals=Stage1Baseline.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(identifier.number),
+                max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
@@ -461,7 +461,7 @@ def resume_run(
                 stage2_meta = StageMeta(
                     identifier=identifier,
                     goals=Stage2Tuning.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(identifier.number),
+                    max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
@@ -486,7 +486,7 @@ def resume_run(
                 stage3_meta = StageMeta(
                     identifier=identifier,
                     goals=Stage3Plotting.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(identifier.number),
+                    max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
@@ -508,7 +508,7 @@ def resume_run(
         next_meta = StageMeta(
             identifier=next_identifier,
             goals=next_goals,
-            max_iterations=manager.get_max_iterations(next_identifier.number),
+            max_iterations=manager.get_max_iterations(stage_identifier=next_identifier),
             num_drafts=0,
         )
 

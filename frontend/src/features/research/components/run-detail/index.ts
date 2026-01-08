@@ -1,5 +1,6 @@
 export { AutoEvaluationCard } from "./AutoEvaluationCard";
 export { FinalPdfBanner } from "./final-pdf-banner";
+export { ImportSourceCard } from "./import-source-card";
 export { PaperGenerationProgress } from "./paper-generation-progress";
 export { ResearchArtifactsList } from "./research-artifacts-list";
 export { ResearchLogsList } from "./research-logs-list";

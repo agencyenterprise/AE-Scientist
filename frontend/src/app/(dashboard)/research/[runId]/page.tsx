@@ -5,6 +5,7 @@ import {
   AutoEvaluationCard,
   CostDetailsCard,
   FinalPdfBanner,
+  ImportSourceCard,
   ResearchArtifactsList,
   ResearchLogsList,
   ResearchPipelineStages,
@@ -176,6 +177,10 @@ export default function ResearchRunDetailPage() {
         />
 
         {run.error_message && <ResearchRunError message={run.error_message} />}
+
+        {runMeta?.conversation_url && (
+          <ImportSourceCard conversationUrl={runMeta.conversation_url} />
+        )}
 
         {conversationId !== null && (
           <FinalPdfBanner artifacts={artifacts} conversationId={conversationId} runId={runId} />

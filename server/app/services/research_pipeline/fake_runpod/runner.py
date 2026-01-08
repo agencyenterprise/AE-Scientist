@@ -55,6 +55,11 @@ class PodRequest(BaseModel):
     dockerStartCmd: List[str]
 
 
+class SkipStageRequest(BaseModel):
+    run_id: str
+    reason: str
+
+
 class BillingRecord(NamedTuple):
     podId: str
     amount: float
@@ -67,10 +72,24 @@ class TelemetryRecord(NamedTuple):
     received_at: float
 
 
+class TerminateExecutionRequest(BaseModel):
+    payload: str
+
+
+class ExecutionRecord(NamedTuple):
+    run_id: str
+    stage_name: str
+    run_type: str
+    started_at: datetime
+    status: str
+
+
 app = FastAPI(title="Fake RunPod Server")
 _pods: Dict[str, PodRecord] = {}
 _lock = threading.Lock()
 _telemetry_events: List[TelemetryRecord] = []
+_runners_by_run_id: Dict[str, "FakeRunner"] = {}
+_executions_by_id: Dict[str, ExecutionRecord] = {}
 
 
 def _require_env(name: str) -> str:
@@ -205,7 +224,7 @@ def _start_fake_runner(
     aws_secret_access_key: str,
     aws_region: str,
     aws_s3_bucket_name: str,
-) -> None:
+) -> "FakeRunner":
     runner = FakeRunner(
         run_id=record.run_id,
         pod_id=record.id,
@@ -219,6 +238,7 @@ def _start_fake_runner(
     )
     thread = threading.Thread(target=runner.run, name=f"fake-runner-{record.run_id}", daemon=True)
     thread.start()
+    return runner
 
 
 @app.post("/pods")
@@ -266,7 +286,7 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
     webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
     db_url = _require_env("DATABASE_PUBLIC_URL")
-    _start_fake_runner(
+    runner = _start_fake_runner(
         record=record,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
@@ -276,6 +296,8 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
     )
+    with _lock:
+        _runners_by_run_id[record.run_id] = runner
     return _build_pod_response(record)
 
 
@@ -323,6 +345,39 @@ def graphql_query(body: Dict[str, object] = Body(...)) -> Dict[str, object]:
     if "podHostId" in json.dumps(query):
         return {"data": {"pod": {"machine": {"podHostId": "fake-host"}}}}
     return {"data": {}, "variables": variables}
+
+
+@app.post("/skip-stage")
+def skip_stage(request: SkipStageRequest = Body(...)) -> Dict[str, object]:
+    with _lock:
+        runner = _runners_by_run_id.get(request.run_id)
+    if runner is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    runner.request_stage_skip(reason=request.reason)
+    return {}
+
+
+@app.post("/terminate/{execution_id}")
+def terminate_execution(
+    execution_id: str,
+    request: TerminateExecutionRequest = Body(...),
+) -> Dict[str, object]:
+    with _lock:
+        record = _executions_by_id.get(execution_id)
+        runner = _runners_by_run_id.get(record.run_id) if record is not None else None
+
+    if record is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+    if runner is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    status_code, detail = runner.terminate_execution(
+        execution_id=execution_id,
+        payload=request.payload,
+    )
+    if status_code == 200:
+        return {}
+    raise HTTPException(status_code=status_code, detail=detail)
 
 
 @app.post("/telemetry/run-started", status_code=204)
@@ -480,6 +535,71 @@ class FakeRunner:
         self._webhooks = FakeRunPodWebhookPublisher(
             client=self._webhook_client, run_id=self._run_id
         )
+        self._stage_skip_requested = threading.Event()
+        self._stage_skip_reason: str | None = None
+        self._stage_skip_lock = threading.Lock()
+
+    def request_stage_skip(self, *, reason: str) -> None:
+        with self._stage_skip_lock:
+            self._stage_skip_reason = reason
+        self._stage_skip_requested.set()
+
+    def _consume_stage_skip_request(self) -> str | None:
+        if not self._stage_skip_requested.is_set():
+            return None
+        self._stage_skip_requested.clear()
+        with self._stage_skip_lock:
+            reason = self._stage_skip_reason
+            self._stage_skip_reason = None
+        return reason
+
+    def _wait_or_skip(self, *, timeout_seconds: float) -> str | None:
+        if not self._stage_skip_requested.wait(timeout=timeout_seconds):
+            return None
+        return self._consume_stage_skip_request()
+
+    def terminate_execution(self, *, execution_id: str, payload: str) -> tuple[int, str]:
+        with _lock:
+            record = _executions_by_id.get(execution_id)
+            if record is None:
+                return 404, "Unknown execution_id"
+            if record.run_id != self._run_id:
+                return 404, "Unknown execution_id"
+            if record.status in ("success", "terminated"):
+                return 409, "Execution already completed or terminating"
+            if record.status == "terminating":
+                return 409, "Execution already completed or terminating"
+            _executions_by_id[execution_id] = record._replace(status="terminating")
+
+        now = datetime.now(timezone.utc)
+        exec_time = max(0.0, (now - record.started_at).total_seconds())
+        self._enqueue_event(
+            kind="run_log",
+            data={
+                "message": f"Termination requested for execution {execution_id}: {payload}",
+                "level": "warn",
+            },
+        )
+        try:
+            self._db.record_code_execution_completion(
+                execution_id=execution_id,
+                stage_name=record.stage_name,
+                completed_at=now,
+                exec_time=exec_time,
+                status="failed",
+                run_type=record.run_type,
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
+            logger.exception(
+                "Failed to persist terminated execution completion for %s (stage=%s)",
+                execution_id,
+                record.stage_name,
+            )
+        with _lock:
+            latest = _executions_by_id.get(execution_id)
+            if latest is not None and latest.run_id == self._run_id:
+                _executions_by_id[execution_id] = latest._replace(status="terminated")
+        return 200, ""
 
     def run(self) -> None:
         logger.info(
@@ -604,6 +724,14 @@ class FakeRunner:
             f"print('Simulating execution for run {self._run_id}')\n"
         )
         run_type = "main_execution"
+        with _lock:
+            _executions_by_id[execution_id] = ExecutionRecord(
+                run_id=self._run_id,
+                stage_name=stage_name,
+                run_type=run_type,
+                started_at=started_at,
+                status="running",
+            )
         self._db.record_code_execution_start(
             execution_id=execution_id,
             stage_name=stage_name,
@@ -642,6 +770,10 @@ class FakeRunner:
                 "completed_at": completed_at.isoformat(),
             }
         )
+        with _lock:
+            existing = _executions_by_id.get(execution_id)
+            if existing is not None:
+                _executions_by_id[execution_id] = existing._replace(status="success")
 
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage
@@ -659,8 +791,21 @@ class FakeRunner:
                 state="opened",
                 reason="Fake runner marked stage as skippable.",
             )
+            stage_skipped = False
+            stage_skip_reason: str | None = None
             iterations_to_emit = min(self._iterations_per_stage, max_iterations)
             for iteration in range(iterations_to_emit):
+                pending_skip_reason = self._consume_stage_skip_request()
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
                 current_iter += 1
                 progress = (iteration + 1) / max_iterations
                 logger.debug(
@@ -703,7 +848,17 @@ class FakeRunner:
                             stage_name,
                             iteration + 1,
                         )
-                time.sleep(20)
+                pending_skip_reason = self._wait_or_skip(timeout_seconds=20)
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s during wait: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
                 logger.info(
                     "[FakeRunner %s]   Iteration %d/%d complete (%.0f%% overall)",
                     self._run_id[:8],
@@ -711,6 +866,58 @@ class FakeRunner:
                     iterations_to_emit,
                     (current_iter / total_iterations) * 100,
                 )
+            if stage_skipped:
+                effective_skip_reason = stage_skip_reason or "Stage skipped by operator."
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"Skipping stage {stage_name}: {effective_skip_reason}",
+                        "level": "warn",
+                    },
+                )
+                summary = {
+                    "goals": f"Goals for {stage_name}",
+                    "feedback": effective_skip_reason,
+                    "good_nodes": 0,
+                    "best_metric": None,
+                    "buggy_nodes": 0,
+                    "total_nodes": 0,
+                    "llm_summary": f"Stage {stage_name} skipped.",
+                }
+                self._enqueue_event(
+                    kind="substage_completed",
+                    data={
+                        "stage": stage_name,
+                        "main_stage_number": stage_index + 1,
+                        "reason": "skipped",
+                        "summary": summary,
+                    },
+                )
+                try:
+                    self._db.insert_substage_summary(stage_name=stage_name, summary=summary)
+                except Exception:  # noqa: BLE001 - fake runner best-effort
+                    logger.exception(
+                        "Failed to store skipped-stage summary for stage %s", stage_name
+                    )
+                try:
+                    self._enqueue_event(
+                        kind="substage_summary",
+                        data={
+                            "stage": stage_name,
+                            "summary": summary,
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to enqueue skipped-stage substage summary for stage %s",
+                        stage_name,
+                    )
+                self._emit_stage_skip_window_event(
+                    stage_name=stage_name,
+                    state="closed",
+                    reason=effective_skip_reason,
+                )
+                continue
             self._emit_fake_best_node(stage_name=stage_name, stage_index=stage_index)
             summary = {
                 "goals": f"Goals for {stage_name}",
