@@ -854,50 +854,66 @@ class FakeRunner:
 
     def _emit_fake_review(self) -> None:
         """Emit a fake LLM review by storing it in the database and publishing a webhook."""
-        fake_review_data = {
-            "summary": "This paper presents a novel approach to the problem with solid experimental validation. The methodology is sound and the results demonstrate clear improvements over baseline approaches.",
-            "strengths": [
-                "Novel approach with clear motivation",
-                "Comprehensive experimental evaluation",
-                "Well-written and easy to follow",
-                "Strong empirical results across multiple benchmarks",
-            ],
-            "weaknesses": [
-                "Limited comparison with recent state-of-the-art methods",
-                "Some experimental details could be clarified",
-                "Scalability concerns not fully addressed",
-            ],
-            "originality": 3.5,
-            "quality": 3.0,
-            "clarity": 3.5,
-            "significance": 3.0,
-            "questions": [
-                "How does the approach scale to larger datasets?",
-                "What is the computational overhead compared to baselines?",
-            ],
-            "limitations": [
-                "Limited to specific domain",
-                "Requires significant computational resources",
-            ],
-            "ethical_concerns": False,
-            "soundness": 3.0,
-            "presentation": 3.5,
-            "contribution": 3.0,
-            "overall": 7.0,
-            "confidence": 4.0,
-            "decision": "Accept",
-            "source_path": None,
-        }
+        summary = "This paper presents a novel approach to the problem with solid experimental validation. The methodology is sound and the results demonstrate clear improvements over baseline approaches."
+        strengths = [
+            "Novel approach with clear motivation",
+            "Comprehensive experimental evaluation",
+            "Well-written and easy to follow",
+            "Strong empirical results across multiple benchmarks",
+        ]
+        weaknesses = [
+            "Limited comparison with recent state-of-the-art methods",
+            "Some experimental details could be clarified",
+            "Scalability concerns not fully addressed",
+        ]
+        questions = [
+            "How does the approach scale to larger datasets?",
+            "What is the computational overhead compared to baselines?",
+        ]
+        limitations = [
+            "Limited to specific domain",
+            "Requires significant computational resources",
+        ]
+        originality = 3.5
+        quality = 3.0
+        clarity = 3.5
+        significance = 3.0
+        soundness = 3.0
+        presentation = 3.5
+        contribution = 3.0
+        overall = 7.0
+        confidence = 4.0
+        decision = "Accept"
+        ethical_concerns = False
+        source_path = None
 
         # Insert review into database first
         try:
-            review_id, created_at = self._db.insert_review(**fake_review_data)
+            review_id, created_at = self._db.insert_review(
+                summary=summary,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                originality=originality,
+                quality=quality,
+                clarity=clarity,
+                significance=significance,
+                questions=questions,
+                limitations=limitations,
+                ethical_concerns=ethical_concerns,
+                soundness=soundness,
+                presentation=presentation,
+                contribution=contribution,
+                overall=overall,
+                confidence=confidence,
+                decision=decision,
+                source_path=source_path,
+            )
             logger.info(
                 "[FakeRunner %s] Inserted fake review into database: id=%s decision=%s overall=%.1f",
                 self._run_id[:8],
                 review_id,
-                fake_review_data["decision"],
-                fake_review_data["overall"],
+                decision,
+                overall,
             )
         except Exception:
             logger.exception(
@@ -908,7 +924,23 @@ class FakeRunner:
         # Now publish the webhook with the database ID and timestamp
         webhook_payload = {
             "review_id": review_id,
-            **fake_review_data,
+            "summary": summary,
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "originality": originality,
+            "quality": quality,
+            "clarity": clarity,
+            "significance": significance,
+            "questions": questions,
+            "limitations": limitations,
+            "ethical_concerns": ethical_concerns,
+            "soundness": soundness,
+            "presentation": presentation,
+            "contribution": contribution,
+            "overall": overall,
+            "confidence": confidence,
+            "decision": decision,
+            "source_path": source_path,
             "created_at": created_at.isoformat(),
         }
 
