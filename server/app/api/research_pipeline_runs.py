@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
 from uuid import uuid4
@@ -51,6 +52,7 @@ from app.services.research_pipeline.runpod_manager import (
     get_pipeline_startup_grace_seconds,
     get_supported_gpu_types,
     launch_research_pipeline_run,
+    request_stage_skip_via_fake_runpod,
     request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
     terminate_pod,
@@ -775,17 +777,25 @@ async def skip_active_stage(
             status_code=400,
             detail=f"Run is {run.status}; skipping stages is only available while running.",
         )
-    if not run.public_ip or not run.ssh_port:
-        raise HTTPException(
-            status_code=409,
-            detail="Run is missing management server access details.",
-        )
 
     reason = payload.reason or (
         f"Skip stage requested via dashboard (stage={payload.stage or 'active'})"
     )
     try:
-        request_stage_skip_via_ssh(host=run.public_ip, port=run.ssh_port, reason=reason)
+        fake_runpod_base_url = os.environ.get("FAKE_RUNPOD_BASE_URL")
+        if fake_runpod_base_url:
+            await request_stage_skip_via_fake_runpod(
+                base_url=fake_runpod_base_url,
+                run_id=run_id,
+                reason=reason,
+            )
+        else:
+            if not run.public_ip or not run.ssh_port:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Run is missing management server access details.",
+                )
+            request_stage_skip_via_ssh(host=run.public_ip, port=run.ssh_port, reason=reason)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
