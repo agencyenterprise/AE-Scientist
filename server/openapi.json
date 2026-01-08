@@ -5989,6 +5989,23 @@
             "type": "string",
             "title": "Created At",
             "description": "ISO timestamp when the artifact was recorded"
+          },
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID of the associated conversation"
           }
         },
         "type": "object",
@@ -5998,7 +6015,8 @@
           "filename",
           "file_size",
           "file_type",
-          "created_at"
+          "created_at",
+          "run_id"
         ],
         "title": "ResearchRunArtifactMetadata"
       },
@@ -7015,18 +7033,6 @@
             "type": "integer",
             "title": "Conversation Id",
             "description": "ID of the associated conversation"
-          },
-          "conversation_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Url",
-            "description": "Original conversation share URL (ChatGPT, Claude, etc.) if imported"
           }
         },
         "type": "object",

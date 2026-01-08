@@ -530,6 +530,8 @@ async def ingest_artifact_uploaded(
         file_size=event.file_size,
         file_type=event.file_type,
         created_at=event.created_at,
+        run_id=payload.run_id,
+        conversation_id=None,
     )
     publish_stream_event(
         run_id=payload.run_id,

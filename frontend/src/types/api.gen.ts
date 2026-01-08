@@ -2819,6 +2819,16 @@ export interface components {
              * @description ISO timestamp when the artifact was recorded
              */
             created_at: string;
+            /**
+             * Run Id
+             * @description Research run identifier
+             */
+            run_id: string;
+            /**
+             * Conversation Id
+             * @description ID of the associated conversation
+             */
+            conversation_id?: number | null;
         };
         /** ResearchRunBestNodeEvent */
         ResearchRunBestNodeEvent: {
@@ -3355,11 +3365,6 @@ export interface components {
              * @description ID of the associated conversation
              */
             conversation_id: number;
-            /**
-             * Conversation Url
-             * @description Original conversation share URL (ChatGPT, Claude, etc.) if imported
-             */
-            conversation_url?: string | null;
         };
         /**
          * ResearchRunListResponse
