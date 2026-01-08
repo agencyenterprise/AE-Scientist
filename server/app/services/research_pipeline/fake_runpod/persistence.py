@@ -267,3 +267,69 @@ class FakeRunPodPersistence:
                     """,
                     (self._run_id, stage_name, Jsonb(summary)),
                 )
+
+    def insert_review(
+        self,
+        *,
+        summary: str,
+        strengths: list[str],
+        weaknesses: list[str],
+        originality: float,
+        quality: float,
+        clarity: float,
+        significance: float,
+        questions: list[str],
+        limitations: list[str],
+        ethical_concerns: bool,
+        soundness: float,
+        presentation: float,
+        contribution: float,
+        overall: float,
+        confidence: float,
+        decision: str,
+        source_path: str | None,
+    ) -> tuple[int, datetime]:
+        """Insert a fake LLM review into the database.
+
+        Returns:
+            Tuple of (review_id, created_at)
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO rp_llm_reviews (
+                        run_id, summary, strengths, weaknesses, originality, quality,
+                        clarity, significance, questions, limitations, ethical_concerns,
+                        soundness, presentation, contribution, overall, confidence, decision,
+                        source_path, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                    RETURNING id, created_at
+                    """,
+                    (
+                        self._run_id,
+                        summary,
+                        Jsonb(strengths),
+                        Jsonb(weaknesses),
+                        originality,
+                        quality,
+                        clarity,
+                        significance,
+                        Jsonb(questions),
+                        Jsonb(limitations),
+                        ethical_concerns,
+                        soundness,
+                        presentation,
+                        contribution,
+                        overall,
+                        confidence,
+                        decision,
+                        source_path,
+                    ),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    raise RuntimeError("Failed to insert fake review")
+                review_id, created_at = row
+                return int(review_id), created_at

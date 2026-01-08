@@ -154,14 +154,17 @@ export function useResearchRunDetails({
     );
   }, []);
 
-  const handleReviewCompleted = useCallback(
-    (review: LlmReviewResponse) => {
-      if (onReviewCompleted) {
-        onReviewCompleted(review);
-      }
-    },
-    [onReviewCompleted]
-  );
+  // Use a ref to avoid recreating this callback when onReviewCompleted changes
+  const onReviewCompletedRef = useRef(onReviewCompleted);
+  useEffect(() => {
+    onReviewCompletedRef.current = onReviewCompleted;
+  }, [onReviewCompleted]);
+
+  const handleReviewCompleted = useCallback((review: LlmReviewResponse) => {
+    if (onReviewCompletedRef.current) {
+      onReviewCompletedRef.current(review);
+    }
+  }, []);
 
   const handlePaperGenerationProgress = useCallback((event: PaperGenerationEvent) => {
     setDetails(prev =>
