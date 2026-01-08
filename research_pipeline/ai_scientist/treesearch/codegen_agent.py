@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from .datasets_context import (
+    S3DatasetEntry,
     build_s3_download_snippet,
     build_s3_upload_snippet,
     get_available_datasets,
@@ -39,6 +40,44 @@ from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, SUMMARY_RESPONSE_SCHEMA
 
 logger = logging.getLogger("ai-scientist")
 WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
+_MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
+_MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
+
+
+def _format_s3_entries_for_prompt(
+    *,
+    datasets_aws_folder: str,
+    entries: list[S3DatasetEntry],
+) -> list[str]:
+    folder = datasets_aws_folder.strip("/")
+    prefix = f"{folder}/" if folder else ""
+
+    grouped: dict[str, list[tuple[str, int]]] = {}
+    for entry in entries:
+        s3_uri = entry.s3_uri
+        size_bytes = entry.size_on_disk_bytes
+        without_scheme = s3_uri.removeprefix("s3://")
+        parts = without_scheme.split("/", 1)
+        key = parts[1] if len(parts) == 2 else ""
+        relative = key[len(prefix) :] if key.startswith(prefix) else key
+        group = relative.split("/", 1)[0] if "/" in relative else "(root)"
+        grouped.setdefault(group, []).append((relative, size_bytes))
+
+    lines: list[str] = []
+    for group_name in sorted(grouped.keys())[:_MAX_S3_DATASET_GROUPS_FOR_PROMPT]:
+        lines.append(f"- {group_name}/")
+        group_entries = grouped[group_name]
+        shown = 0
+        for rel_path, size_bytes in group_entries:
+            if shown >= _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT:
+                break
+            child_path = rel_path.split("/", 1)[1] if "/" in rel_path else rel_path
+            lines.append(f"  - {child_path} | size={size_bytes} bytes")
+            shown += 1
+        remaining = max(len(group_entries) - shown, 0)
+        if remaining:
+            lines.append(f"  - ... ({remaining} more)")
+    return lines
 
 
 def _load_workspace_usage_file() -> int | None:
@@ -207,6 +246,8 @@ class MinimalAgent:
 
         dataset_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
         local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
+        logger.info("Local datasets directory: %s", local_datasets_dir)
+        logger.info("Dataset AWS folder: %s", dataset_aws_folder)
         datasets_info = get_available_datasets(
             local_datasets_dir=local_datasets_dir, datasets_aws_folder=dataset_aws_folder
         )
@@ -232,8 +273,11 @@ class MinimalAgent:
         s3_block = ""
         s3_lines: list[str] = []
 
-        for entry in datasets_info.s3_folder_entries:
-            s3_lines.append(f"- {entry.s3_uri} | size={entry.size_on_disk_bytes} bytes")
+        if datasets_info.s3_folder_entries:
+            s3_lines = _format_s3_entries_for_prompt(
+                datasets_aws_folder=dataset_aws_folder,
+                entries=datasets_info.s3_folder_entries,
+            )
         s3_snippet = build_s3_download_snippet(
             datasets_aws_folder=dataset_aws_folder,
             local_datasets_dir=local_datasets_dir,

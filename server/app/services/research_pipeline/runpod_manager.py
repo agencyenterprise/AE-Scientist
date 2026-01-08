@@ -550,6 +550,22 @@ def _installation_commands() -> list[str]:
     ]
 
 
+def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
+    return [
+        "# === AWS Credentials Setup ===",
+        'echo "Creating ~/.aws/credentials..."',
+        "mkdir -p ~/.aws",
+        "chmod 700 ~/.aws",
+        "cat > ~/.aws/credentials << 'EOF'",
+        "[default]",
+        f"aws_access_key_id={env.aws_access_key_id}",
+        f"aws_secret_access_key={env.aws_secret_access_key}",
+        "EOF",
+        "chmod 600 ~/.aws/credentials",
+        "",
+    ]
+
+
 def _build_remote_script(
     *,
     env: RunPodEnvironment,
@@ -602,6 +618,10 @@ def _build_remote_script(
         "set -a",
         "source .env",
         "set +a",
+        "",
+    ]
+    script_parts += _aws_credentials_setup_commands(env=env)
+    script_parts += [
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
         "python - <<'PY'",

@@ -1,15 +1,15 @@
 import logging
 import os
-import re
-import subprocess
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from dotenv import load_dotenv
 from huggingface_hub import CacheNotFound, scan_cache_dir
 
 logger = logging.getLogger("ai-scientist")
-_S5CMD_LINE_RE = re.compile(r"^\S+\s+\S+\s+(?P<size>\d+)\s+(?P<uri>s3://\S+)$")
+_MAX_S3_FOLDER_ENTRIES = 2000
 
 
 class HFCachedRepo(NamedTuple):
@@ -80,10 +80,12 @@ def _scan_hf_cache() -> list[HFCachedRepo]:
     hf_home = os.environ.get("HF_HOME", "/workspace/.cache/huggingface/")
     cache_dir = Path(hf_home) / "hub"
     if not cache_dir.exists():
+        logger.info("HF cache directory does not exist at %s", cache_dir)
         return []
     try:
         info = scan_cache_dir(str(cache_dir))
     except (OSError, RuntimeError, ValueError, CacheNotFound):
+        logger.exception("Error scanning HF cache directory at %s", cache_dir)
         return []
     repos: list[HFCachedRepo] = []
     for repo in sorted(info.repos, key=lambda r: (r.repo_type, r.repo_id)):
@@ -105,31 +107,40 @@ def _list_s3_folder_entries(
 ) -> list[S3DatasetEntry]:
     s3_bucket_name = str(os.environ.get("AWS_S3_BUCKET_NAME", "")).strip()
     if not s3_bucket_name:
+        logger.info("AWS_S3_BUCKET_NAME is not set")
         return []
     folder = datasets_aws_folder.strip("/")
-    s3_uri = f"s3://{s3_bucket_name}/{folder}/"
     try:
-        proc = subprocess.run(
-            ["s5cmd", "ls", s3_uri],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return []
-    if proc.returncode != 0:
+        session = boto3.session.Session()
+        s3_client = session.client(service_name="s3")
+        prefix = f"{folder}/" if folder else ""
+        paginator = s3_client.get_paginator(operation_name="list_objects_v2")
+        page_iterator = paginator.paginate(Bucket=s3_bucket_name, Prefix=prefix)
+    except (BotoCoreError, ClientError):
+        logger.exception("Error listing S3 folder entries at %s", datasets_aws_folder)
         return []
     entries: list[S3DatasetEntry] = []
-    for line in proc.stdout.splitlines():
-        m = _S5CMD_LINE_RE.match(line.strip())
-        if not m:
+    for page in page_iterator:
+        if len(entries) >= _MAX_S3_FOLDER_ENTRIES:
+            break
+        contents = page.get("Contents", [])
+        if not contents:
             continue
-        entries.append(
-            S3DatasetEntry(
-                s3_uri=m.group("uri"),
-                size_on_disk_bytes=int(m.group("size")),
+        for obj in contents:
+            if len(entries) >= _MAX_S3_FOLDER_ENTRIES:
+                break
+            key = str(obj.get("Key", "")).lstrip("/")
+            if not key:
+                continue
+            size_bytes = int(obj.get("Size", 0) or 0)
+            if key.endswith("/") and size_bytes == 0:
+                continue
+            entries.append(
+                S3DatasetEntry(
+                    s3_uri=f"s3://{s3_bucket_name}/{key}",
+                    size_on_disk_bytes=size_bytes,
+                )
             )
-        )
     return entries
 
 
