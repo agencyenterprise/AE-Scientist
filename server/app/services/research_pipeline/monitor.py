@@ -5,6 +5,8 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Protocol, cast
 
+from psycopg import AsyncConnection
+
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
@@ -66,6 +68,9 @@ class ResearchRunStore(Protocol):
 
 logger = logging.getLogger(__name__)
 
+_PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1 = 184467
+_PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2 = 991733
+
 
 class PipelineMonitorError(Exception):
     """Raised when the pipeline monitor encounters an unexpected error."""
@@ -98,7 +103,7 @@ class ResearchPipelineMonitor:
             return
         self._stop_event = asyncio.Event()
         self._task = asyncio.create_task(self._run(), name="PipelineMonitor")
-        logger.info("Research pipeline monitor started.")
+        logger.debug("Research pipeline monitor task started (pid=%s).", os.getpid())
 
     async def stop(self) -> None:
         if self._task is None:
@@ -114,7 +119,7 @@ class ResearchPipelineMonitor:
         finally:
             self._task = None
             self._stop_event = None
-        logger.info("Research pipeline monitor stopped.")
+        logger.debug("Research pipeline monitor task stopped (pid=%s).", os.getpid())
 
     async def _run(self) -> None:
         stop_event = self._stop_event
@@ -122,14 +127,67 @@ class ResearchPipelineMonitor:
             stop_event = asyncio.Event()
             self._stop_event = stop_event
         while not stop_event.is_set():
-            try:
-                await self._check_runs()
-            except PipelineMonitorError:
-                logger.exception("Pipeline monitor encountered an error.")
+            is_leader = await self._try_run_as_leader(stop_event=stop_event)
+            if is_leader:
+                continue
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
             except asyncio.TimeoutError:
                 continue
+
+    async def _try_run_as_leader(self, *, stop_event: asyncio.Event) -> bool:
+        db = get_database()
+        async with db.aget_connection() as conn:
+            lock_acquired = await self._try_acquire_global_monitor_lock(conn=conn)
+            if not lock_acquired:
+                return False
+
+            logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
+            try:
+                while not stop_event.is_set():
+                    try:
+                        await self._check_runs()
+                    except PipelineMonitorError:
+                        logger.exception("Pipeline monitor encountered an error.")
+                    try:
+                        await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
+                    except asyncio.TimeoutError:
+                        continue
+            finally:
+                await self._release_global_monitor_lock(conn=conn)
+                logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
+            return True
+
+    async def _try_acquire_global_monitor_lock(self, *, conn: AsyncConnection[object]) -> bool:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT pg_try_advisory_lock(%s, %s)",
+                    (
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1,
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2,
+                    ),
+                )
+                row = cast("tuple[object, ...] | None", await cursor.fetchone())
+                if row is None:
+                    return False
+                return bool(row[0])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to acquire pipeline monitor leader lock: %s", exc)
+            return False
+
+    async def _release_global_monitor_lock(self, *, conn: AsyncConnection[object]) -> None:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT pg_advisory_unlock(%s, %s)",
+                    (
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1,
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2,
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to release pipeline monitor leader lock: %s", exc)
 
     async def _check_runs(self) -> None:
         try:
