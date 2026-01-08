@@ -512,15 +512,18 @@ class Interpreter:
 
     def _log_queue_dump(self, *, header: str, entries: list[Any]) -> None:
         if not entries:
-            logger.error("%s: <empty>", header)
+            # Keep this diagnostic out of Sentry noise. The caller decides whether this is fatal.
+            logger.debug("%s: <empty>", header)
             return
         formatted = "\n".join(f"{idx + 1:02d}: {repr(entry)}" for idx, entry in enumerate(entries))
-        logger.error("%s (%d entries):\n%s", header, len(entries), formatted)
+        # Keep this diagnostic out of Sentry noise. The caller decides whether this is fatal.
+        logger.debug("%s (%d entries):\n%s", header, len(entries), formatted)
 
     def _log_failure_context(self, *, reason: str) -> None:
         pid = self.process.pid if self.process is not None else None
         exitcode = self.process.exitcode if self.process is not None else None
-        logger.error(
+        # Keep detailed diagnostics at debug to avoid multiple Sentry events for one failure.
+        logger.debug(
             "Interpreter failure context (reason=%s, pid=%s, exitcode=%s)",
             reason,
             pid,
@@ -562,7 +565,7 @@ class Interpreter:
                 terminated = self._wait_for_process_exit(proc=proc, timeout_seconds=5.0)
 
             if not terminated:
-                logger.error(
+                logger.warning(
                     "Child process %s remained alive after SIGKILL; skipping close to avoid ValueError.",
                     proc.pid,
                 )
@@ -621,11 +624,12 @@ class Interpreter:
             remaining = startup_deadline - time.time()
             if remaining <= 0:
                 msg = "REPL child process failed to start execution"
-                logger.critical(msg)
+                # Avoid CRITICAL/ERROR log spam (which would create multiple Sentry events).
+                # If the child is already dead, route through the unified handler which can
+                # classify expected terminations.
                 if self.process is not None and not self.process.is_alive():
-                    logger.critical(
-                        f"REPL child died before start (pid={self.process.pid}, exitcode={self.process.exitcode})"
-                    )
+                    self._raise_child_exit(message=msg)
+                logger.warning("%s (%s)", msg, self._format_run_context())
                 self._log_failure_context(reason=msg)
                 raise RuntimeError(msg) from None
             try:
@@ -752,6 +756,8 @@ class Interpreter:
                 self._format_run_context(),
             )
             raise InterpreterTerminated(reason=message)
-        logger.critical(message)
+        # Unexpected interpreter death: log once at WARNING to avoid Sentry log spam.
+        # Higher layers are responsible for emitting a single Sentry event for true crashes.
+        logger.warning("%s (%s)", message, self._format_run_context())
         self._log_failure_context(reason=message)
         raise RuntimeError(message)

@@ -39,7 +39,12 @@ from .stages.stage4_ablation import Stage4Ablation
 from .types import PromptType
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, process_node
+from .worker_process import (
+    ExecutionCrashedError,
+    ExecutionTerminatedError,
+    NodeTask,
+    process_node_task,
+)
 
 logger = logging.getLogger("ai-scientist")
 
@@ -132,6 +137,14 @@ class ParallelAgent:
         self._shared_pid_state = execution_registry.get_shared_pid_state()
         self._future_execution_ids: dict[Future, str] = {}
         self._future_process_ids: dict[Future, str] = {}
+        # Execution IDs whose registry entries should be cleared later (not immediately).
+        # This is used to keep termination state available briefly so workers can classify
+        # SIGKILL as expected (e.g., timeout) and avoid Sentry noise.
+        self._deferred_registry_clears: set[str] = set()
+        # One-shot user feedback payloads scheduled for exactly one next run (per node id).
+        # We clear the payload off the journal node immediately when scheduling, then pass it
+        # to the worker explicitly.
+        self._one_shot_user_feedback_payloads: dict[str, str] = {}
 
     @property
     def stage_name(self) -> str:
@@ -300,22 +313,23 @@ class ParallelAgent:
                 node=node,
                 stage_name=self.stage_name,
             )
-            future = executor.submit(
-                process_node,
-                node_data=node_data,
-                task_desc=self.task_desc,
-                cfg=self.cfg,
-                gpu_id=gpu_id,
-                memory_summary=memory_summary,
-                evaluation_metrics=self.evaluation_metrics,
-                stage_identifier=self.stage_identifier,
-                new_ablation_idea=new_ablation_idea,
-                new_hyperparam_idea=new_hyperparam_idea,
-                best_stage3_plot_code=best_stage3_plot_code,
-                seed_eval=seed_eval,
-                event_callback=self.event_callback,
-                execution_id=execution_id,
-            )
+            task: NodeTask = {
+                "node_data": node_data,
+                "task_desc": self.task_desc,
+                "cfg": self.cfg,
+                "gpu_id": gpu_id,
+                "memory_summary": memory_summary,
+                "evaluation_metrics": self.evaluation_metrics,
+                "stage_identifier": self.stage_identifier,
+                "new_ablation_idea": new_ablation_idea,
+                "new_hyperparam_idea": new_hyperparam_idea,
+                "best_stage3_plot_code": best_stage3_plot_code,
+                "seed_eval": seed_eval,
+                "event_callback": self.event_callback,
+                "execution_id": execution_id,
+                "user_feedback_payload": "",
+            }
+            future = executor.submit(process_node_task, task)
             futures.append(future)
             execution_ids.append(execution_id)
 
@@ -408,6 +422,12 @@ class ParallelAgent:
                 newest_child.user_feedback_payload = node.user_feedback_payload
                 newest_child.user_feedback_pending = True
                 node.user_feedback_pending = False
+                # Consume feedback from the root node so it only impacts the next scheduled run.
+                payload = node.user_feedback_payload or ""
+                if payload:
+                    self._one_shot_user_feedback_payloads[newest_child.id] = payload
+                node.user_feedback_payload = None
+                node.is_user_feedback = False
                 feedback_nodes.append(newest_child)
                 continue
             logger.info(
@@ -416,6 +436,11 @@ class ParallelAgent:
                 (node.user_feedback_payload or "")[:120].replace("\n", " "),
             )
             node.user_feedback_pending = False
+            payload = node.user_feedback_payload or ""
+            if payload:
+                self._one_shot_user_feedback_payloads[node.id] = payload
+            node.user_feedback_payload = None
+            node.is_user_feedback = False
             nodes_to_process.append(node)
 
         while len(nodes_to_process) < self.num_workers:
@@ -651,22 +676,26 @@ class ParallelAgent:
                     node=node,
                     stage_name=self.stage_name,
                 )
-                future = executor.submit(
-                    process_node,
-                    node_data=node_data,
-                    task_desc=self.task_desc,
-                    cfg=self.cfg,
-                    gpu_id=gpu_id,
-                    memory_summary=memory_summary,
-                    evaluation_metrics=self.evaluation_metrics,
-                    stage_identifier=self.stage_identifier,
-                    new_ablation_idea=new_ablation_idea,
-                    new_hyperparam_idea=new_hyperparam_idea,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    seed_eval=seed_eval,
-                    event_callback=self.event_callback,
-                    execution_id=execution_id,
-                )
+                user_feedback_payload = ""
+                if node is not None:
+                    user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
+                task: NodeTask = {
+                    "node_data": node_data,
+                    "task_desc": self.task_desc,
+                    "cfg": self.cfg,
+                    "gpu_id": gpu_id,
+                    "memory_summary": memory_summary,
+                    "evaluation_metrics": self.evaluation_metrics,
+                    "stage_identifier": self.stage_identifier,
+                    "new_ablation_idea": new_ablation_idea,
+                    "new_hyperparam_idea": new_hyperparam_idea,
+                    "best_stage3_plot_code": best_stage3_plot_code,
+                    "seed_eval": seed_eval,
+                    "event_callback": self.event_callback,
+                    "execution_id": execution_id,
+                    "user_feedback_payload": user_feedback_payload,
+                }
+                future = executor.submit(process_node_task, task)
                 futures.append(future)
                 self._future_execution_ids[future] = execution_id
                 self._future_process_ids[future] = process_id
@@ -754,6 +783,7 @@ class ParallelAgent:
                             future=future,
                             execution_id=current_execution_id,
                         )
+                        self._deferred_registry_clears.add(current_execution_id)
                     else:
                         self._handle_worker_timeout(future=future)
                 except ExecutionTerminatedError:
@@ -769,7 +799,10 @@ class ParallelAgent:
                     )
                     continue
                 except ExecutionCrashedError as exc:
-                    logger.error(
+                    # Emit exactly one Sentry event for a true crash. Avoid error-level logging
+                    # here to prevent multiple Sentry events for the same underlying issue.
+                    sentry_sdk.capture_exception(exc)
+                    logger.warning(
                         "Execution %s crashed unexpectedly: %s",
                         current_execution_id,
                         exc,
@@ -809,11 +842,17 @@ class ParallelAgent:
                     continue
                 finally:
                     if current_execution_id is not None:
-                        logger.info(
-                            "ParallelAgent clearing execution %s after future completion",
-                            current_execution_id,
-                        )
-                        execution_registry.clear_execution(current_execution_id)
+                        if current_execution_id in self._deferred_registry_clears:
+                            logger.info(
+                                "Deferring execution registry clear for %s (timeout/termination).",
+                                current_execution_id,
+                            )
+                        else:
+                            logger.info(
+                                "ParallelAgent clearing execution %s after future completion",
+                                current_execution_id,
+                            )
+                            execution_registry.clear_execution(current_execution_id)
                     completed_process_id = (
                         self._future_process_ids.pop(future)
                         if future in self._future_process_ids
@@ -853,6 +892,16 @@ class ParallelAgent:
                 self._shutdown_executor()
 
                 logger.info("Executor shutdown complete")
+                # Clear any deferred registry entries now that the executor is shut down.
+                for execution_id in list(self._deferred_registry_clears):
+                    try:
+                        execution_registry.clear_execution(execution_id)
+                    except Exception:
+                        logger.debug(
+                            "Failed to clear deferred execution registry entry %s during cleanup",
+                            execution_id,
+                        )
+                self._deferred_registry_clears.clear()
 
             except Exception as e:
                 logger.exception(f"Error during executor shutdown: {e}")
@@ -925,6 +974,41 @@ class ParallelAgent:
                     node_ref.id[:8],
                     reason,
                 )
+            else:
+                # Draft executions are registered with node=None, and when they time out we never
+                # receive a result_node to append to the journal. Without a journal entry, the
+                # next iteration's memory_summary becomes "No experiments conducted yet." and the
+                # codegen LLM has no signal to reduce runtime.
+                existing = self.journal.get_node_by_id(execution_id)
+                if existing is None:
+                    timeout_node = Node(
+                        id=execution_id,
+                        plan="",
+                        code="",
+                        is_buggy=True,
+                        analysis=reason,
+                        exc_type="TimeoutError",
+                        exec_time=float(self.timeout),
+                        exec_time_feedback=reason,
+                        metric=WorstMetricValue(),
+                    )
+                    self.journal.append(timeout_node)
+                    logger.info(
+                        "Created synthetic timeout node %s to preserve timeout feedback in journal.",
+                        execution_id[:8],
+                    )
+                else:
+                    existing.is_buggy = True
+                    existing.analysis = reason
+                    existing.exc_type = existing.exc_type or "TimeoutError"
+                    existing.exec_time = existing.exec_time or float(self.timeout)
+                    existing.exec_time_feedback = (
+                        f"{existing.exec_time_feedback}\n{reason}".strip()
+                        if existing.exec_time_feedback
+                        else reason
+                    )
+                    existing.metric = existing.metric or WorstMetricValue()
+                    logger.info("Updated existing node %s with timeout feedback.", execution_id[:8])
             if status == "ok" and pid is not None:
                 try:
                     os.kill(pid, signal.SIGKILL)
@@ -944,8 +1028,6 @@ class ParallelAgent:
                         pid,
                         execution_id,
                     )
-                finally:
-                    execution_registry.clear_execution(execution_id)
             else:
                 logger.warning(
                     "Unable to terminate timed-out execution_id=%s (status=%s); flagging skip pending.",

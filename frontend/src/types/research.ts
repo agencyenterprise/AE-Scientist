@@ -48,6 +48,10 @@ export interface ResearchRunListResponse {
   total: number;
 }
 
+export interface ResearchGpuTypesResponse {
+  gpu_types: string[];
+}
+
 // Status type for UI styling
 export type ResearchRunStatus = "pending" | "running" | "completed" | "failed";
 

@@ -28,13 +28,11 @@ from torchvision.models import resnet18
 try:
     import torch.multiprocessing as mp
 
-    # Prefer spawn to avoid fork-related issues (e.g., hanging subprocess trees / CUDA state).
-    # If the start method is already set by the environment, leave it unchanged.
     if mp.get_start_method(allow_none=True) is None:
-        mp.set_start_method("spawn", force=True)
-except RuntimeError:
-    # Start method may already be set; ignore.
-    pass
+        mp.set_start_method("fork", force=True)
+    else:
+        if mp.get_start_method() == "spawn":
+            mp.set_start_method("fork", force=True)
 except Exception:
     pass
 

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import queue
+import re
 import threading
 import time
 import uuid
@@ -77,6 +78,57 @@ def _require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"{name} is required for fake RunPod server")
     return value
+
+
+def _extract_bash_c_script(*, docker_start_cmd: List[str]) -> str:
+    if len(docker_start_cmd) < 3:
+        raise HTTPException(
+            status_code=400, detail="dockerStartCmd must be like: ['bash', '-c', '<script>']"
+        )
+    if docker_start_cmd[0] != "bash" or docker_start_cmd[1] != "-c":
+        raise HTTPException(
+            status_code=400, detail="dockerStartCmd must be like: ['bash', '-c', '<script>']"
+        )
+    script = docker_start_cmd[2]
+    if not script:
+        raise HTTPException(status_code=400, detail="dockerStartCmd script missing")
+    return script
+
+
+def _parse_env_file_from_docker_start_cmd(*, docker_start_cmd: List[str]) -> Dict[str, str]:
+    script = _extract_bash_c_script(docker_start_cmd=docker_start_cmd)
+
+    # Expect a heredoc of the form:
+    #   cat > .env << 'EOF'
+    #   KEY=value
+    #   ...
+    #   EOF
+    #
+    # Some callers escape quotes inside the string (e.g. << \'EOF\'), so we allow a
+    # leading backslash before quotes.
+    match = re.search(
+        r"cat\s+>\s+\.env\s+<<\s*\\?['\"]?EOF\\?['\"]?\n(?P<body>[\s\S]*?)\nEOF\b",
+        script,
+    )
+    if match is None:
+        raise HTTPException(status_code=400, detail="Could not find .env heredoc in dockerStartCmd")
+
+    env: Dict[str, str] = {}
+    for raw_line in match.group("body").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        env[key] = value
+    return env
 
 
 def _build_pod_response(record: PodRecord) -> Dict[str, object]:
@@ -176,20 +228,23 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     )
     if not request.gpuTypeIds:
         raise HTTPException(status_code=400, detail="gpuTypeIds required")
-    run_id = request.env.get("RUN_ID")
+
+    parsed_env = _parse_env_file_from_docker_start_cmd(docker_start_cmd=request.dockerStartCmd)
+
+    run_id = parsed_env.get("RUN_ID")
     if not run_id:
-        raise HTTPException(status_code=400, detail="RUN_ID env missing")
-    aws_access_key_id = request.env.get("AWS_ACCESS_KEY_ID")
-    aws_secret_access_key = request.env.get("AWS_SECRET_ACCESS_KEY")
-    aws_region = request.env.get("AWS_REGION")
-    aws_s3_bucket_name = request.env.get("AWS_S3_BUCKET_NAME")
+        raise HTTPException(status_code=400, detail="RUN_ID missing from dockerStartCmd .env")
+    aws_access_key_id = parsed_env.get("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = parsed_env.get("AWS_SECRET_ACCESS_KEY")
+    aws_region = parsed_env.get("AWS_REGION")
+    aws_s3_bucket_name = parsed_env.get("AWS_S3_BUCKET_NAME")
     if (
         not aws_access_key_id
         or not aws_secret_access_key
         or not aws_region
         or not aws_s3_bucket_name
     ):
-        raise HTTPException(status_code=400, detail="AWS_* env missing")
+        raise HTTPException(status_code=400, detail="AWS_* missing from dockerStartCmd .env")
     pod_id = f"fake-{uuid.uuid4()}"
     created_at = time.time()
     record = PodRecord(
@@ -416,7 +471,7 @@ class FakeRunner:
         self._heartbeat_stop = threading.Event()
         self._log_stop = threading.Event()
         self._log_thread: Optional[threading.Thread] = None
-        self._data_dir = Path(__file__).parent / "fake_run_pod" / "data"
+        self._data_dir = Path(__file__).parent / "data"
         self._plot_filename: str | None = None
         self._random_exec_time_seconds = 12.0
         self._code_event_delay_seconds = 12.0

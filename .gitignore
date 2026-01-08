@@ -170,7 +170,6 @@ cython_debug/
 .vscode/
 
 # Misc folders
-data/
 !orchestrator/apps/web/lib/data/
 
 *ckpt.pt

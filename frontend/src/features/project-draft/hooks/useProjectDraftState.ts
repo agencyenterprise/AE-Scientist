@@ -5,6 +5,7 @@ import { apiFetch, ApiError } from "@/shared/lib/api-client";
 import { useProjectDraftData } from "./use-project-draft-data";
 import { useProjectDraftEdit } from "./use-project-draft-edit";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
+import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 interface UseProjectDraftStateProps {
   conversation: ConversationDetail;
@@ -42,6 +43,10 @@ interface UseProjectDraftStateReturn {
     expected_outcome: string;
     risk_factors_and_limitations: string[];
   }) => Promise<void>;
+  gpuTypes: string[];
+  selectedGpuType: string | null;
+  isGpuTypeLoading: boolean;
+  setSelectedGpuType: (gpuType: string) => void;
 }
 
 /**
@@ -62,6 +67,8 @@ export function useProjectDraftState({
   // Compose sub-hooks
   const dataState = useProjectDraftData({ conversation });
   const editState = useProjectDraftEdit();
+  const { gpuTypes, selectedGpuType, isGpuTypeLoading, refreshGpuTypes, setSelectedGpuType } =
+    useGpuSelection();
 
   // Modal and project creation state (kept local as they're simple)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -107,8 +114,9 @@ export function useProjectDraftState({
   );
 
   const handleCreateProject = useCallback((): void => {
+    void refreshGpuTypes();
     setIsCreateModalOpen(true);
-  }, []);
+  }, [refreshGpuTypes]);
 
   const handleCloseCreateModal = useCallback((): void => {
     setIsCreateModalOpen(false);
@@ -117,10 +125,16 @@ export function useProjectDraftState({
   const handleConfirmCreateProject = useCallback(async (): Promise<void> => {
     setIsCreatingProject(true);
     try {
+      if (!selectedGpuType) {
+        throw new Error("Select a GPU type before launching research.");
+      }
       const response = await apiFetch<ResearchRunAcceptedResponse>(
         `/conversations/${conversation.id}/idea/research-run`,
         {
           method: "POST",
+          body: {
+            gpu_type: selectedGpuType,
+          },
         }
       );
       setIsCreateModalOpen(false);
@@ -151,7 +165,7 @@ export function useProjectDraftState({
     } finally {
       setIsCreatingProject(false);
     }
-  }, [conversation.id, router]);
+  }, [conversation.id, router, selectedGpuType]);
 
   // Scroll to bottom when component mounts or project draft loads
   useEffect(() => {
@@ -189,5 +203,9 @@ export function useProjectDraftState({
     handleCloseCreateModal,
     handleConfirmCreateProject,
     updateProjectDraft: dataState.updateProjectDraft,
+    gpuTypes,
+    selectedGpuType,
+    isGpuTypeLoading,
+    setSelectedGpuType,
   };
 }

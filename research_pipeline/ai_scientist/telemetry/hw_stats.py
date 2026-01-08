@@ -3,14 +3,24 @@ Utilities for collecting hardware statistics (disk usage) and reporting them via
 """
 
 import logging
+import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import NamedTuple, Optional, Sequence
 
 from .event_persistence import WebhookClient
 
 logger = logging.getLogger("ai-scientist.telemetry")
+
+WORKSPACE_PATH = os.environ.get("PIPELINE_WORKSPACE_PATH", "/workspace")
+workspace_root = Path(WORKSPACE_PATH)
+WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
+
+
+class PartitionUsage(NamedTuple):
+    partition: str
+    used_bytes: int
 
 
 def _du_bytes(path: Path) -> Optional[int]:
@@ -53,8 +63,8 @@ def _du_bytes(path: Path) -> Optional[int]:
     return None
 
 
-def _collect_hw_stats(paths: Sequence[str]) -> list[dict[str, int | str]]:
-    stats: list[dict[str, int | str]] = []
+def _collect_hw_stats(paths: Sequence[str]) -> list[PartitionUsage]:
+    stats: list[PartitionUsage] = []
     for raw_path in paths:
         path = Path(raw_path).resolve()
         if not path.exists():
@@ -62,13 +72,23 @@ def _collect_hw_stats(paths: Sequence[str]) -> list[dict[str, int | str]]:
         used_bytes = _du_bytes(path=path)
         if used_bytes is None:
             continue
-        stats.append(
-            {
-                "partition": str(path),
-                "used_bytes": int(used_bytes),
-            }
-        )
+        stats.append(PartitionUsage(partition=str(path), used_bytes=used_bytes))
+        logger.info("Collected hardware stats for path=%s: used_bytes=%s", path, used_bytes)
+        if path == workspace_root or workspace_root in path.parents:
+            try:
+                _write_workspace_usage_file(used_bytes=used_bytes)
+                logger.info(
+                    "Updated workspace usage state for path=%s: used_bytes=%s", path, used_bytes
+                )
+            except Exception:
+                logger.exception("Failed to update workspace usage state.")
     return stats
+
+
+def _write_workspace_usage_file(*, used_bytes: int) -> None:
+    tmp_path = WORKSPACE_USAGE_FILE.with_suffix(".tmp")
+    tmp_path.write_text(data=str(used_bytes), encoding="utf-8")
+    tmp_path.replace(target=WORKSPACE_USAGE_FILE)
 
 
 class HardwareStatsReporter:
@@ -105,7 +125,10 @@ class HardwareStatsReporter:
             try:
                 stats = _collect_hw_stats(self._paths)
                 if stats:
-                    self._webhook.publish_hw_stats(partitions=stats)
+                    partition_payload: list[dict[str, int | str]] = [
+                        dict(entry._asdict()) for entry in stats
+                    ]
+                    self._webhook.publish_hw_stats(partitions=partition_payload)
             except Exception:
                 logger.exception("Failed to publish hardware stats payload.")
             self._stop_event.wait(timeout=self._interval)

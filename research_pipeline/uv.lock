@@ -49,7 +49,6 @@ dependencies = [
     { name = "omegaconf" },
     { name = "openai" },
     { name = "pandas" },
-    { name = "psutil" },
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "pymongo" },
@@ -60,6 +59,7 @@ dependencies = [
     { name = "python-magic" },
     { name = "python-ulid" },
     { name = "requests" },
+    { name = "s5cmd" },
     { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "sentry-sdk" },
@@ -128,7 +128,6 @@ requires-dist = [
     { name = "omegaconf", specifier = "==2.3.0" },
     { name = "openai", specifier = "==2.7.1" },
     { name = "pandas", specifier = "==2.3.3" },
-    { name = "psutil", specifier = "==7.1.3" },
     { name = "psycopg2-binary", specifier = "==2.9.11" },
     { name = "pydantic", specifier = "==2.12.4" },
     { name = "pymongo", specifier = "==4.15.3" },
@@ -139,6 +138,7 @@ requires-dist = [
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "python-ulid", specifier = "==3.1.0" },
     { name = "requests", specifier = "==2.32.5" },
+    { name = "s5cmd", specifier = ">=0.3.3" },
     { name = "scikit-learn", specifier = ">=1.7.2" },
     { name = "seaborn", specifier = "==0.13.2" },
     { name = "sentry-sdk", specifier = ">=2.43.0" },
@@ -3311,6 +3311,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/04/74127fc843314818edfa81b5540e26dd537353b123a4edc563109d8f17dd/s3transfer-0.16.0.tar.gz", hash = "sha256:8e990f13268025792229cd52fa10cb7163744bf56e719e0b9cb925ab79abf920", size = 153827, upload-time = "2025-12-01T02:30:59.114Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/51/727abb13f44c1fcf6d145979e1535a35794db0f6e450a0cb46aa24732fe2/s3transfer-0.16.0-py3-none-any.whl", hash = "sha256:18e25d66fed509e3868dc1572b3f427ff947dd2c56f844a5bf09481ad3f3b2fe", size = 86830, upload-time = "2025-12-01T02:30:57.729Z" },
+]
+
+[[package]]
+name = "s5cmd"
+version = "0.3.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/20/4c5087622e2149ce3ab2a933b649e2119d407976f77592ddc18be997ec96/s5cmd-0.3.3.tar.gz", hash = "sha256:1c94d2bdff2937ac1610b52aef9219f446675f8cfc820c9d607cffe80daf2e57", size = 16901, upload-time = "2025-09-09T02:22:18.521Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/f9/767be6152403df4c727266995055fd463b6ab14af40522132255afc66020/s5cmd-0.3.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:d341fc8cba5361d2efdeb0c6f1c8528dab8bfce7db9590d87a5b257ac8c2e50f", size = 4753239, upload-time = "2025-09-09T02:22:00.187Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/6d/a319f73bde136496fd6a864f12a303262c0047dad18423ee4d8aa937f689/s5cmd-0.3.3-py3-none-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:51c3c8b567bba82efc4b88192f30bb54a8b7fd81b701a90b73d3fccb6e5d44a6", size = 4952367, upload-time = "2025-09-09T02:22:02.223Z" },
+    { url = "https://files.pythonhosted.org/packages/81/c8/a045684a7f818faf2b971e4ceca8793e7ff1bae4514058b205692d4660c9/s5cmd-0.3.3-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:04821d75b725e8c39f313ebd47243be14e069e6d21b5525d7ddbecc3766cfd6f", size = 4513241, upload-time = "2025-09-09T02:22:04.257Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/6b/f2e4d26ace767de4b396ca8b85a556bcf130e5e9c10d8729b1f09f91e2bd/s5cmd-0.3.3-py3-none-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:e32ed9e828c00aea7db2d06446461933eb5c477c5d3c9a0df6199c8271f9aca0", size = 4439452, upload-time = "2025-09-09T02:22:06.053Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/5d/e83dbdaf7b5acac2124f07d172433e48d67287392ecf97ffd2f6258080ba/s5cmd-0.3.3-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:21004047781675e48b3a75271bd1bf9d9b6232f736c416e1644f07f6c44f9f31", size = 4513224, upload-time = "2025-09-09T02:22:07.523Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/30/c55d12a26ed22a54dba5fc261f87fb4c097935707cfa29deb654493e1e43/s5cmd-0.3.3-py3-none-musllinux_1_2_ppc64le.whl", hash = "sha256:bfab2079bfa928a258ace5e140b82a1091099a128699ef55de83d4d001922150", size = 4439438, upload-time = "2025-09-09T02:22:10.363Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/12/2cfa4868a788ade0ca016b1a8305d69fc36113c94a6878467b2772fafdec/s5cmd-0.3.3-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:1e72608dbdb60e322c18706d673fafcc268382b2db9be53a08c6eee52574278d", size = 4952352, upload-time = "2025-09-09T02:22:11.897Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/e3/c209fe93e8915516e4ff8b5298831d4f86f6d825b2322f963331323745a4/s5cmd-0.3.3-py3-none-win32.whl", hash = "sha256:1d6b429102bdd21f4db3778a43db7fa1112ad8adb88989fbbfc369b911f25252", size = 5113547, upload-time = "2025-09-09T02:22:13.438Z" },
+    { url = "https://files.pythonhosted.org/packages/01/03/2092f3cdc317f704f0ebeb67ad046ca98b012d837f26af2a98e044a31995/s5cmd-0.3.3-py3-none-win_amd64.whl", hash = "sha256:db79dbffc027a2838a35f272c144b8747073e23f3d76ee92f50a6a97708acfab", size = 5113553, upload-time = "2025-09-09T02:22:15.397Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/ba/590e067e6b09acad431bbcd1d79717ab5878456d9d7c6500bd4fd52a8eb1/s5cmd-0.3.3-py3-none-win_arm64.whl", hash = "sha256:2b2c1eabd1a7e96ea7b5907aa0494acb1efe31335b3d02b4d15a86d2e813abf7", size = 4595065, upload-time = "2025-09-09T02:22:16.898Z" },
 ]
 
 [[package]]

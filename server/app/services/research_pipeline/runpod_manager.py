@@ -18,6 +18,7 @@ from typing import Any, Dict, NamedTuple, Type, cast
 
 import httpx
 from omegaconf import OmegaConf
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +33,55 @@ CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.y
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
 RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 CONTAINER_DISK_GB = 100
-VOLUME_DISK_GB = 200
-_POD_CONTAINER_DISK_ENV = "POD_CONTAINER_DISK_GB"
-_POD_VOLUME_DISK_ENV = "POD_VOLUME_DISK_GB"
+WORKSPACE_DISK_GB = 200
 DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
-_DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
-_LEGACY_HW_STATS_ENV_NAME = "HW_STATS_PATHS"
+DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
+RUNPOD_GPU_TYPES: tuple[str, ...] = (
+    "NVIDIA GeForce RTX 5090",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA GeForce RTX 3090",
+    "NVIDIA RTX A4000",
+    "NVIDIA RTX A4500",
+    "NVIDIA RTX A5000",
+)
 
+DEFAULT_RUNPOD_DATACENTER_IDS: tuple[str, ...] = (
+    # RunPod published dataCenterIds options (full list), ordered by proximity to AWS us-east-1 (N. Virginia).
+    #
+    # Heuristic ordering:
+    # - US East (closest)
+    # - US Central
+    # - US West
+    # - Canada East
+    # - Europe
+    # - APAC / Oceania (farthest)
+    "US-DE-1",
+    "US-NC-1",
+    "US-GA-1",
+    "US-GA-2",
+    "US-IL-1",
+    "US-KS-2",
+    "US-KS-3",
+    "US-TX-1",
+    "US-TX-3",
+    "US-TX-4",
+    "US-CA-2",
+    "US-WA-1",
+    "CA-MTL-1",
+    "CA-MTL-2",
+    "CA-MTL-3",
+    "EU-NL-1",
+    "EU-FR-1",
+    "EU-SE-1",
+    "EU-CZ-1",
+    "EU-RO-1",
+    "EUR-NO-1",
+    "EUR-IS-1",
+    "EUR-IS-2",
+    "EUR-IS-3",
+    "AP-JP-1",
+    "OC-AU-1",
+)
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_ACCESS_KEY_ID",
@@ -47,7 +90,7 @@ _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_S3_BUCKET_NAME",
 ]
 
-ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 10 * 60
+ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 20 * 60
 
 
 @dataclass
@@ -203,18 +246,21 @@ class RunPodManager:
         name: str,
         image: str,
         gpu_type: str,
-        env: dict[str, str],
+        pod_env: dict[str, str],
         docker_cmd: str,
     ) -> dict[str, Any]:
+        datacenter_ids = list(DEFAULT_RUNPOD_DATACENTER_IDS)
         payload = {
             "name": name,
             "imageName": image,
             "cloudType": "SECURE",
             "gpuCount": 1,
             "gpuTypeIds": [gpu_type],
+            "dataCenterIds": datacenter_ids,
+            "dataCenterPriority": "custom",
             "containerDiskInGb": CONTAINER_DISK_GB,
-            "volumeInGb": VOLUME_DISK_GB,
-            "env": env,
+            "volumeInGb": WORKSPACE_DISK_GB,
+            "env": pod_env,
             "ports": ["22/tcp"],
             "dockerStartCmd": ["bash", "-c", docker_cmd],
         }
@@ -229,7 +275,7 @@ class RunPodManager:
         name: str,
         image: str,
         gpu_types: list[str],
-        env: dict[str, str],
+        pod_env: dict[str, str],
         docker_cmd: str,
         max_retries: int = 3,
     ) -> dict[str, Any]:
@@ -246,7 +292,7 @@ class RunPodManager:
                     name=name,
                     image=image,
                     gpu_type=gpu_type,
-                    env=env,
+                    pod_env=pod_env,
                     docker_cmd=docker_cmd,
                 )
                 return pod
@@ -367,6 +413,29 @@ def get_pipeline_startup_grace_seconds() -> int:
     return max(parsed, 1)
 
 
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(subprocess.TimeoutExpired),
+)
+def _run_artifact_upload_command(
+    *, command: list[str], timeout_seconds: int
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
+def get_supported_gpu_types() -> list[str]:
+    """Return the GPU types that can be targeted when launching RunPod jobs."""
+    return list(RUNPOD_GPU_TYPES)
+
+
 def _sanitize_pod_user_component(*, value: str) -> str:
     trimmed = value.strip()
     if not trimmed:
@@ -442,11 +511,7 @@ def _encode_multiline(value: str) -> str:
 
 
 def _resolve_disk_stats_paths() -> str:
-    raw = (
-        os.environ.get(_DISK_STATS_ENV_NAME)
-        or os.environ.get(_LEGACY_HW_STATS_ENV_NAME)
-        or DEFAULT_COLLECT_DISK_STATS_PATHS
-    )
+    raw = os.environ.get(DISK_STATS_ENV_NAME) or DEFAULT_COLLECT_DISK_STATS_PATHS
     paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
     sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
     return sanitized
@@ -485,6 +550,22 @@ def _installation_commands() -> list[str]:
     ]
 
 
+def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
+    return [
+        "# === AWS Credentials Setup ===",
+        'echo "Creating ~/.aws/credentials..."',
+        "mkdir -p ~/.aws",
+        "chmod 700 ~/.aws",
+        "cat > ~/.aws/credentials << 'EOF'",
+        "[default]",
+        f"aws_access_key_id={env.aws_access_key_id}",
+        f"aws_secret_access_key={env.aws_secret_access_key}",
+        "EOF",
+        "chmod 600 ~/.aws/credentials",
+        "",
+    ]
+
+
 def _build_remote_script(
     *,
     env: RunPodEnvironment,
@@ -503,12 +584,13 @@ def _build_remote_script(
         f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
         f"AWS_REGION={env.aws_region}",
         f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        "DATASETS_AWS_FOLDER=datasets",
+        "DATASETS_LOCAL_DIR=/workspace/datasets",
         f"RUN_ID={run_id}",
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
-        f"{_DISK_STATS_ENV_NAME}={hw_stats_paths}",
-        f"{_LEGACY_HW_STATS_ENV_NAME}={hw_stats_paths}",
-        f"{_POD_CONTAINER_DISK_ENV}={CONTAINER_DISK_GB}",
-        f"{_POD_VOLUME_DISK_ENV}={VOLUME_DISK_GB}",
+        f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
+        f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
+        "PIPELINE_WORKSPACE_PATH=/workspace",
     ]
     if env.sentry_dsn:
         env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
@@ -532,6 +614,14 @@ def _build_remote_script(
     script_parts += env_file_lines
     script_parts += [
         "EOF",
+        'echo "Exporting environment variables from .env..."',
+        "set -a",
+        "source .env",
+        "set +a",
+        "",
+    ]
+    script_parts += _aws_credentials_setup_commands(env=env)
+    script_parts += [
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
         "python - <<'PY'",
@@ -558,7 +648,7 @@ def _build_remote_script(
         "fi",
         "pipeline_exit_code=0",
         "set +e",
-        f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
         'if [ "$pipeline_exit_code" -eq 0 ]; then',
@@ -580,6 +670,7 @@ async def launch_research_pipeline_run(
     config_name: str,
     run_id: str,
     requested_by_first_name: str,
+    gpu_types: list[str],
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -617,44 +708,21 @@ async def launch_research_pipeline_run(
 
     creator = RunPodManager(api_key=runpod_api_key)
     github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
-    hw_stats_paths = _resolve_disk_stats_paths()
-    metadata_env = {
+    pod_env = {
         "GIT_SSH_KEY_B64": github_key_b64,
         "REPO_NAME": "AE-Scientist",
         "REPO_ORG": "agencyenterprise",
         "REPO_BRANCH": "main",
-        "OPENAI_API_KEY": env.openai_api_key,
-        "HF_TOKEN": env.hf_token,
-        "AWS_ACCESS_KEY_ID": env.aws_access_key_id,
-        "AWS_SECRET_ACCESS_KEY": env.aws_secret_access_key,
-        "AWS_REGION": env.aws_region,
-        "AWS_S3_BUCKET_NAME": env.aws_s3_bucket_name,
-        "RUN_ID": run_id,
-        "DATABASE_PUBLIC_URL": env.database_public_url,
-        _DISK_STATS_ENV_NAME: hw_stats_paths,
-        _LEGACY_HW_STATS_ENV_NAME: hw_stats_paths,
-        _POD_CONTAINER_DISK_ENV: str(CONTAINER_DISK_GB),
-        _POD_VOLUME_DISK_ENV: str(VOLUME_DISK_GB),
     }
-    if env.sentry_dsn:
-        metadata_env["SENTRY_DSN"] = env.sentry_dsn
-    if env.sentry_environment:
-        metadata_env["SENTRY_ENVIRONMENT"] = env.sentry_environment
-    gpu_types = [
-        "NVIDIA RTX PRO 6000 Blackwell Server Edition"
-        # "NVIDIA GeForce RTX 5090",
-        # "NVIDIA GeForce RTX 3090",
-        # "NVIDIA RTX A4000",
-        # "NVIDIA RTX A4500",
-        # "NVIDIA RTX A5000",
-    ]
+    if not gpu_types:
+        raise ValueError("At least one GPU type must be provided when launching a pod.")
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
     pod_name = f"{POD_NAME_PREFIX}_{user_component}_{run_id}"
     pod = await creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1.1",
         gpu_types=gpu_types,
-        env=metadata_env,
+        pod_env=pod_env,
         docker_cmd=docker_cmd,
     )
     logger.debug("Pod created: %s", pod)
@@ -815,12 +883,9 @@ def _upload_runpod_artifacts_via_ssh_sync(
         shlex.quote(remote_command),
     ]
     try:
-        result = subprocess.run(
-            ssh_command,
-            capture_output=True,
-            text=True,
-            timeout=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
-            check=False,
+        result = _run_artifact_upload_command(
+            command=ssh_command,
+            timeout_seconds=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
         )
         if result.returncode != 0:
             logger.warning(

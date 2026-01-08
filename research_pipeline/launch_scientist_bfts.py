@@ -928,9 +928,11 @@ def execute_launcher(args: argparse.Namespace) -> None:
         heartbeat_thread.start()
 
         hw_paths_env = os.environ.get("COLLECT_DISK_STATS_PATHS")
-        if not hw_paths_env:
-            hw_paths_env = os.environ.get("HW_STATS_PATHS", "")
-        hw_paths = [path.strip() for path in hw_paths_env.split(",") if path.strip()]
+        hw_paths = (
+            [path.strip() for path in hw_paths_env.split(",") if path.strip()]
+            if hw_paths_env
+            else []
+        )
         if hw_paths:
             hw_interval = int(os.environ.get("HW_STATS_INTERVAL_SECONDS", "600"))
             hw_stats_reporter = HardwareStatsReporter(

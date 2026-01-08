@@ -14,6 +14,7 @@ Scope:
 import logging
 import os
 import random
+from pathlib import Path
 from typing import Callable
 
 import humanize
@@ -21,6 +22,13 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
+from .datasets_context import (
+    S3DatasetEntry,
+    build_s3_download_snippet,
+    build_s3_upload_snippet,
+    get_available_datasets,
+    get_research_pipeline_env_file,
+)
 from .gpu_manager import GPUSpec
 from .interpreter import ExecutionResult
 from .journal import Node
@@ -31,6 +39,68 @@ from .utils.response import wrap_code
 from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, SUMMARY_RESPONSE_SCHEMA
 
 logger = logging.getLogger("ai-scientist")
+WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
+_MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
+_MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
+
+
+def _format_s3_entries_for_prompt(
+    *,
+    datasets_aws_folder: str,
+    entries: list[S3DatasetEntry],
+) -> list[str]:
+    folder = datasets_aws_folder.strip("/")
+    prefix = f"{folder}/" if folder else ""
+
+    grouped: dict[str, list[tuple[str, int]]] = {}
+    for entry in entries:
+        s3_uri = entry.s3_uri
+        size_bytes = entry.size_on_disk_bytes
+        without_scheme = s3_uri.removeprefix("s3://")
+        parts = without_scheme.split("/", 1)
+        key = parts[1] if len(parts) == 2 else ""
+        relative = key[len(prefix) :] if key.startswith(prefix) else key
+        group = relative.split("/", 1)[0] if "/" in relative else "(root)"
+        grouped.setdefault(group, []).append((relative, size_bytes))
+
+    lines: list[str] = []
+    for group_name in sorted(grouped.keys())[:_MAX_S3_DATASET_GROUPS_FOR_PROMPT]:
+        lines.append(f"- {group_name}/")
+        group_entries = grouped[group_name]
+        shown = 0
+        for rel_path, size_bytes in group_entries:
+            if shown >= _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT:
+                break
+            child_path = rel_path.split("/", 1)[1] if "/" in rel_path else rel_path
+            lines.append(f"  - {child_path} | size={size_bytes} bytes")
+            shown += 1
+        remaining = max(len(group_entries) - shown, 0)
+        if remaining:
+            lines.append(f"  - ... ({remaining} more)")
+    return lines
+
+
+def _load_workspace_usage_file() -> int | None:
+    if not WORKSPACE_USAGE_FILE.exists():
+        logger.info("Workspace usage file does not exist at %s", WORKSPACE_USAGE_FILE)
+        return None
+    try:
+        raw_text = WORKSPACE_USAGE_FILE.read_text(encoding="utf-8").strip()
+        logger.info("Workspace usage file exists at %s: %s", WORKSPACE_USAGE_FILE, raw_text)
+    except OSError:
+        logger.debug(
+            "Could not read workspace usage file at %s", WORKSPACE_USAGE_FILE, exc_info=True
+        )
+        return None
+    if not raw_text:
+        return None
+    try:
+        return int(raw_text)
+    except ValueError:
+        logger.debug(
+            "Malformed workspace usage file contents at %s: %s", WORKSPACE_USAGE_FILE, raw_text
+        )
+        return None
 
 
 class PlanAndCodeSchema(BaseModel):
@@ -93,6 +163,19 @@ class MinimalAgent:
     def stage_name(self) -> str:
         return self.stage_identifier.prefixed_name
 
+    def _inject_prompt_environment(self, *, prompt: PromptType) -> None:
+        """
+        Ensure the LLM prompt always includes the environment context (packages/GPU/storage).
+
+        Stages build their own instruction blocks; injecting here guarantees consistency
+        across all stages that call `plan_and_code_query`.
+        """
+        instructions = prompt.get("Instructions")
+        if isinstance(instructions, dict):
+            instructions |= self._prompt_environment
+            return
+        prompt["Instructions"] = dict(self._prompt_environment)
+
     def _check_for_skip(self) -> None:
         if self._skip_checker is not None:
             self._skip_checker()
@@ -120,9 +203,11 @@ class MinimalAgent:
         # Add GPU info if available in config
         gpu_info = ""
         if self.gpu_spec is not None and self.gpu_id is not None:
+            gpu_name = self.gpu_spec["name"]
+            gpu_mem_mib = self.gpu_spec["memory_total_mib"]
             gpu_info = (
-                f"\n\n**Available Hardware**: You have access to ONE {self.gpu_spec['name']} GPU with {self.gpu_spec['memory_total_mib']}MB VRAM. This is a powerful enterprise GPU that can handle:\n"
-                "  - Large models (up to ~{self.gpu_spec['memory_total_mib']} parameters for inference, ~{self.gpu_spec['memory_total_mib']} for training)\n"
+                f"\n\n**Available Hardware**: You have access to ONE {gpu_name} GPU with {gpu_mem_mib}MiB VRAM. This is a powerful enterprise GPU that can handle:\n"
+                f"  - Large models (size appropriately for ~{gpu_mem_mib}MiB VRAM)\n"
                 "  - Large batch sizes (don't be conservative - use batch sizes of 32-128+)\n"
                 "  - Extensive training (15-20+ epochs is fine)\n"
                 "  - Multiple datasets with thousands of samples"
@@ -131,20 +216,20 @@ class MinimalAgent:
             gpu_info += f"\n\n**GPU Selection**: Use GPU index {self.gpu_id}. Set the device to `cuda:{self.gpu_id}` and enforce using this GPU (do not fall back)."
 
         storage_details: list[str] = []
-        volume_disk_gb = os.environ.get("POD_VOLUME_DISK_GB")
-        container_disk_gb = os.environ.get("POD_CONTAINER_DISK_GB")
-        free_disk_bytes = os.environ.get("PIPELINE_FREE_DISK_BYTES")
-        if volume_disk_gb:
-            storage_details.append(f"a dedicated workspace volume of ~{volume_disk_gb}GB")
-        if container_disk_gb:
-            storage_details.append(f"{container_disk_gb}GB of container-local storage")
-        if free_disk_bytes:
-            try:
-                free_bytes_val = int(free_disk_bytes)
-                free_human = humanize.naturalsize(free_bytes_val, binary=True)
-                storage_details.append(f"{free_human} free right now on /workspace")
-            except (TypeError, ValueError):
-                pass
+        capacity_int = int(os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES", "0"))
+        logger.info("Workspace disk capacity: capacity_int=%s", capacity_int)
+        used_int = _load_workspace_usage_file()
+        logger.info("Workspace usage file loaded: used_int=%s", used_int)
+        if capacity_int and used_int is not None:
+            humanized_workspace_disk_capacity = humanize.naturalsize(
+                value=capacity_int, binary=True
+            )
+            storage_details.append(
+                f"a dedicated workspace volume of ~{humanized_workspace_disk_capacity}"
+            )
+            free_bytes_val = max(capacity_int - used_int, 0)
+            free_human = humanize.naturalsize(value=free_bytes_val, binary=True)
+            storage_details.append(f"{free_human} free right now on your workspace volume")
         storage_info = ""
         if storage_details:
             storage_info = (
@@ -152,13 +237,87 @@ class MinimalAgent:
                 + "; ".join(storage_details)
                 + ". Use disk space responsibly when downloading datasets."
             )
+        logger.debug(
+            "LLM storage context: workspace_disk_capacity_bytes=%s workspace_disk_used_bytes=%s storage_details=%s",
+            capacity_int,
+            used_int,
+            storage_details,
+        )
+
+        dataset_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
+        local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
+        logger.info("Local datasets directory: %s", local_datasets_dir)
+        logger.info("Dataset AWS folder: %s", dataset_aws_folder)
+        datasets_info = get_available_datasets(
+            local_datasets_dir=local_datasets_dir, datasets_aws_folder=dataset_aws_folder
+        )
+        hf_lines: list[str] = []
+        for repo in datasets_info.hf_cache:
+            revs = ", ".join(repo.revision_hashes)
+            hf_lines.append(
+                f"- {repo.repo_id} ({repo.repo_type}) | size={repo.size_on_disk_bytes} bytes | revisions=[{revs}]"
+            )
+        if not hf_lines:
+            hf_lines.append("- (none detected)")
+
+        local_lines: list[str] = []
+        for ds in datasets_info.local_datasets:
+            local_lines.append(
+                f"- {ds.dataset_name} | path={ds.path} | size={ds.size_on_disk_bytes} bytes"
+            )
+        if not local_lines:
+            local_lines.append(
+                f"- (empty) Create a subfolder per dataset under {local_datasets_dir}"
+            )
+
+        s3_block = ""
+        s3_lines: list[str] = []
+
+        if datasets_info.s3_folder_entries:
+            s3_lines = _format_s3_entries_for_prompt(
+                datasets_aws_folder=dataset_aws_folder,
+                entries=datasets_info.s3_folder_entries,
+            )
+        s3_snippet = build_s3_download_snippet(
+            datasets_aws_folder=dataset_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=get_research_pipeline_env_file(),
+        )
+        s3_upload_snippet = build_s3_upload_snippet(
+            datasets_aws_folder=dataset_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=get_research_pipeline_env_file(),
+        )
+        if s3_lines:
+            s3_block = (
+                "\n\n"
+                + "**Some datasets are available on S3, you can download them if you need to (the download is very fast):**\n"
+                + "\n".join(s3_lines)
+                + (
+                    "\n\n**How to download from S3 into the local dataset cache (paste into your script):**\n\n"
+                    + s3_snippet
+                )
+                + (
+                    "\n\n**How to upload a dataset to S3 for future runs (paste into your script):**\n\n"
+                    + s3_upload_snippet
+                )
+            )
 
         env_prompt = {
             "Installed Packages": (
                 "Your solution can use any relevant machine learning packages such as: "
                 f"{pkg_str}. Feel free to use any other packages too (all packages are already installed!). "
                 f"For neural networks we suggest using PyTorch rather than TensorFlow.{gpu_info}{storage_info}"
-            )
+            ),
+            "Available Datasets": (
+                "You may use any dataset from any source, but avoid re-downloading available data.\n\n"
+                "**Hugging Face cache (already cached):**\n"
+                + "\n".join(hf_lines)
+                + "\n\n"
+                + f"**Local datasets (already downloaded):** (use subfolders per dataset under {local_datasets_dir})\n"
+                + "\n".join(local_lines)
+                + s3_block
+            ),
         }
         # Debug: show GPU context fed to the LLM
         logger.debug(
@@ -348,6 +507,7 @@ class MinimalAgent:
     ) -> tuple[str, str]:
         """Generate a natural language plan + code in the same LLM call and split them apart."""
         last_completion: str = ""
+        self._inject_prompt_environment(prompt=prompt)
         should_enforce_gpu = enforce_gpu and self.gpu_id is not None
         logger.debug("Final code-generation prompt for stage=%s: %s", self.stage_name, prompt)
         for _ in range(retries):

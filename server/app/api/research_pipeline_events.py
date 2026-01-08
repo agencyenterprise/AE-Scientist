@@ -57,6 +57,7 @@ from app.services.research_pipeline import (
     terminate_pod,
     upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
 
 
 class ResearchRunStore(Protocol):
@@ -159,7 +160,6 @@ class HardwareStatsPartition(BaseModel):
 
 class HeartbeatPayload(BaseModel):
     run_id: str
-    disk_usage: List[DiskUsagePartition] = Field(default_factory=list)
 
 
 class HardwareStatsPayload(BaseModel):
@@ -990,14 +990,6 @@ async def ingest_heartbeat(
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
-    if payload.disk_usage:
-        await _record_disk_usage_event(
-            db=db,
-            run_id=payload.run_id,
-            partitions=payload.disk_usage,
-            occurred_at=now,
-            event_type="disk_usage",
-        )
     logger.debug("RP heartbeat received for run=%s", payload.run_id)
 
 
@@ -1186,10 +1178,15 @@ async def _retry_run_after_gpu_shortage(
         risk_factors_and_limitations=_coerce_list(idea_version.risk_factors_and_limitations),
     )
     requester_first_name = await _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
+    retry_gpu_types = _build_retry_gpu_preferences(
+        failed_run_gpu_type=failed_run.gpu_type, run_id=failed_run.run_id
+    )
+
     try:
         new_run_id, _pod_info = await create_and_launch_research_run(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
+            gpu_types=retry_gpu_types,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",
@@ -1210,6 +1207,40 @@ async def _retry_run_after_gpu_shortage(
             "Failed to schedule retry run after GPU shortage for run %s", failed_run.run_id
         )
         return
+
+
+def _build_retry_gpu_preferences(
+    *, failed_run_gpu_type: str | None, run_id: str | None
+) -> list[str]:
+    """Return a GPU preference list that reuses the user's original choice when possible."""
+    supported_gpu_types = get_supported_gpu_types()
+    if not failed_run_gpu_type:
+        logger.info(
+            "GPU shortage retry for run %s: no prior GPU recorded; using default list %s.",
+            run_id,
+            supported_gpu_types,
+        )
+        return supported_gpu_types
+
+    if failed_run_gpu_type in supported_gpu_types:
+        logger.info(
+            "GPU shortage retry for run %s: reusing original GPU type %s.",
+            run_id,
+            failed_run_gpu_type,
+        )
+        return [failed_run_gpu_type]
+
+    # If the GPU has been removed from the supported list, still try it first before falling back.
+    logger.info(
+        (
+            "GPU shortage retry for run %s: requested GPU %s no longer in supported list; "
+            "trying it first, then falling back to %s."
+        ),
+        run_id,
+        failed_run_gpu_type,
+        supported_gpu_types,
+    )
+    return [failed_run_gpu_type, *supported_gpu_types]
 
 
 @dataclass(frozen=True)

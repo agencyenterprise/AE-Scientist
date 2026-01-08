@@ -21,6 +21,10 @@ export function LaunchResearchButton({
     isLaunching,
     handleLaunchClick,
     handleConfirmLaunch,
+    gpuTypes,
+    selectedGpuType,
+    isGpuTypeLoading,
+    setSelectedGpuType,
   } = useLaunchResearch(conversationId);
 
   return (
@@ -38,6 +42,10 @@ export function LaunchResearchButton({
         onClose={() => setIsLaunchModalOpen(false)}
         onConfirm={handleConfirmLaunch}
         isLoading={isLaunching}
+        availableGpuTypes={gpuTypes}
+        selectedGpuType={selectedGpuType}
+        onSelectGpuType={setSelectedGpuType}
+        isGpuTypeLoading={isGpuTypeLoading}
       />
     </>
   );

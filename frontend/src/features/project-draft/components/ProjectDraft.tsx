@@ -235,6 +235,10 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
         isLoading={projectState.isCreatingProject}
         onClose={projectState.handleCloseCreateModal}
         onConfirm={handleConfirmCreateProject}
+        availableGpuTypes={projectState.gpuTypes}
+        selectedGpuType={projectState.selectedGpuType}
+        onSelectGpuType={projectState.setSelectedGpuType}
+        isGpuTypeLoading={projectState.isGpuTypeLoading}
       />
 
       {/* Title Edit Modal */}

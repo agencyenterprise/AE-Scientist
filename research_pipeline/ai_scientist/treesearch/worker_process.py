@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Literal, Optional, TypeVar
+from typing import Callable, Literal, Optional, TypedDict, TypeVar
 
 from ai_scientist.llm import structured_query_with_schema
 
@@ -34,6 +34,23 @@ T = TypeVar("T")
 
 logger = logging.getLogger("ai-scientist")
 _LLM_PARSE_TIMEOUT_SECONDS = 300
+
+
+class NodeTask(TypedDict):
+    node_data: dict[str, object] | None
+    task_desc: str
+    cfg: AppConfig
+    evaluation_metrics: str
+    memory_summary: str
+    stage_identifier: StageIdentifier
+    seed_eval: bool
+    event_callback: Callable[[BaseEvent], None]
+    gpu_id: int | None
+    new_ablation_idea: AblationIdea | None
+    new_hyperparam_idea: HyperparamTuningIdea | None
+    best_stage3_plot_code: str | None
+    execution_id: str
+    user_feedback_payload: str
 
 
 class ExecutionTerminatedError(RuntimeError):
@@ -366,7 +383,9 @@ def _execute_experiment(
                 execution_id=execution_id,
                 exec_time=duration,
             ) from exc
-        logger.error("Execution %s crashed unexpectedly; propagating failure.", execution_id)
+        # Avoid Sentry log spam: the controller (main process) is responsible for emitting a single
+        # Sentry event for true crashes. Worker logs should remain non-error level.
+        logger.warning("Execution %s crashed unexpectedly; propagating failure.", execution_id)
         raise ExecutionCrashedError(
             execution_id=execution_id,
             exec_time=duration,
@@ -454,6 +473,7 @@ def _select_plotting_code(
     return generate_plotting_code(
         agent=worker_agent,
         node=child_node,
+        parent_node=parent_node,
         plot_code_from_prev_stage=plot_code_from_prev_stage,
     )
 
@@ -862,6 +882,7 @@ def process_node(
     new_hyperparam_idea: Optional[HyperparamTuningIdea] = None,
     best_stage3_plot_code: Optional[str] = None,
     execution_id: str,
+    user_feedback_payload: str,
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
 
@@ -891,7 +912,14 @@ def process_node(
         stage_identifier=stage_identifier,
         skip_checker=lambda: _abort_if_skip_requested(execution_id=execution_id),
     )
-    parent_feedback = parent_node.user_feedback_payload if parent_node else None
+    parent_feedback = user_feedback_payload or (
+        parent_node.user_feedback_payload if parent_node else ""
+    )
+    if parent_node is not None and parent_feedback:
+        # Ensure stage-specific prompt builders that read parent_node.user_feedback_payload
+        # can see the one-shot payload.
+        parent_node.is_user_feedback = True
+        parent_node.user_feedback_payload = parent_feedback
     logger.info(
         "Worker agent ready for execution_id=%s. User feedback present=%s",
         execution_id,
@@ -1040,3 +1068,28 @@ def process_node(
     finally:
         if process_interpreter:
             process_interpreter.cleanup_session()
+
+
+def process_node_task(task: NodeTask) -> dict[str, object]:
+    """
+    Pickle/type-checker friendly wrapper for ProcessPoolExecutor submission.
+
+    We submit a single dict positional arg to the executor, then call the keyword-only
+    `process_node` using named args.
+    """
+    return process_node(
+        node_data=task["node_data"],
+        task_desc=task["task_desc"],
+        cfg=task["cfg"],
+        evaluation_metrics=task["evaluation_metrics"],
+        memory_summary=task["memory_summary"],
+        stage_identifier=task["stage_identifier"],
+        seed_eval=task["seed_eval"],
+        event_callback=task["event_callback"],
+        gpu_id=task["gpu_id"],
+        new_ablation_idea=task["new_ablation_idea"],
+        new_hyperparam_idea=task["new_hyperparam_idea"],
+        best_stage3_plot_code=task["best_stage3_plot_code"],
+        execution_id=task["execution_id"],
+        user_feedback_payload=task["user_feedback_payload"],
+    )
