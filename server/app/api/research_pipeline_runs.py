@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -52,7 +53,6 @@ from app.services.research_pipeline.runpod_manager import (
     get_pipeline_startup_grace_seconds,
     get_supported_gpu_types,
     launch_research_pipeline_run,
-    request_stage_skip_via_fake_runpod,
     request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
     terminate_pod,
@@ -63,6 +63,25 @@ from app.services.s3_service import get_s3_service
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 REQUESTER_NAME_FALLBACK = "Scientist"
+
+
+def _get_fake_runpod_base_url() -> str | None:
+    value = os.environ.get("FAKE_RUNPOD_BASE_URL")
+    return value.strip() if value else None
+
+
+async def _post_fake_runpod(
+    *,
+    base_url: str,
+    path: str,
+    payload: dict[str, object],
+    timeout_seconds: float,
+) -> tuple[int, str]:
+    endpoint = f"{base_url.rstrip('/')}{path}"
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        response = await client.post(endpoint, json=payload)
+    body = response.text.strip() if response.text else ""
+    return response.status_code, body
 
 
 class PodLaunchError(Exception):
@@ -682,12 +701,6 @@ async def terminate_code_execution(
             detail=f"Research run is already {run.status}; cannot terminate execution.",
         )
 
-    if not run.public_ip or not run.ssh_port:
-        raise HTTPException(
-            status_code=409,
-            detail="Run pod is not reachable; SSH endpoint unavailable for termination.",
-        )
-
     feedback_payload = payload.payload
     logger.info(
         "Termination requested by user_id=%s run_id=%s execution_id=%s payload_len=%s",
@@ -697,12 +710,50 @@ async def terminate_code_execution(
         len(feedback_payload),
     )
     try:
-        send_execution_feedback_via_ssh(
-            host=run.public_ip,
-            port=run.ssh_port,
-            execution_id=execution_id,
-            payload=feedback_payload,
-        )
+        fake_runpod_base_url = _get_fake_runpod_base_url()
+        if fake_runpod_base_url is not None:
+            status_code, body = await _post_fake_runpod(
+                base_url=fake_runpod_base_url,
+                path=f"/terminate/{execution_id}",
+                payload={"payload": feedback_payload},
+                timeout_seconds=60.0,
+            )
+            if status_code == 404:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Execution {execution_id} not found on fake RunPod "
+                        f"(response: {body or 'no body'})"
+                    ),
+                )
+            if status_code == 409:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Execution {execution_id} already completed or terminating "
+                        f"(response: {body or 'no body'})"
+                    ),
+                )
+            if status_code != 200:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"Unexpected termination response for execution {execution_id}: "
+                        f"status={status_code} body={body or '<empty>'}"
+                    ),
+                )
+        else:
+            if not run.public_ip or not run.ssh_port:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Run pod is not reachable; SSH endpoint unavailable for termination.",
+                )
+            send_execution_feedback_via_ssh(
+                host=run.public_ip,
+                port=run.ssh_port,
+                execution_id=execution_id,
+                payload=feedback_payload,
+            )
     except TerminationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except TerminationConflictError as exc:
@@ -782,13 +833,18 @@ async def skip_active_stage(
         f"Skip stage requested via dashboard (stage={payload.stage or 'active'})"
     )
     try:
-        fake_runpod_base_url = os.environ.get("FAKE_RUNPOD_BASE_URL")
-        if fake_runpod_base_url:
-            await request_stage_skip_via_fake_runpod(
+        fake_runpod_base_url = _get_fake_runpod_base_url()
+        if fake_runpod_base_url is not None:
+            status_code, body = await _post_fake_runpod(
                 base_url=fake_runpod_base_url,
-                run_id=run_id,
-                reason=reason,
+                path="/skip-stage",
+                payload={"run_id": run_id, "reason": reason},
+                timeout_seconds=30.0,
             )
+            if status_code != 200:
+                raise RuntimeError(
+                    f"Stage skip request rejected by fake RunPod: status={status_code} body={body or '<empty>'}"
+                )
         else:
             if not run.public_ip or not run.ssh_port:
                 raise HTTPException(

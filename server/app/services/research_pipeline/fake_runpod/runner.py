@@ -72,11 +72,24 @@ class TelemetryRecord(NamedTuple):
     received_at: float
 
 
+class TerminateExecutionRequest(BaseModel):
+    payload: str
+
+
+class ExecutionRecord(NamedTuple):
+    run_id: str
+    stage_name: str
+    run_type: str
+    started_at: datetime
+    status: str
+
+
 app = FastAPI(title="Fake RunPod Server")
 _pods: Dict[str, PodRecord] = {}
 _lock = threading.Lock()
 _telemetry_events: List[TelemetryRecord] = []
 _runners_by_run_id: Dict[str, "FakeRunner"] = {}
+_executions_by_id: Dict[str, ExecutionRecord] = {}
 
 
 def _require_env(name: str) -> str:
@@ -344,6 +357,29 @@ def skip_stage(request: SkipStageRequest = Body(...)) -> Dict[str, object]:
     return {}
 
 
+@app.post("/terminate/{execution_id}")
+def terminate_execution(
+    execution_id: str,
+    request: TerminateExecutionRequest = Body(...),
+) -> Dict[str, object]:
+    with _lock:
+        record = _executions_by_id.get(execution_id)
+        runner = _runners_by_run_id.get(record.run_id) if record is not None else None
+
+    if record is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+    if runner is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    status_code, detail = runner.terminate_execution(
+        execution_id=execution_id,
+        payload=request.payload,
+    )
+    if status_code == 200:
+        return {}
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 @app.post("/telemetry/run-started", status_code=204)
 def telemetry_run_started(payload: Dict[str, object] = Body(...)) -> None:
     _telemetry_events.append(
@@ -522,6 +558,49 @@ class FakeRunner:
             return None
         return self._consume_stage_skip_request()
 
+    def terminate_execution(self, *, execution_id: str, payload: str) -> tuple[int, str]:
+        with _lock:
+            record = _executions_by_id.get(execution_id)
+            if record is None:
+                return 404, "Unknown execution_id"
+            if record.run_id != self._run_id:
+                return 404, "Unknown execution_id"
+            if record.status in ("success", "terminated"):
+                return 409, "Execution already completed or terminating"
+            if record.status == "terminating":
+                return 409, "Execution already completed or terminating"
+            _executions_by_id[execution_id] = record._replace(status="terminating")
+
+        now = datetime.now(timezone.utc)
+        exec_time = max(0.0, (now - record.started_at).total_seconds())
+        self._enqueue_event(
+            kind="run_log",
+            data={
+                "message": f"Termination requested for execution {execution_id}: {payload}",
+                "level": "warn",
+            },
+        )
+        try:
+            self._db.record_code_execution_completion(
+                execution_id=execution_id,
+                stage_name=record.stage_name,
+                completed_at=now,
+                exec_time=exec_time,
+                status="failed",
+                run_type=record.run_type,
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
+            logger.exception(
+                "Failed to persist terminated execution completion for %s (stage=%s)",
+                execution_id,
+                record.stage_name,
+            )
+        with _lock:
+            latest = _executions_by_id.get(execution_id)
+            if latest is not None and latest.run_id == self._run_id:
+                _executions_by_id[execution_id] = latest._replace(status="terminated")
+        return 200, ""
+
     def run(self) -> None:
         logger.info(
             "[FakeRunner %s] Starting simulation for pod %s", self._run_id[:8], self._pod_id[:13]
@@ -644,6 +723,14 @@ class FakeRunner:
             f"print('Simulating execution for run {self._run_id}')\n"
         )
         run_type = "main_execution"
+        with _lock:
+            _executions_by_id[execution_id] = ExecutionRecord(
+                run_id=self._run_id,
+                stage_name=stage_name,
+                run_type=run_type,
+                started_at=started_at,
+                status="running",
+            )
         self._db.record_code_execution_start(
             execution_id=execution_id,
             stage_name=stage_name,
@@ -682,6 +769,10 @@ class FakeRunner:
                 "completed_at": completed_at.isoformat(),
             }
         )
+        with _lock:
+            existing = _executions_by_id.get(execution_id)
+            if existing is not None:
+                _executions_by_id[execution_id] = existing._replace(status="success")
 
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage

@@ -1075,20 +1075,3 @@ def request_stage_skip_via_ssh(
         )
 
     logger.info("Stage skip request acknowledged by management server: %s", body or "<empty>")
-
-
-async def request_stage_skip_via_fake_runpod(
-    *,
-    base_url: str,
-    run_id: str,
-    reason: str,
-) -> None:
-    endpoint = f"{base_url.rstrip('/')}/skip-stage"
-    payload = {"run_id": run_id, "reason": reason}
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(endpoint, json=payload)
-    if response.status_code != 200:
-        body = response.text.strip() if response.text else "<empty>"
-        raise RuntimeError(
-            f"Stage skip request rejected by fake RunPod: status={response.status_code} body={body}"
-        )
