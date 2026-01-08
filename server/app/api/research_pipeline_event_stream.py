@@ -40,6 +40,29 @@ SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
 RUN_ACTIVE_STATUSES = {"pending", "running"}
 RUN_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
+INT64_MIN = -(2**63)
+INT64_MAX = (2**63) - 1
+
+
+def _sanitize_orjson_value(*, value: object) -> object:
+    if isinstance(value, int):
+        if value < INT64_MIN or value > INT64_MAX:
+            return str(value)
+        return value
+    if isinstance(value, list):
+        return [_sanitize_orjson_value(value=item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_orjson_value(value=item) for item in value]
+    if isinstance(value, dict):
+        sanitized: dict[object, object] = {}
+        for raw_key, raw_value in value.items():
+            key = _sanitize_orjson_value(value=raw_key)
+            if not isinstance(key, str):
+                key = str(key)
+            sanitized[key] = _sanitize_orjson_value(value=raw_value)
+        return sanitized
+    return value
+
 
 def _parse_iso_timestamp(*, timestamp: str | None) -> datetime | None:
     if timestamp is None:
@@ -563,4 +586,4 @@ async def get_research_run_snapshot(
         conversation_id=conversation_id,
         current_run=current_run,
     )
-    return ORJSONResponse(content=initial_payload)
+    return ORJSONResponse(content=_sanitize_orjson_value(value=initial_payload))
