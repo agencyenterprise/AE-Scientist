@@ -45,7 +45,11 @@ def configure_logging() -> None:
         # In development, show HTTP requests for debugging
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
+    # Reduce noise from HTTP client debug logs (httpx/httpcore)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
     # Suppress extremely verbose DEBUG logs from PDF parsers when app LOG_LEVEL=DEBUG
     logging.getLogger("pdfminer").setLevel(logging.WARNING)
     logging.getLogger("pdfminer.psparser").setLevel(logging.WARNING)
