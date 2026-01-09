@@ -3,10 +3,11 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, cast
 
+import sentry_sdk
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.research_pipeline_runs import (
     REQUESTER_NAME_FALLBACK,
@@ -17,7 +18,11 @@ from app.api.research_pipeline_runs import (
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.config import settings
-from app.models.research_pipeline import ResearchRunBestNodeSelection
+from app.models.research_pipeline import (
+    LlmReviewResponse,
+    ResearchRunArtifactMetadata,
+    ResearchRunBestNodeSelection,
+)
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
     ResearchRunLogEntry,
@@ -26,24 +31,67 @@ from app.models.research_pipeline import (
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCodeExecutionCompletedData
+from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
+from app.models.sse import ResearchRunCodeExecutionStartedData
+from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
+from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
-from app.models.sse import ResearchRunSubstageCompletedEvent
+from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
+from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import get_database
-from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
+from app.services.database.ideas import IdeaVersionData
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.database.users import UserData
 from app.services.research_pipeline import (
     RunPodError,
     fetch_pod_billing_summary,
     terminate_pod,
-    upload_runpod_log_via_ssh,
+    upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
+
+
+class ResearchRunStore(Protocol):
+    async def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]: ...
+
+    async def update_research_pipeline_run(
+        self,
+        *,
+        run_id: str,
+        status: Optional[str] = None,
+        pod_update_info: Optional[PodUpdateInfo] = None,
+        error_message: Optional[str] = None,
+        last_heartbeat_at: Optional[datetime] = None,
+        heartbeat_failures: Optional[int] = None,
+        start_deadline_at: Optional[datetime] = None,
+        last_billed_at: Optional[datetime] = None,
+        started_running_at: Optional[datetime] = None,
+    ) -> None: ...
+
+    async def insert_research_pipeline_run_event(
+        self,
+        *,
+        run_id: str,
+        event_type: str,
+        metadata: Dict[str, object],
+        occurred_at: datetime,
+    ) -> None: ...
+
+    async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
+
+    async def get_user_by_id(self, user_id: int) -> Optional[UserData]: ...
+
+    async def get_idea_version_by_id(self, idea_version_id: int) -> Optional[IdeaVersionData]: ...
+
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
 logger = logging.getLogger(__name__)
@@ -99,8 +147,47 @@ class RunFinishedPayload(BaseModel):
     message: Optional[str] = None
 
 
+class DiskUsagePartition(BaseModel):
+    partition: str
+    total_bytes: int
+    used_bytes: int
+
+
+class HardwareStatsPartition(BaseModel):
+    partition: str
+    used_bytes: int
+
+
 class HeartbeatPayload(BaseModel):
     run_id: str
+
+
+class HardwareStatsPayload(BaseModel):
+    run_id: str
+    partitions: List[HardwareStatsPartition] = Field(default_factory=list)
+
+
+LOW_FREE_DISK_THRESHOLD_BYTES = 50 * 1024**3
+BYTES_PER_GB = 1024**3
+
+
+def _resolve_partition_capacity_bytes(
+    *,
+    run: ResearchPipelineRun,
+    partition: str,
+) -> Optional[int]:
+    normalized = partition if partition == "/" else partition.rstrip("/")
+    if not normalized:
+        normalized = "/"
+    if normalized == "/":
+        capacity_gb = run.container_disk_gb
+    elif normalized == "/workspace":
+        capacity_gb = run.volume_disk_gb
+    else:
+        return None
+    if capacity_gb is None:
+        return None
+    return int(capacity_gb) * BYTES_PER_GB
 
 
 class GPUShortagePayload(BaseModel):
@@ -123,6 +210,47 @@ class PaperGenerationProgressPayload(BaseModel):
     event: PaperGenerationProgressEvent
 
 
+class ArtifactUploadedEvent(BaseModel):
+    artifact_id: int
+    artifact_type: str
+    filename: str
+    file_size: int
+    file_type: str
+    created_at: str
+
+
+class ArtifactUploadedPayload(BaseModel):
+    run_id: str
+    event: ArtifactUploadedEvent
+
+
+class ReviewCompletedEvent(BaseModel):
+    review_id: int
+    summary: str
+    strengths: List[str]
+    weaknesses: List[str]
+    originality: float
+    quality: float
+    clarity: float
+    significance: float
+    questions: List[str]
+    limitations: List[str]
+    ethical_concerns: bool
+    soundness: float
+    presentation: float
+    contribution: float
+    overall: float
+    confidence: float
+    decision: str
+    source_path: Optional[str]
+    created_at: str
+
+
+class ReviewCompletedPayload(BaseModel):
+    run_id: str
+    event: ReviewCompletedEvent
+
+
 class BestNodeSelectionEvent(BaseModel):
     stage: str
     node_id: str
@@ -132,6 +260,18 @@ class BestNodeSelectionEvent(BaseModel):
 class BestNodeSelectionPayload(BaseModel):
     run_id: str
     event: BestNodeSelectionEvent
+
+
+class StageSkipWindowEventModel(BaseModel):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: str
+    reason: Optional[str] = None
+
+
+class StageSkipWindowPayload(BaseModel):
+    run_id: str
+    event: StageSkipWindowEventModel
 
 
 class TreeVizStoredEvent(BaseModel):
@@ -155,6 +295,33 @@ class RunLogPayload(BaseModel):
     event: RunLogEvent
 
 
+class RunningCodeEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    code: str
+    started_at: str
+    run_type: str = "main_execution"
+
+
+class RunningCodePayload(BaseModel):
+    run_id: str
+    event: RunningCodeEventPayload
+
+
+class RunCompletedEventPayload(BaseModel):
+    execution_id: str
+    stage_name: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: str
+    run_type: str = "main_execution"
+
+
+class RunCompletedPayload(BaseModel):
+    run_id: str
+    event: RunCompletedEventPayload
+
+
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
     expected_token = settings.TELEMETRY_WEBHOOK_TOKEN
     if not expected_token:
@@ -170,15 +337,15 @@ def _verify_bearer_token(authorization: str = Header(...)) -> None:
         )
 
 
-def _record_pod_billing_event(
-    db: DatabaseManager,
+async def _record_pod_billing_event(
+    db: "ResearchRunStore",
     *,
     run_id: str,
     pod_id: str,
     context: str,
 ) -> None:
     try:
-        summary = fetch_pod_billing_summary(pod_id=pod_id)
+        summary = await fetch_pod_billing_summary(pod_id=pod_id)
     except (RuntimeError, RunPodError) as exc:
         logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
         return
@@ -187,7 +354,7 @@ def _record_pod_billing_event(
     metadata = summary._asdict()
     metadata["records"] = [record._asdict() for record in summary.records]
     metadata["context"] = context
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="pod_billing_summary",
         metadata=metadata,
@@ -195,20 +362,37 @@ def _record_pod_billing_event(
     )
 
 
-def _upload_pod_log_if_possible(run: ResearchPipelineRun) -> None:
+async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun, *, trigger: str) -> None:
     host = run.public_ip
     port = run.ssh_port
     if not host or not port:
-        logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
+        logger.info(
+            "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
+            run.run_id,
+            trigger,
+        )
         return
-    upload_runpod_log_via_ssh(host=host, port=port, run_id=run.run_id)
+    logger.info(
+        "Triggering pod artifacts upload for run %s (trigger=%s, pod_id=%s, host=%s, port=%s).",
+        run.run_id,
+        trigger,
+        run.pod_id,
+        host,
+        port,
+    )
+    await upload_runpod_artifacts_via_ssh(
+        host=host,
+        port=port,
+        run_id=run.run_id,
+        trigger=trigger,
+    )
 
 
-def _resolve_run_owner_first_name(*, db: DatabaseManager, run_id: str) -> str:
-    owner_id = db.get_run_owner_user_id(run_id=run_id)
+async def _resolve_run_owner_first_name(*, db: "ResearchRunStore", run_id: str) -> str:
+    owner_id = await db.get_run_owner_user_id(run_id=run_id)
     if owner_id is None:
         return REQUESTER_NAME_FALLBACK
-    user = db.get_user_by_id(user_id=owner_id)
+    user = await db.get_user_by_id(user_id=owner_id)
     if user is None:
         return REQUESTER_NAME_FALLBACK
     return extract_user_first_name(full_name=user.name)
@@ -219,7 +403,7 @@ def _next_stream_event_id() -> int:
 
 
 @router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_stage_progress(
+async def ingest_stage_progress(
     payload: StageProgressPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -256,7 +440,7 @@ def ingest_stage_progress(
 
 
 @router.post("/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_substage_completed(
+async def ingest_substage_completed(
     payload: SubstageCompletedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -291,7 +475,7 @@ def ingest_substage_completed(
 
 
 @router.post("/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_paper_generation_progress(
+async def ingest_paper_generation_progress(
     payload: PaperGenerationProgressPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -324,8 +508,89 @@ def ingest_paper_generation_progress(
     )
 
 
+@router.post("/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_artifact_uploaded(
+    payload: ArtifactUploadedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+
+    logger.info(
+        "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
+        payload.run_id,
+        event.artifact_type,
+        event.filename,
+        event.file_size,
+        event.artifact_id,
+    )
+    artifact_metadata = ResearchRunArtifactMetadata(
+        id=event.artifact_id,
+        artifact_type=event.artifact_type,
+        filename=event.filename,
+        file_size=event.file_size,
+        file_type=event.file_type,
+        created_at=event.created_at,
+        run_id=payload.run_id,
+        conversation_id=None,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEArtifactEvent(
+            type="artifact",
+            data=artifact_metadata,
+        ),
+    )
+
+
+@router.post("/review-completed", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_review_completed(
+    payload: ReviewCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    event = payload.event
+
+    logger.info(
+        "Review completed: run=%s decision=%s overall=%.2f",
+        payload.run_id,
+        event.decision,
+        event.overall,
+    )
+
+    # Create LlmReviewResponse for SSE
+    review_data = LlmReviewResponse(
+        id=event.review_id,
+        run_id=payload.run_id,
+        summary=event.summary,
+        strengths=event.strengths,
+        weaknesses=event.weaknesses,
+        originality=event.originality,
+        quality=event.quality,
+        clarity=event.clarity,
+        significance=event.significance,
+        questions=event.questions,
+        limitations=event.limitations,
+        ethical_concerns=event.ethical_concerns,
+        soundness=event.soundness,
+        presentation=event.presentation,
+        contribution=event.contribution,
+        overall=event.overall,
+        confidence=event.confidence,
+        decision=event.decision,
+        source_path=event.source_path,
+        created_at=event.created_at,
+    )
+
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=SSEReviewCompletedEvent(
+            type="review_completed",
+            data=review_data,
+        ),
+    )
+
+
 @router.post("/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_substage_summary(
+async def ingest_substage_summary(
     payload: SubstageSummaryPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -352,7 +617,7 @@ def ingest_substage_summary(
 
 
 @router.post("/best-node-selection", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_best_node_selection(
+async def ingest_best_node_selection(
     payload: BestNodeSelectionPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -384,8 +649,43 @@ def ingest_best_node_selection(
     )
 
 
+@router.post("/stage-skip-window", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_stage_skip_window(
+    payload: StageSkipWindowPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    logger.info(
+        "RP stage skip window event: run=%s stage=%s state=%s reason=%s",
+        payload.run_id,
+        event.stage,
+        event.state,
+        event.reason,
+    )
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSEStageSkipWindowEvent(
+                type="stage_skip_window",
+                data=ResearchRunStageSkipWindowUpdate(
+                    stage=event.stage,
+                    state=event.state,
+                    timestamp=event.timestamp,
+                    reason=event.reason,
+                ),
+            ),
+        ),
+    )
+
+
 @router.post("/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_tree_viz_stored(
+async def ingest_tree_viz_stored(
     payload: "TreeVizStoredPayload",
     _: None = Depends(_verify_bearer_token),
 ) -> None:
@@ -398,7 +698,7 @@ def ingest_tree_viz_stored(
         event.version,
     )
     created_at = datetime.now(timezone.utc).isoformat()
-    
+
     # Create run event for SSE streaming
     run_event = RPEvent(
         id=_next_stream_event_id(),
@@ -411,7 +711,7 @@ def ingest_tree_viz_stored(
         },
         occurred_at=created_at,
     )
-    
+
     # Publish to SSE stream
     publish_stream_event(
         run_id=payload.run_id,
@@ -423,12 +723,12 @@ def ingest_tree_viz_stored(
 
 
 @router.post("/run-log", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_run_log(
+async def ingest_run_log(
     payload: RunLogPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
-    db = get_database()
-    run = db.get_research_pipeline_run(payload.run_id)
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -452,18 +752,77 @@ def ingest_run_log(
     )
 
 
+@router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_running_code(
+    payload: RunningCodePayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionStartedEvent(
+                type="code_execution_started",
+                data=ResearchRunCodeExecutionStartedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    code=event.code,
+                    started_at=event.started_at,
+                ),
+            ),
+        ),
+    )
+
+
+@router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_run_completed(
+    payload: RunCompletedPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    event = payload.event
+    publish_stream_event(
+        run_id=payload.run_id,
+        event=cast(
+            StreamEventModel,
+            SSECodeExecutionCompletedEvent(
+                type="code_execution_completed",
+                data=ResearchRunCodeExecutionCompletedData(
+                    execution_id=event.execution_id,
+                    stage_name=event.stage_name,
+                    run_type=event.run_type,
+                    status=event.status,
+                    exec_time=event.exec_time,
+                    completed_at=event.completed_at,
+                ),
+            ),
+        ),
+    )
+
+
 @router.post("/run-started", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_run_started(
+async def ingest_run_started(
     payload: RunStartedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
-    db = get_database()
-    run = db.get_research_pipeline_run(payload.run_id)
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     now = datetime.now(timezone.utc)
     new_deadline = now + timedelta(minutes=5)
-    db.update_research_pipeline_run(
+    await db.update_research_pipeline_run(
         run_id=payload.run_id,
         status="running",
         last_heartbeat_at=now,
@@ -471,7 +830,7 @@ def ingest_run_started(
         start_deadline_at=new_deadline,
         started_running_at=now,
     )
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=payload.run_id,
         event_type="status_changed",
         metadata={
@@ -505,25 +864,25 @@ def ingest_run_started(
 
 
 @router.post("/run-finished", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_run_finished(
+async def ingest_run_finished(
     payload: RunFinishedPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
-    db = get_database()
-    run = db.get_research_pipeline_run(payload.run_id)
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     new_status = "completed" if payload.success else "failed"
     now = datetime.now(timezone.utc)
-    db.update_research_pipeline_run(
+    await db.update_research_pipeline_run(
         run_id=payload.run_id,
         status=new_status,
         error_message=payload.message,
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=payload.run_id,
         event_type="status_changed",
         metadata={
@@ -568,7 +927,6 @@ def ingest_run_finished(
     )
 
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
         try:
             logger.info(
                 "Run %s finished (success=%s, message=%s); terminating pod %s.",
@@ -577,12 +935,15 @@ def ingest_run_finished(
                 payload.message,
                 run.pod_id,
             )
-            terminate_pod(pod_id=run.pod_id)
+            # This call is also performed by the research pipeline when the paper was generated.
+            # But we want to be sure to upload the log file and workspace archive so we call it again here.
+            await _upload_pod_artifacts_if_possible(run, trigger="pipeline_event_finish")
+            await terminate_pod(pod_id=run.pod_id)
             logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
         finally:
-            _record_pod_billing_event(
+            await _record_pod_billing_event(
                 db,
                 run_id=payload.run_id,
                 pod_id=run.pod_id,
@@ -591,12 +952,12 @@ def ingest_run_finished(
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
-def ingest_heartbeat(
+async def ingest_heartbeat(
     payload: HeartbeatPayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
-    db = get_database()
-    run = db.get_research_pipeline_run(payload.run_id)
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         logger.warning(
             "Received heartbeat for unknown run_id=%s; ignoring but returning 204.",
@@ -604,7 +965,7 @@ def ingest_heartbeat(
         )
         return
     now = datetime.now(timezone.utc)
-    db.update_research_pipeline_run(
+    await db.update_research_pipeline_run(
         run_id=payload.run_id,
         last_heartbeat_at=now,
         heartbeat_failures=0,
@@ -612,13 +973,63 @@ def ingest_heartbeat(
     logger.debug("RP heartbeat received for run=%s", payload.run_id)
 
 
+@router.post("/hw-stats", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_hw_stats(
+    payload: HardwareStatsPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        logger.warning(
+            "Received hardware stats for unknown run_id=%s; ignoring but returning 204.",
+            payload.run_id,
+        )
+        return
+    now = datetime.now(timezone.utc)
+    resolved_partitions: list[DiskUsagePartition] = []
+    for partition in payload.partitions:
+        total_bytes = _resolve_partition_capacity_bytes(
+            run=run,
+            partition=partition.partition,
+        )
+        if total_bytes is None:
+            logger.debug(
+                "Skipping hw_stats partition without capacity mapping: run=%s partition=%s",
+                payload.run_id,
+                partition.partition,
+            )
+            continue
+        resolved_partitions.append(
+            DiskUsagePartition(
+                partition=partition.partition,
+                total_bytes=total_bytes,
+                used_bytes=partition.used_bytes,
+            )
+        )
+    if not resolved_partitions:
+        logger.debug(
+            "No recognized partitions in hw_stats payload for run=%s; skipping record.",
+            payload.run_id,
+        )
+        return
+    await _record_disk_usage_event(
+        db=db,
+        run_id=payload.run_id,
+        partitions=resolved_partitions,
+        occurred_at=now,
+        event_type="hw_stats",
+    )
+    logger.debug("RP hardware stats received for run=%s", payload.run_id)
+
+
 @router.post("/gpu-shortage", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_gpu_shortage(
     payload: GPUShortagePayload,
     _: None = Depends(_verify_bearer_token),
 ) -> None:
-    db = get_database()
-    run = db.get_research_pipeline_run(payload.run_id)
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -633,14 +1044,14 @@ async def ingest_gpu_shortage(
         payload.required_gpus,
         payload.available_gpus,
     )
-    db.update_research_pipeline_run(
+    await db.update_research_pipeline_run(
         run_id=payload.run_id,
         status="failed",
         error_message=failure_reason,
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=payload.run_id,
         event_type="gpu_shortage",
         metadata={
@@ -650,7 +1061,7 @@ async def ingest_gpu_shortage(
         },
         occurred_at=now,
     )
-    db.insert_research_pipeline_run_event(
+    await db.insert_research_pipeline_run_event(
         run_id=payload.run_id,
         event_type="status_changed",
         metadata={
@@ -662,9 +1073,9 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     if run.pod_id:
-        _upload_pod_log_if_possible(run)
+        await _upload_pod_artifacts_if_possible(run, trigger="gpu_shortage")
         try:
-            terminate_pod(pod_id=run.pod_id)
+            await terminate_pod(pod_id=run.pod_id)
             logger.info(
                 "Terminated pod %s for run %s after GPU shortage.",
                 run.pod_id,
@@ -673,26 +1084,60 @@ async def ingest_gpu_shortage(
         except RuntimeError as exc:
             logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
         finally:
-            _record_pod_billing_event(
+            await _record_pod_billing_event(
                 db,
                 run_id=payload.run_id,
                 pod_id=run.pod_id,
                 context="gpu_shortage",
             )
-    try:
-        await _retry_run_after_gpu_shortage(db=db, failed_run=run)
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "Failed to schedule retry run after GPU shortage for run %s",
-            payload.run_id,
+    await _retry_run_after_gpu_shortage(db=db, failed_run=run)
+
+
+async def _record_disk_usage_event(
+    *,
+    db: ResearchRunStore,
+    run_id: str,
+    partitions: Sequence[DiskUsagePartition],
+    occurred_at: datetime,
+    event_type: str,
+) -> None:
+    if not partitions:
+        return
+    partitions_payload = []
+    low_free_partitions: list[tuple[str, int]] = []
+    for partition in partitions:
+        free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
+        partitions_payload.append(
+            {
+                "partition": partition.partition,
+                "total_bytes": partition.total_bytes,
+                "used_bytes": partition.used_bytes,
+                "free_bytes": free_bytes,
+            }
         )
+        if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
+            low_free_partitions.append((partition.partition, free_bytes))
+    await db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type=event_type,
+        metadata={"partitions": partitions_payload},
+        occurred_at=occurred_at,
+    )
+    if low_free_partitions:
+        details = ", ".join(
+            f"{name}={free_bytes / (1024**3):.1f} GiB free"
+            for name, free_bytes in low_free_partitions
+        )
+        message = f"Low disk space detected for run {run_id}: {details}"
+        logger.warning(message)
+        sentry_sdk.capture_message(message, level="warning")
 
 
 async def _retry_run_after_gpu_shortage(
-    *, db: DatabaseManager, failed_run: ResearchPipelineRun
+    *, db: "ResearchRunStore", failed_run: ResearchPipelineRun
 ) -> None:
     version_id = failed_run.idea_version_id
-    idea_version = db.get_idea_version_by_id(version_id)
+    idea_version = await db.get_idea_version_by_id(version_id)
     if idea_version is None:
         logger.warning(
             "Cannot retry run %s after GPU shortage: idea version %s not found.",
@@ -712,18 +1157,23 @@ async def _retry_run_after_gpu_shortage(
         expected_outcome=idea_version.expected_outcome,
         risk_factors_and_limitations=_coerce_list(idea_version.risk_factors_and_limitations),
     )
-    requester_first_name = _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
+    requester_first_name = await _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
+    retry_gpu_types = _build_retry_gpu_preferences(
+        failed_run_gpu_type=failed_run.gpu_type, run_id=failed_run.run_id
+    )
+
     try:
         new_run_id, _pod_info = await create_and_launch_research_run(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
+            gpu_types=retry_gpu_types,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",
             new_run_id,
             failed_run.run_id,
         )
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=failed_run.run_id,
             event_type="gpu_shortage_retry",
             metadata={
@@ -737,6 +1187,40 @@ async def _retry_run_after_gpu_shortage(
             "Failed to schedule retry run after GPU shortage for run %s", failed_run.run_id
         )
         return
+
+
+def _build_retry_gpu_preferences(
+    *, failed_run_gpu_type: str | None, run_id: str | None
+) -> list[str]:
+    """Return a GPU preference list that reuses the user's original choice when possible."""
+    supported_gpu_types = get_supported_gpu_types()
+    if not failed_run_gpu_type:
+        logger.info(
+            "GPU shortage retry for run %s: no prior GPU recorded; using default list %s.",
+            run_id,
+            supported_gpu_types,
+        )
+        return supported_gpu_types
+
+    if failed_run_gpu_type in supported_gpu_types:
+        logger.info(
+            "GPU shortage retry for run %s: reusing original GPU type %s.",
+            run_id,
+            failed_run_gpu_type,
+        )
+        return [failed_run_gpu_type]
+
+    # If the GPU has been removed from the supported list, still try it first before falling back.
+    logger.info(
+        (
+            "GPU shortage retry for run %s: requested GPU %s no longer in supported list; "
+            "trying it first, then falling back to %s."
+        ),
+        run_id,
+        failed_run_gpu_type,
+        supported_gpu_types,
+    )
+    return [failed_run_gpu_type, *supported_gpu_types]
 
 
 @dataclass(frozen=True)

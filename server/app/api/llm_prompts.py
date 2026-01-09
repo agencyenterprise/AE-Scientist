@@ -62,7 +62,7 @@ async def get_llm_prompt(
 
     try:
         # Try to get active prompt from database
-        prompt_data = db.get_active_prompt(prompt_type)
+        prompt_data = await db.get_active_prompt(prompt_type)
 
         if prompt_data:
             # Return custom prompt data
@@ -142,14 +142,14 @@ async def create_llm_prompt(
 
     try:
         # Create new prompt (this will deactivate any existing active prompt)
-        db.create_prompt(
+        await db.create_prompt(
             prompt_type=request_data.prompt_type,
             system_prompt=request_data.system_prompt,
             created_by_user_id=user.id,
         )
 
         # Get the newly created prompt to return it
-        prompt_data = db.get_active_prompt(request_data.prompt_type)
+        prompt_data = await db.get_active_prompt(request_data.prompt_type)
         if not prompt_data:
             response.status_code = 500
             return ErrorResponse(
@@ -184,7 +184,7 @@ async def delete_llm_prompt(
 
     try:
         # Deactivate the prompt
-        success = db.deactivate_prompt(prompt_type)
+        success = await db.deactivate_prompt(prompt_type)
 
         if success:
             return LLMPromptDeleteResponse(

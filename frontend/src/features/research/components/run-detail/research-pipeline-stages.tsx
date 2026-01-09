@@ -1,14 +1,21 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import type {
   SubstageEvent,
   StageProgress,
   PaperGenerationEvent,
   BestNodeSelection,
   SubstageSummary,
+  ResearchRunCodeExecution,
 } from "@/types/research";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
+import { extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
+import { Modal } from "@/shared/components/Modal";
+import { Button } from "@/shared/components/ui/button";
+import { ApiError } from "@/shared/lib/api-client";
+import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
@@ -16,6 +23,12 @@ interface ResearchPipelineStagesProps {
   substageSummaries: SubstageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
+  stageSkipState: StageSkipStateMap;
+  currentCodeExecution?: ResearchRunCodeExecution | null;
+  runStatus: string;
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+  onSkipStage?: (stageSlug: string) => Promise<void>;
+  skipPendingStage?: string | null;
   className?: string;
 }
 
@@ -53,34 +66,6 @@ const PIPELINE_STAGES = [
     description: "Plot aggregation, citation gathering, paper writeup, and peer review",
   },
 ] as const;
-
-/**
- * Helper function to extract stage slug from backend stage name
- *
- * Backend format: {stage_number}_{stage_slug}
- * Examples:
- *   "1_initial_implementation" → "initial_implementation"
- *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
- *   "3_creative_research_1_exploration" → "creative_research"
- */
-const extractStageSlug = (stageName: string): string | null => {
-  const parts = stageName.split("_");
-
-  // Need at least 2 parts: stage_number + slug
-  if (parts.length < 2) return null;
-
-  // Skip first part (stage number), collect parts until we hit next number (substage number)
-  const slugParts: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    const part = parts[i];
-    if (!part) continue;
-    // Stop when we hit a number (substage number)
-    if (/^\d+$/.test(part)) break;
-    slugParts.push(part);
-  }
-
-  return slugParts.length > 0 ? slugParts.join("_") : null;
-};
 
 interface StageInfo {
   status: "pending" | "in_progress" | "completed";
@@ -203,9 +188,6 @@ const getBestNodeForStage = (
   );
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 const getLatestSummaryForStage = (
   stageKey: string,
   summaries: SubstageSummary[]
@@ -219,17 +201,6 @@ const getLatestSummaryForStage = (
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0] ?? null
   );
-};
-
-const getSummaryText = (summary: SubstageSummary): string => {
-  if (!isRecord(summary.summary)) {
-    return JSON.stringify(summary.summary, null, 2);
-  }
-  const llmSummary = summary.summary.llm_summary;
-  if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
-    return llmSummary.trim();
-  }
-  return JSON.stringify(summary.summary, null, 2);
 };
 
 // Paper generation step labels for Stage 5
@@ -280,8 +251,58 @@ export function ResearchPipelineStages({
   substageSummaries,
   paperGenerationProgress,
   bestNodeSelections,
+  stageSkipState,
+  currentCodeExecution,
+  runStatus,
+  onTerminateExecution,
+  onSkipStage,
+  skipPendingStage,
   className,
 }: ResearchPipelineStagesProps) {
+  const [skipSubmittingStage, setSkipSubmittingStage] = useState<string | null>(null);
+  const [skipErrorStage, setSkipErrorStage] = useState<string | null>(null);
+  const [skipErrorMessage, setSkipErrorMessage] = useState<string | null>(null);
+  const [skipDialogStage, setSkipDialogStage] = useState<string | null>(null);
+
+  const effectiveSkipStage = skipPendingStage ?? skipSubmittingStage;
+
+  const openSkipDialog = (stageKey: string) => {
+    if (!onSkipStage) {
+      return;
+    }
+    setSkipDialogStage(stageKey);
+    setSkipErrorStage(null);
+    setSkipErrorMessage(null);
+  };
+
+  const closeSkipDialog = () => {
+    if (effectiveSkipStage && effectiveSkipStage === skipDialogStage) {
+      return;
+    }
+    setSkipDialogStage(null);
+  };
+
+  const confirmSkipStage = async () => {
+    if (!onSkipStage || !skipDialogStage) {
+      return;
+    }
+    const stageKey = skipDialogStage;
+    setSkipSubmittingStage(stageKey);
+    setSkipErrorStage(null);
+    setSkipErrorMessage(null);
+    try {
+      await onSkipStage(stageKey);
+      setSkipDialogStage(null);
+      setSkipSubmittingStage(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to request stage skip. Please try again.";
+      setSkipErrorStage(stageKey);
+      setSkipErrorMessage(message);
+      setSkipSubmittingStage(null);
+      return;
+    }
+  };
   /**
    * Get aggregated stage information for a given main stage
    * Handles multiple substages within a main stage by using the latest progress
@@ -426,58 +447,111 @@ export function ResearchPipelineStages({
             ? PAPER_GENERATION_STEPS.findIndex(s => s.key === latestPaperEvent.step)
             : -1;
 
+          const isStageExecutionActive =
+            runStatus === "running" &&
+            currentCodeExecution &&
+            currentCodeExecution.status === "running" &&
+            extractStageSlug(currentCodeExecution.stage_name) === stage.key;
+
+          const displayMax =
+            info.maxIterations ?? (info.iteration !== null ? info.iteration + 1 : 0);
+          const displayIteration =
+            info.iteration !== null ? Math.min(info.iteration + 1, displayMax) : null;
+
+          const canShowSkipButton = Boolean(
+            stageSkipState[stage.key] &&
+              runStatus === "running" &&
+              typeof onSkipStage === "function" &&
+              !isPaperGeneration
+          );
+
           return (
             <div key={stage.id} className="flex flex-col gap-3">
-              {/* Stage header with title, description, and status */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <h3 className="text-base font-semibold text-white">
-                    Stage {stage.id}: {stage.title}
-                    {/* Stages 1-4: Show iteration count for in_progress */}
-                    {info.status === "in_progress" &&
-                      !isPaperGeneration &&
-                      info.iteration !== null && (
+              {/* Stage header with title, description, status, and skip action */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-base font-semibold text-white">
+                      Stage {stage.id}: {stage.title}
+                      {/* Stages 1-4: Show iteration count for in_progress */}
+                      {info.status === "in_progress" &&
+                        !isPaperGeneration &&
+                        info.iteration !== null && (
+                          <span className="ml-2 text-slate-400">
+                            — Iteration {displayIteration} of {displayMax}
+                          </span>
+                        )}
+                      {/* Stages 1-4: Show completion iteration count for completed */}
+                      {info.status === "completed" &&
+                        !isPaperGeneration &&
+                        info.iteration !== null && (
+                          <span className="ml-2 text-slate-400">
+                            — Completed in {displayIteration} iterations
+                          </span>
+                        )}
+                      {/* Stage 5: Show step name + step count for in_progress */}
+                      {isPaperGeneration &&
+                        info.status === "in_progress" &&
+                        latestPaperEvent?.step && (
+                          <span className="ml-2 text-slate-400">
+                            — {STEP_LABELS[latestPaperEvent.step]} (Step {currentStepIndex + 1} of{" "}
+                            {PAPER_GENERATION_STEPS.length})
+                          </span>
+                        )}
+                      {/* Stage 5: Show completed message */}
+                      {isPaperGeneration && info.status === "completed" && (
                         <span className="ml-2 text-slate-400">
-                          — Iteration {info.iteration} of {info.maxIterations}
+                          — Completed in {PAPER_GENERATION_STEPS.length} steps
                         </span>
                       )}
-                    {/* Stages 1-4: Show completion iteration count for completed */}
-                    {info.status === "completed" &&
-                      !isPaperGeneration &&
-                      info.iteration !== null && (
-                        <span className="ml-2 text-slate-400">
-                          — Completed in {info.iteration} iterations
-                        </span>
-                      )}
-                    {/* Stage 5: Show step name + step count for in_progress */}
-                    {isPaperGeneration &&
-                      info.status === "in_progress" &&
-                      latestPaperEvent?.step && (
-                        <span className="ml-2 text-slate-400">
-                          — {STEP_LABELS[latestPaperEvent.step]} (Step {currentStepIndex + 1} of{" "}
-                          {PAPER_GENERATION_STEPS.length})
-                        </span>
-                      )}
-                    {/* Stage 5: Show completed message */}
-                    {isPaperGeneration && info.status === "completed" && (
-                      <span className="ml-2 text-slate-400">
-                        — Completed in {PAPER_GENERATION_STEPS.length} steps
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {info.status === "completed" && (
+                      <span className="text-sm font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                        COMPLETED
                       </span>
                     )}
-                  </h3>
+                    {info.status === "in_progress" && (
+                      <span className="text-sm font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
+                        IN PROGRESS
+                      </span>
+                    )}
+                    {canShowSkipButton && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openSkipDialog(stage.key)}
+                        disabled={effectiveSkipStage === stage.key}
+                      >
+                        {effectiveSkipStage === stage.key ? "Skipping…" : "Skip Stage"}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {/* Status Badge */}
-                {info.status === "completed" && (
-                  <span className="text-sm font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
-                    COMPLETED
-                  </span>
-                )}
-                {info.status === "in_progress" && (
-                  <span className="text-sm font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
-                    IN PROGRESS
-                  </span>
+                <div className="flex items-center gap-2">
+                  {info.status === "completed" && (
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-400 whitespace-nowrap">
+                      COMPLETED
+                    </span>
+                  )}
+                  {info.status === "in_progress" && (
+                    <span className="text-xs font-medium uppercase tracking-wide text-blue-400 whitespace-nowrap">
+                      IN PROGRESS
+                    </span>
+                  )}
+                </div>
+                {skipErrorStage === stage.key && skipErrorMessage && (
+                  <p className="text-xs text-red-300">{skipErrorMessage}</p>
                 )}
               </div>
+
+              {isStageExecutionActive && currentCodeExecution && (
+                <ActiveExecutionCard
+                  execution={currentCodeExecution}
+                  onTerminateExecution={onTerminateExecution}
+                />
+              )}
 
               {/* Unified progress bar for all stages */}
               <SegmentedProgressBar segments={segments} emptyMessage={emptyMessage} />
@@ -517,6 +591,205 @@ export function ResearchPipelineStages({
           );
         })}
       </div>
+      <Modal
+        isOpen={Boolean(skipDialogStage && onSkipStage)}
+        onClose={closeSkipDialog}
+        title="Skip current stage?"
+        maxWidth="max-w-lg"
+      >
+        <p className="text-sm text-slate-300">
+          Skipping{" "}
+          <span className="font-semibold text-white">
+            {PIPELINE_STAGES.find(stage => stage.key === skipDialogStage)?.title ??
+              skipDialogStage ??
+              "this stage"}
+          </span>{" "}
+          will stop remaining iterations and immediately advance the pipeline to the next stage.
+          This action cannot be undone.
+        </p>
+        {skipErrorStage === skipDialogStage && skipErrorMessage && (
+          <p className="mt-4 text-sm text-red-400">{skipErrorMessage}</p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={closeSkipDialog}
+            disabled={effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={confirmSkipStage}
+            disabled={
+              !skipDialogStage ||
+              (effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage)
+            }
+          >
+            {effectiveSkipStage !== null && effectiveSkipStage === skipDialogStage
+              ? "Skipping..."
+              : "Skip Stage"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
+}
+
+interface ActiveExecutionCardProps {
+  execution: ResearchRunCodeExecution;
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+}
+
+function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutionCardProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [requestAcknowledged, setRequestAcknowledged] = useState(false);
+  const startedAtMs = useMemo(
+    () => new Date(execution.started_at).getTime(),
+    [execution.started_at]
+  );
+  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
+    Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+  );
+
+  useEffect(() => {
+    setIsDialogOpen(false);
+    setFeedback("");
+    setError(null);
+    setIsSubmitting(false);
+    setRequestAcknowledged(false);
+    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+  }, [execution.execution_id, startedAtMs]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [startedAtMs]);
+
+  const startedAtLabel = new Date(execution.started_at).toLocaleString();
+  const formattedDuration = useMemo(() => formatDuration(elapsedSeconds), [elapsedSeconds]);
+
+  const handleClose = () => {
+    if (isSubmitting) {
+      return;
+    }
+    setIsDialogOpen(false);
+    setError(null);
+  };
+
+  const handleConfirm = async () => {
+    if (!onTerminateExecution) {
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onTerminateExecution(execution.execution_id, feedback.trim());
+      setIsDialogOpen(false);
+      setFeedback("");
+      setRequestAcknowledged(true);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const data = err.data as { detail?: string } | string | undefined;
+        if (typeof data === "string") {
+          setError(data);
+        } else if (data && typeof data.detail === "string") {
+          setError(data.detail);
+        } else {
+          setError(`Request failed (HTTP ${err.status})`);
+        }
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Failed to send termination request.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
+        <div className="flex flex-col gap-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+            Code execution in progress
+          </p>
+          <p className="text-sm font-mono text-white">{formatNodeId(execution.execution_id)}</p>
+          <p className="text-xs text-slate-400">
+            Stage {execution.stage_name} • Started {startedAtLabel}
+          </p>
+          <p className="text-xs text-emerald-200">
+            Running for <span className="font-semibold">{formattedDuration}</span>
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3 max-h-60 overflow-y-auto">
+          <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
+            {execution.code}
+          </pre>
+        </div>
+        {requestAcknowledged && (
+          <p className="text-xs text-amber-300">
+            Termination requested. Waiting for the worker to stop…
+          </p>
+        )}
+        {onTerminateExecution && (
+          <div className="flex justify-end">
+            <Button variant="destructive" size="sm" onClick={() => setIsDialogOpen(true)}>
+              Terminate
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {onTerminateExecution && (
+        <Modal
+          isOpen={isDialogOpen}
+          onClose={handleClose}
+          title="Terminate execution"
+          maxHeight="max-h-[80vh]"
+        >
+          <p className="text-sm text-slate-200">
+            The current run will be stopped immediately. Optionally provide feedback for the next
+            iteration.
+          </p>
+          <textarea
+            className="mt-3 w-full rounded-md border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            rows={6}
+            value={feedback}
+            onChange={event => setFeedback(event.target.value)}
+            placeholder="Example: Stop this run and focus on fixing data loader crashes…"
+          />
+          {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={handleClose} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleConfirm} disabled={isSubmitting}>
+              {isSubmitting ? "Sending..." : "Send & terminate"}
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function formatDuration(totalSeconds: number): string {
+  const clamped = Math.max(0, totalSeconds);
+  const hours = Math.floor(clamped / 3600);
+  const minutes = Math.floor((clamped % 3600) / 60);
+  const seconds = clamped % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}`;
 }

@@ -1820,6 +1820,96 @@
         }
       }
     },
+    "/api/research-pipeline/events/artifact-uploaded": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Artifact Uploaded",
+        "operationId": "ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactUploadedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/review-completed": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Review Completed",
+        "operationId": "ingest_review_completed_api_research_pipeline_events_review_completed_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCompletedPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/substage-summary": {
       "post": {
         "tags": [
@@ -1910,6 +2000,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/stage-skip-window": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Stage Skip Window",
+        "operationId": "ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageSkipWindowPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/tree-viz-stored": {
       "post": {
         "tags": [
@@ -1979,6 +2114,96 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RunLogPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/running-code": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Running Code",
+        "operationId": "ingest_running_code_api_research_pipeline_events_running_code_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunningCodePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/run-completed": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Run Completed",
+        "operationId": "ingest_run_completed_api_research_pipeline_events_run_completed_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCompletedPayload"
               }
             }
           }
@@ -2114,6 +2339,51 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/HeartbeatPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/hw-stats": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Hw Stats",
+        "operationId": "ingest_hw_stats_api_research_pipeline_events_hw_stats_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareStatsPayload"
               }
             }
           }
@@ -2287,6 +2557,27 @@
         }
       }
     },
+    "/api/conversations/research/gpu-types": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "List Research Gpu Types",
+        "operationId": "list_research_gpu_types_api_conversations_research_gpu_types_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuTypeListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run": {
       "post": {
         "tags": [
@@ -2305,6 +2596,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaunchResearchRunRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -2423,6 +2724,138 @@
                     }
                   ],
                   "title": "Response Get Research Run Review Api Conversations  Conversation Id  Idea Research Run  Run Id  Review Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate": {
+      "post": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Terminate Code Execution",
+        "operationId": "terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "execution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Execution Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminateExecutionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TerminateExecutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/skip-stage": {
+      "post": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Skip Active Stage",
+        "description": "Request the running pipeline to skip the current stage.",
+        "operationId": "skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkipStageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkipStageResponse"
                 }
               }
             }
@@ -2999,6 +3432,61 @@
         ],
         "title": "ArtifactPresignedUrlResponse",
         "description": "Response containing presigned S3 download URL."
+      },
+      "ArtifactUploadedEvent": {
+        "properties": {
+          "artifact_id": {
+            "type": "integer",
+            "title": "Artifact Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "file_type": {
+            "type": "string",
+            "title": "File Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "filename",
+          "file_size",
+          "file_type",
+          "created_at"
+        ],
+        "title": "ArtifactUploadedEvent"
+      },
+      "ArtifactUploadedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ArtifactUploadedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "ArtifactUploadedPayload"
       },
       "AuthStatus": {
         "properties": {
@@ -4479,6 +4967,22 @@
         ],
         "title": "GPUShortagePayload"
       },
+      "GpuTypeListResponse": {
+        "properties": {
+          "gpu_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gpu Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gpu_types"
+        ],
+        "title": "GpuTypeListResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4491,6 +4995,44 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HardwareStatsPartition": {
+        "properties": {
+          "partition": {
+            "type": "string",
+            "title": "Partition"
+          },
+          "used_bytes": {
+            "type": "integer",
+            "title": "Used Bytes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partition",
+          "used_bytes"
+        ],
+        "title": "HardwareStatsPartition"
+      },
+      "HardwareStatsPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "partitions": {
+            "items": {
+              "$ref": "#/components/schemas/HardwareStatsPartition"
+            },
+            "type": "array",
+            "title": "Partitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "HardwareStatsPayload"
       },
       "HeartbeatPayload": {
         "properties": {
@@ -5092,6 +5634,19 @@
         "title": "LLMProvidersResponse",
         "description": "Response model for getting available LLM providers."
       },
+      "LaunchResearchRunRequest": {
+        "properties": {
+          "gpu_type": {
+            "type": "string",
+            "title": "Gpu Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gpu_type"
+        ],
+        "title": "LaunchResearchRunRequest"
+      },
       "LlmReviewNotFoundResponse": {
         "properties": {
           "run_id": {
@@ -5454,6 +6009,24 @@
         ],
         "title": "ResearchRunAcceptedResponse"
       },
+      "ResearchRunArtifactEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "artifact",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunArtifactMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunArtifactEvent"
+      },
       "ResearchRunArtifactMetadata": {
         "properties": {
           "id": {
@@ -5486,10 +6059,22 @@
             "title": "Created At",
             "description": "ISO timestamp when the artifact was recorded"
           },
-          "download_path": {
+          "run_id": {
             "type": "string",
-            "title": "Download Path",
-            "description": "API path to initiate a download"
+            "title": "Run Id",
+            "description": "Research run identifier"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID of the associated conversation"
           }
         },
         "type": "object",
@@ -5500,7 +6085,7 @@
           "file_size",
           "file_type",
           "created_at",
-          "download_path"
+          "run_id"
         ],
         "title": "ResearchRunArtifactMetadata"
       },
@@ -5562,6 +6147,186 @@
           "created_at"
         ],
         "title": "ResearchRunBestNodeSelection"
+      },
+      "ResearchRunCodeExecution": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id",
+            "description": "Unique identifier for the code execution attempt"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name",
+            "description": "Stage name reported by the research pipeline"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "description": "Type of execution (e.g., main_execution)"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Python source code submitted for execution"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Execution status reported by the worker"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At",
+            "description": "ISO timestamp when execution began"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "ISO timestamp when execution ended"
+          },
+          "exec_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exec Time",
+            "description": "Execution time reported by the worker"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "code",
+          "status",
+          "started_at"
+        ],
+        "title": "ResearchRunCodeExecution",
+        "description": "Latest code execution snapshot for a run."
+      },
+      "ResearchRunCodeExecutionCompletedData": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "exec_time": {
+            "type": "number",
+            "title": "Exec Time"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "status",
+          "exec_time",
+          "completed_at"
+        ],
+        "title": "ResearchRunCodeExecutionCompletedData"
+      },
+      "ResearchRunCodeExecutionCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "code_execution_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionCompletedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunCodeExecutionCompletedEvent"
+      },
+      "ResearchRunCodeExecutionStartedData": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "run_type",
+          "code",
+          "started_at"
+        ],
+        "title": "ResearchRunCodeExecutionStartedData"
+      },
+      "ResearchRunCodeExecutionStartedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "code_execution_started",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionStartedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunCodeExecutionStartedEvent"
       },
       "ResearchRunCompleteData": {
         "properties": {
@@ -5724,6 +6489,14 @@
             "type": "array",
             "title": "Paper Generation Progress",
             "description": "Paper generation progress events (Stage 5)"
+          },
+          "stage_skip_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
+            },
+            "type": "array",
+            "title": "Stage Skip Windows",
+            "description": "Windows indicating when each stage became skippable."
           }
         },
         "type": "object",
@@ -6171,6 +6944,14 @@
             "type": "array",
             "title": "Best Node Selections"
           },
+          "stage_skip_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
+            },
+            "type": "array",
+            "title": "Stage Skip Windows",
+            "description": "Recorded windows when stages became skippable."
+          },
           "hw_cost_estimate": {
             "anyOf": [
               {
@@ -6192,6 +6973,17 @@
               }
             ],
             "description": "Hardware cost billed so far, if available."
+          },
+          "code_execution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchRunCodeExecution"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest code execution snapshot available for the run."
           }
         },
         "type": "object",
@@ -6260,7 +7052,7 @@
               }
             ],
             "title": "Progress",
-            "description": "Progress percentage (0-1) from latest event"
+            "description": "Overall pipeline progress (0-1) computed as completed-stages-only buckets (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)."
           },
           "gpu_type": {
             "anyOf": [
@@ -6509,6 +7301,24 @@
         ],
         "title": "ResearchRunPaperGenerationProgress"
       },
+      "ResearchRunReviewCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "review_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LlmReviewResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunReviewCompletedEvent"
+      },
       "ResearchRunRunEvent": {
         "properties": {
           "type": {
@@ -6643,6 +7453,124 @@
         ],
         "title": "ResearchRunStageProgressEvent"
       },
+      "ResearchRunStageSkipWindow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier for the skip window record"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier where skipping became possible"
+          },
+          "opened_at": {
+            "type": "string",
+            "title": "Opened At",
+            "description": "ISO timestamp when the window opened"
+          },
+          "opened_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened Reason",
+            "description": "Reason provided when the window opened"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At",
+            "description": "ISO timestamp when the window closed (if closed)"
+          },
+          "closed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Reason",
+            "description": "Reason provided when the window closed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "opened_at"
+        ],
+        "title": "ResearchRunStageSkipWindow"
+      },
+      "ResearchRunStageSkipWindowEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "stage_skip_window",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageSkipWindowUpdate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageSkipWindowEvent"
+      },
+      "ResearchRunStageSkipWindowUpdate": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "timestamp"
+        ],
+        "title": "ResearchRunStageSkipWindowUpdate"
+      },
       "ResearchRunStopResponse": {
         "properties": {
           "run_id": {
@@ -6684,6 +7612,12 @@
             "$ref": "#/components/schemas/ResearchRunLogEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunArtifactEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
           },
           {
@@ -6697,6 +7631,15 @@
           },
           {
             "$ref": "#/components/schemas/ResearchRunSubstageSummaryEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionStartedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResearchRunStageSkipWindowEvent"
           },
           {
             "$ref": "#/components/schemas/ResearchRunHeartbeatEvent"
@@ -6716,7 +7659,10 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "artifact": "#/components/schemas/ResearchRunArtifactEvent",
             "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
+            "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
+            "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
             "complete": "#/components/schemas/ResearchRunCompleteEvent",
             "error": "#/components/schemas/ResearchRunErrorEvent",
             "heartbeat": "#/components/schemas/ResearchRunHeartbeatEvent",
@@ -6725,8 +7671,10 @@
             "initial": "#/components/schemas/ResearchRunInitialEvent",
             "log": "#/components/schemas/ResearchRunLogEvent",
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
+            "review_completed": "#/components/schemas/ResearchRunReviewCompletedEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
+            "stage_skip_window": "#/components/schemas/ResearchRunStageSkipWindowEvent",
             "substage_completed": "#/components/schemas/ResearchRunSubstageCompletedEvent",
             "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
             "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
@@ -7025,6 +7973,204 @@
         "title": "ResearchRunSummary",
         "description": "Lightweight overview of a research pipeline run."
       },
+      "ReviewCompletedEvent": {
+        "properties": {
+          "review_id": {
+            "type": "integer",
+            "title": "Review Id"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Weaknesses"
+          },
+          "originality": {
+            "type": "number",
+            "title": "Originality"
+          },
+          "quality": {
+            "type": "number",
+            "title": "Quality"
+          },
+          "clarity": {
+            "type": "number",
+            "title": "Clarity"
+          },
+          "significance": {
+            "type": "number",
+            "title": "Significance"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          },
+          "ethical_concerns": {
+            "type": "boolean",
+            "title": "Ethical Concerns"
+          },
+          "soundness": {
+            "type": "number",
+            "title": "Soundness"
+          },
+          "presentation": {
+            "type": "number",
+            "title": "Presentation"
+          },
+          "contribution": {
+            "type": "number",
+            "title": "Contribution"
+          },
+          "overall": {
+            "type": "number",
+            "title": "Overall"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "summary",
+          "strengths",
+          "weaknesses",
+          "originality",
+          "quality",
+          "clarity",
+          "significance",
+          "questions",
+          "limitations",
+          "ethical_concerns",
+          "soundness",
+          "presentation",
+          "contribution",
+          "overall",
+          "confidence",
+          "decision",
+          "source_path",
+          "created_at"
+        ],
+        "title": "ReviewCompletedEvent"
+      },
+      "ReviewCompletedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/ReviewCompletedEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "ReviewCompletedPayload"
+      },
+      "RunCompletedEventPayload": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "exec_time": {
+            "type": "number",
+            "title": "Exec Time"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "status",
+          "exec_time",
+          "completed_at"
+        ],
+        "title": "RunCompletedEventPayload"
+      },
+      "RunCompletedPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/RunCompletedEventPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "RunCompletedPayload"
+      },
       "RunFinishedPayload": {
         "properties": {
           "run_id": {
@@ -7101,6 +8247,103 @@
           "run_id"
         ],
         "title": "RunStartedPayload"
+      },
+      "RunningCodeEventPayload": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage_name",
+          "code",
+          "started_at"
+        ],
+        "title": "RunningCodeEventPayload"
+      },
+      "RunningCodePayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/RunningCodeEventPayload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "RunningCodePayload"
+      },
+      "SkipStageRequest": {
+        "properties": {
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "SkipStageRequest"
+      },
+      "SkipStageResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "SkipStageResponse"
       },
       "StageProgressEvent": {
         "properties": {
@@ -7194,6 +8437,61 @@
           "event"
         ],
         "title": "StageProgressPayload"
+      },
+      "StageSkipWindowEventModel": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "opened",
+              "closed"
+            ],
+            "title": "State"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "state",
+          "timestamp"
+        ],
+        "title": "StageSkipWindowEventModel"
+      },
+      "StageSkipWindowPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/StageSkipWindowEventModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "StageSkipWindowPayload"
       },
       "SubstageCompletedEvent": {
         "properties": {
@@ -7290,6 +8588,38 @@
         "title": "SummaryResponse",
         "description": "Response for summary operations."
       },
+      "TerminateExecutionRequest": {
+        "properties": {
+          "payload": {
+            "type": "string",
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payload"
+        ],
+        "title": "TerminateExecutionRequest"
+      },
+      "TerminateExecutionResponse": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "terminating",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "status"
+        ],
+        "title": "TerminateExecutionResponse"
+      },
       "TreeVizItem": {
         "properties": {
           "id": {
@@ -7305,7 +8635,7 @@
           "stage_id": {
             "type": "string",
             "title": "Stage Id",
-            "description": "Stage identifier (Stage_1..Stage_4)"
+            "description": "Stage identifier (stage_1..stage_4)"
           },
           "version": {
             "type": "integer",

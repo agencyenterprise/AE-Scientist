@@ -27,8 +27,6 @@ from app.services.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-EMPTY_MESSAGE_ID = "__empty_message__"
-
 
 class CustomSummarizationMiddleware(SummarizationMiddleware):
     """Custom summarization middleware that mark the summary message with the summary flag."""
@@ -49,7 +47,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
             )
         ]
 
-    def _save_usage_metadata(self, response: AIMessage) -> None:
+    async def _save_usage_metadata(self, response: AIMessage) -> None:
         """Save the usage metadata to the database."""
 
         metadata = response.usage_metadata
@@ -60,7 +58,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
         model_name, provider_name = extract_model_name_and_provider(self.model)
 
         db = DatabaseManager()
-        db.create_llm_token_usage(
+        await db.create_llm_token_usage(
             conversation_id=self.conversation_id,
             provider=provider_name,
             model=model_name,
@@ -82,7 +80,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
                 self.summary_prompt.format(messages=trimmed_messages)
             )
 
-            self._save_usage_metadata(response)
+            await self._save_usage_metadata(response)
 
             return response.text.strip()
         except Exception as e:  # noqa: BLE001
@@ -90,24 +88,19 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
 
 
 @after_model  # type: ignore[arg-type]
-def remove_after_empty_message(state: AgentState, _runtime: Runtime) -> dict | None:  # noqa: ARG001
+def remove_model_response(state: AgentState, _runtime: Runtime) -> dict | None:  # noqa: ARG001
     """
-    Remove all the messages after the empty message.
+    Remove the model's final response message.
 
-    This is used to keep only the original conversation history and summary.
-    If the CustomSummarizationMiddleware has been configured to keep only one message, this will keep only the summary message.
-    If it keeps more, it will keep the summary and the other messages as original.
+    This service uses the agent call to drive summarization, but we don't need
+    the assistant response content that would normally be returned to a user.
     """
     messages = state["messages"]
-    remove_messages = []
-    remove_started = False
-    for message in messages:
-        if message.id == EMPTY_MESSAGE_ID:
-            remove_started = True
-        if remove_started and message.id:
-            remove_messages.append(RemoveMessage(id=message.id))
-    if remove_messages:
-        return {"messages": remove_messages}
+    if not messages:
+        return None
+    last_message = messages[-1]
+    if isinstance(last_message, AIMessage) and last_message.id:
+        return {"messages": [RemoveMessage(id=last_message.id)]}
     return None
 
 
@@ -118,6 +111,18 @@ class SummarizerService:
         """Initialize the Summarizer service."""
         self.db = DatabaseManager()
         self.model = model
+
+    def _filter_messages_with_nonempty_content(
+        self,
+        *,
+        messages: list[Dict[str, str]],
+    ) -> list[Dict[str, str]]:
+        filtered: list[Dict[str, str]] = []
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                filtered.append(message)
+        return filtered
 
     @staticmethod
     def for_model(provider: str, model_id: str) -> "SummarizerService":
@@ -207,7 +212,7 @@ class SummarizerService:
 
             if latest_summary:
                 # Persist record immediately
-                imported_summary_id = self.db.create_imported_conversation_summary(
+                imported_summary_id = await self.db.create_imported_conversation_summary(
                     conversation_id=conversation_id,
                     summary=latest_summary,
                 )
@@ -260,7 +265,7 @@ class SummarizerService:
         self, conversation_id: int, chat_history: list[ChatMessageData]
     ) -> tuple[Optional[str], list[ChatMessageData]]:
         """Return rolling summary and recent messages not covered by it."""
-        summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+        summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
 
         if summary_row is None or summary_row.summary is None:
             return None, chat_history
@@ -278,14 +283,14 @@ class SummarizerService:
         correct starting index.
         """
         try:
-            all_messages = self.db.get_chat_messages(idea_id)
+            all_messages = await self.db.get_chat_messages(idea_id)
 
             # Filter messages to allowed roles and produce index mapping by ID
             allowed_roles = {"user", "assistant", "system"}
             filtered_messages = [m for m in all_messages if m.role in allowed_roles]
 
             # If no summary row yet, create one with full history
-            summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+            summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
             if summary_row is None:
                 model_messages = [
                     ChatMessageData(
@@ -346,6 +351,11 @@ class SummarizerService:
             if not conversation_id:
                 raise ValueError("Conversation ID is required")
             if new_messages:
+                filtered_new_messages = self._filter_messages_with_nonempty_content(
+                    messages=new_messages
+                )
+                if not filtered_new_messages:
+                    return True, {"latest_summary": ""}
                 async with AsyncPostgresSaver.from_conn_string(
                     settings.DATABASE_URL
                 ) as checkpointer:
@@ -356,19 +366,17 @@ class SummarizerService:
                     self.model.max_tokens = 10  # type: ignore[attr-defined]
                     middleware_sequence: Sequence[AgentMiddleware[AgentState, None]] = [
                         self._get_summarizer(conversation_id),
-                        cast(AgentMiddleware[AgentState, None], remove_after_empty_message),
+                        cast(AgentMiddleware[AgentState, None], remove_model_response),
                     ]
                     agent: CompiledStateGraph = create_agent(
                         model=self.model,
                         middleware=middleware_sequence,
                         checkpointer=checkpointer,
                     )
-                    # Add a blank human message to trigger summarization of the entire conversation history
                     result = await agent.ainvoke(
                         {
                             "messages": [
-                                *new_messages,
-                                HumanMessage(content="", id=EMPTY_MESSAGE_ID),
+                                *filtered_new_messages,
                             ],
                         },
                         config=self._get_agent_config_for_conversation(conversation_id),
@@ -386,14 +394,14 @@ class SummarizerService:
                     if summary_message:
                         summary = summary_message.content
                     last_message_id = None
-                    if new_messages:
+                    if filtered_new_messages:
                         try:
-                            last_message_id = int(new_messages[-1].get("id", ""))
+                            last_message_id = int(filtered_new_messages[-1].get("id", ""))
                         except Exception:
                             pass
                     if summary:
                         # Upsert the chat summary
-                        self._upsert_chat_summary(
+                        await self._upsert_chat_summary(
                             conversation_id=conversation_id,
                             summary=summary,
                             latest_message_id=last_message_id,
@@ -450,23 +458,23 @@ class SummarizerService:
             logger.exception("Failed to add messages to chat summary")
             return
 
-    def _upsert_chat_summary(
+    async def _upsert_chat_summary(
         self, conversation_id: int, summary: str, latest_message_id: int | None = None
     ) -> None:
         """Upsert the chat summary in the database."""
         try:
             # get the latest chat summary
-            summary_row = self.db.get_chat_summary_by_conversation_id(conversation_id)
+            summary_row = await self.db.get_chat_summary_by_conversation_id(conversation_id)
             if summary_row is not None:
                 # update the summary
-                self.db.update_chat_summary(
+                await self.db.update_chat_summary(
                     conversation_id=conversation_id,
                     new_summary=summary,
                     latest_message_id=latest_message_id or summary_row.latest_message_id,
                 )
             else:
                 # create a new chat summary
-                self.db.create_chat_summary(
+                await self.db.create_chat_summary(
                     conversation_id=conversation_id,
                     summary=summary,
                     latest_message_id=latest_message_id or -1,

@@ -47,8 +47,6 @@ agent:
     stage2_max_iters: 10
     stage3_max_iters: 10
     stage4_max_iters: 10
-  # how many improvement iterations to run
-  steps: 10 # if stage-specific max_iters are not provided, the agent will use this value for all stages
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 1
   multi_seed_eval:

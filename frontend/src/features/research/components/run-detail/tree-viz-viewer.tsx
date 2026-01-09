@@ -1,8 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ArtifactMetadata, TreeVizItem } from "@/types/research";
+import type {
+  ArtifactMetadata,
+  TreeVizItem,
+  MergedTreeViz,
+  StageZoneMetadata,
+} from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
+import { stageLabel, FULL_TREE_STAGE_ID } from "@/shared/lib/stage-utils";
+import {
+  getNodeType,
+  getBorderStyle,
+  NODE_TYPE_COLORS,
+  BORDER_STYLES,
+  NODE_TYPE_LONG_DESCRIPTIONS,
+  BorderStyle,
+} from "@/shared/lib/tree-colors";
+import { NodeTypesLegend } from "./NodeTypesLegend";
+import { NodeStrategyGuide } from "./NodeStrategyGuide";
 
 type MetricName = {
   metric_name: string;
@@ -37,32 +53,54 @@ type TreeVizPayload = TreeVizItem["viz"] & {
   exec_time?: Array<number | string | null>;
   exec_time_feedback?: Array<string | null>;
   is_best_node?: Array<boolean>;
+  is_seed_node?: Array<boolean>;
+  is_seed_agg_node?: Array<boolean>;
+  ablation_name?: Array<string | null>;
+  hyperparam_name?: Array<string | null>;
 };
 
 interface Props {
-  viz: TreeVizItem;
+  viz: TreeVizItem | MergedTreeViz;
   artifacts: ArtifactMetadata[];
+  conversationId: number | null;
+  runId: string;
+  stageId: string;
   bestNodeId?: number | null;
 }
 
-const NODE_SIZE = 14;
-const BLUE = "#1a73e8";
-const GRAY = "#6b7280";
+// =============================================================================
+// SVG VISUALIZATION CONSTANTS
+// =============================================================================
 
-export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
+// Node appearance
+const NODE_SIZE = 14;
+
+// ViewBox sizing - calibrated for good aspect ratio and readability
+const SINGLE_STAGE_VIEWBOX_HEIGHT = 100;
+const ADDITIONAL_HEIGHT_PER_STAGE = 33; // ~1.33x scaling per stage
+const VIEWBOX_TO_PIXELS_RATIO = 5; // viewBox 100 → 500px
+
+// Full Tree stage separator layout (in viewBox units)
+const LABEL_OFFSET_FROM_TOP = -7.0; // First stage: offset above zone top (prevents node overlap)
+const LABEL_OFFSET_FROM_DIVIDER = 7.0; // Other stages: offset below divider
+const DIVIDER_OFFSET = 2.0; // Offset from calculated position
+const LABEL_BG_HEIGHT = 5;
+const LABEL_BG_PADDING_TOP = 3.5;
+
+export function TreeVizViewer({ viz, artifacts, conversationId, runId, stageId, bestNodeId }: Props) {
   const payload = viz.viz as TreeVizPayload;
-  
+
   // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0
   const initialSelection = useMemo(() => {
     if (bestNodeId !== null && bestNodeId !== undefined && bestNodeId >= 0) {
       return bestNodeId;
     }
-    
+
     return 0;
   }, [bestNodeId]);
-  
+
   const [selected, setSelected] = useState<number>(initialSelection);
-  
+
   // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
   useEffect(() => {
     setSelected(initialSelection);
@@ -71,6 +109,8 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
   const nodes = useMemo(() => {
     return (payload.layout || []).map((coords, idx) => ({
       id: idx,
+      stageId: (payload as { stageIds?: string[] }).stageIds?.[idx] ?? stageId,
+      originalNodeId: (payload as { originalNodeIds?: number[] }).originalNodeIds?.[idx] ?? idx,
       x: coords?.[0] ?? 0,
       y: coords?.[1] ?? 0,
       code: payload.code?.[idx] ?? "",
@@ -87,10 +127,24 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
       execTime: payload.exec_time?.[idx],
       execTimeFeedback: payload.exec_time_feedback?.[idx] ?? "",
       isBest: payload.is_best_node?.[idx] ?? false,
+      isSeedNode: payload.is_seed_node?.[idx] ?? false,
+      isSeedAggNode: payload.is_seed_agg_node?.[idx] ?? false,
+      ablationName: payload.ablation_name?.[idx],
+      hyperparamName: payload.hyperparam_name?.[idx],
     }));
-  }, [payload]);
+  }, [payload, stageId]);
 
   const edges: Array<[number, number]> = payload.edges ?? [];
+
+  // Extract zone metadata for Full Tree view
+  const zoneMetadata = (payload as { zoneMetadata?: StageZoneMetadata[] }).zoneMetadata ?? [];
+  const isFullTree = stageId === FULL_TREE_STAGE_ID;
+
+  // Calculate dynamic viewBox height based on number of stages
+  // Full Tree view scales height based on stage count; single stage uses base height
+  const numStages = isFullTree ? zoneMetadata.length : 1;
+  const viewBoxHeight = SINGLE_STAGE_VIEWBOX_HEIGHT + (numStages - 1) * ADDITIONAL_HEIGHT_PER_STAGE;
+  const cssHeight = viewBoxHeight * VIEWBOX_TO_PIXELS_RATIO;
 
   const selectedNode = nodes[selected];
   const plotList = useMemo(() => {
@@ -109,7 +163,7 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
     let canceled = false;
 
     const loadPlotUrls = async () => {
-      if (!plotList.length) {
+      if (!plotList.length || conversationId === null) {
         setPlotUrls([]);
         return;
       }
@@ -122,12 +176,12 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
             return asString;
           }
           const filename = asString.split("/").pop();
-          const artifact =
-            artifacts.find(a => a.filename === filename) ||
-            artifacts.find(a => a.download_path && a.download_path.endsWith(asString));
-          if (artifact?.download_path) {
+          const artifact = artifacts.find(a => a.filename === filename);
+          if (artifact) {
+            // Compute download path from available context
+            const downloadPath = `/conversations/${conversationId}/idea/research-run/${runId}/artifacts/${artifact.id}/presign`;
             try {
-              return await fetchDownloadUrl(artifact.download_path);
+              return await fetchDownloadUrl(downloadPath);
             } catch {
               return null;
             }
@@ -150,49 +204,169 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
     return () => {
       canceled = true;
     };
-  }, [artifacts, plotList]);
+  }, [artifacts, plotList, conversationId, runId]);
+
+  // Render stage separators (dividers + labels) for Full Tree view
+  const renderStageSeparators = () => {
+    if (!isFullTree || zoneMetadata.length === 0) return null;
+
+    // Use the same coordinate transformation as nodes to avoid drift
+    // Full Tree nodes use: y * (viewBoxHeight - 10) + 5
+    const transformY = (y: number) => y * (viewBoxHeight - 10) + 5;
+
+    return (
+      <g className="stage-separators">
+        {zoneMetadata.map((meta, idx) => {
+          const isFirstStage = idx === 0;
+          const zoneStartY = transformY(meta.zone.min);
+
+          // Position divider in the middle of the padding gap between stages
+          let dividerY = zoneStartY;
+          if (!isFirstStage) {
+            const prevZone = zoneMetadata[idx - 1]?.zone;
+            if (prevZone) {
+              // Divider goes in the middle of the gap: between prevZone.max and meta.zone.min
+              dividerY = transformY((prevZone.max + meta.zone.min) / 2);
+            }
+          }
+
+          // Position labels consistently:
+          // - First stage: offset from zone start (no divider above)
+          // - Other stages: offset below divider line
+          const labelY = isFirstStage
+            ? zoneStartY + LABEL_OFFSET_FROM_TOP
+            : dividerY + LABEL_OFFSET_FROM_DIVIDER;
+          const labelText = stageLabel(meta.stageId);
+
+          return (
+            <g key={`separator-${meta.stageId}`}>
+              {/* Background rectangle behind label to prevent node overlap */}
+              <rect
+                x={1}
+                y={labelY - LABEL_BG_PADDING_TOP}
+                width={labelText.length * 2.5}
+                height={LABEL_BG_HEIGHT}
+                fill="#0f172a"
+                opacity={0.9}
+                className="select-none"
+              />
+
+              {/* Stage label */}
+              <text
+                x={2}
+                y={labelY}
+                fontSize="4"
+                fill="#64748b"
+                fontWeight="600"
+                className="select-none"
+              >
+                {labelText}
+              </text>
+
+              {/* Divider line (skip first stage, only draw between stages) */}
+              {!isFirstStage && (
+                <line
+                  x1={0}
+                  y1={dividerY + DIVIDER_OFFSET}
+                  x2={100}
+                  y2={dividerY + DIVIDER_OFFSET}
+                  stroke="#64748b"
+                  strokeWidth={0.4}
+                  strokeDasharray="2,2"
+                  opacity={0.6}
+                />
+              )}
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
 
   return (
     <div className="flex w-full gap-4">
-      <div className="relative w-1/2 border border-slate-700 bg-slate-900">
-        <svg viewBox="0 0 100 100" className="w-full h-[320px]">
-          {edges.map(([parent, child], idx) => {
-            const p = nodes[parent];
-            const c = nodes[child];
-            if (!p || !c) return null;
-            const px = p.x * 90 + 5;
-            const py = p.y * 90 + 5;
-            const cx = c.x * 90 + 5;
-            const cy = c.y * 90 + 5;
-            return (
-              <line key={idx} x1={px} y1={py} x2={cx} y2={cy} stroke="#cbd5e1" strokeWidth={0.6} />
-            );
-          })}
-          {nodes.map(node => {
-            const isSelected = node.id === selected;
-            const color = node.excType ? GRAY : node.isBest ? "#10b981" : BLUE;
-            const cx = node.x * 90 + 5;
-            const cy = node.y * 90 + 5;
-            return (
-              <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={NODE_SIZE / 3}
-                  fill={color}
-                  stroke={isSelected ? "#fbbf24" : "#0f172a"}
-                  strokeWidth={isSelected ? 1.2 : 0.6}
+      <div className="w-1/2 flex flex-col">
+        <div className="relative flex-1 border border-slate-700 bg-slate-900 overflow-auto max-h-[700px]">
+          <svg
+            viewBox={`0 -8 100 ${viewBoxHeight + 8}`}
+            preserveAspectRatio="xMidYMin meet"
+            className="w-full"
+            style={{ height: `${cssHeight}px` }}
+          >
+            {/* Stage separators (rendered first as background) */}
+            {renderStageSeparators()}
+
+            {/* Edges */}
+            {edges.map(([parent, child], idx) => {
+              const p = nodes[parent];
+              const c = nodes[child];
+              if (!p || !c) return null;
+              const px = p.x * 85 + 7.5;
+              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
+              const py = isFullTree
+                ? p.y * (viewBoxHeight - 10) + 5
+                : p.y * (viewBoxHeight - 15) + 7.5;
+              const cx = c.x * 85 + 7.5;
+              const cy = isFullTree
+                ? c.y * (viewBoxHeight - 10) + 5
+                : c.y * (viewBoxHeight - 15) + 7.5;
+              return (
+                <line
+                  key={idx}
+                  x1={px}
+                  y1={py}
+                  x2={cx}
+                  y2={cy}
+                  stroke="#cbd5e1"
+                  strokeWidth={0.48}
                 />
-              </g>
-            );
-          })}
-        </svg>
+              );
+            })}
+            {nodes.map(node => {
+              const isSelected = node.id === selected;
+              const nodeType = getNodeType(node.id, { nodes, edges });
+              const nodeColor = NODE_TYPE_COLORS[nodeType].color;
+              const qualityBorder = getBorderStyle(node);
+              const borderConfig = BORDER_STYLES[qualityBorder];
+              const selectedBorderConfig = BORDER_STYLES[BorderStyle.Selected];
+              const strokeColor = isSelected ? selectedBorderConfig.stroke : borderConfig.stroke;
+              const strokeWidth = isSelected
+                ? selectedBorderConfig.strokeWidth
+                : borderConfig.strokeWidth;
+              const cx = node.x * 85 + 7.5;
+              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
+              const cy = isFullTree
+                ? node.y * (viewBoxHeight - 10) + 5
+                : node.y * (viewBoxHeight - 15) + 7.5;
+              return (
+                <g key={node.id} onClick={() => setSelected(node.id)} className="cursor-pointer">
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={NODE_SIZE / 3}
+                    fill={nodeColor}
+                    stroke={strokeColor}
+                    strokeWidth={parseFloat(strokeWidth)}
+                  />
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <NodeTypesLegend stageId={isFullTree ? undefined : stageId} />
+          <NodeStrategyGuide stageId={isFullTree ? undefined : stageId} />
+        </div>
       </div>
       <div className="w-1/2 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 max-h-[600px] overflow-y-auto">
         {selectedNode ? (
           <>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-base font-semibold">Node {selectedNode.id}</h3>
+              <h3 className="text-base font-semibold">
+                {selectedNode.stageId
+                  ? `${stageLabel(selectedNode.stageId)}: Node ${selectedNode.originalNodeId}`
+                  : `Node ${selectedNode.id}`}
+              </h3>
               {selectedNode.excType ? (
                 <span className="text-xs text-red-300">Abandoned</span>
               ) : selectedNode.isBest ? (
@@ -202,7 +376,8 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
               )}
             </div>
             <div className="space-y-2">
-              <Section label="Plan" value={selectedNode.plan} />
+              <NodeTypeSection nodeId={selectedNode.id} nodes={nodes} edges={edges} />
+              {selectedNode.isSeedNode ? null : <Section label="Plan" value={selectedNode.plan} />}
               <Section label="Analysis" value={selectedNode.analysis} />
               <MetricsSection metrics={selectedNode.metrics} />
               <ExecSection
@@ -255,6 +430,33 @@ export function TreeVizViewer({ viz, artifacts, bestNodeId }: Props) {
           <p className="text-slate-300">Select a node to inspect details.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+interface NodeTypeSectionProps {
+  nodeId: number;
+  nodes: Array<{
+    id: number;
+    excType?: string | null;
+    isBest?: boolean;
+    isSeedNode?: boolean;
+    isSeedAggNode?: boolean;
+    ablationName?: string | null;
+    hyperparamName?: string | null;
+  }>;
+  edges: Array<[number, number]>;
+}
+
+function NodeTypeSection({ nodeId, nodes, edges }: NodeTypeSectionProps) {
+  const nodeType = getNodeType(nodeId, { nodes, edges });
+  const longDescription = NODE_TYPE_LONG_DESCRIPTIONS[nodeType];
+  const label = NODE_TYPE_COLORS[nodeType].label;
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-300">Node Type: {label}</div>
+      <div className="whitespace-pre-wrap">{longDescription}</div>
     </div>
   );
 }

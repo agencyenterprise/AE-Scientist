@@ -14,6 +14,7 @@ from omegaconf import OmegaConf
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..journal import Journal
+from ..stage_identifiers import StageIdentifier
 from . import serialize, tree_export
 
 shutup.mute_warnings()
@@ -59,6 +60,8 @@ def apply_log_level(*, level_name: str) -> None:
             "s3fs",
             "datasets",
             "huggingface_hub",
+            "boto3",
+            "botocore",
         ]
         for name in noisy_loggers:
             lgr = logging.getLogger(name)
@@ -105,9 +108,27 @@ class SearchConfig:
 
 
 @dataclass
+class AgentStagesConfig:
+    stage1_max_iters: int
+    stage2_max_iters: int
+    stage3_max_iters: int
+    stage4_max_iters: int
+
+    def max_iters_for_stage(self, *, stage_identifier: StageIdentifier) -> int:
+        if stage_identifier is StageIdentifier.STAGE1:
+            return self.stage1_max_iters
+        if stage_identifier is StageIdentifier.STAGE2:
+            return self.stage2_max_iters
+        if stage_identifier is StageIdentifier.STAGE3:
+            return self.stage3_max_iters
+        if stage_identifier is StageIdentifier.STAGE4:
+            return self.stage4_max_iters
+        raise ValueError(f"Unsupported stage_identifier: {stage_identifier}")
+
+
+@dataclass
 class AgentConfig:
-    steps: int
-    stages: dict[str, int]
+    stages: AgentStagesConfig
     k_fold_validation: int
 
     code: StageConfig
@@ -228,6 +249,13 @@ def prep_cfg(cfg: object) -> Config:
 
     if cfg_obj.agent.type not in ["parallel", "sequential"]:
         raise ValueError("agent.type must be either 'parallel' or 'sequential'")
+
+    if cfg_obj.agent.type == "sequential" and cfg_obj.agent.num_workers != 1:
+        logger.warning(
+            "agent.type is 'sequential' but agent.num_workers=%s; forcing num_workers=1",
+            cfg_obj.agent.num_workers,
+        )
+        cfg_obj.agent.num_workers = 1
 
     if cfg_obj.min_num_gpus < 0:
         raise ValueError("min_num_gpus must be non-negative")

@@ -10,6 +10,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
+from app.services.database import DatabaseManager
 from app.services.research_pipeline.monitor import pipeline_monitor
 from app.validation import validate_configuration
 
@@ -44,7 +45,16 @@ def configure_logging() -> None:
         # In development, show HTTP requests for debugging
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
+    # Reduce noise from HTTP client debug logs (httpx/httpcore)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.http11").setLevel(logging.WARNING)
+    logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+    # Reduce noise from urllib3 (used by requests and some SDKs)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+    # Reduce noise from requests_oauthlib (used by google-auth-oauthlib)
+    logging.getLogger("requests_oauthlib.oauth2_session").setLevel(logging.WARNING)
     # Suppress extremely verbose DEBUG logs from PDF parsers when app LOG_LEVEL=DEBUG
     logging.getLogger("pdfminer").setLevel(logging.WARNING)
     logging.getLogger("pdfminer.psparser").setLevel(logging.WARNING)
@@ -52,8 +62,8 @@ def configure_logging() -> None:
     logging.getLogger("pdfplumber").setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
-    logger.info(f"Logging configured at {settings.LOG_LEVEL} level")
-    logger.info(f"Environment: {settings.RAILWAY_ENVIRONMENT_NAME}")
+    logger.info("Logging configured at %s level", settings.LOG_LEVEL)
+    logger.info("Environment: %s", settings.RAILWAY_ENVIRONMENT_NAME)
 
 
 # Configure logging before creating the app
@@ -70,6 +80,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await pipeline_monitor.stop()
+        await DatabaseManager.close_all_pools()
 
 
 app = FastAPI(

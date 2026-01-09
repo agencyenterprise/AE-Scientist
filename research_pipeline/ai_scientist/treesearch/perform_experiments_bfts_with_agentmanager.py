@@ -17,7 +17,7 @@ import logging
 import shutil
 import time
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 from .agent_manager import AgentManager
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
@@ -63,11 +63,75 @@ def perform_experiments_bfts(
     )
 
     # Track iteration timing for smart ETA calculation
-    iteration_start_times: list[float] = []
+    iteration_start_time: Optional[float] = None
     iteration_durations: list[float] = []
     # Track per-stage iteration state to avoid duplicate progress events and
     # to ensure iteration counts start from 1 for each main stage.
     last_reported_iteration_by_stage: dict[str, int] = {}
+
+    def iteration_started_callback(stage: StageMeta, journal: Journal) -> None:
+        nonlocal iteration_start_time
+        iteration_start_time = time.time()
+        attempt_iteration = manager.get_attempt_iteration(stage.name)
+        if attempt_iteration == 0:
+            return
+        if stage.max_iterations > 0:
+            iteration_display = min(attempt_iteration, stage.max_iterations)
+        else:
+            iteration_display = attempt_iteration
+
+        best_node = journal.get_best_node()
+        good_nodes_list = journal.good_nodes
+        good_nodes_count = len(good_nodes_list)
+        latest_node = journal.nodes[-1] if journal.nodes else None
+
+        eta_s = None
+        if len(iteration_durations) >= 2:
+            recent_durations = iteration_durations[-5:]
+            avg_duration = sum(recent_durations) / len(recent_durations)
+            remaining_iterations = (
+                max(stage.max_iterations - attempt_iteration, 0)
+                if stage.max_iterations > 0
+                else None
+            )
+            if remaining_iterations is not None:
+                eta_s = int(remaining_iterations * avg_duration)
+
+        latest_exec_time_s = None
+        if latest_node and latest_node.exec_time is not None:
+            latest_exec_time_s = int(latest_node.exec_time)
+
+        stage_completed = manager.has_stage_completed(stage.name)
+        previous_iteration = last_reported_iteration_by_stage.get(stage.name)
+        stage_complete = stage.max_iterations > 0 and attempt_iteration >= stage.max_iterations
+        iteration_increased = previous_iteration is None or iteration_display > previous_iteration
+        needs_final_event = (
+            stage_complete
+            and previous_iteration is not None
+            and previous_iteration < stage.max_iterations
+        )
+        should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
+        if should_emit and not stage_completed:
+            last_reported_iteration_by_stage[stage.name] = iteration_display
+            final_iteration = iteration_display
+            final_progress = min(iteration_display / stage.max_iterations, 1.0)
+            if stage_complete:
+                final_progress = 1.0
+
+            event_callback(
+                RunStageProgressEvent(
+                    stage=stage.name,
+                    iteration=final_iteration,
+                    max_iterations=stage.max_iterations,
+                    progress=final_progress,
+                    total_nodes=len(journal.nodes),
+                    buggy_nodes=len(journal.buggy_nodes),
+                    good_nodes=good_nodes_count,
+                    best_metric=str(best_node.metric) if best_node else None,
+                    eta_s=eta_s,
+                    latest_iteration_time_s=latest_exec_time_s,
+                )
+            )
 
     def step_callback(stage: StageMeta, journal: Journal) -> None:
         # Persist progress snapshot and emit progress events after each step
@@ -75,10 +139,11 @@ def perform_experiments_bfts(
         try:
             # Track iteration timing
             current_time = time.time()
-            if len(iteration_start_times) > 0:
-                duration = current_time - iteration_start_times[-1]
+            nonlocal iteration_start_time
+            if iteration_start_time is not None:
+                duration = current_time - iteration_start_time
                 iteration_durations.append(duration)
-            iteration_start_times.append(current_time)
+                iteration_start_time = None
 
             # Generate and save notes for this step
             notes_dir = cfg.log_dir / f"stage_{stage.name}" / "notes"
@@ -113,78 +178,6 @@ def perform_experiments_bfts(
             # Save the run as before
             save_run(cfg, journal, stage_name=f"stage_{stage.name}")
 
-            # ALWAYS emit progress - show actual work being done.
-            # Derive an effective iteration count for this stage that:
-            # - Ignores seed nodes (multi-seed eval and aggregation nodes)
-            # Track attempts (including retries/timeouts) so UI/DB stay in sync with logs.
-            attempt_iteration = manager.get_attempt_iteration(stage.name)
-            if attempt_iteration == 0:
-                return
-            if stage.max_iterations > 0:
-                iteration_display = min(attempt_iteration, stage.max_iterations)
-            else:
-                iteration_display = attempt_iteration
-
-            # Calculate smart ETA using moving average of recent iterations
-            eta_s = None
-            if len(iteration_durations) >= 2:
-                # Use last 5 iterations (or fewer if not enough data)
-                recent_durations = iteration_durations[-5:]
-                avg_duration = sum(recent_durations) / len(recent_durations)
-                remaining_iterations = (
-                    max(stage.max_iterations - attempt_iteration, 0)
-                    if stage.max_iterations > 0
-                    else None
-                )
-                if remaining_iterations is not None:
-                    eta_s = int(remaining_iterations * avg_duration)
-
-            # Get latest node execution time for display
-            latest_exec_time_s = None
-            if latest_node and latest_node.exec_time is not None:
-                latest_exec_time_s = int(latest_node.exec_time)
-
-            # Emit progress with the actual stage name to reflect current substage accurately.
-            # To avoid duplicate events (for example, during multi-seed evaluation where
-            # additional nodes do not advance the effective iteration), only emit when
-            # the iteration for this stage actually increases.
-            # Also emit when stage completes (reaches max_iterations) to ensure final progress=1.0 is recorded.
-            stage_completed = manager.has_stage_completed(stage.name)
-            previous_iteration = last_reported_iteration_by_stage.get(stage.name)
-            stage_complete = stage.max_iterations > 0 and attempt_iteration >= stage.max_iterations
-            # Emit if iteration increased, or if stage completed and we haven't emitted the final event yet
-            iteration_increased = (
-                previous_iteration is None or iteration_display > previous_iteration
-            )
-            needs_final_event = (
-                stage_complete
-                and previous_iteration is not None
-                and previous_iteration < stage.max_iterations
-            )
-            should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
-            if should_emit and not stage_completed:
-                last_reported_iteration_by_stage[stage.name] = iteration_display
-                final_iteration = iteration_display
-                final_progress = min(iteration_display / stage.max_iterations, 1.0)
-                # When stage completes, ensure progress is exactly 1.0 and iteration equals current iteration
-                if stage_complete:
-                    final_progress = 1.0
-
-                event_callback(
-                    RunStageProgressEvent(
-                        stage=stage.name,
-                        iteration=final_iteration,
-                        max_iterations=stage.max_iterations,
-                        progress=final_progress,
-                        total_nodes=len(journal.nodes),
-                        buggy_nodes=len(journal.buggy_nodes),
-                        good_nodes=good_nodes_count,
-                        best_metric=str(best_node.metric) if best_node else None,
-                        eta_s=eta_s,
-                        latest_iteration_time_s=latest_exec_time_s,
-                    )
-                )
-
             # Also emit a log event describing what's happening
             if good_nodes_count == 0 and len(journal.buggy_nodes) > 0:
                 event_callback(
@@ -204,12 +197,19 @@ def perform_experiments_bfts(
         except Exception as e:
             logger.exception(f"Error in step callback: {e}")
 
+        nodes_saved = len(journal)
         logger.info(f"Run saved at {cfg.log_dir / f'stage_{stage.name}'}")
         logger.debug(
-            f"Step {min(len(journal), stage.max_iterations)}/{stage.max_iterations} at stage_{stage.name}"
+            msg=(
+                f"Saved run snapshot at stage_{stage.name} "
+                f"(nodes={nodes_saved}, max_iterations={stage.max_iterations})"
+            )
         )
 
-    manager.run(step_callback=step_callback)
+    manager.run(
+        step_callback=step_callback,
+        iteration_started_callback=iteration_started_callback,
+    )
 
     if cfg.generate_report:
         logger.info("Generating final report from all stages...")

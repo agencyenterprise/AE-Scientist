@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Dict, Literal, Optional, Tuple
 
 EventKind = Literal[
@@ -9,6 +10,11 @@ EventKind = Literal[
     "paper_generation_progress",
     "best_node_selection",
     "tree_viz_stored",
+    "running_code",
+    "run_completed",
+    "stage_skip_window",
+    "artifact_uploaded",
+    "review_completed",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
@@ -239,3 +245,103 @@ class PaperGenerationProgressEvent(BaseEvent):
                 "details": self.details,
             },
         )
+
+
+@dataclass(frozen=True)
+class RunningCodeEvent(BaseEvent):
+    execution_id: str
+    stage_name: str
+    code: str
+    started_at: datetime
+    run_type: str = "main_execution"
+
+    def type(self) -> str:
+        return "ai.run.running_code"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "stage_name": self.stage_name,
+            "run_type": self.run_type,
+            "code": self.code,
+            "started_at": self.started_at.isoformat(),
+        }
+
+    def persistence_record(self) -> PersistenceRecord:
+        return (
+            "running_code",
+            {
+                "execution_id": self.execution_id,
+                "stage_name": self.stage_name,
+                "run_type": self.run_type,
+                "code": self.code,
+                "started_at": self.started_at.isoformat(),
+            },
+        )
+
+
+@dataclass(frozen=True)
+class RunCompletedEvent(BaseEvent):
+    execution_id: str
+    stage_name: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: datetime
+    run_type: str = "main_execution"
+
+    def type(self) -> str:
+        return "ai.run.run_completed"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "execution_id": self.execution_id,
+            "stage_name": self.stage_name,
+            "run_type": self.run_type,
+            "status": self.status,
+            "exec_time": self.exec_time,
+            "completed_at": self.completed_at.isoformat(),
+        }
+
+    def persistence_record(self) -> PersistenceRecord:
+        return (
+            "run_completed",
+            {
+                "execution_id": self.execution_id,
+                "stage_name": self.stage_name,
+                "run_type": self.run_type,
+                "status": self.status,
+                "exec_time": self.exec_time,
+                "completed_at": self.completed_at.isoformat(),
+            },
+        )
+
+
+@dataclass(frozen=True)
+class StageSkipWindowEvent(BaseEvent):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: datetime
+    reason: Optional[str] = None
+
+    def type(self) -> str:
+        return "ai.run.stage_skip_window"
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "stage": self.stage,
+            "state": self.state,
+            "timestamp": self.timestamp.isoformat(),
+        }
+        if self.reason:
+            payload["reason"] = self.reason
+        return payload
+
+    def persistence_record(self) -> PersistenceRecord:
+        record: Dict[str, Any] = {
+            "stage": self.stage,
+            "state": self.state,
+            "timestamp": self.timestamp.isoformat(),
+        }
+        if self.reason:
+            record["reason"] = self.reason
+        return ("stage_skip_window", record)

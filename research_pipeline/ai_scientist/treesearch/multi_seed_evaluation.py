@@ -16,7 +16,13 @@ from .utils.config import Config as AppConfig
 
 
 class SupportsSeedAgent(Protocol):
-    def plan_and_code_query(self, *, prompt: PromptType, retries: int = 3) -> Tuple[str, str]: ...
+    def plan_and_code_query(
+        self,
+        *,
+        prompt: PromptType,
+        retries: int = 3,
+        enforce_gpu: bool,
+    ) -> Tuple[str, str]: ...
 
     @property
     def cfg(
@@ -87,7 +93,7 @@ def aggregate_seed_eval_results(*, agent: SupportsSeedAgent, seed_nodes: List[No
     }
     plotting_prompt["Instructions"] = plotting_instructions
     # Attach instructions and call the LLM to produce aggregation code
-    plan, code = agent.plan_and_code_query(prompt=plotting_prompt)
+    plan, code = agent.plan_and_code_query(prompt=plotting_prompt, enforce_gpu=False)
     return code
 
 
@@ -114,7 +120,15 @@ def run_plot_aggregation(*, agent: SupportsSeedAgent, node: Node, seed_nodes: Li
         )
         try:
             working_dir = process_interpreter.working_dir
-            _ = process_interpreter.run(agg_plotting_code, True)
+            process_interpreter.set_run_context(
+                execution_id=agg_node.id,
+                stage_name="seed_aggregation",
+                purpose="plot_aggregation",
+            )
+            try:
+                _ = process_interpreter.run(code=agg_plotting_code, reset_session=True)
+            finally:
+                process_interpreter.clear_run_context()
             process_interpreter.cleanup_session()
             # Save aggregated plots
             plots_dir = Path(working_dir) / "working"

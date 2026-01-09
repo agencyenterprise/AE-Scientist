@@ -180,8 +180,8 @@ async def test_chat_with_idea_invokes_update_tool(config: ProviderConfig) -> Non
         patch.object(service, "get_or_create_model", return_value=fake_model),
     ):
         db = MagicMock()
-        db.get_file_attachments_by_message_ids.return_value = []
-        db.create_idea_version = MagicMock()
+        db.get_file_attachments_by_message_ids = AsyncMock(return_value=[])
+        db.create_idea_version = AsyncMock()
         mock_get_db.return_value = db
 
         events: List[object] = []
@@ -260,8 +260,8 @@ async def test_llm_tool_calls_real_smoke(config: RealProviderConfig) -> None:
         patch("app.services.langchain_llm_service.get_database") as mock_get_db,
     ):
         db = MagicMock()
-        db.get_file_attachments_by_message_ids.return_value = []
-        db.create_idea_version = MagicMock()
+        db.get_file_attachments_by_message_ids = AsyncMock(return_value=[])
+        db.create_idea_version = AsyncMock()
         mock_get_db.return_value = db
 
         service = config.service_factory(summarizer_service=_fake_summarizer())

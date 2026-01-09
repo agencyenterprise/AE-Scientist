@@ -18,6 +18,7 @@ export interface ResearchRunListItemApi {
   artifacts_count: number;
   error_message: string | null;
   conversation_id: number;
+  conversation_url: string | null;
 }
 
 export interface ResearchRunListResponseApi {
@@ -41,11 +42,16 @@ export interface ResearchRun {
   artifactsCount: number;
   errorMessage: string | null;
   conversationId: number;
+  conversationUrl: string | null;
 }
 
 export interface ResearchRunListResponse {
   items: ResearchRun[];
   total: number;
+}
+
+export interface ResearchGpuTypesResponse {
+  gpu_types: string[];
 }
 
 // Status type for UI styling
@@ -136,7 +142,6 @@ export interface ArtifactMetadataApi {
   file_size: number;
   file_type: string;
   created_at: string;
-  download_path: string;
 }
 
 export interface BestNodeSelectionApi {
@@ -145,6 +150,15 @@ export interface BestNodeSelectionApi {
   node_id: string;
   reasoning: string;
   created_at: string;
+}
+
+export interface StageSkipWindowApi {
+  id: number;
+  stage: string;
+  opened_at: string;
+  opened_reason: string | null;
+  closed_at: string | null;
+  closed_reason: string | null;
 }
 
 export interface ResearchRunDetailsApi {
@@ -157,6 +171,8 @@ export interface ResearchRunDetailsApi {
   paper_generation_progress: PaperGenerationEventApi[];
   tree_viz: TreeVizItemApi[];
   best_node_selections?: BestNodeSelectionApi[];
+  stage_skip_windows?: StageSkipWindowApi[];
+  code_execution?: ResearchRunCodeExecution | null;
 }
 
 // Frontend types (camelCase) - using same structure for SSE compatibility
@@ -247,6 +263,17 @@ export interface PaperGenerationEvent {
   created_at: string;
 }
 
+export interface ResearchRunCodeExecution {
+  execution_id: string;
+  stage_name: string;
+  run_type: string;
+  code: string;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  exec_time?: number | null;
+}
+
 export interface ArtifactMetadata {
   id: number;
   artifact_type: string;
@@ -254,7 +281,6 @@ export interface ArtifactMetadata {
   file_size: number;
   file_type: string;
   created_at: string;
-  download_path: string;
 }
 
 export interface ArtifactPresignedUrlResponse {
@@ -272,6 +298,22 @@ export interface BestNodeSelection {
   created_at: string;
 }
 
+export interface StageSkipWindow {
+  id: number;
+  stage: string;
+  opened_at: string;
+  opened_reason: string | null;
+  closed_at: string | null;
+  closed_reason: string | null;
+}
+
+export interface StageSkipWindowUpdate {
+  stage: string;
+  state: "opened" | "closed";
+  timestamp: string;
+  reason?: string | null;
+}
+
 export interface ResearchRunDetails {
   run: ResearchRunInfo;
   stage_progress: StageProgress[];
@@ -282,8 +324,10 @@ export interface ResearchRunDetails {
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];
   best_node_selections?: BestNodeSelection[];
+  stage_skip_windows?: StageSkipWindow[];
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
+  code_execution?: ResearchRunCodeExecution | null;
 }
 
 export interface TreeVizItemApi {
@@ -304,6 +348,51 @@ export interface TreeVizItem {
   viz: unknown;
   created_at: string;
   updated_at: string;
+}
+
+export interface StageZone {
+  min: number;
+  max: number;
+}
+
+export interface StageZoneMetadata {
+  stageIndex: number;
+  stageId: string;
+  zone: StageZone;
+}
+
+export interface MergedTreeVizPayload {
+  layout: Array<[number, number]>;
+  edges: Array<[number, number]>;
+  stageIds: string[];
+  originalNodeIds: number[];
+  zoneMetadata?: StageZoneMetadata[];
+  code?: string[];
+  plan?: string[];
+  analysis?: string[];
+  metrics?: Array<unknown>;
+  exc_type?: Array<string | null>;
+  exc_info?: Array<{ args?: unknown[] } | null>;
+  exc_stack?: Array<unknown>;
+  plot_plan?: Array<string | null>;
+  plot_code?: Array<string | null>;
+  plot_analyses?: Array<unknown>;
+  plots?: Array<string | string[] | null>;
+  plot_paths?: Array<string | string[] | null>;
+  vlm_feedback_summary?: Array<string | string[] | null>;
+  datasets_successfully_tested?: Array<string[] | null>;
+  exec_time?: Array<number | string | null>;
+  exec_time_feedback?: Array<string | null>;
+  is_best_node?: Array<boolean>;
+  is_seed_node?: Array<boolean>;
+  is_seed_agg_node?: Array<boolean>;
+  ablation_name?: Array<string | null>;
+  hyperparam_name?: Array<string | null>;
+}
+
+export interface MergedTreeViz extends Omit<TreeVizItem, "stage_id" | "viz"> {
+  stage_id: "full_tree";
+  viz: MergedTreeVizPayload;
 }
 
 // ==========================================

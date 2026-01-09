@@ -81,7 +81,7 @@ async def auth_callback(
             return RedirectResponse(url=error_url, status_code=302)
 
         # Authenticate with Google
-        auth_result = auth_service.authenticate_with_google(code, state)
+        auth_result = await auth_service.authenticate_with_google(code, state)
         if not auth_result:
             logger.warning("Failed to authenticate with Google")
             error_url = f"{settings.FRONTEND_URL}/login?error=auth_failed"
@@ -137,7 +137,7 @@ async def get_auth_status(request: Request) -> AuthStatus:
     if not session_token:
         return AuthStatus(authenticated=False, user=None)
 
-    user = auth_service.get_user_by_session(session_token=session_token)
+    user = await auth_service.get_user_by_session(session_token=session_token)
     if not user:
         return AuthStatus(authenticated=False, user=None)
 
@@ -163,7 +163,7 @@ async def logout(request: Request) -> Dict[str, str]:
         session_token = extract_bearer_token(authorization_header)
 
         if session_token:
-            success = auth_service.logout_user(session_token=session_token)
+            success = await auth_service.logout_user(session_token=session_token)
             if success:
                 logger.info("User logged out successfully")
             else:
@@ -185,7 +185,7 @@ async def cleanup_expired_sessions() -> Dict[str, str]:
         Cleanup result message
     """
     try:
-        count = auth_service.cleanup_expired_sessions()
+        count = await auth_service.cleanup_expired_sessions()
         return {"message": f"Cleaned up {count} expired sessions"}
 
     except Exception as e:

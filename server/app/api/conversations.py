@@ -368,9 +368,9 @@ async def _stream_structured_idea(
         raise ValueError("LLM did not provide a final structured idea payload.")
 
     llm_idea = llm_service._parse_idea_response(content=final_payload)
-    existing_idea = db.get_idea_by_conversation_id(conversation_id)
+    existing_idea = await db.get_idea_by_conversation_id(conversation_id)
     if existing_idea is None:
-        db.create_idea(
+        await db.create_idea(
             conversation_id=conversation_id,
             title=llm_idea.title,
             short_hypothesis=llm_idea.short_hypothesis,
@@ -382,7 +382,7 @@ async def _stream_structured_idea(
             created_by_user_id=user_id,
         )
     else:
-        db.update_idea_version(
+        await db.update_idea_version(
             idea_id=existing_idea.idea_id,
             version_id=existing_idea.version_id,
             title=llm_idea.title,
@@ -469,9 +469,9 @@ async def _generate_response_for_conversation(
     db: DatabaseManager, conversation_id: int
 ) -> AsyncGenerator[str, None]:
     """Generate response for conversation."""
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     assert conversation is not None
-    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    idea_data = await db.get_idea_by_conversation_id(conversation_id)
     assert idea_data is not None
     active_version = IdeaVersion(
         version_id=idea_data.version_id,
@@ -516,11 +516,11 @@ async def _handle_existing_conversation(
         )
         for msg in messages
     ]
-    db.update_conversation_messages(existing_conversation_id, db_messages)
+    await db.update_conversation_messages(existing_conversation_id, db_messages)
     logger.info(
         f"Deleting imported conversation summary for conversation {existing_conversation_id}"
     )
-    db.delete_imported_conversation_summary(existing_conversation_id)
+    await db.delete_imported_conversation_summary(existing_conversation_id)
 
     # Will generate a new summarization in the background
     summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
@@ -604,13 +604,13 @@ async def _prepare_import_context(parse_result: ParseSuccessResult) -> PreparedI
     return PreparedImportContext(imported_conversation_text=imported_conversation_text)
 
 
-def _create_conversation(
+async def _create_conversation(
     db: DatabaseManager,
     parse_result: ParseSuccessResult,
     user_id: int,
 ) -> DBFullConversation:
     """Persist the imported conversation."""
-    conversation_id = db.create_conversation(
+    conversation_id = await db.create_conversation(
         conversation=DBConversation(
             url=parse_result.data.url,
             title=parse_result.data.title,
@@ -625,7 +625,7 @@ def _create_conversation(
         ),
         imported_by_user_id=user_id,
     )
-    conversation = db.get_conversation_by_id(conversation_id)
+    conversation = await db.get_conversation_by_id(conversation_id)
     assert conversation is not None
     return conversation
 
@@ -720,11 +720,11 @@ async def _stream_manual_seed_flow(
         yield chunk
 
 
-def _create_failure_idea(
+async def _create_failure_idea(
     db: DatabaseManager, conversation_id: int, user_id: int, error_message: str
 ) -> None:
     """Create a failure idea entry so the UI can show the error state."""
-    db.create_idea(
+    await db.create_idea(
         conversation_id=conversation_id,
         title="Failed to Generate Idea",
         short_hypothesis="Generation failed",
@@ -744,7 +744,7 @@ async def _stream_failure_response(
     error_message: str,
 ) -> AsyncGenerator[str, None]:
     """Stream the failure response after persisting the failure idea."""
-    _create_failure_idea(
+    await _create_failure_idea(
         db=db,
         conversation_id=conversation.id,
         user_id=user_id,
@@ -770,7 +770,7 @@ async def _stream_import_pipeline(
 
     try:
         _validate_import_url_or_raise(url=url)
-        matching = db.list_conversations_by_url(url)
+        matching = await db.list_conversations_by_url(url)
         decision = _determine_import_decision(import_data=import_data, matching=matching)
         if decision.action == ImportAction.CONFLICT:
             raise ImportConversationStreamError(payload=_build_conflict_payload(matching=matching))
@@ -799,7 +799,7 @@ async def _stream_import_pipeline(
 
         prepared_context = await _prepare_import_context(parse_result=parse_result)
 
-        conversation = _create_conversation(
+        conversation = await _create_conversation(
             db=db,
             parse_result=parse_result,
             user_id=user.id,
@@ -846,12 +846,12 @@ async def _stream_manual_seed_pipeline(
     manual_hypothesis = manual_data.idea_hypothesis.strip()
     try:
         yield json.dumps({"type": "state", "data": "creating_manual_seed"}) + "\n"
-        conversation_id = db.create_manual_conversation(
+        conversation_id = await db.create_manual_conversation(
             manual_title=manual_title,
             manual_hypothesis=manual_hypothesis,
             imported_by_user_id=user.id,
         )
-        conversation = db.get_conversation_by_id(conversation_id)
+        conversation = await db.get_conversation_by_id(conversation_id)
         assert conversation is not None
 
         async for chunk in _stream_manual_seed_flow(
@@ -906,12 +906,12 @@ async def import_conversation(
 
     user = get_current_user(request)
     logger.debug("User authenticated for import: %s", user.email)
-    enforce_minimum_credits(
+    await enforce_minimum_credits(
         user_id=user.id,
         required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
         action="input_pipeline",
     )
-    charge_user_credits(
+    await charge_user_credits(
         user_id=user.id,
         cost=settings.CHAT_MESSAGE_CREDIT_COST,
         action="conversation_import",
@@ -966,12 +966,12 @@ async def import_manual_seed(
     """
     user = get_current_user(request)
     logger.debug("User authenticated for manual import: %s", user.email)
-    enforce_minimum_credits(
+    await enforce_minimum_credits(
         user_id=user.id,
         required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
         action="input_pipeline",
     )
-    charge_user_credits(
+    await charge_user_credits(
         user_id=user.id,
         cost=settings.CHAT_MESSAGE_CREDIT_COST,
         action="manual_import",
@@ -1040,7 +1040,7 @@ async def list_conversations(
         )
 
     db = get_database()
-    conversations: List[DBDashboardConversation] = db.list_conversations(
+    conversations: List[DBDashboardConversation] = await db.list_conversations(
         limit=limit,
         offset=offset,
         user_id=user.id,
@@ -1087,7 +1087,7 @@ async def get_conversation(
 
     db = get_database()
     try:
-        conversation = db.get_conversation_by_id(conversation_id)
+        conversation = await db.get_conversation_by_id(conversation_id)
     except Exception as e:
         logger.exception(f"Error getting conversation: {e}")
         response.status_code = 500
@@ -1101,7 +1101,8 @@ async def get_conversation(
         )
 
     run_summaries = [
-        _run_to_summary(run) for run in db.list_research_runs_for_conversation(conversation_id)
+        _run_to_summary(run)
+        for run in await db.list_research_runs_for_conversation(conversation_id)
     ]
     return convert_db_to_api_response(conversation, research_runs=run_summaries)
 
@@ -1122,13 +1123,13 @@ async def delete_conversation(
     db = get_database()
 
     # Check if conversation exists first
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Delete the conversation
-    deleted = db.delete_conversation(conversation_id)
+    deleted = await db.delete_conversation(conversation_id)
     if not deleted:
         response.status_code = 500
         return ErrorResponse(error="Delete failed", detail="Failed to delete conversation")
@@ -1152,19 +1153,19 @@ async def update_conversation(
     db = get_database()
 
     # Check if conversation exists first
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Update the conversation title
-    updated = db.update_conversation_title(conversation_id, conversation_data.title)
+    updated = await db.update_conversation_title(conversation_id, conversation_data.title)
     if not updated:
         response.status_code = 500
         return ErrorResponse(error="Update failed", detail="Failed to update conversation")
 
     # Return the updated conversation
-    updated_conversation = db.get_conversation_by_id(conversation_id)
+    updated_conversation = await db.get_conversation_by_id(conversation_id)
     if not updated_conversation:
         response.status_code = 500
         return ErrorResponse(
@@ -1190,10 +1191,12 @@ async def get_conversation_costs(
     db = get_database()
     try:
         researches_token_usage = (
-            db.get_llm_token_usages_by_conversation_aggregated_by_run_and_model(conversation_id)
+            await db.get_llm_token_usages_by_conversation_aggregated_by_run_and_model(
+                conversation_id
+            )
         )
-        conversation_token_usage = db.get_llm_token_usages_by_conversation_aggregated_by_model(
-            conversation_id
+        conversation_token_usage = (
+            await db.get_llm_token_usages_by_conversation_aggregated_by_model(conversation_id)
         )
 
         researches_token_usage_cost = calculate_llm_token_usage_cost(researches_token_usage)
@@ -1255,7 +1258,7 @@ async def get_conversation_summary(
 
     db = get_database()
     try:
-        imported = db.get_imported_conversation_summary_by_conversation_id(conversation_id)
+        imported = await db.get_imported_conversation_summary_by_conversation_id(conversation_id)
         if imported and imported.summary:
             return SummaryResponse(summary=imported.summary)
         response.status_code = 404
@@ -1282,13 +1285,13 @@ async def update_conversation_summary(
     db = get_database()
 
     # Check if conversation exists first
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Update the conversation summary
-    updated = db.update_imported_conversation_summary(conversation_id, summary_data.summary)
+    updated = await db.update_imported_conversation_summary(conversation_id, summary_data.summary)
     if not updated:
         response.status_code = 500
         return ErrorResponse(error="Update failed", detail="Failed to update summary")

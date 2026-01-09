@@ -20,7 +20,7 @@ import type { InlineIdeaViewProps } from "../types/ideation-queue.types";
 export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
   const router = useRouter();
   const { idea, isLoading, error, refetch } = useSelectedIdeaData(conversationId);
-  const { runs } = useConversationResearchRuns(conversationId ?? 0);
+  const { runs } = useConversationResearchRuns(conversationId);
 
   const handleEditClick = () => {
     if (conversationId) {

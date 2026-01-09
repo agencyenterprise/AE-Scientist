@@ -2,20 +2,24 @@ import logging
 import multiprocessing
 import os
 import pickle
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Literal, Optional, TypedDict, TypeVar
 
 from ai_scientist.llm import structured_query_with_schema
 
+from . import execution_registry
 from .codegen_agent import MinimalAgent
-from .events import BaseEvent, RunLogEvent
+from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .interpreter import ExecutionResult, Interpreter
 from .journal import Node
 from .plotting import analyze_plots_with_vlm, generate_plotting_code
+from .stage_identifiers import StageIdentifier
 from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import HyperparamTuningIdea, Stage2Tuning
 from .stages.stage4_ablation import AblationIdea, Stage4Ablation
@@ -30,6 +34,41 @@ T = TypeVar("T")
 
 logger = logging.getLogger("ai-scientist")
 _LLM_PARSE_TIMEOUT_SECONDS = 300
+
+
+class NodeTask(TypedDict):
+    node_data: dict[str, object] | None
+    task_desc: str
+    cfg: AppConfig
+    evaluation_metrics: str
+    memory_summary: str
+    stage_identifier: StageIdentifier
+    seed_eval: bool
+    event_callback: Callable[[BaseEvent], None]
+    gpu_id: int | None
+    new_ablation_idea: AblationIdea | None
+    new_hyperparam_idea: HyperparamTuningIdea | None
+    best_stage3_plot_code: str | None
+    execution_id: str
+    user_feedback_payload: str
+
+
+class ExecutionTerminatedError(RuntimeError):
+    """Raised when the execution was intentionally terminated via user action."""
+
+    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+        super().__init__(f"Execution {execution_id} terminated intentionally")
+        self.execution_id = execution_id
+        self.exec_time = exec_time
+
+
+class ExecutionCrashedError(RuntimeError):
+    """Raised when the interpreter process died unexpectedly."""
+
+    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+        super().__init__(f"Execution {execution_id} crashed unexpectedly")
+        self.execution_id = execution_id
+        self.exec_time = exec_time
 
 
 def _call_with_timeout(
@@ -61,10 +100,10 @@ def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[str, str]:
     return str(workspace_path), str(working_dir_path)
 
 
-def _should_run_plotting_and_vlm(*, stage_name: str) -> bool:
+def _should_run_plotting_and_vlm(*, stage_identifier: StageIdentifier) -> bool:
     """Return True if plotting + VLM analysis should run for this stage."""
     # Skip plotting and VLM for Stage 1 and Stage 2; only run for later stages
-    return not (stage_name.startswith("1_") or stage_name.startswith("2_"))
+    return stage_identifier not in (StageIdentifier.STAGE1, StageIdentifier.STAGE2)
 
 
 def _configure_gpu_for_worker(*, gpu_id: int | None) -> GPUSpec | None:
@@ -120,7 +159,8 @@ def _create_worker_agent(
     gpu_spec: GPUSpec | None,
     memory_summary: str,
     evaluation_metrics: str,
-    stage_name: str,
+    stage_identifier: StageIdentifier,
+    skip_checker: Callable[[], None],
 ) -> MinimalAgent:
     return MinimalAgent(
         task_desc=task_desc,
@@ -129,7 +169,8 @@ def _create_worker_agent(
         gpu_spec=gpu_spec,
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
-        stage_name=stage_name,
+        stage_identifier=stage_identifier,
+        skip_checker=skip_checker,
     )
 
 
@@ -148,6 +189,17 @@ def _load_parent_node(*, node_data: dict[str, object] | None) -> Node | None:
     return None
 
 
+def _abort_if_skip_requested(*, execution_id: str) -> None:
+    skip_pending, reason = execution_registry.is_skip_pending(execution_id)
+    if skip_pending:
+        logger.info(
+            "Skip pending for execution_id=%s (reason=%s); aborting before code generation.",
+            execution_id,
+            reason,
+        )
+        raise ExecutionTerminatedError(execution_id=execution_id, exec_time=0.0)
+
+
 def _create_child_node(
     *,
     worker_agent: MinimalAgent,
@@ -156,7 +208,9 @@ def _create_child_node(
     new_ablation_idea: AblationIdea | None,
     new_hyperparam_idea: HyperparamTuningIdea | None,
     event_callback: Callable[[BaseEvent], None],
+    execution_id: str,
 ) -> Node:
+    _abort_if_skip_requested(execution_id=execution_id)
     if seed_eval:
         assert parent_node is not None, "parent_node must be provided for seed evaluation"
         event_callback(RunLogEvent(message="Running multi-seed evaluation", level="info"))
@@ -169,6 +223,7 @@ def _create_child_node(
         event_callback(RunLogEvent(message="Generating new implementation code", level="info"))
         child_node = Stage1Baseline.draft(worker_agent)
         event_callback(RunLogEvent(message="Code generation complete", level="info"))
+        child_node.id = execution_id
         return child_node
 
     if parent_node.is_buggy:
@@ -178,6 +233,7 @@ def _create_child_node(
         child_node = worker_agent.debug(parent_node)
         child_node.parent = parent_node
         event_callback(RunLogEvent(message="Fix attempt generated", level="info"))
+        child_node.id = execution_id
         return child_node
 
     if new_hyperparam_idea is not None and new_ablation_idea is None:
@@ -188,6 +244,7 @@ def _create_child_node(
             hyperparam_idea=new_hyperparam_idea,
         )
         child_node.parent = parent_node
+        child_node.id = execution_id
         return child_node
 
     if new_ablation_idea is not None and new_hyperparam_idea is None:
@@ -198,6 +255,7 @@ def _create_child_node(
             ablation_idea=new_ablation_idea,
         )
         child_node.parent = parent_node
+        child_node.id = execution_id
         return child_node
 
     logger.info(f"Improving node {parent_node.id}")
@@ -206,6 +264,7 @@ def _create_child_node(
         parent_node=parent_node,
     )
     child_node.parent = parent_node
+    child_node.id = execution_id
     return child_node
 
 
@@ -215,17 +274,27 @@ def _improve_existing_implementation(
     parent_node: Node,
 ) -> Node:
     """Improve an existing implementation based on the current experimental stage."""
+    user_feedback = parent_node.user_feedback_payload
+    introduction = (
+        "You are an experienced AI researcher. You are provided with a previously developed "
+        "implementation. Your task is to improve it based on the current experimental stage."
+    )
+    if user_feedback:
+        introduction = (
+            "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
+            "Based on the user feedback, you should revise it to satisfy that request. "
+            "Your main goal is to satisfy the user request. "
+        )
     prompt: PromptType = {
-        "Introduction": (
-            "You are an experienced AI researcher. You are provided with a previously developed "
-            "implementation. Your task is to improve it based on the current experimental stage."
-        ),
+        "Introduction": introduction,
         "Research idea": worker_agent.task_desc,
         "Memory": worker_agent.memory_summary if worker_agent.memory_summary else "",
         "Feedback based on generated plots": parent_node.vlm_feedback_summary,
         "Feedback about execution time": parent_node.exec_time_feedback,
         "Instructions": {},
     }
+    if user_feedback is not None:
+        prompt["User feedback"] = user_feedback
     prompt["Previous solution"] = {
         "Code": wrap_code(code=parent_node.code),
     }
@@ -234,7 +303,8 @@ def _improve_existing_implementation(
     improve_instructions |= worker_agent.prompt_impl_guideline
     prompt["Instructions"] = improve_instructions
 
-    plan, code = worker_agent.plan_and_code_query(prompt=prompt)
+    logger.debug("Improve prompt for stage=%s: %s", worker_agent.stage_name, prompt)
+    plan, code = worker_agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
     logger.debug("----- LLM code start (improve) -----")
     logger.debug(code)
     logger.debug("----- LLM code end (improve) -----")
@@ -251,11 +321,79 @@ def _execute_experiment(
     cfg: AppConfig,
     process_interpreter: Interpreter,
     event_callback: Callable[[BaseEvent], None],
+    stage_name: str,
+    execution_id: str,
 ) -> ExecutionResult:
+    _abort_if_skip_requested(execution_id=execution_id)
     logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
     logger.debug("Starting first interpreter: executing experiment code")
     event_callback(RunLogEvent(message="Executing experiment code on GPU...", level="info"))
-    exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
+    started_at = datetime.now(timezone.utc)
+    event_callback(
+        RunningCodeEvent(
+            execution_id=child_node.id,
+            stage_name=stage_name,
+            code=child_node.code,
+            started_at=started_at,
+        )
+    )
+    timer_start = time.monotonic()
+
+    def _pid_tracker(pid: int) -> None:
+        logger.info("Worker recorded pid=%s for execution_id=%s", pid, execution_id)
+        execution_registry.update_pid(execution_id=execution_id, pid=pid)
+
+    def _termination_checker() -> bool:
+        return execution_registry.is_terminated(execution_id=execution_id)
+
+    process_interpreter.set_pid_callback(_pid_tracker)
+    process_interpreter.set_termination_checker(checker=_termination_checker)
+    try:
+        process_interpreter.set_run_context(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            purpose="experiment",
+        )
+        exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
+    except Exception as exc:
+        process_interpreter.set_pid_callback(None)
+        process_interpreter.cleanup_session()
+        completed_at = datetime.now(timezone.utc)
+        duration = time.monotonic() - timer_start
+        terminated = execution_registry.is_terminated(execution_id)
+        event_callback(
+            RunCompletedEvent(
+                execution_id=child_node.id,
+                stage_name=stage_name,
+                status="failed",
+                exec_time=duration,
+                completed_at=completed_at,
+            )
+        )
+        logger.info(
+            "Clearing PID reference for execution_id=%s due to execution failure.", execution_id
+        )
+        execution_registry.clear_pid(execution_id)
+        if terminated:
+            logger.info(
+                "Execution %s was intentionally terminated; skipping further processing.",
+                execution_id,
+            )
+            raise ExecutionTerminatedError(
+                execution_id=execution_id,
+                exec_time=duration,
+            ) from exc
+        # Avoid Sentry log spam: the controller (main process) is responsible for emitting a single
+        # Sentry event for true crashes. Worker logs should remain non-error level.
+        logger.warning("Execution %s crashed unexpectedly; propagating failure.", execution_id)
+        raise ExecutionCrashedError(
+            execution_id=execution_id,
+            exec_time=duration,
+        ) from exc
+    finally:
+        process_interpreter.clear_run_context()
+        process_interpreter.set_pid_callback(None)
+        process_interpreter.clear_termination_checker()
     process_interpreter.cleanup_session()
     logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
     event_callback(
@@ -263,6 +401,19 @@ def _execute_experiment(
             message=f"Code execution completed ({exec_result.exec_time:.1f}s)", level="info"
         )
     )
+    completed_at = datetime.now(timezone.utc)
+    status: Literal["success", "failed"] = "success" if exec_result.exc_type is None else "failed"
+    event_callback(
+        RunCompletedEvent(
+            execution_id=child_node.id,
+            stage_name=stage_name,
+            status=status,
+            exec_time=exec_result.exec_time,
+            completed_at=completed_at,
+        )
+    )
+    logger.info("Marking execution_id=%s as completed in registry.", execution_id)
+    execution_registry.mark_completed(execution_id)
     return exec_result
 
 
@@ -278,7 +429,7 @@ def _analyze_results_and_metrics(
     exec_result: ExecutionResult,
     event_callback: Callable[[BaseEvent], None],
 ) -> None:
-    logger.info("→ Analyzing results and extracting metrics...")
+    logger.info("→ Analyzing results and extracting metrics (execution_id=%s)...", child_node.id)
     event_callback(RunLogEvent(message="Analyzing results and extracting metrics", level="info"))
     worker_agent.parse_exec_result(
         node=child_node,
@@ -294,7 +445,11 @@ def _analyze_results_and_metrics(
         seed_eval=seed_eval,
         event_callback=event_callback,
     )
-    logger.info(f"✓ Metrics extracted. Buggy: {child_node.is_buggy}")
+    logger.info(
+        "✓ Metrics extracted (execution_id=%s). Buggy: %s",
+        child_node.id,
+        child_node.is_buggy,
+    )
 
 
 def _select_plotting_code(
@@ -310,11 +465,7 @@ def _select_plotting_code(
         return parent_node.plot_code or ""
 
     plot_code_from_prev_stage: str | None
-    if (
-        worker_agent.stage_name
-        and worker_agent.stage_name.startswith("4_")
-        and best_stage3_plot_code
-    ):
+    if worker_agent.stage_identifier is StageIdentifier.STAGE4 and best_stage3_plot_code:
         plot_code_from_prev_stage = best_stage3_plot_code
     else:
         plot_code_from_prev_stage = None
@@ -322,6 +473,7 @@ def _select_plotting_code(
     return generate_plotting_code(
         agent=worker_agent,
         node=child_node,
+        parent_node=parent_node,
         plot_code_from_prev_stage=plot_code_from_prev_stage,
     )
 
@@ -349,10 +501,18 @@ def _execute_plotting_with_retries(
             best_stage3_plot_code=best_stage3_plot_code,
         )
         event_callback(RunLogEvent(message="Executing plotting code", level="info"))
-        plot_exec_result = process_interpreter.run(
-            code=plotting_code,
-            reset_session=True,
+        process_interpreter.set_run_context(
+            execution_id=child_node.id,
+            stage_name=worker_agent.stage_name,
+            purpose="plotting",
         )
+        try:
+            plot_exec_result = process_interpreter.run(
+                code=plotting_code,
+                reset_session=True,
+            )
+        finally:
+            process_interpreter.clear_run_context()
         process_interpreter.cleanup_session()
         child_node.absorb_plot_exec_result(plot_exec_result)
         if child_node.plot_exc_type and retry_count < 3:
@@ -605,16 +765,29 @@ def parse_and_assign_metrics(
                 "Generating metric parsing code to extract metrics from experiment results"
             )
             parse_metrics_plan, parse_metrics_code = worker_agent.plan_and_code_query(
-                prompt=parse_metrics_prompt
+                prompt=parse_metrics_prompt,
+                enforce_gpu=False,
             )
         child_node.parse_metrics_plan = parse_metrics_plan
         child_node.parse_metrics_code = parse_metrics_code
 
         # Execute metric parsing code
         logger.debug(
-            "Starting second interpreter: executing metric parsing code to load .npy files and extract metrics"
+            "Starting second interpreter: executing metric parsing code (execution_id=%s, stage=%s)",
+            child_node.id,
+            worker_agent.stage_name,
         )
-        metrics_exec_result = process_interpreter.run(code=parse_metrics_code, reset_session=True)
+        process_interpreter.set_run_context(
+            execution_id=child_node.id,
+            stage_name=worker_agent.stage_name,
+            purpose="metrics_parsing",
+        )
+        try:
+            metrics_exec_result = process_interpreter.run(
+                code=parse_metrics_code, reset_session=True
+            )
+        finally:
+            process_interpreter.clear_run_context()
         process_interpreter.cleanup_session()
         child_node.parse_term_out = metrics_exec_result.term_out
         child_node.parse_exc_type = metrics_exec_result.exc_type
@@ -701,13 +874,15 @@ def process_node(
     cfg: AppConfig,
     evaluation_metrics: str,
     memory_summary: str,
-    stage_name: str,
+    stage_identifier: StageIdentifier,
     seed_eval: bool,
     event_callback: Callable[[BaseEvent], None],
     gpu_id: Optional[int] = None,
     new_ablation_idea: Optional[AblationIdea] = None,
     new_hyperparam_idea: Optional[HyperparamTuningIdea] = None,
     best_stage3_plot_code: Optional[str] = None,
+    execution_id: str,
+    user_feedback_payload: str,
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
 
@@ -716,6 +891,17 @@ def process_node(
 
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
 
+    parent_node = _load_parent_node(node_data=node_data)
+    stage_name = stage_identifier.prefixed_name
+    logger.info(
+        "Worker process %s handling execution_id=%s stage=%s (parent_node=%s, user_feedback=%s)",
+        process_id,
+        execution_id,
+        stage_name,
+        parent_node.id if parent_node else "draft",
+        bool(parent_node.user_feedback_payload) if parent_node else False,
+    )
+
     worker_agent = _create_worker_agent(
         task_desc=task_desc,
         cfg=cfg,
@@ -723,14 +909,39 @@ def process_node(
         gpu_spec=gpu_spec,
         memory_summary=memory_summary,
         evaluation_metrics=evaluation_metrics,
-        stage_name=stage_name,
+        stage_identifier=stage_identifier,
+        skip_checker=lambda: _abort_if_skip_requested(execution_id=execution_id),
     )
+    parent_feedback = user_feedback_payload or (
+        parent_node.user_feedback_payload if parent_node else ""
+    )
+    if parent_node is not None and parent_feedback:
+        # Ensure stage-specific prompt builders that read parent_node.user_feedback_payload
+        # can see the one-shot payload.
+        parent_node.is_user_feedback = True
+        parent_node.user_feedback_payload = parent_feedback
+    logger.info(
+        "Worker agent ready for execution_id=%s. User feedback present=%s",
+        execution_id,
+        bool(parent_feedback),
+    )
+    if parent_feedback:
+        logger.debug(
+            "User feedback payload for execution_id=%s:\n%s",
+            execution_id,
+            parent_feedback,
+        )
 
     process_interpreter = _create_interpreter(cfg=cfg, workspace=workspace)
 
     try:
-        parent_node = _load_parent_node(node_data=node_data)
-
+        logger.info(
+            "Building child node for execution_id=%s (seed_eval=%s, stage=%s)",
+            execution_id,
+            seed_eval,
+            stage_name,
+        )
+        _abort_if_skip_requested(execution_id=execution_id)
         child_node = _create_child_node(
             worker_agent=worker_agent,
             parent_node=parent_node,
@@ -738,43 +949,112 @@ def process_node(
             new_ablation_idea=new_ablation_idea,
             new_hyperparam_idea=new_hyperparam_idea,
             event_callback=event_callback,
+            execution_id=execution_id,
+        )
+        logger.info(
+            "Child node %s prepared (feedback=%s)",
+            child_node.id,
+            child_node.is_user_feedback,
         )
 
-        exec_result = _execute_experiment(
-            child_node=child_node,
-            cfg=cfg,
-            process_interpreter=process_interpreter,
-            event_callback=event_callback,
-        )
-
-        _analyze_results_and_metrics(
-            worker_agent=worker_agent,
-            child_node=child_node,
-            parent_node=parent_node,
-            cfg=cfg,
-            working_dir=working_dir,
-            process_interpreter=process_interpreter,
-            seed_eval=seed_eval,
-            exec_result=exec_result,
-            event_callback=event_callback,
-        )
-
-        if not child_node.is_buggy:
-            if _should_run_plotting_and_vlm(stage_name=worker_agent.stage_name):
-                _run_plotting_and_vlm(
-                    worker_agent=worker_agent,
-                    child_node=child_node,
-                    parent_node=parent_node,
-                    cfg=cfg,
-                    working_dir=working_dir,
-                    process_interpreter=process_interpreter,
-                    seed_eval=seed_eval,
-                    best_stage3_plot_code=best_stage3_plot_code,
-                    event_callback=event_callback,
+        exec_result: ExecutionResult | None = None
+        exec_failed = False
+        terminated_by_user = False
+        failure_reason: str | None = None
+        try:
+            _abort_if_skip_requested(execution_id=execution_id)
+            exec_result = _execute_experiment(
+                child_node=child_node,
+                cfg=cfg,
+                process_interpreter=process_interpreter,
+                event_callback=event_callback,
+                stage_name=stage_name,
+                execution_id=execution_id,
+            )
+        except ExecutionTerminatedError as term_exc:
+            exec_failed = True
+            terminated_by_user = True
+            payload_text = child_node.user_feedback_payload or ""
+            if not payload_text:
+                payload_text = execution_registry.get_termination_payload(execution_id) or ""
+            if payload_text:
+                child_node.is_user_feedback = True
+                child_node.user_feedback_payload = payload_text
+                child_node.user_feedback_pending = True
+                logger.info(
+                    "Attached termination payload (%s chars) to node %s after user kill.",
+                    len(payload_text),
+                    child_node.id,
                 )
-            elif child_node.is_buggy_plots is None:
-                # If plotting/VLM is skipped (e.g., Stage 1), treat plots as non-buggy
-                child_node.is_buggy_plots = False
+            if payload_text:
+                failure_reason = (
+                    "Execution terminated by user request. User feedback: " f"{payload_text}"
+                )
+            else:
+                failure_reason = "Execution terminated by user request."
+            exec_result = ExecutionResult(
+                term_out=[],
+                exec_time=term_exc.exec_time or 0.0,
+                exc_type="Terminated",
+            )
+        except ExecutionCrashedError as crash_exc:
+            exec_failed = True
+            failure_reason = "Execution process crashed unexpectedly."
+            exec_result = ExecutionResult(
+                term_out=[],
+                exec_time=crash_exc.exec_time or 0.0,
+                exc_type="Crashed",
+            )
+
+        if exec_failed or exec_result is None:
+            logger.warning(
+                "Skipping result analysis for execution_id=%s (terminated=%s).",
+                execution_id,
+                terminated_by_user,
+            )
+            child_node.metric = WorstMetricValue()
+            child_node.is_buggy = True
+            child_node.analysis = (
+                failure_reason
+                if failure_reason
+                else "Execution failed before metrics could be collected."
+            )
+            child_node.exec_time = exec_result.exec_time if exec_result else None
+            child_node.exc_type = exec_result.exc_type if exec_result else "Unknown"
+            if exec_result:
+                child_node._term_out = exec_result.term_out
+            child_node.exc_info = {}
+            child_node.exc_stack = []
+            child_node.is_buggy_plots = True
+        else:
+            _analyze_results_and_metrics(
+                worker_agent=worker_agent,
+                child_node=child_node,
+                parent_node=parent_node,
+                cfg=cfg,
+                working_dir=working_dir,
+                process_interpreter=process_interpreter,
+                seed_eval=seed_eval,
+                exec_result=exec_result,
+                event_callback=event_callback,
+            )
+
+            if not child_node.is_buggy:
+                if _should_run_plotting_and_vlm(stage_identifier=worker_agent.stage_identifier):
+                    _run_plotting_and_vlm(
+                        worker_agent=worker_agent,
+                        child_node=child_node,
+                        parent_node=parent_node,
+                        cfg=cfg,
+                        working_dir=working_dir,
+                        process_interpreter=process_interpreter,
+                        seed_eval=seed_eval,
+                        best_stage3_plot_code=best_stage3_plot_code,
+                        event_callback=event_callback,
+                    )
+                elif child_node.is_buggy_plots is None:
+                    # If plotting/VLM is skipped (e.g., Stage 1), treat plots as non-buggy
+                    child_node.is_buggy_plots = False
 
         result_data = child_node.to_dict()
         # sanity pickle
@@ -788,3 +1068,28 @@ def process_node(
     finally:
         if process_interpreter:
             process_interpreter.cleanup_session()
+
+
+def process_node_task(task: NodeTask) -> dict[str, object]:
+    """
+    Pickle/type-checker friendly wrapper for ProcessPoolExecutor submission.
+
+    We submit a single dict positional arg to the executor, then call the keyword-only
+    `process_node` using named args.
+    """
+    return process_node(
+        node_data=task["node_data"],
+        task_desc=task["task_desc"],
+        cfg=task["cfg"],
+        evaluation_metrics=task["evaluation_metrics"],
+        memory_summary=task["memory_summary"],
+        stage_identifier=task["stage_identifier"],
+        seed_eval=task["seed_eval"],
+        event_callback=task["event_callback"],
+        gpu_id=task["gpu_id"],
+        new_ablation_idea=task["new_ablation_idea"],
+        new_hyperparam_idea=task["new_hyperparam_idea"],
+        best_stage3_plot_code=task["best_stage3_plot_code"],
+        execution_id=task["execution_id"],
+        user_feedback_payload=task["user_feedback_payload"],
+    )

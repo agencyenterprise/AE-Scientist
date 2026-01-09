@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
 import {
   AutoEvaluationCard,
+  CostDetailsCard,
   FinalPdfBanner,
+  ImportSourceCard,
   ResearchArtifactsList,
   ResearchLogsList,
   ResearchPipelineStages,
@@ -12,19 +14,19 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
-  CostDetailsCard,
   TreeVizCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
-import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
+import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
 import { PageCard } from "@/shared/components/PageCard";
 import { apiFetch } from "@/shared/lib/api-client";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 
 export default function ResearchRunDetailPage() {
   const params = useParams();
@@ -38,16 +40,19 @@ export default function ResearchRunDetailPage() {
     loading,
     error,
     conversationId,
-    isConnected,
-    connectionError,
     hwEstimatedCostCents,
     hwActualCostCents,
     hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
-    reconnect,
-  } = useResearchRunDetails({ runId });
+    stageSkipState,
+    skipPendingStage,
+    handleSkipStage,
+  } = useResearchRunDetails({
+    runId,
+    onReviewCompleted: newReview => setReview(newReview),
+  });
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
     queryKey: ["researchRunMeta", runId],
@@ -56,7 +61,7 @@ export default function ResearchRunDetailPage() {
     staleTime: 60 * 1000,
   });
 
-  const { runs: conversationRuns } = useConversationResearchRuns(conversationId ?? 0);
+  const { runs: conversationRuns } = useConversationResearchRuns(conversationId);
 
   const {
     review,
@@ -64,6 +69,7 @@ export default function ResearchRunDetailPage() {
     error: reviewError,
     notFound,
     fetchReview,
+    setReview,
   } = useReviewData({
     runId,
     conversationId,
@@ -82,6 +88,22 @@ export default function ResearchRunDetailPage() {
       fetchReview();
     }
   }, [conversationId, review, notFound, reviewError, reviewLoading, fetchReview]);
+
+  const handleTerminateExecution = useCallback(
+    async (executionId: string, feedback: string) => {
+      if (!conversationId) {
+        throw new Error("Conversation not available yet. Please try again in a moment.");
+      }
+      await apiFetch(
+        `/conversations/${conversationId}/idea/research-run/${runId}/executions/${executionId}/terminate`,
+        {
+          method: "POST",
+          body: { payload: feedback },
+        }
+      );
+    },
+    [conversationId, runId]
+  );
 
   if (loading) {
     return (
@@ -115,6 +137,7 @@ export default function ResearchRunDetailPage() {
     substage_summaries = [],
     paper_generation_progress,
     best_node_selections = [],
+    code_execution,
   } = details;
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
@@ -132,6 +155,13 @@ export default function ResearchRunDetailPage() {
 
   const title = runMeta?.idea_title?.trim() || "Untitled";
 
+  // Compute current stage and progress from real-time SSE data
+  // This replicates the backend's SQL logic and updates immediately without page refresh
+  const { currentStage, progress: overallProgress } = getCurrentStageAndProgress(
+    stage_progress,
+    paper_generation_progress
+  );
+
   return (
     <PageCard>
       <div className="flex flex-col gap-6 p-6">
@@ -140,23 +170,26 @@ export default function ResearchRunDetailPage() {
           runNumber={runNumber}
           status={run.status}
           createdAt={run.created_at}
-          isConnected={isConnected}
-          connectionError={connectionError}
           canStopRun={canStopRun}
           stopPending={stopPending}
           stopError={stopError}
           onStopRun={handleStopRun}
-          onReconnect={reconnect}
         />
 
         {run.error_message && <ResearchRunError message={run.error_message} />}
+
+        {runMeta?.conversation_url && (
+          <ImportSourceCard conversationUrl={runMeta.conversation_url} />
+        )}
 
         {conversationId !== null && (
           <FinalPdfBanner artifacts={artifacts} conversationId={conversationId} runId={runId} />
         )}
 
         <ResearchRunStats
-          stageProgress={stage_progress}
+          status={run.status}
+          currentStage={currentStage}
+          progress={overallProgress}
           gpuType={run.gpu_type}
           artifactsCount={artifacts.length}
         />
@@ -169,6 +202,12 @@ export default function ResearchRunDetailPage() {
               substageSummaries={substage_summaries}
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
+              stageSkipState={stageSkipState}
+              currentCodeExecution={code_execution ?? null}
+              runStatus={run.status}
+              onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
+              onSkipStage={conversationId ? handleSkipStage : undefined}
+              skipPendingStage={skipPendingStage}
               className="max-h-[600px] overflow-y-auto"
             />
           </div>
@@ -221,7 +260,9 @@ export default function ResearchRunDetailPage() {
             <TreeVizCard
               treeViz={details.tree_viz ?? []}
               conversationId={conversationId}
+              runId={runId}
               artifacts={artifacts}
+              substageSummaries={substage_summaries}
             />
           </div>
         )}

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, AsyncGenerator, List
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from anthropic import BadRequestError as AnthropicBadRequestError
@@ -132,7 +132,9 @@ def test_parse_idea_response_missing_fields_raises() -> None:
 @pytest.mark.asyncio
 async def test_stream_structured_idea_creates_new_idea() -> None:
     db = MagicMock()
-    db.get_idea_by_conversation_id.return_value = None
+    db.get_idea_by_conversation_id = AsyncMock(return_value=None)
+    db.create_idea = AsyncMock()
+    db.update_idea_version = AsyncMock()
     llm_service = MagicMock()
     llm_service._parse_idea_response.return_value = LLMIdeaGeneration(**_sample_payload())
 
@@ -161,7 +163,9 @@ async def test_stream_structured_idea_creates_new_idea() -> None:
 async def test_stream_structured_idea_updates_existing_idea() -> None:
     existing = SimpleNamespace(idea_id=11, version_id=22)
     db = MagicMock()
-    db.get_idea_by_conversation_id.return_value = existing
+    db.get_idea_by_conversation_id = AsyncMock(return_value=existing)
+    db.create_idea = AsyncMock()
+    db.update_idea_version = AsyncMock()
     llm_service = MagicMock()
     llm_service._parse_idea_response.return_value = LLMIdeaGeneration(**_sample_payload())
 
@@ -247,7 +251,7 @@ async def test_real_providers_emit_structured_ideas(config: RealIdeaProviderConf
     service = config.service_factory(summarizer_service=MagicMock())  # type: ignore[call-arg]
 
     fake_db = MagicMock()
-    fake_db.get_active_prompt.return_value = None
+    fake_db.get_active_prompt = AsyncMock(return_value=None)
 
     with patch("app.services.langchain_llm_service.get_database", return_value=fake_db):
         final_payload: str | None = None

@@ -45,7 +45,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
 
 
 @router.get("/", response_model=ResearchRunListResponse)
-def list_research_runs(
+async def list_research_runs(
     request: Request,
     limit: int = Query(50, ge=1, le=500, description="Maximum number of runs to return"),
     offset: int = Query(0, ge=0, description="Number of runs to skip"),
@@ -67,7 +67,7 @@ def list_research_runs(
     user = get_current_user(request)
 
     db = get_database()
-    rows, total = db.list_all_research_pipeline_runs(
+    rows, total = await db.list_all_research_pipeline_runs(
         limit=limit,
         offset=offset,
         search=search,
@@ -81,7 +81,7 @@ def list_research_runs(
 
 
 @router.get("/{run_id}/", response_model=ResearchRunListItem)
-def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
+async def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
     """
     Get a single research pipeline run by run_id.
 
@@ -96,7 +96,7 @@ def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
     get_current_user(request)
 
     db = get_database()
-    row = db.get_enriched_research_pipeline_run(run_id)
+    row = await db.get_enriched_research_pipeline_run(run_id)
 
     if not row:
         raise HTTPException(status_code=404, detail="Research run not found")
@@ -105,14 +105,14 @@ def get_research_run(request: Request, run_id: str) -> ResearchRunListItem:
 
 
 @router.get("/{run_id}/costs", response_model=ResearchRunCostResponse)
-def get_research_run_costs(request: Request, run_id: str) -> ResearchRunCostResponse:
+async def get_research_run_costs(request: Request, run_id: str) -> ResearchRunCostResponse:
     """
     Get the cost breakdown for a specific research run.
     """
     get_current_user(request)
 
     db = get_database()
-    token_usages = db.get_llm_token_usages_by_run_aggregated_by_model(run_id)
+    token_usages = await db.get_llm_token_usages_by_run_aggregated_by_model(run_id)
     token_usage_costs = calculate_llm_token_usage_cost(token_usages)
 
     total_cost = sum([cost.input_cost + cost.output_cost for cost in token_usage_costs])

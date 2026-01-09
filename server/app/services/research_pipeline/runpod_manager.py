@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import math
 import os
 import re
 import shlex
@@ -13,22 +14,74 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, NamedTuple, cast
+from typing import Any, Dict, NamedTuple, Type, cast
 
 import httpx
 from omegaconf import OmegaConf
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
-POD_NAME_PREFIX = "aeScientist"
+POD_NAME_PREFIX = "aescientist"
 _POD_USER_FALLBACK = "Scientist"
 _POD_USER_MAX_LEN = 24
+DEFAULT_STARTUP_GRACE_SECONDS = 600
+POD_READY_POLL_INTERVAL_SECONDS = 5
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
 RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
+CONTAINER_DISK_GB = 100
+WORKSPACE_DISK_GB = 200
+DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
+DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
+RUNPOD_GPU_TYPES: tuple[str, ...] = (
+    "NVIDIA GeForce RTX 5090",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "NVIDIA GeForce RTX 3090",
+    "NVIDIA RTX A4000",
+    "NVIDIA RTX A4500",
+    "NVIDIA RTX A5000",
+)
 
+DEFAULT_RUNPOD_DATACENTER_IDS: tuple[str, ...] = (
+    # RunPod published dataCenterIds options (full list), ordered by proximity to AWS us-east-1 (N. Virginia).
+    #
+    # Heuristic ordering:
+    # - US East (closest)
+    # - US Central
+    # - US West
+    # - Canada East
+    # - Europe
+    # - APAC / Oceania (farthest)
+    "US-DE-1",
+    "US-NC-1",
+    "US-GA-1",
+    "US-GA-2",
+    "US-IL-1",
+    "US-KS-2",
+    "US-KS-3",
+    "US-TX-1",
+    "US-TX-3",
+    "US-TX-4",
+    "US-CA-2",
+    "US-WA-1",
+    "CA-MTL-1",
+    "CA-MTL-2",
+    "CA-MTL-3",
+    "EU-NL-1",
+    "EU-FR-1",
+    "EU-SE-1",
+    "EU-CZ-1",
+    "EU-RO-1",
+    "EUR-NO-1",
+    "EUR-IS-1",
+    "EUR-IS-2",
+    "EUR-IS-3",
+    "AP-JP-1",
+    "OC-AU-1",
+)
 
 _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_ACCESS_KEY_ID",
@@ -36,6 +89,8 @@ _LOG_UPLOAD_REQUIRED_ENVS = [
     "AWS_REGION",
     "AWS_S3_BUCKET_NAME",
 ]
+
+ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 20 * 60
 
 
 @dataclass
@@ -50,6 +105,8 @@ class RunPodEnvironment:
     aws_secret_access_key: str
     aws_region: str
     aws_s3_bucket_name: str
+    sentry_dsn: str
+    sentry_environment: str
 
 
 class RunPodError(Exception):
@@ -58,6 +115,18 @@ class RunPodError(Exception):
     def __init__(self, message: str, status: int = 0):
         super().__init__(message)
         self.status = status
+
+
+class TerminationRequestError(Exception):
+    """Generic error when sending termination requests to the pipeline pod."""
+
+
+class TerminationConflictError(TerminationRequestError):
+    """Raised when the targeted execution already finished or is terminating."""
+
+
+class TerminationNotFoundError(TerminationRequestError):
+    """Raised when the targeted execution_id cannot be found on the pod."""
 
 
 class PodLaunchInfo(NamedTuple):
@@ -177,18 +246,21 @@ class RunPodManager:
         name: str,
         image: str,
         gpu_type: str,
-        env: dict[str, str],
+        pod_env: dict[str, str],
         docker_cmd: str,
     ) -> dict[str, Any]:
+        datacenter_ids = list(DEFAULT_RUNPOD_DATACENTER_IDS)
         payload = {
             "name": name,
             "imageName": image,
             "cloudType": "SECURE",
             "gpuCount": 1,
             "gpuTypeIds": [gpu_type],
-            "containerDiskInGb": 100,
-            "volumeInGb": 200,
-            "env": env,
+            "dataCenterIds": datacenter_ids,
+            "dataCenterPriority": "custom",
+            "containerDiskInGb": CONTAINER_DISK_GB,
+            "volumeInGb": WORKSPACE_DISK_GB,
+            "env": pod_env,
             "ports": ["22/tcp"],
             "dockerStartCmd": ["bash", "-c", docker_cmd],
         }
@@ -203,7 +275,7 @@ class RunPodManager:
         name: str,
         image: str,
         gpu_types: list[str],
-        env: dict[str, str],
+        pod_env: dict[str, str],
         docker_cmd: str,
         max_retries: int = 3,
     ) -> dict[str, Any]:
@@ -220,7 +292,7 @@ class RunPodManager:
                     name=name,
                     image=image,
                     gpu_type=gpu_type,
-                    env=env,
+                    pod_env=pod_env,
                     docker_cmd=docker_cmd,
                 )
                 return pod
@@ -325,6 +397,45 @@ class RunPodManager:
         raise RunPodError("Pod did not become ready in time")
 
 
+def get_pipeline_startup_grace_seconds() -> int:
+    raw_value = os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
+    if raw_value is None:
+        return DEFAULT_STARTUP_GRACE_SECONDS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid PIPELINE_MONITOR_STARTUP_GRACE_SECONDS=%s; defaulting to %s seconds.",
+            raw_value,
+            DEFAULT_STARTUP_GRACE_SECONDS,
+        )
+        return DEFAULT_STARTUP_GRACE_SECONDS
+    return max(parsed, 1)
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    retry=retry_if_exception_type(subprocess.TimeoutExpired),
+)
+def _run_artifact_upload_command(
+    *, command: list[str], timeout_seconds: int
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+        check=False,
+    )
+
+
+def get_supported_gpu_types() -> list[str]:
+    """Return the GPU types that can be targeted when launching RunPod jobs."""
+    return list(RUNPOD_GPU_TYPES)
+
+
 def _sanitize_pod_user_component(*, value: str) -> str:
     trimmed = value.strip()
     if not trimmed:
@@ -333,7 +444,7 @@ def _sanitize_pod_user_component(*, value: str) -> str:
     if not sanitized:
         return _POD_USER_FALLBACK
     truncated = sanitized[:_POD_USER_MAX_LEN]
-    return f"{truncated[0].upper()}{truncated[1:]}"
+    return truncated.lower()
 
 
 def _load_repo_setup_script() -> str:
@@ -352,6 +463,10 @@ def _load_runpod_environment() -> RunPodEnvironment:
             raise RuntimeError(f"Environment variable {name} is required to launch RunPod.")
         return value
 
+    def _optional(name: str) -> str:
+        value = os.environ.get(name)
+        return value or ""
+
     return RunPodEnvironment(
         git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
@@ -363,6 +478,8 @@ def _load_runpod_environment() -> RunPodEnvironment:
         aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
         aws_region=_require("AWS_REGION"),
         aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
+        sentry_dsn=_optional("SENTRY_DSN"),
+        sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
     )
 
 
@@ -391,6 +508,13 @@ def _prepare_config_text(*, idea_filename: str, telemetry: dict[str, str]) -> st
 
 def _encode_multiline(value: str) -> str:
     return base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+
+def _resolve_disk_stats_paths() -> str:
+    raw = os.environ.get(DISK_STATS_ENV_NAME) or DEFAULT_COLLECT_DISK_STATS_PATHS
+    paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
+    sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
+    return sanitized
 
 
 def _repository_setup_commands() -> list[str]:
@@ -426,6 +550,22 @@ def _installation_commands() -> list[str]:
     ]
 
 
+def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
+    return [
+        "# === AWS Credentials Setup ===",
+        'echo "Creating ~/.aws/credentials..."',
+        "mkdir -p ~/.aws",
+        "chmod 700 ~/.aws",
+        "cat > ~/.aws/credentials << 'EOF'",
+        "[default]",
+        f"aws_access_key_id={env.aws_access_key_id}",
+        f"aws_secret_access_key={env.aws_secret_access_key}",
+        "EOF",
+        "chmod 600 ~/.aws/credentials",
+        "",
+    ]
+
+
 def _build_remote_script(
     *,
     env: RunPodEnvironment,
@@ -436,6 +576,26 @@ def _build_remote_script(
     run_id: str,
 ) -> str:
     script_parts: list[str] = ["set -euo pipefail", ""]
+    hw_stats_paths = _resolve_disk_stats_paths()
+    env_file_lines = [
+        f"OPENAI_API_KEY={env.openai_api_key}",
+        f"HF_TOKEN={env.hf_token}",
+        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
+        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
+        f"AWS_REGION={env.aws_region}",
+        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        "DATASETS_AWS_FOLDER=datasets",
+        "DATASETS_LOCAL_DIR=/workspace/datasets",
+        f"RUN_ID={run_id}",
+        f"DATABASE_PUBLIC_URL={env.database_public_url}",
+        f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
+        f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
+        "PIPELINE_WORKSPACE_PATH=/workspace",
+    ]
+    if env.sentry_dsn:
+        env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
+    if env.sentry_environment:
+        env_file_lines.append(f"SENTRY_ENVIRONMENT={env.sentry_environment}")
     script_parts += [
         "# === GPU Validation ===",
         'echo "Validating GPU..."',
@@ -450,15 +610,18 @@ def _build_remote_script(
         'echo "Creating .env file..."',
         "cd /workspace/AE-Scientist/research_pipeline",
         "cat > .env << 'EOF'",
-        f"OPENAI_API_KEY={env.openai_api_key}",
-        f"HF_TOKEN={env.hf_token}",
-        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
-        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
-        f"AWS_REGION={env.aws_region}",
-        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
-        f"RUN_ID={run_id}",
-        f"DATABASE_PUBLIC_URL={env.database_public_url}",
+    ]
+    script_parts += env_file_lines
+    script_parts += [
         "EOF",
+        'echo "Exporting environment variables from .env..."',
+        "set -a",
+        "source .env",
+        "set +a",
+        "",
+    ]
+    script_parts += _aws_credentials_setup_commands(env=env)
+    script_parts += [
         "# === Inject refined idea and config ===",
         "cd /workspace/AE-Scientist/research_pipeline",
         "python - <<'PY'",
@@ -475,9 +638,17 @@ def _build_remote_script(
         "torch.cuda.set_device(0)",
         "print('✅ PyTorch device initialized successfully')",
         "PY",
+        "",
+        "scrubbed_config_path=/tmp/run_config.yaml",
+        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
+        'if [ -s "$scrubbed_config_path" ]; then',
+        '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config || true',
+        "else",
+        "  echo 'Sanitized config is empty; skipping upload.'",
+        "fi",
         "pipeline_exit_code=0",
         "set +e",
-        f"python launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
         'if [ "$pipeline_exit_code" -eq 0 ]; then',
@@ -486,15 +657,9 @@ def _build_remote_script(
         '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
         "fi",
         "",
-        "# === Upload Research Pipeline Log to S3 ===",
-        'echo "Uploading research pipeline log to S3 (best-effort)..."',
-        "python upload_runpod_log.py --log-path /workspace/research_pipeline.log --artifact-type run_log || true",
-        'if [ "$pipeline_exit_code" -ne 0 ]; then',
-        '  echo "Research pipeline failed with exit code $pipeline_exit_code (log uploaded)."',
-        "  python upload_runpod_workspace.py --workspace-path /workspace/AE-Scientist/workspaces/0-run --artifact-type workspace_archive --archive-name 0-run-workspace.zip || true",
-        "else",
-        '  echo "Research pipeline finished successfully (log uploaded)."',
-        "fi",
+        "# === Await External Cleanup ===",
+        'echo "Research pipeline finished; sleeping until server collects artifacts..."',
+        "while true; do sleep 3600; done",
     ]
     return "\n".join(script_parts).strip()
 
@@ -505,6 +670,7 @@ async def launch_research_pipeline_run(
     config_name: str,
     run_id: str,
     requested_by_first_name: str,
+    gpu_types: list[str],
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -542,35 +708,21 @@ async def launch_research_pipeline_run(
 
     creator = RunPodManager(api_key=runpod_api_key)
     github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
-    metadata_env = {
+    pod_env = {
         "GIT_SSH_KEY_B64": github_key_b64,
         "REPO_NAME": "AE-Scientist",
         "REPO_ORG": "agencyenterprise",
         "REPO_BRANCH": "main",
-        "OPENAI_API_KEY": env.openai_api_key,
-        "HF_TOKEN": env.hf_token,
-        "AWS_ACCESS_KEY_ID": env.aws_access_key_id,
-        "AWS_SECRET_ACCESS_KEY": env.aws_secret_access_key,
-        "AWS_REGION": env.aws_region,
-        "AWS_S3_BUCKET_NAME": env.aws_s3_bucket_name,
-        "RUN_ID": run_id,
-        "DATABASE_PUBLIC_URL": env.database_public_url,
     }
-    gpu_types = [
-        "NVIDIA RTX PRO 6000 Blackwell Server Edition"
-        # "NVIDIA GeForce RTX 5090",
-        # "NVIDIA GeForce RTX 3090",
-        # "NVIDIA RTX A4000",
-        # "NVIDIA RTX A4500",
-        # "NVIDIA RTX A5000",
-    ]
+    if not gpu_types:
+        raise ValueError("At least one GPU type must be provided when launching a pod.")
     user_component = _sanitize_pod_user_component(value=requested_by_first_name)
-    pod_name = f"{POD_NAME_PREFIX}-{user_component}-{run_id}"
+    pod_name = f"{POD_NAME_PREFIX}_{user_component}_{run_id}"
     pod = await creator.create_pod(
         name=pod_name,
-        image="newtonsander/runpod_pytorch_texdeps:v1",
+        image="newtonsander/runpod_pytorch_texdeps:v1.1",
         gpu_types=gpu_types,
-        env=metadata_env,
+        pod_env=pod_env,
         docker_cmd=docker_cmd,
     )
     logger.debug("Pod created: %s", pod)
@@ -587,7 +739,14 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
-    ready_pod = await manager.wait_for_pod_ready(pod_id=pod_id)
+    poll_interval_seconds = POD_READY_POLL_INTERVAL_SECONDS
+    startup_grace_seconds = get_pipeline_startup_grace_seconds()
+    max_attempts = max(1, math.ceil(startup_grace_seconds / poll_interval_seconds))
+    ready_pod = await manager.wait_for_pod_ready(
+        pod_id=pod_id,
+        poll_interval=poll_interval_seconds,
+        max_attempts=max_attempts,
+    )
     pod_host_id = await manager.get_pod_host_id(pod_id=pod_id)
     return PodReadyMetadata(
         public_ip=cast(str, ready_pod.get("publicIp")),
@@ -596,23 +755,26 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
     )
 
 
-def terminate_pod(*, pod_id: str) -> None:
+async def terminate_pod(*, pod_id: str) -> None:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     creator = RunPodManager(api_key=runpod_api_key)
     try:
-        asyncio.run(creator.delete_pod(pod_id=pod_id))
+        logger.info("Terminating RunPod pod %s...", pod_id)
+        await creator.delete_pod(pod_id=pod_id)
+        logger.info("Terminated RunPod pod %s.", pod_id)
     except RunPodError as exc:
+        logger.warning("Failed to terminate RunPod pod %s: %s", pod_id, exc)
         raise RuntimeError(f"Failed to terminate pod {pod_id}: {exc}") from exc
 
 
-def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
+async def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     manager = RunPodManager(api_key=runpod_api_key)
-    return asyncio.run(manager.get_pod_billing_summary(pod_id=pod_id))
+    return await manager.get_pod_billing_summary(pod_id=pod_id)
 
 
 def _gather_log_env(run_id: str) -> dict[str, str] | None:
@@ -645,24 +807,136 @@ def _write_temp_key_file(raw_key: str) -> str:
     return path
 
 
-def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> None:
+async def upload_runpod_artifacts_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    run_id: str,
+    trigger: str,
+) -> None:
+    await asyncio.to_thread(
+        _upload_runpod_artifacts_via_ssh_sync,
+        host=host,
+        port=port,
+        run_id=run_id,
+        trigger=trigger,
+    )
+
+
+def _upload_runpod_artifacts_via_ssh_sync(
+    *,
+    host: str,
+    port: str | int,
+    run_id: str,
+    trigger: str,
+) -> None:
     if not host or not port:
-        logger.info("Skipping pod log upload for run %s; missing host/port.", run_id)
+        logger.info(
+            "Skipping pod artifacts upload for run %s (trigger=%s); missing host/port.",
+            run_id,
+            trigger,
+        )
         return
     private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
     if not private_key:
-        logger.info("RUN_POD_SSH_ACCESS_KEY is not configured; skipping pod log upload.")
+        logger.info(
+            "Skipping pod artifacts upload for run %s (trigger=%s); RUN_POD_SSH_ACCESS_KEY is not configured.",
+            run_id,
+            trigger,
+        )
         return
     env_values = _gather_log_env(run_id)
     if env_values is None:
         return
+    logger.info(
+        "Starting pod artifacts upload via SSH (run=%s trigger=%s host=%s port=%s)",
+        run_id,
+        trigger,
+        host,
+        port,
+    )
     key_path = _write_temp_key_file(private_key)
     remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
     remote_command = (
         "cd /workspace/AE-Scientist/research_pipeline && "
         "source .venv/bin/activate && "
-        f"{remote_env} python upload_runpod_log.py "
-        "--log-path /workspace/research_pipeline.log --artifact-type run_log"
+        f"{remote_env} python upload_file.py "
+        "--file-path /workspace/research_pipeline.log --artifact-type run_log || true && "
+        f"{remote_env} python upload_folder.py "
+        "--folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
+        "--artifact-type workspace_archive "
+        "--archive-name 0-run-workspace.zip"
+    )
+    ssh_command = [
+        "ssh",
+        "-i",
+        key_path,
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-p",
+        str(port),
+        f"root@{host}",
+        "bash",
+        "-lc",
+        shlex.quote(remote_command),
+    ]
+    try:
+        result = _run_artifact_upload_command(
+            command=ssh_command,
+            timeout_seconds=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "Pod artifacts upload via SSH failed for run %s (trigger=%s, exit %s): %s",
+                run_id,
+                trigger,
+                result.returncode,
+                result.stderr.strip(),
+            )
+        else:
+            if result.stdout:
+                logger.info(
+                    "Pod artifacts upload output for run %s (trigger=%s): %s",
+                    run_id,
+                    trigger,
+                    result.stdout.strip(),
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Error uploading pod artifacts for run %s (trigger=%s): %s", run_id, trigger, exc
+        )
+    finally:
+        try:
+            Path(key_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _perform_management_ssh_request(
+    *,
+    host: str,
+    port: str | int,
+    payload: dict[str, object],
+    endpoint: str,
+    private_key: str,
+    timeout: int,
+    error_cls: Type[Exception],
+) -> tuple[int, str]:
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    payload_b64 = base64.b64encode(payload_json.encode("utf-8")).decode("utf-8")
+    key_path = _write_temp_key_file(private_key)
+    remote_command = (
+        f"PAYLOAD=$(printf '%s' '{payload_b64}' | base64 --decode); "
+        "RESPONSE=$(curl -sS -w '\\n%{http_code}' "
+        "-H 'Content-Type: application/json' "
+        '--data "$PAYLOAD" '
+        f"http://127.0.0.1:8090{endpoint}); "
+        "STATUS=$(printf '%s' \"$RESPONSE\" | tail -n1); "
+        "BODY=$(printf '%s' \"$RESPONSE\" | sed '$d'); "
+        "printf 'HTTP_STATUS:%s\\n' \"$STATUS\"; "
+        "printf '%s' \"$BODY\""
     )
     ssh_command = [
         "ssh",
@@ -684,27 +958,120 @@ def upload_runpod_log_via_ssh(*, host: str, port: str | int, run_id: str) -> Non
             ssh_command,
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=timeout,
             check=False,
         )
-        if result.returncode != 0:
-            logger.warning(
-                "Pod log upload via SSH failed for run %s (exit %s): %s",
-                run_id,
-                result.returncode,
-                result.stderr.strip(),
-            )
-        else:
-            if result.stdout:
-                logger.info(
-                    "Pod log upload output for run %s: %s",
-                    run_id,
-                    result.stdout.strip(),
-                )
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Error uploading pod log for run %s: %s", run_id, exc)
+        logger.exception("SSH management request failed (endpoint=%s)", endpoint)
+        raise error_cls(f"SSH command failed for endpoint {endpoint}") from exc
     finally:
         try:
             Path(key_path).unlink(missing_ok=True)
         except OSError:
             pass
+
+    stdout = result.stdout.strip() if result.stdout else ""
+    stderr = result.stderr.strip() if result.stderr else ""
+    if result.returncode != 0:
+        raise error_cls(
+            f"SSH command exited with {result.returncode} for endpoint {endpoint}: {stderr}"
+        )
+
+    status_line, _, body = stdout.partition("\n")
+    if not status_line.startswith("HTTP_STATUS:"):
+        raise error_cls(
+            f"Malformed response from management server for endpoint {endpoint}: {stdout}"
+        )
+    status_code = status_line.split(":", 1)[1].strip()
+    return int(status_code or "0"), body.strip()
+
+
+def send_execution_feedback_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    execution_id: str,
+    payload: str,
+) -> None:
+    """
+    Kill a running execution inside the research pipeline pod and submit user feedback payload.
+
+    This connects via SSH and sends a POST request to the local termination server running
+    alongside the pipeline (default http://127.0.0.1:8090/terminate/{execution_id}).
+    """
+    if not host or not port:
+        logger.warning("Cannot send feedback for execution %s; missing host or port.", execution_id)
+        return
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        logger.warning(
+            "RUN_POD_SSH_ACCESS_KEY not configured; skipping feedback for execution %s",
+            execution_id,
+        )
+        return
+
+    try:
+        status_code, body = _perform_management_ssh_request(
+            host=host,
+            port=port,
+            payload={"payload": payload},
+            endpoint=f"/terminate/{execution_id}",
+            private_key=private_key,
+            timeout=60,
+            error_cls=TerminationRequestError,
+        )
+    except TerminationRequestError:
+        raise
+
+    if status_code == 200:
+        logger.info(
+            "Termination acknowledged for execution %s: %s", execution_id, body or "<empty>"
+        )
+        return
+
+    if status_code == 404:
+        raise TerminationNotFoundError(
+            f"Execution {execution_id} not found on pod (response: {body or 'no body'})"
+        )
+
+    if status_code == 409:
+        raise TerminationConflictError(
+            f"Execution {execution_id} already completed or terminating (response: {body or 'no body'})"
+        )
+
+    raise TerminationRequestError(
+        f"Unexpected termination response for execution {execution_id}: status={status_code} body={body}"
+    )
+
+
+def request_stage_skip_via_ssh(
+    *,
+    host: str,
+    port: str | int,
+    reason: str | None = None,
+) -> None:
+    """
+    Request the pipeline to skip the current stage via the management server.
+    """
+    if not host or not port:
+        raise RuntimeError("Cannot request stage skip; missing host or port.")
+    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
+    if not private_key:
+        raise RuntimeError("RUN_POD_SSH_ACCESS_KEY not configured; cannot request stage skip.")
+
+    status_code, body = _perform_management_ssh_request(
+        host=host,
+        port=port,
+        payload={"reason": reason or "Skip stage requested via dashboard."},
+        endpoint="/skip-stage",
+        private_key=private_key,
+        timeout=30,
+        error_cls=RuntimeError,
+    )
+
+    if status_code != 200:
+        raise RuntimeError(
+            f"Stage skip request rejected: status={status_code} body={body or '<empty>'}"
+        )
+
+    logger.info("Stage skip request acknowledged by management server: %s", body or "<empty>")

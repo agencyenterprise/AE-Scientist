@@ -1,16 +1,63 @@
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, NamedTuple, Optional
+from typing import Any, List, NamedTuple, Optional, cast
 
-import psycopg2
-import psycopg2.extras
-from psycopg2.extensions import cursor as PsycopgCursor
+from psycopg import AsyncCursor
+from psycopg.rows import dict_row
+from psycopg.sql import SQL, Composable, Composed
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
 
 PIPELINE_RUN_STATUSES = ("pending", "running", "failed", "completed")
+
+# Shared SQL CTE for calculating progress across pipeline runs.
+# Combines stage progress and paper generation events, then calculates overall progress
+# as completed-stages-only buckets (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+_PROGRESS_CTE_SQL = SQL(
+    """
+    all_progress AS (
+        SELECT run_id, stage, progress, best_metric, created_at
+        FROM rp_run_stage_progress_events
+        UNION ALL
+        SELECT run_id, '5_paper_generation'::text, progress, NULL::text, created_at
+        FROM rp_paper_generation_events
+    ),
+    latest_progress AS (
+        SELECT DISTINCT ON (run_id)
+            run_id,
+            stage,
+            progress,
+            best_metric,
+            created_at
+        FROM all_progress
+        ORDER BY run_id, created_at DESC
+    ),
+    progress_with_calculations AS (
+        SELECT
+            run_id,
+            stage,
+            best_metric,
+            -- Calculate overall progress as completed-stages-only buckets.
+            -- If the *current* stage is incomplete, the displayed progress reflects
+            -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+            CASE
+                WHEN stage ~ '^[1-5]_' THEN
+                    CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
+                    CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
+                ELSE progress
+            END AS overall_progress
+        FROM latest_progress
+    ),
+    artifact_counts AS (
+        SELECT run_id, COUNT(*) as count
+        FROM rp_artifacts
+        GROUP BY run_id
+    )
+"""
+)
 
 
 class PodUpdateInfo(NamedTuple):
@@ -35,6 +82,8 @@ class ResearchPipelineRun(NamedTuple):
     public_ip: Optional[str]
     ssh_port: Optional[str]
     pod_host_id: Optional[str]
+    container_disk_gb: Optional[int]
+    volume_disk_gb: Optional[int]
     error_message: Optional[str]
     cost: float
     started_running_at: Optional[datetime]
@@ -55,16 +104,8 @@ class ResearchPipelineRunEvent(NamedTuple):
 
 
 class ResearchPipelineRunsMixin(ConnectionProvider):
-    if TYPE_CHECKING:
-        # Type hint for method provided by ConversationsMixin (via DatabaseManager)
-        def _update_conversation_status_with_cursor(
-            self, cursor: PsycopgCursor, conversation_id: int, status: str
-        ) -> None:
-            """Update conversation status within existing transaction."""
-            del cursor, conversation_id, status
-            raise NotImplementedError
 
-    def create_research_pipeline_run(
+    async def create_research_pipeline_run(
         self,
         *,
         run_id: str,
@@ -74,15 +115,17 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         start_deadline_at: Optional[datetime],
         cost: float,
         last_billed_at: datetime,
+        container_disk_gb: int,
+        volume_disk_gb: int,
         started_running_at: Optional[datetime] = None,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
             raise ValueError(f"Invalid status '{status}'")
         now = datetime.now(timezone.utc)
         deadline = start_deadline_at
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO research_pipeline_runs (
                         run_id,
@@ -92,10 +135,12 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         cost,
                         start_deadline_at,
                         last_billed_at,
+                        container_disk_gb,
+                        volume_disk_gb,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -106,15 +151,17 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         cost,
                         deadline,
                         last_billed_at,
+                        container_disk_gb,
+                        volume_disk_gb,
                         now,
                         now,
                     ),
                 )
-                new_id_row = cursor.fetchone()
+                new_id_row = await cursor.fetchone()
                 if not new_id_row:
                     raise ValueError("Failed to create research pipeline run (missing id).")
-                new_id = new_id_row[0]
-                self._insert_run_event_with_cursor(
+                new_id = int(new_id_row["id"])
+                await self._insert_run_event_with_cursor(
                     cursor=cursor,
                     run_id=run_id,
                     event_type="created",
@@ -131,25 +178,26 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                     occurred_at=now,
                 )
 
-                # Get conversation_id from the idea and update its status to 'with_research'
-                cursor.execute(
+                await cursor.execute(
                     "SELECT conversation_id FROM ideas WHERE id = %s",
                     (idea_id,),
                 )
-                idea_row = cursor.fetchone()
+                idea_row = await cursor.fetchone()
                 if idea_row:
-                    conversation_id = idea_row[0]
-                    # Call the helper method to update status within this transaction
-                    self._update_conversation_status_with_cursor(
-                        cursor=cursor,
-                        conversation_id=conversation_id,
-                        status="with_research",
+                    conversation_id = idea_row["conversation_id"]
+                    await cursor.execute(
+                        """
+                        UPDATE conversations
+                        SET status = %s, updated_at = %s
+                        WHERE id = %s
+                        """,
+                        ("with_research", now, conversation_id),
                     )
 
-                conn.commit()
-                return int(new_id)
+                await conn.commit()
+                return new_id
 
-    def update_research_pipeline_run(
+    async def update_research_pipeline_run(
         self,
         *,
         run_id: str,
@@ -194,18 +242,20 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             fields.append("started_running_at = %s")
             values.append(started_running_at)
         fields.append("updated_at = %s")
-        values.append(datetime.now())
+        values.append(datetime.now(timezone.utc))
         values.append(run_id)
         set_clause = ", ".join(fields)
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    f"UPDATE research_pipeline_runs SET {set_clause} WHERE run_id = %s",
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    SQL("UPDATE research_pipeline_runs SET {} WHERE run_id = %s").format(
+                        SQL(set_clause)
+                    ),
                     tuple(values),
                 )
-                conn.commit()
+                await conn.commit()
 
-    def insert_research_pipeline_run_event(
+    async def insert_research_pipeline_run_event(
         self,
         *,
         run_id: str,
@@ -213,40 +263,42 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         metadata: dict[str, object],
         occurred_at: datetime,
     ) -> None:
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                self._insert_run_event_with_cursor(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await self._insert_run_event_with_cursor(
                     cursor=cursor,
                     run_id=run_id,
                     event_type=event_type,
                     metadata=metadata,
                     occurred_at=occurred_at,
                 )
-                conn.commit()
+                await conn.commit()
 
-    def list_research_pipeline_run_events(self, run_id: str) -> list[ResearchPipelineRunEvent]:
+    async def list_research_pipeline_run_events(
+        self, run_id: str
+    ) -> list[ResearchPipelineRunEvent]:
         query = """
             SELECT id, run_id, event_type, metadata, occurred_at
             FROM research_pipeline_run_events
             WHERE run_id = %s
             ORDER BY occurred_at ASC, id ASC
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(query, (run_id,))
-                rows = cursor.fetchall() or []
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                rows = await cursor.fetchall() or []
         return [ResearchPipelineRunEvent(**row) for row in rows]
 
-    def _insert_run_event_with_cursor(
+    async def _insert_run_event_with_cursor(
         self,
         *,
-        cursor: PsycopgCursor,
+        cursor: AsyncCursor[Any],
         run_id: str,
         event_type: str,
         metadata: dict[str, object],
         occurred_at: datetime,
     ) -> None:
-        cursor.execute(
+        await cursor.execute(
             """
             INSERT INTO research_pipeline_run_events (run_id, event_type, metadata, occurred_at)
             VALUES (%s, %s, %s, %s)
@@ -254,7 +306,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             (
                 run_id,
                 event_type,
-                psycopg2.extras.Json(self._normalize_metadata(metadata)),
+                Jsonb(self._normalize_metadata(metadata)),
                 occurred_at,
             ),
         )
@@ -272,31 +324,31 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
 
         return {key: _convert(value) for key, value in metadata.items()}
 
-    def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+    async def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]:
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     "SELECT * FROM research_pipeline_runs WHERE run_id = %s",
                     (run_id,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
                 if not row:
                     return None
                 return self._row_to_run(row)
 
-    def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+    async def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]:
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT * FROM research_pipeline_runs
                     WHERE status IN ('pending', 'running')
                     """
                 )
-                rows = cursor.fetchall() or []
+                rows = await cursor.fetchall() or []
         return [self._row_to_run(row) for row in rows]
 
-    def list_research_runs_for_conversation(
+    async def list_research_runs_for_conversation(
         self, conversation_id: int
     ) -> list[ResearchPipelineRun]:
         query = """
@@ -306,13 +358,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             WHERE i.conversation_id = %s
             ORDER BY r.created_at DESC
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(query, (conversation_id,))
-                rows = cursor.fetchall() or []
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (conversation_id,))
+                rows = await cursor.fetchall() or []
         return [self._row_to_run(row) for row in rows]
 
-    def get_run_for_conversation(
+    async def get_run_for_conversation(
         self, *, run_id: str, conversation_id: int
     ) -> Optional[ResearchPipelineRun]:
         query = """
@@ -322,43 +374,43 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             WHERE r.run_id = %s AND i.conversation_id = %s
             LIMIT 1
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(query, (run_id, conversation_id))
-                row = cursor.fetchone()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id, conversation_id))
+                row = await cursor.fetchone()
         if not row:
             return None
         return self._row_to_run(row)
 
-    def get_run_conversation_id(self, run_id: str) -> Optional[int]:
+    async def get_run_conversation_id(self, run_id: str) -> Optional[int]:
         query = """
             SELECT i.conversation_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             WHERE r.run_id = %s
         """
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query, (run_id,))
-                result = cursor.fetchone()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                result = await cursor.fetchone()
         if not result:
             return None
-        return int(result[0])
+        return int(result["conversation_id"])
 
-    def get_run_owner_user_id(self, run_id: str) -> Optional[int]:
+    async def get_run_owner_user_id(self, run_id: str) -> Optional[int]:
         query = """
             SELECT i.created_by_user_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             WHERE r.run_id = %s
         """
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query, (run_id,))
-                result = cursor.fetchone()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                result = await cursor.fetchone()
         if not result:
             return None
-        return int(result[0])
+        return int(result["created_by_user_id"])
 
     def _row_to_run(self, row: dict) -> ResearchPipelineRun:
         return ResearchPipelineRun(
@@ -373,6 +425,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             public_ip=row.get("public_ip"),
             ssh_port=row.get("ssh_port"),
             pod_host_id=row.get("pod_host_id"),
+            container_disk_gb=row.get("container_disk_gb"),
+            volume_disk_gb=row.get("volume_disk_gb"),
             error_message=row.get("error_message"),
             cost=float(row.get("cost", 0)),
             started_running_at=row.get("started_running_at"),
@@ -384,58 +438,16 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             updated_at=row["updated_at"],
         )
 
-    def get_enriched_research_pipeline_run(self, run_id: str) -> Optional[dict]:
+    async def get_enriched_research_pipeline_run(self, run_id: str) -> Optional[dict]:
         """
         Get a single research pipeline run with enriched data from related tables.
 
         Returns a dict with the same fields as list_all_research_pipeline_runs,
         or None if not found.
         """
-        query = """
-            WITH latest_stage_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    stage,
-                    progress,
-                    best_metric,
-                    created_at
-                FROM rp_run_stage_progress_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_paper_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    '5_paper_generation' AS stage,
-                    progress,
-                    NULL::text AS best_metric,
-                    created_at
-                FROM rp_paper_generation_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_progress AS (
-                SELECT
-                    COALESCE(pp.run_id, sp.run_id) AS run_id,
-                    COALESCE(pp.stage, sp.stage) AS stage,
-                    sp.best_metric,
-                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
-                    -- For stages 1-4: show fixed percentage based on stage number
-                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
-                    CASE 
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
-                        ELSE COALESCE(pp.progress, sp.progress)
-                    END AS overall_progress
-                FROM latest_stage_progress sp
-                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
-            ),
-            artifact_counts AS (
-                SELECT run_id, COUNT(*) as count
-                FROM rp_artifacts
-                GROUP BY run_id
-            )
+        query = SQL(
+            "WITH {progress_cte}"
+            """
             SELECT
                 r.run_id,
                 r.status,
@@ -448,28 +460,31 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 iv.short_hypothesis AS idea_hypothesis,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
-                lp.stage AS current_stage,
-                lp.overall_progress AS progress,
-                lp.best_metric,
+                pc.stage AS current_stage,
+                pc.overall_progress AS progress,
+                pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
-                i.conversation_id
+                i.conversation_id,
+                c.url AS conversation_url
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
-            LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
+            LEFT JOIN conversations c ON i.conversation_id = c.id
+            LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
             WHERE r.run_id = %s
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(query, (run_id,))
-                row = cursor.fetchone()
+        ).format(progress_cte=_PROGRESS_CTE_SQL)
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                row = await cursor.fetchone()
         if not row:
             return None
         return dict(row)
 
-    def list_all_research_pipeline_runs(
+    async def list_all_research_pipeline_runs(
         self,
         *,
         limit: int = 50,
@@ -500,78 +515,39 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         - conversation_id from ideas
         """
         # Build WHERE clauses
-        where_clauses: List[str] = []
+        where_clauses: List[Composable] = []
         params: List[object] = []
 
         if search:
             where_clauses.append(
+                SQL(
+                    """
+                    (r.run_id ILIKE %s
+                    OR iv.title ILIKE %s
+                    OR iv.short_hypothesis ILIKE %s
+                    OR u.name ILIKE %s)
                 """
-                (r.run_id ILIKE %s
-                OR iv.title ILIKE %s
-                OR iv.short_hypothesis ILIKE %s
-                OR u.name ILIKE %s)
-            """
+                )
             )
             search_pattern = f"%{search}%"
             params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
 
         if status:
-            where_clauses.append("r.status = %s")
+            where_clauses.append(SQL("r.status = %s"))
             params.append(status)
 
         if user_id:
-            where_clauses.append("i.created_by_user_id = %s")
+            where_clauses.append(SQL("i.created_by_user_id = %s"))
             params.append(user_id)
 
-        where_sql = ""
+        where_clause_sql: Composed = cast(Composed, SQL(""))
         if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+            composed_clauses = SQL(" AND ").join(where_clauses)
+            where_clause_sql = SQL(" WHERE ") + composed_clauses
 
-        query = f"""
-            WITH latest_stage_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    stage,
-                    progress,
-                    best_metric,
-                    created_at
-                FROM rp_run_stage_progress_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_paper_progress AS (
-                SELECT DISTINCT ON (run_id)
-                    run_id,
-                    '5_paper_generation' AS stage,
-                    progress,
-                    NULL::text AS best_metric,
-                    created_at
-                FROM rp_paper_generation_events
-                ORDER BY run_id, created_at DESC
-            ),
-            latest_progress AS (
-                SELECT
-                    COALESCE(pp.run_id, sp.run_id) AS run_id,
-                    COALESCE(pp.stage, sp.stage) AS stage,
-                    sp.best_metric,
-                    -- Calculate overall progress: each stage is 20%% of total (5 stages)
-                    -- For stages 1-4: show fixed percentage based on stage number
-                    -- For stage 5: interpolate from 80%% to 100%% based on paper generation progress
-                    CASE 
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '1_%%' THEN 0.2
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '2_%%' THEN 0.4
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '3_%%' THEN 0.6
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '4_%%' THEN 0.8
-                        WHEN COALESCE(pp.stage, sp.stage) LIKE '5_%%' THEN 0.8 + (COALESCE(pp.progress, sp.progress) * 0.2)
-                        ELSE COALESCE(pp.progress, sp.progress)
-                    END AS overall_progress
-                FROM latest_stage_progress sp
-                FULL OUTER JOIN latest_paper_progress pp ON sp.run_id = pp.run_id
-            ),
-            artifact_counts AS (
-                SELECT run_id, COUNT(*) as count
-                FROM rp_artifacts
-                GROUP BY run_id
-            )
+        query = SQL(
+            "WITH {progress_cte}"
+            """
             SELECT
                 r.run_id,
                 r.status,
@@ -584,39 +560,43 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 iv.short_hypothesis AS idea_hypothesis,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
-                lp.stage AS current_stage,
-                lp.overall_progress AS progress,
-                lp.best_metric,
+                pc.stage AS current_stage,
+                pc.overall_progress AS progress,
+                pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
-                i.conversation_id
+                i.conversation_id,
+                c.url AS conversation_url
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
-            LEFT JOIN latest_progress lp ON r.run_id = lp.run_id
+            LEFT JOIN conversations c ON i.conversation_id = c.id
+            LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
-            {where_sql}
+            {where_clause}
             ORDER BY r.created_at DESC
             LIMIT %s OFFSET %s
         """
+        ).format(progress_cte=_PROGRESS_CTE_SQL, where_clause=where_clause_sql)
 
-        # Count query with same filters
-        count_query = f"""
+        count_query = SQL(
+            """
             SELECT COUNT(*)
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
             JOIN users u ON i.created_by_user_id = u.id
-            {where_sql}
+            {where_clause}
         """
+        ).format(where_clause=where_clause_sql)
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(count_query, params)
-                total_row = cursor.fetchone()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(count_query, params)
+                total_row = await cursor.fetchone()
                 total = int(total_row["count"]) if total_row else 0
 
-                cursor.execute(query, params + [limit, offset])
-                rows = cursor.fetchall() or []
+                await cursor.execute(query, params + [limit, offset])
+                rows = await cursor.fetchall() or []
 
         return [dict(row) for row in rows], total

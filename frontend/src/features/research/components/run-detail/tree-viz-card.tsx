@@ -1,32 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
+import type { TreeVizItem, ArtifactMetadata, SubstageSummary } from "@/types/research";
 import { formatDateTime } from "@/shared/lib/date-utils";
+import {
+  stageLabel,
+  extractStageSlug,
+  getSummaryText,
+  getStageSummary,
+  getStageSlug,
+  FULL_TREE_STAGE_ID,
+} from "@/shared/lib/stage-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
+import { mergeTreeVizItems } from "@/shared/lib/tree-merge-utils";
 
 interface Props {
   treeViz?: TreeVizItem[] | null;
   conversationId: number | null;
+  runId: string;
   artifacts: ArtifactMetadata[];
+  substageSummaries?: SubstageSummary[];
 }
 
-const STAGE_SUMMARIES: Record<string, string> = {
-  Stage_1:
-    "Goal: Develop functional code which can produce a runnable result. The tree represents attempts and fixes needed to reach this state.",
-  Stage_2:
-    "Goal: Improve the baseline through tuning and small changes to the code while keeping the overall approach fixed. The scientist tries to improve the metrics which quantify the quality of the research.",
-  Stage_3:
-    "Goal: Explore higher-leverage variants and research directions, supported by plots and analyses to understand what is driving performance. The scientist tries to find and validate meaningful improvements worth writing up.",
-  Stage_4:
-    "Goal: Run controlled ablations and robustness checks to isolate which components matter and why. The scientist tries to attribute gains and strengthen the evidence for the final claims.",
-};
-
-function stageLabel(stageId: string): string {
-  return stageId.replace("Stage_", "Stage ");
-}
-
-export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
+export function TreeVizCard({ treeViz, conversationId, runId, artifacts, substageSummaries }: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
 
@@ -46,17 +42,31 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
   const selectedStageId = useMemo(() => {
     if (!hasViz) return null;
 
-    // If user has manually selected a stage and it still exists, use it
-    if (manuallySelectedStageId && list.find(v => v.stage_id === manuallySelectedStageId)) {
-      return manuallySelectedStageId;
+    // If user has manually selected Full Tree or a stage that still exists, use it
+    if (manuallySelectedStageId) {
+      if (manuallySelectedStageId === FULL_TREE_STAGE_ID) {
+        return FULL_TREE_STAGE_ID;
+      }
+      if (list.find(v => v.stage_id === manuallySelectedStageId)) {
+        return manuallySelectedStageId;
+      }
     }
 
     // Otherwise auto-follow the most recent stage
     return mostRecentStageId;
   }, [hasViz, list, manuallySelectedStageId, mostRecentStageId]);
 
-  const selectedViz =
-    hasViz && selectedStageId ? (list.find(v => v.stage_id === selectedStageId) ?? list[0]) : null;
+  // Create merged viz for Full Tree view
+  const mergedViz = useMemo(() => {
+    if (!hasViz || list.length === 0) return null;
+    return mergeTreeVizItems(list);
+  }, [hasViz, list]);
+
+  const selectedViz = useMemo(() => {
+    if (!hasViz || !selectedStageId) return null;
+    if (selectedStageId === FULL_TREE_STAGE_ID) return mergedViz;
+    return list.find(v => v.stage_id === selectedStageId) ?? list[0];
+  }, [hasViz, selectedStageId, list, mergedViz]);
 
   // Find best node for the selected stage using the is_best_node array in the tree viz payload
   const bestNodeForSelectedStage = useMemo(() => {
@@ -64,23 +74,46 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const payload = selectedViz.viz as any;
-    const isBestNodeArray = payload?.is_best_node;
+    const payload = selectedViz.viz as { is_best_node?: boolean[] };
+    const isBestNodeArray = payload.is_best_node;
 
     if (!isBestNodeArray || isBestNodeArray.length === 0) {
       return null;
     }
 
     // Find the index where is_best_node is true
-    const bestNodeIndex = isBestNodeArray.findIndex((isBest: boolean) => isBest === true);
+    const bestNodeIndex = isBestNodeArray.findIndex(isBest => isBest === true);
 
     return bestNodeIndex >= 0 ? bestNodeIndex : null;
   }, [selectedViz]);
 
+  const stageSummaryText = useMemo(() => {
+    if (!selectedViz) return null;
+    if (!substageSummaries || substageSummaries.length === 0) return null;
+    if (selectedViz.stage_id === FULL_TREE_STAGE_ID) return null;
+
+    const stageKey = getStageSlug(selectedViz.stage_id);
+    if (!stageKey) return null;
+
+    const matches = substageSummaries.filter(
+      summary => extractStageSlug(summary.stage) === stageKey
+    );
+    if (matches.length === 0) return null;
+
+    const latest =
+      matches.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0] ?? null;
+    if (!latest) return null;
+
+    return getSummaryText(latest);
+  }, [selectedViz, substageSummaries]);
+
   return (
     <div className="w-full rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-      <div className="mb-2 text-sm font-semibold text-slate-100">Tree Visualization</div>
+      <div className="mb-2">
+        <span className="text-sm font-semibold text-slate-100">Tree Visualization</span>
+      </div>
       {!hasViz && <p className="text-sm text-slate-300">No tree visualization available yet.</p>}
       {hasViz && selectedViz && (
         <>
@@ -101,11 +134,34 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
                 {stageLabel(viz.stage_id)}
               </button>
             ))}
+            <button
+              key="full-tree"
+              type="button"
+              onClick={() => {
+                setManuallySelectedStageId(FULL_TREE_STAGE_ID);
+              }}
+              className={`rounded px-3 py-1 text-xs ${
+                selectedStageId === FULL_TREE_STAGE_ID
+                  ? "bg-emerald-500 text-slate-900"
+                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+              }`}
+            >
+              Full Tree
+            </button>
           </div>
           <p className="mb-2 text-xs text-slate-300">
-            {STAGE_SUMMARIES[selectedViz.stage_id] ??
-              "Explore and evaluate candidate solutions for this stage. The tree shows how the run iterates on ideas, tests changes, and selects better-performing nodes."}
+            {getStageSummary(selectedViz.stage_id) ?? ""}
           </p>
+          {stageSummaryText && (
+            <div className="mb-2 w-full rounded border border-slate-800/60 bg-slate-900/60 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Completed Stage Summary
+              </p>
+              <div className="mt-1 text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                {stageSummaryText}
+              </div>
+            </div>
+          )}
           <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
             <span>
               <span className="text-slate-500">Start:</span>{" "}
@@ -118,6 +174,9 @@ export function TreeVizCard({ treeViz, conversationId, artifacts }: Props) {
           <TreeVizViewer
             viz={selectedViz}
             artifacts={artifacts}
+            conversationId={conversationId}
+            runId={runId}
+            stageId={selectedViz.stage_id}
             bestNodeId={bestNodeForSelectedStage}
           />
         </>

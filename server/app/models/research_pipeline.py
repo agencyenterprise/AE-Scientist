@@ -14,9 +14,11 @@ from app.services.database.research_pipeline_runs import (
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import (
     BestNodeReasoningEvent,
+    CodeExecutionEvent,
     PaperGenerationEvent,
     RunLogEvent,
     StageProgressEvent,
+    StageSkipWindowRecord,
     SubstageCompletedEvent,
     SubstageSummaryEvent,
 )
@@ -38,7 +40,11 @@ class ResearchRunListItem(BaseModel):
     )
     current_stage: Optional[str] = Field(None, description="Latest stage from progress events")
     progress: Optional[float] = Field(
-        None, description="Progress percentage (0-1) from latest event"
+        None,
+        description=(
+            "Overall pipeline progress (0-1) computed as completed-stages-only buckets "
+            "(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)."
+        ),
     )
     gpu_type: Optional[str] = Field(None, description="GPU type used for the run")
     cost: float = Field(..., description="Hourly RunPod cost (USD) captured when the pod launched")
@@ -212,6 +218,28 @@ class ResearchRunBestNodeSelection(BaseModel):
         )
 
 
+class ResearchRunStageSkipWindow(BaseModel):
+    id: int = Field(..., description="Unique identifier for the skip window record")
+    stage: str = Field(..., description="Stage identifier where skipping became possible")
+    opened_at: str = Field(..., description="ISO timestamp when the window opened")
+    opened_reason: Optional[str] = Field(None, description="Reason provided when the window opened")
+    closed_at: Optional[str] = Field(
+        None, description="ISO timestamp when the window closed (if closed)"
+    )
+    closed_reason: Optional[str] = Field(None, description="Reason provided when the window closed")
+
+    @staticmethod
+    def from_db_record(record: StageSkipWindowRecord) -> "ResearchRunStageSkipWindow":
+        return ResearchRunStageSkipWindow(
+            id=record.id,
+            stage=record.stage,
+            opened_at=record.opened_at.isoformat(),
+            opened_reason=record.opened_reason,
+            closed_at=record.closed_at.isoformat() if record.closed_at else None,
+            closed_reason=record.closed_reason,
+        )
+
+
 class ResearchRunPaperGenerationProgress(BaseModel):
     id: int = Field(..., description="Unique identifier of the paper generation event")
     run_id: str = Field(..., description="Research run identifier")
@@ -243,6 +271,32 @@ class ResearchRunPaperGenerationProgress(BaseModel):
         )
 
 
+class ResearchRunCodeExecution(BaseModel):
+    """Latest code execution snapshot for a run."""
+
+    execution_id: str = Field(..., description="Unique identifier for the code execution attempt")
+    stage_name: str = Field(..., description="Stage name reported by the research pipeline")
+    run_type: str = Field(..., description="Type of execution (e.g., main_execution)")
+    code: str = Field(..., description="Python source code submitted for execution")
+    status: str = Field(..., description="Execution status reported by the worker")
+    started_at: str = Field(..., description="ISO timestamp when execution began")
+    completed_at: Optional[str] = Field(None, description="ISO timestamp when execution ended")
+    exec_time: Optional[float] = Field(None, description="Execution time reported by the worker")
+
+    @staticmethod
+    def from_db_record(record: "CodeExecutionEvent") -> "ResearchRunCodeExecution":
+        return ResearchRunCodeExecution(
+            execution_id=record.execution_id,
+            stage_name=record.stage_name,
+            run_type=record.run_type,
+            code=record.code,
+            status=record.status,
+            started_at=record.started_at.isoformat(),
+            completed_at=record.completed_at.isoformat() if record.completed_at else None,
+            exec_time=record.exec_time,
+        )
+
+
 class ResearchRunArtifactMetadata(BaseModel):
     id: int = Field(..., description="Artifact identifier")
     artifact_type: str = Field(..., description="Artifact type label")
@@ -250,11 +304,14 @@ class ResearchRunArtifactMetadata(BaseModel):
     file_size: int = Field(..., description="File size in bytes")
     file_type: str = Field(..., description="MIME type")
     created_at: str = Field(..., description="ISO timestamp when the artifact was recorded")
-    download_path: str = Field(..., description="API path to initiate a download")
+    run_id: str = Field(..., description="Research run identifier")
+    conversation_id: Optional[int] = Field(None, description="ID of the associated conversation")
 
     @staticmethod
     def from_db_record(
-        artifact: ResearchPipelineArtifact, conversation_id: int, run_id: str
+        artifact: ResearchPipelineArtifact,
+        conversation_id: int,
+        run_id: str,
     ) -> "ResearchRunArtifactMetadata":
         return ResearchRunArtifactMetadata(
             id=artifact.id,
@@ -263,9 +320,8 @@ class ResearchRunArtifactMetadata(BaseModel):
             file_size=artifact.file_size,
             file_type=artifact.file_type,
             created_at=artifact.created_at.isoformat(),
-            download_path=(
-                f"/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact.id}/download"
-            ),
+            run_id=run_id,
+            conversation_id=conversation_id,
         )
 
 
@@ -283,7 +339,7 @@ class TreeVizItem(BaseModel):
 
     id: int = Field(..., description="Tree viz identifier")
     run_id: str = Field(..., description="Research run identifier")
-    stage_id: str = Field(..., description="Stage identifier (Stage_1..Stage_4)")
+    stage_id: str = Field(..., description="Stage identifier (stage_1..stage_4)")
     version: int = Field(..., description="Version counter for the stored viz")
     viz: dict = Field(..., description="Tree visualization payload")
     created_at: str = Field(..., description="ISO timestamp when the viz was stored")
@@ -334,6 +390,10 @@ class ResearchRunDetailsResponse(BaseModel):
     )
     paper_generation_progress: List[ResearchRunPaperGenerationProgress] = Field(
         default_factory=list, description="Paper generation progress events (Stage 5)"
+    )
+    stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
+        default_factory=list,
+        description="Windows indicating when each stage became skippable.",
     )
 
 

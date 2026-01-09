@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from multiprocessing import Queue
 from multiprocessing.context import SpawnProcess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import humanize
 import IPython.core.ultratb
@@ -241,6 +241,15 @@ def _repl_run_session(
     Using a module-level function avoids pickling the Interpreter instance
     which can fail under the 'spawn' start method.
     """
+    # Create a dedicated process group for this interpreter process so any
+    # forked/spawned subprocesses (e.g., DataLoader workers) can be terminated
+    # together via os.killpg(pid, ...).
+    try:
+        if hasattr(os, "setsid"):
+            os.setsid()
+    except Exception:
+        pass
+
     # Child process setup (mirrors Interpreter.child_proc_setup)
     shutup.mute_warnings()
     # Suppress PyMuPDF layout warning
@@ -287,6 +296,14 @@ def _repl_run_session(
         result_outq.put("<|EOF|>")
 
 
+class InterpreterTerminated(RuntimeError):
+    """Raised when the interpreter child process was terminated externally."""
+
+    def __init__(self, *, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class Interpreter:
     def __init__(
         self,
@@ -330,6 +347,30 @@ class Interpreter:
                 list[tuple[str, int, str, str | None]] | None,
             ]
         ]
+        self._pid_callback: Callable[[int], None] | None = None
+        # Set by callers for log correlation (useful when multiple workers interleave logs).
+        # Keys: execution_id, stage_name, purpose
+        self._run_context: dict[str, str] = {}
+        self._termination_checker: Callable[[], bool] | None = None
+
+    def set_run_context(self, *, execution_id: str, stage_name: str, purpose: str) -> None:
+        self._run_context = {
+            "execution_id": execution_id,
+            "stage_name": stage_name,
+            "purpose": purpose,
+        }
+
+    def clear_run_context(self) -> None:
+        self._run_context = {}
+
+    def _format_run_context(self) -> str:
+        if not self._run_context:
+            return "execution_id=<unknown> stage=<unknown> purpose=<unknown>"
+        return (
+            f"execution_id={self._run_context.get('execution_id', '<unknown>')} "
+            f"stage={self._run_context.get('stage_name', '<unknown>')} "
+            f"purpose={self._run_context.get('purpose', '<unknown>')}"
+        )
 
     def child_proc_setup(self, result_outq: Queue) -> None:
         # disable all warnings (before importing anything)
@@ -443,48 +484,97 @@ class Interpreter:
             logger.debug(
                 f"Child process started (pid={self.process.pid}, executable={self._venv_python}, cwd={self.working_dir}, agent_file={self.agent_file_name})"
             )
+            if self._pid_callback is not None and self.process.pid is not None:
+                try:
+                    self._pid_callback(self.process.pid)
+                except Exception:
+                    logger.exception(
+                        "PID callback failed for interpreter process %s", self.process.pid
+                    )
         finally:
             multiprocessing.set_executable(str(old_executable))
             logger.debug(f"Restored multiprocessing executable to {old_executable}")
 
     def _drain_queues(self) -> None:
         """Quickly drain all in-flight messages to prevent blocking."""
-        while not self.result_outq.empty():
-            try:
-                self.result_outq.get_nowait()
-            except Exception:
-                break
+        self._drain_queue(target_queue=self.result_outq)
+        self._drain_queue(target_queue=self.event_outq)
+        self._drain_queue(target_queue=self.code_inq)
 
-        while not self.event_outq.empty():
+    def _drain_queue(self, *, target_queue: Queue) -> list[Any]:
+        drained: list[Any] = []
+        while not target_queue.empty():
             try:
-                self.event_outq.get_nowait()
+                drained.append(target_queue.get_nowait())
             except Exception:
                 break
+        return drained
 
-        while not self.code_inq.empty():
-            try:
-                self.code_inq.get_nowait()
-            except Exception:
+    def _log_queue_dump(self, *, header: str, entries: list[Any]) -> None:
+        if not entries:
+            # Keep this diagnostic out of Sentry noise. The caller decides whether this is fatal.
+            logger.debug("%s: <empty>", header)
+            return
+        formatted = "\n".join(f"{idx + 1:02d}: {repr(entry)}" for idx, entry in enumerate(entries))
+        # Keep this diagnostic out of Sentry noise. The caller decides whether this is fatal.
+        logger.debug("%s (%d entries):\n%s", header, len(entries), formatted)
+
+    def _log_failure_context(self, *, reason: str) -> None:
+        pid = self.process.pid if self.process is not None else None
+        exitcode = self.process.exitcode if self.process is not None else None
+        # Keep detailed diagnostics at debug to avoid multiple Sentry events for one failure.
+        logger.debug(
+            "Interpreter failure context (reason=%s, pid=%s, exitcode=%s)",
+            reason,
+            pid,
+            exitcode,
+        )
+        result_entries = self._drain_queue(target_queue=self.result_outq)
+        self._log_queue_dump(header="REPL output queue dump", entries=result_entries)
+        event_entries = self._drain_queue(target_queue=self.event_outq)
+        self._log_queue_dump(header="REPL event queue dump", entries=event_entries)
+
+    def _wait_for_process_exit(self, *, proc: SpawnProcess, timeout_seconds: float) -> bool:
+        """
+        Wait for a process to exit up to timeout_seconds.
+        Returns True if the process exited, False otherwise.
+        """
+        deadline = time.monotonic() + timeout_seconds
+        while proc.is_alive():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 break
+            wait_interval = min(0.5, remaining)
+            proc.join(timeout=wait_interval)
+        return not proc.is_alive()
 
     def cleanup_session(self) -> None:
-        if self.process is None:
+        proc = self.process
+        if proc is None:
             return
-        # give the child process a chance to terminate gracefully
-        logger.debug(f"Terminating child process (pid={self.process.pid})")
-        self.process.terminate()
-        self._drain_queues()
-        self.process.join(timeout=2)
-        # kill the child process if it's still alive
-        if self.process.exitcode is None:
-            logger.warning("Child process failed to terminate gracefully, killing it..")
-            self.process.kill()
+        try:
+            logger.debug(f"Terminating child process (pid={proc.pid})")
+            proc.terminate()
             self._drain_queues()
-            self.process.join(timeout=2)
-        # don't wait for gc, clean up immediately
-        self.process.close()
-        logger.debug("Child process resources released")
-        self.process = None
+            terminated = self._wait_for_process_exit(proc=proc, timeout_seconds=2.0)
+
+            if not terminated:
+                logger.warning("Child process failed to terminate gracefully, killing it..")
+                proc.kill()
+                self._drain_queues()
+                terminated = self._wait_for_process_exit(proc=proc, timeout_seconds=5.0)
+
+            if not terminated:
+                logger.warning(
+                    "Child process %s remained alive after SIGKILL; skipping close to avoid ValueError.",
+                    proc.pid,
+                )
+                return
+
+            proc.close()
+            logger.debug("Child process resources released")
+        finally:
+            self.process = None
 
     def run(self, code: str, reset_session: bool = True) -> ExecutionResult:
         """
@@ -500,7 +590,11 @@ class Interpreter:
         """
 
         logger.debug(
-            f"Interpreter.run called (reset_session={reset_session}, timeout={self.timeout}, parent_executable={sys.executable})"
+            "Interpreter.run called (%s, reset_session=%s, timeout=%s, parent_executable=%s)",
+            self._format_run_context(),
+            reset_session,
+            self.timeout,
+            sys.executable,
         )
         logger.debug("Starting Python interpreter process...")
 
@@ -530,13 +624,13 @@ class Interpreter:
             remaining = startup_deadline - time.time()
             if remaining <= 0:
                 msg = "REPL child process failed to start execution"
-                logger.critical(msg)
+                # Avoid CRITICAL/ERROR log spam (which would create multiple Sentry events).
+                # If the child is already dead, route through the unified handler which can
+                # classify expected terminations.
                 if self.process is not None and not self.process.is_alive():
-                    logger.critical(
-                        f"REPL child died before start (pid={self.process.pid}, exitcode={self.process.exitcode})"
-                    )
-                while not self.result_outq.empty():
-                    logger.error(f"REPL output queue dump: {self.result_outq.get()}")
+                    self._raise_child_exit(message=msg)
+                logger.warning("%s (%s)", msg, self._format_run_context())
+                self._log_failure_context(reason=msg)
                 raise RuntimeError(msg) from None
             try:
                 state = self.event_outq.get(timeout=min(1.0, max(0.0, remaining)))
@@ -544,14 +638,12 @@ class Interpreter:
             except queue.Empty:
                 if self.process is not None and not self.process.is_alive():
                     msg = "REPL child process died before signaling readiness"
-                    logger.critical(msg)
-                    while not self.result_outq.empty():
-                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
-                    raise RuntimeError(msg) from None
+                    self._raise_child_exit(message=msg)
                 continue
         assert state[0] == "state:ready", state
         start_time = time.time()
-        logger.debug("Code is now executing...")
+        pid = self.process.pid if self.process is not None else None
+        logger.debug("Code is now executing... (%s, pid=%s)", self._format_run_context(), pid)
         last_progress_time = start_time
 
         # this flag indicates that the child ahs exceeded the time limit and an interrupt was sent
@@ -580,10 +672,7 @@ class Interpreter:
                     and not self.process.is_alive()
                 ):
                     msg = "REPL child process died unexpectedly"
-                    logger.critical(msg)
-                    while not self.result_outq.empty():
-                        logger.error(f"REPL output queue dump: {self.result_outq.get()}")
-                    raise RuntimeError(msg) from None
+                    self._raise_child_exit(message=msg)
 
                 # child is alive and still executing -> check if we should sigint..
                 if self.timeout is None:
@@ -637,3 +726,38 @@ class Interpreter:
             )
         logger.debug(f"Child execution completed (exc_type={e_cls_name}, exec_time={exec_time})")
         return ExecutionResult(output, exec_time, e_cls_name, exc_info, exc_stack)
+
+    def set_pid_callback(self, callback: Callable[[int], None] | None) -> None:
+        """Register a callback invoked when a new interpreter process starts."""
+        self._pid_callback = callback
+
+    def set_termination_checker(self, *, checker: Callable[[], bool]) -> None:
+        """Register a callback that reports whether an external termination was requested."""
+        self._termination_checker = checker
+
+    def clear_termination_checker(self) -> None:
+        """Clear any previously registered termination checker."""
+        self._termination_checker = None
+
+    def _termination_expected(self) -> bool:
+        if self._termination_checker is None:
+            return False
+        try:
+            return bool(self._termination_checker())
+        except Exception:
+            logger.exception("Termination checker raised an exception; treating as unexpected")
+            return False
+
+    def _raise_child_exit(self, *, message: str) -> None:
+        if self._termination_expected():
+            logger.info(
+                "%s; interpreter termination expected (%s)",
+                message,
+                self._format_run_context(),
+            )
+            raise InterpreterTerminated(reason=message)
+        # Unexpected interpreter death: log once at WARNING to avoid Sentry log spam.
+        # Higher layers are responsible for emitting a single Sentry event for true crashes.
+        logger.warning("%s (%s)", message, self._format_run_context())
+        self._log_failure_context(reason=message)
+        raise RuntimeError(message)

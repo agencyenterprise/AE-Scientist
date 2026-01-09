@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from app.services import get_database
 
 
-def enforce_minimum_credits(*, user_id: int, required: int, action: str) -> None:
+async def enforce_minimum_credits(*, user_id: int, required: int, action: str) -> None:
     """
     Ensure the user has at least the required credit balance.
 
@@ -20,7 +20,7 @@ def enforce_minimum_credits(*, user_id: int, required: int, action: str) -> None
         return
 
     db = get_database()
-    balance = db.get_user_wallet_balance(user_id)
+    balance = await db.get_user_wallet_balance(user_id)
     if balance >= required:
         return
 
@@ -35,7 +35,7 @@ def enforce_minimum_credits(*, user_id: int, required: int, action: str) -> None
     )
 
 
-def charge_user_credits(
+async def charge_user_credits(
     *,
     user_id: int,
     cost: int,
@@ -53,7 +53,7 @@ def charge_user_credits(
         return
 
     db = get_database()
-    balance = db.get_user_wallet_balance(user_id)
+    balance = await db.get_user_wallet_balance(user_id)
     if balance < cost:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -66,7 +66,7 @@ def charge_user_credits(
         )
 
     transaction_metadata = {"action": action, **metadata}
-    db.add_completed_transaction(
+    await db.add_completed_transaction(
         user_id=user_id,
         amount=-cost,
         transaction_type="debit",

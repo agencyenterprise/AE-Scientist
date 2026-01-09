@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/shared/lib/api-client";
+import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -15,11 +16,16 @@ import type {
   SubstageEvent,
   HwCostEstimateData,
   HwCostActualData,
+  ResearchRunCodeExecution,
+  StageSkipWindow,
+  StageSkipWindowUpdate,
+  LlmReviewResponse,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 
 interface UseResearchRunDetailsOptions {
   runId: string;
+  onReviewCompleted?: (review: LlmReviewResponse) => void;
 }
 
 interface UseResearchRunDetailsReturn {
@@ -27,22 +33,37 @@ interface UseResearchRunDetailsReturn {
   loading: boolean;
   error: string | null;
   conversationId: number | null;
-  isConnected: boolean;
-  connectionError: string | null;
   hwEstimatedCostCents: number | null;
   hwActualCostCents: number | null;
   hwCostPerHourCents: number | null;
   stopPending: boolean;
   stopError: string | null;
   handleStopRun: () => Promise<void>;
-  reconnect: () => void;
+  stageSkipState: StageSkipStateMap;
+  skipPendingStage: string | null;
+  handleSkipStage: (stageSlug: string) => Promise<void>;
 }
+
+interface CodeExecutionCompletionPayload {
+  execution_id: string;
+  status: "success" | "failed";
+  exec_time: number;
+  completed_at: string;
+}
+
+export interface StageSkipStateEntry {
+  reason: string | null;
+  updatedAt: string;
+}
+
+export type StageSkipStateMap = Record<string, StageSkipStateEntry>;
 
 /**
  * Hook that manages research run details state including SSE updates
  */
 export function useResearchRunDetails({
   runId,
+  onReviewCompleted,
 }: UseResearchRunDetailsOptions): UseResearchRunDetailsReturn {
   const [details, setDetails] = useState<ResearchRunDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,20 +74,50 @@ export function useResearchRunDetails({
   const [hwCostPerHourCents, setHwCostPerHourCents] = useState<number | null>(null);
   const [stopPending, setStopPending] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [stageSkipState, setStageSkipState] = useState<StageSkipStateMap>({});
+  const [skipPendingStage, setSkipPendingStage] = useState<string | null>(null);
 
   // SSE callback handlers
-  const handleInitialData = useCallback((data: ResearchRunDetails) => {
-    setDetails(data);
-    setLoading(false);
-    setError(null);
-    if (data.hw_cost_estimate) {
-      setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
-      setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
+  const syncStageSkipState = useCallback((windows: StageSkipWindow[] | undefined) => {
+    if (!windows) {
+      setStageSkipState({});
+      setSkipPendingStage(null);
+      return;
     }
-    if (data.hw_cost_actual) {
-      setHwActualCostCents(data.hw_cost_actual.hw_actual_cost_cents);
-    }
+    const next: StageSkipStateMap = {};
+    windows.forEach(window => {
+      if (window.closed_at) {
+        return;
+      }
+      const slug = extractStageSlug(window.stage);
+      if (!slug) {
+        return;
+      }
+      next[slug] = {
+        reason: window.opened_reason ?? null,
+        updatedAt: window.opened_at,
+      };
+    });
+    setStageSkipState(next);
+    setSkipPendingStage(prev => (prev && !next[prev] ? null : prev));
   }, []);
+
+  const handleInitialData = useCallback(
+    (data: ResearchRunDetails) => {
+      setDetails(data);
+      setLoading(false);
+      setError(null);
+      if (data.hw_cost_estimate) {
+        setHwEstimatedCostCents(data.hw_cost_estimate.hw_estimated_cost_cents);
+        setHwCostPerHourCents(data.hw_cost_estimate.hw_cost_per_hour_cents);
+      }
+      if (data.hw_cost_actual) {
+        setHwActualCostCents(data.hw_cost_actual.hw_actual_cost_cents);
+      }
+      syncStageSkipState(data.stage_skip_windows);
+    },
+    [syncStageSkipState]
+  );
 
   const handleStageProgress = useCallback((event: StageProgress) => {
     setDetails(prev =>
@@ -103,6 +154,18 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  // Use a ref to avoid recreating this callback when onReviewCompleted changes
+  const onReviewCompletedRef = useRef(onReviewCompleted);
+  useEffect(() => {
+    onReviewCompletedRef.current = onReviewCompleted;
+  }, [onReviewCompleted]);
+
+  const handleReviewCompleted = useCallback((review: LlmReviewResponse) => {
+    if (onReviewCompletedRef.current) {
+      onReviewCompletedRef.current(review);
+    }
+  }, []);
+
   const handlePaperGenerationProgress = useCallback((event: PaperGenerationEvent) => {
     setDetails(prev =>
       prev
@@ -123,6 +186,30 @@ export function useResearchRunDetails({
           }
         : null
     );
+  }, []);
+
+  const handleCodeExecutionStarted = useCallback((execution: ResearchRunCodeExecution) => {
+    setDetails(prev => (prev ? { ...prev, code_execution: execution } : prev));
+  }, []);
+
+  const handleCodeExecutionCompleted = useCallback((event: CodeExecutionCompletionPayload) => {
+    setDetails(prev => {
+      if (!prev?.code_execution) {
+        return prev;
+      }
+      if (prev.code_execution.execution_id !== event.execution_id) {
+        return prev;
+      }
+      return {
+        ...prev,
+        code_execution: {
+          ...prev.code_execution,
+          status: event.status,
+          exec_time: event.exec_time,
+          completed_at: event.completed_at,
+        },
+      };
+    });
   }, []);
 
   const handleSubstageSummary = useCallback((event: SubstageSummary) => {
@@ -148,6 +235,34 @@ export function useResearchRunDetails({
         return;
       }
       const eventType = (event as { event_type?: string }).event_type;
+      if (eventType === "status_changed") {
+        const metadata = (event as { metadata?: Record<string, unknown> }).metadata ?? {};
+        const toStatus =
+          typeof metadata.to_status === "string" ? (metadata.to_status as string) : null;
+        const nextDeadline =
+          typeof metadata.start_deadline_at === "string"
+            ? (metadata.start_deadline_at as string)
+            : null;
+        const errorMessage =
+          typeof metadata.error_message === "string" ? (metadata.error_message as string) : null;
+        if (!toStatus) {
+          return;
+        }
+        setDetails(prev =>
+          prev
+            ? {
+                ...prev,
+                run: {
+                  ...prev.run,
+                  status: toStatus,
+                  start_deadline_at: nextDeadline ?? prev.run.start_deadline_at,
+                  error_message: errorMessage ?? prev.run.error_message,
+                },
+              }
+            : prev
+        );
+        return;
+      }
       if (eventType === "tree_viz_stored") {
         if (!conversationId) {
           return;
@@ -198,6 +313,7 @@ export function useResearchRunDetails({
         if (cents !== null) {
           setHwActualCostCents(cents);
         }
+        return;
       }
     },
     [conversationId, runId]
@@ -243,6 +359,7 @@ export function useResearchRunDetails({
         ? {
             ...prev,
             run: { ...prev.run, status },
+            code_execution: null,
           }
         : null
     );
@@ -259,13 +376,35 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  const handleStageSkipWindowUpdate = useCallback((event: StageSkipWindowUpdate) => {
+    const slug = extractStageSlug(event.stage);
+    if (!slug) {
+      return;
+    }
+    setStageSkipState(prev => {
+      const next = { ...prev };
+      if (event.state === "opened") {
+        next[slug] = {
+          reason: event.reason ?? null,
+          updatedAt: event.timestamp,
+        };
+      } else {
+        delete next[slug];
+      }
+      return next;
+    });
+    if (event.state === "closed") {
+      setSkipPendingStage(prev => (prev === slug ? null : prev));
+    }
+  }, []);
+
   const handleSSEError = useCallback((errorMsg: string) => {
     // eslint-disable-next-line no-console
     console.error("SSE error:", errorMsg);
   }, []);
 
   // Use SSE for real-time updates
-  const { isConnected, connectionError, reconnect } = useResearchRunSSE({
+  useResearchRunSSE({
     runId,
     conversationId,
     enabled:
@@ -285,6 +424,10 @@ export function useResearchRunDetails({
     onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,
+    onCodeExecutionStarted: handleCodeExecutionStarted,
+    onCodeExecutionCompleted: handleCodeExecutionCompleted,
+    onStageSkipWindow: handleStageSkipWindowUpdate,
+    onReviewCompleted: handleReviewCompleted,
   });
 
   // Initial load to get conversation_id (SSE takes over after that)
@@ -307,13 +450,25 @@ export function useResearchRunDetails({
     if (!conversationId || stopPending) {
       return;
     }
+    const refreshDetails = async () => {
+      try {
+        const refreshed = await apiFetch<ResearchRunDetails>(
+          `/conversations/${conversationId}/idea/research-run/${runId}`
+        );
+        setDetails(refreshed);
+      } catch (refreshErr) {
+        // eslint-disable-next-line no-console
+        console.warn("Failed to refresh run details after stop:", refreshErr);
+      }
+    };
     try {
       setStopError(null);
       setStopPending(true);
       await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
         method: "POST",
       });
-      // SSE will automatically receive the status update
+      // Best-effort refresh so the UI updates immediately even if SSE is delayed/lost.
+      await refreshDetails();
     } catch (err) {
       setStopError(err instanceof Error ? err.message : "Failed to stop research run");
     } finally {
@@ -321,19 +476,35 @@ export function useResearchRunDetails({
     }
   }, [conversationId, runId, stopPending]);
 
+  const handleSkipStage = useCallback(
+    async (stageSlug: string) => {
+      if (!conversationId) {
+        throw new Error("Conversation not available yet. Please try again.");
+      }
+      await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/skip-stage`, {
+        method: "POST",
+        body: {
+          stage: stageSlug,
+        },
+      });
+      setSkipPendingStage(stageSlug);
+    },
+    [conversationId, runId]
+  );
+
   return {
     details,
     loading,
     error,
     conversationId,
-    isConnected,
-    connectionError,
     hwEstimatedCostCents,
     hwActualCostCents,
     hwCostPerHourCents,
     stopPending,
     stopError,
     handleStopRun,
-    reconnect,
+    stageSkipState,
+    skipPendingStage,
+    handleSkipStage,
   };
 }

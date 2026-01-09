@@ -13,6 +13,7 @@ from typing import List, NamedTuple, Optional
 
 import psycopg2.extras
 from dotenv import load_dotenv
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 from .billing import BillingDatabaseMixin
@@ -51,15 +52,15 @@ def should_give_free_credits(email: str) -> bool:
     return False
 
 
-class UsersDatabaseMixin(ConnectionProvider):
+class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Mixin for user and session database operations."""
 
     def create_user(
-        self,
-        email: str,
-        name: str,
-        google_id: Optional[str] = None,
-        clerk_user_id: Optional[str] = None,
+            self,
+            email: str,
+            name: str,
+            google_id: Optional[str] = None,
+            clerk_user_id: Optional[str] = None,
     ) -> Optional[UserData]:
         """
         Create a new user.
@@ -74,9 +75,9 @@ class UsersDatabaseMixin(ConnectionProvider):
             User data if successful, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
                         INSERT INTO users (google_id, clerk_user_id, email, name)
                         VALUES (%s, %s, %s, %s)
@@ -85,13 +86,14 @@ class UsersDatabaseMixin(ConnectionProvider):
                         (google_id, clerk_user_id, email, name),
                     )
                     has_free_credits = should_give_free_credits(email)
-                    result = cursor.fetchone()
-                    conn.commit()
+                    result = await cursor.fetchone()
                     if result:
                         try:
                             if isinstance(self, BillingDatabaseMixin):
-                                self.ensure_user_wallet(
-                                    int(result["id"]), has_free_credits=has_free_credits
+                                await self.ensure_user_wallet_with_cursor(
+                                    cursor=cursor,
+                                    user_id=int(result["id"]),
+                                    has_free_credits=has_free_credits,
                                 )
                         except Exception as wallet_error:  # noqa: BLE001
                             logger.exception(
@@ -105,7 +107,7 @@ class UsersDatabaseMixin(ConnectionProvider):
             logger.exception(f"Error creating user: {e}")
             return None
 
-    def get_user_by_google_id(self, google_id: str) -> Optional[UserData]:
+    async def get_user_by_google_id(self, google_id: str) -> Optional[UserData]:
         """
         Get user by Google ID.
 
@@ -116,17 +118,25 @@ class UsersDatabaseMixin(ConnectionProvider):
             User data dict if found, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
-                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        SELECT id,
+                               google_id,
+                               clerk_user_id,
+                               email,
+                               name,
+                               is_active,
+                               created_at,
+                               updated_at
                         FROM users
-                        WHERE google_id = %s AND is_active = TRUE
+                        WHERE google_id = %s
+                          AND is_active = TRUE
                         """,
                         (google_id,),
                     )
-                    result = cursor.fetchone()
+                    result = await cursor.fetchone()
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception(f"Error getting user by Google ID: {e}")
@@ -147,9 +157,17 @@ class UsersDatabaseMixin(ConnectionProvider):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(
                         """
-                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        SELECT id,
+                               google_id,
+                               clerk_user_id,
+                               email,
+                               name,
+                               is_active,
+                               created_at,
+                               updated_at
                         FROM users
-                        WHERE clerk_user_id = %s AND is_active = TRUE
+                        WHERE clerk_user_id = %s
+                          AND is_active = TRUE
                         """,
                         (clerk_user_id,),
                     )
@@ -159,7 +177,7 @@ class UsersDatabaseMixin(ConnectionProvider):
             logger.exception(f"Error getting user by Clerk ID: {e}")
             return None
 
-    def get_user_by_id(self, user_id: int) -> Optional[UserData]:
+    async def get_user_by_id(self, user_id: int) -> Optional[UserData]:
         """
         Get user by database ID.
 
@@ -170,56 +188,34 @@ class UsersDatabaseMixin(ConnectionProvider):
             User data dict if found, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
-                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        SELECT id,
+                               google_id,
+                               clerk_user_id,
+                               email,
+                               name,
+                               is_active,
+                               created_at,
+                               updated_at
                         FROM users
                         WHERE id = %s
                         """,
                         (user_id,),
                     )
-                    result = cursor.fetchone()
+                    result = await cursor.fetchone()
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception("Error getting user by id %s: %s", user_id, e)
             return None
 
-    def get_user_by_email(self, email: str) -> Optional[UserData]:
-        """
-        Get user by email.
-
-        Args:
-            email: User email address
-
-        Returns:
-            User data dict if found, None otherwise
-        """
-        try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
-                        """
-                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
-                        FROM users
-                        WHERE email = %s AND is_active = TRUE
-                        """,
-                        (email,),
-                    )
-                    result = cursor.fetchone()
-                    return UserData(**result) if result else None
-        except Exception as e:
-            logger.exception(f"Error getting user by email: {e}")
-            return None
-
-    def update_user(
-        self,
-        user_id: int,
-        email: str,
-        name: str,
-        clerk_user_id: Optional[str] = None,
-    ) -> Optional[UserData]:
+    async def update_user(self,
+                          user_id: int,
+                          email: str,
+                          name: str,
+                          clerk_user_id: Optional[str] = None, ) -> Optional[UserData]:
         """
         Update user information.
 
@@ -233,38 +229,28 @@ class UsersDatabaseMixin(ConnectionProvider):
             Updated user data dict if successful, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    if clerk_user_id is not None:
-                        # Update including clerk_user_id (for migration)
-                        cursor.execute(
-                            """
-                            UPDATE users
-                            SET email = %s, name = %s, clerk_user_id = %s, updated_at = NOW()
-                            WHERE id = %s AND is_active = TRUE
-                            RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
-                            """,
-                            (email, name, clerk_user_id, user_id),
-                        )
-                    else:
-                        # Update without clerk_user_id (normal update)
-                        cursor.execute(
-                            """
-                            UPDATE users
-                            SET email = %s, name = %s, updated_at = NOW()
-                            WHERE id = %s AND is_active = TRUE
-                            RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
-                            """,
-                            (email, name, user_id),
-                        )
-                    result = cursor.fetchone()
-                    conn.commit()
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        UPDATE users
+                        SET email         = %s,
+                            name          = %s,
+                            clerk_user_id = %s,
+                            updated_at    = NOW()
+                        WHERE id = %s
+                          AND is_active = TRUE
+                        RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        """,
+                        (email, name, clerk_user_id, user_id),
+                    )
+                    result = await cursor.fetchone()
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception(f"Error updating user: {e}")
             return None
 
-    def create_user_session(self, user_id: int, expires_in_hours: int = 24) -> Optional[str]:
+    async def create_user_session(self, user_id: int, expires_in_hours: int = 24) -> Optional[str]:
         """
         Create a new user session.
 
@@ -279,22 +265,21 @@ class UsersDatabaseMixin(ConnectionProvider):
             session_token = secrets.token_urlsafe(32)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
 
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
                         """
                         INSERT INTO user_sessions (user_id, session_token, expires_at)
                         VALUES (%s, %s, %s)
                         """,
                         (user_id, session_token, expires_at),
                     )
-                    conn.commit()
                     return session_token
         except Exception as e:
             logger.exception(f"Error creating user session: {e}")
             return None
 
-    def get_user_by_session_token(self, session_token: str) -> Optional[UserData]:
+    async def get_user_by_session_token(self, session_token: str) -> Optional[UserData]:
         """
         Get user by session token.
 
@@ -305,26 +290,26 @@ class UsersDatabaseMixin(ConnectionProvider):
             User data dict if valid session found, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
                         SELECT u.id, u.google_id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
                         FROM users u
-                        JOIN user_sessions s ON u.id = s.user_id
+                                 JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
-                        AND s.expires_at > NOW()
-                        AND u.is_active = TRUE
+                          AND s.expires_at > NOW()
+                          AND u.is_active = TRUE
                         """,
                         (session_token,),
                     )
-                    result = cursor.fetchone()
+                    result = await cursor.fetchone()
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception(f"Error getting user by session token: {e}")
             return None
 
-    def delete_user_session(self, session_token: str) -> bool:
+    async def delete_user_session(self, session_token: str) -> bool:
         """
         Delete a user session (logout).
 
@@ -335,18 +320,17 @@ class UsersDatabaseMixin(ConnectionProvider):
             True if successful, False otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
                         "DELETE FROM user_sessions WHERE session_token = %s", (session_token,)
                     )
-                    conn.commit()
-                    return True
+                    return cursor.rowcount > 0
         except Exception as e:
             logger.exception(f"Error deleting user session: {e}")
             return False
 
-    def delete_expired_sessions(self) -> int:
+    async def delete_expired_sessions(self) -> int:
         """
         Clean up expired sessions.
 
@@ -354,18 +338,17 @@ class UsersDatabaseMixin(ConnectionProvider):
             Number of sessions deleted
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("DELETE FROM user_sessions WHERE expires_at <= NOW()")
+            async with self.aget_connection() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute("DELETE FROM user_sessions WHERE expires_at <= NOW()")
                     deleted_count = cursor.rowcount
-                    conn.commit()
                     logger.info(f"Deleted {deleted_count} expired sessions")
                     return deleted_count
         except Exception as e:
             logger.exception(f"Error deleting expired sessions: {e}")
             return 0
 
-    def list_all_users(self) -> List[UserData]:
+    async def list_all_users(self) -> List[UserData]:
         """
         List all active users.
 
@@ -373,9 +356,9 @@ class UsersDatabaseMixin(ConnectionProvider):
             List of all active users sorted by name
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
                         SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
                         FROM users
@@ -383,7 +366,8 @@ class UsersDatabaseMixin(ConnectionProvider):
                         ORDER BY name ASC
                         """
                     )
-                    return [UserData(**row) for row in cursor.fetchall()]
+                    rows = await cursor.fetchall() or []
+                    return [UserData(**row) for row in rows]
         except Exception as e:
             logger.exception(f"Error listing users: {e}")
             return []

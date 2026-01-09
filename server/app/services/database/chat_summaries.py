@@ -8,8 +8,7 @@ import logging
 from datetime import datetime
 from typing import NamedTuple, Optional
 
-import psycopg2
-import psycopg2.extras
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 
@@ -30,15 +29,15 @@ class ChatSummary(NamedTuple):
 class ChatSummariesMixin(ConnectionProvider):
     """Database operations for chat summaries."""
 
-    def create_chat_summary(
+    async def create_chat_summary(
         self, conversation_id: int, summary: str, latest_message_id: int
     ) -> int:
         """Create a new chat summary in the database."""
         now = datetime.now()
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO chat_summaries
                     (conversation_id, summary, latest_message_id, created_at, updated_at)
@@ -53,42 +52,43 @@ class ChatSummariesMixin(ConnectionProvider):
                         now,
                     ),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to create chat summary: no ID returned")
 
                 chat_summary_id = int(result["id"])
-                conn.commit()
+                await conn.commit()
+                return chat_summary_id
 
-        return chat_summary_id
-
-    def update_chat_summary(
+    async def update_chat_summary(
         self, conversation_id: int, new_summary: str, latest_message_id: int | None = None
     ) -> bool:
         """Update a conversation's summary. Returns True if updated, False if not found."""
         now = datetime.now()
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
                 if latest_message_id is not None:
-                    cursor.execute(
+                    await cursor.execute(
                         "UPDATE chat_summaries SET summary = %s, latest_message_id = %s, updated_at = %s WHERE conversation_id = %s",
                         (new_summary, latest_message_id, now, conversation_id),
                     )
                 else:
-                    cursor.execute(
+                    await cursor.execute(
                         "UPDATE chat_summaries SET summary = %s, updated_at = %s WHERE conversation_id = %s",
                         (new_summary, now, conversation_id),
                     )
-                conn.commit()
+                await conn.commit()
                 return bool(cursor.rowcount > 0)
 
-    def get_chat_summary_by_conversation_id(self, conversation_id: int) -> Optional[ChatSummary]:
+    async def get_chat_summary_by_conversation_id(
+        self, conversation_id: int
+    ) -> Optional[ChatSummary]:
         """Get a conversation's summary by conversation ID."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     "SELECT id, conversation_id, summary, latest_message_id, created_at, updated_at FROM chat_summaries WHERE conversation_id = %s",
                     (conversation_id,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
                 return ChatSummary(**row) if row else None

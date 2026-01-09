@@ -2,12 +2,17 @@ import asyncio
 import logging
 from typing import Any, Dict, Set, Union
 
+from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
+from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
+from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
+from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
+from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 
@@ -22,6 +27,11 @@ StreamEventModel = Union[
     SSERunEvent,
     SSECompleteEvent,
     SSELogEvent,
+    SSEArtifactEvent,
+    SSEReviewCompletedEvent,
+    SSECodeExecutionStartedEvent,
+    SSECodeExecutionCompletedEvent,
+    SSEStageSkipWindowEvent,
 ]
 
 _RUN_STREAM_SUBSCRIBERS: Dict[str, Set[asyncio.Queue[Dict[str, Any]]]] = {}

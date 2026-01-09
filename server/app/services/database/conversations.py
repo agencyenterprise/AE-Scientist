@@ -10,9 +10,8 @@ import uuid
 from datetime import datetime
 from typing import List, NamedTuple, Optional
 
-import psycopg2
-import psycopg2.extras
-from psycopg2.extensions import cursor as PsycopgCursor
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -85,17 +84,19 @@ class UrlConversationBrief(NamedTuple):
     url: str
 
 
-class ConversationsMixin(ConnectionProvider):
+class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Database operations for conversations."""
 
-    def create_conversation(self, conversation: Conversation, imported_by_user_id: int) -> int:
+    async def create_conversation(
+        self, conversation: Conversation, imported_by_user_id: int
+    ) -> int:
         """Create a new conversation in the database."""
         now = datetime.now()
         content_data = [msg._asdict() for msg in conversation.imported_chat]
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO conversations
                     (url, title, import_date, imported_chat, created_at, updated_at, imported_by_user_id)
@@ -106,26 +107,23 @@ class ConversationsMixin(ConnectionProvider):
                         conversation.url,
                         conversation.title,
                         conversation.import_date,
-                        json.dumps(content_data),
+                        Jsonb(content_data),
                         now,
                         now,
                         imported_by_user_id,
                     ),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to create conversation: no ID returned")
 
-                conversation_id = int(result["id"])
-                conn.commit()
+                return int(result["id"])
 
-        return conversation_id
-
-    def get_conversation_by_id(self, conversation_id: int) -> Optional[FullConversation]:
+    async def get_conversation_by_id(self, conversation_id: int) -> Optional[FullConversation]:
         """Get a conversation by its ID, including full content and file attachment flags."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT c.id, c.url, c.title, c.import_date, c.imported_chat,
                            c.created_at, c.updated_at, c.status,
@@ -139,15 +137,16 @@ class ConversationsMixin(ConnectionProvider):
                                SELECT 1 FROM file_attachments fa
                                WHERE fa.conversation_id = c.id
                                AND fa.file_type = 'application/pdf'
-                           ) as has_pdfs
-                           , c.manual_title, c.manual_hypothesis
+                           ) as has_pdfs,
+                           c.manual_title,
+                           c.manual_hypothesis
                     FROM conversations c
                     JOIN users u ON c.imported_by_user_id = u.id
                     WHERE c.id = %s
                 """,
                     (conversation_id,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
 
         if not row:
             return None
@@ -181,11 +180,11 @@ class ConversationsMixin(ConnectionProvider):
             status=row["status"],
         )
 
-    def get_conversation_id_by_url(self, url: str) -> Optional[int]:
+    async def get_conversation_id_by_url(self, url: str) -> Optional[int]:
         """Get a conversation by its URL (without full content)."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT id
                     FROM conversations
@@ -195,19 +194,19 @@ class ConversationsMixin(ConnectionProvider):
                 """,
                     (url,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
 
         if not row:
             return None
 
         return int(row["id"])
 
-    def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
+    async def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
         """List conversations with the same URL, newest first, for conflict resolution UI."""
 
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT id, title, updated_at, url
                     FROM conversations
@@ -216,7 +215,7 @@ class ConversationsMixin(ConnectionProvider):
                 """,
                     (url,),
                 )
-                rows = cursor.fetchall() or []
+                rows = await cursor.fetchall() or []
 
         return [
             UrlConversationBrief(
@@ -225,16 +224,18 @@ class ConversationsMixin(ConnectionProvider):
             for row in rows
         ]
 
-    def list_conversations_by_title_substring(self, title_query: str) -> List[UrlConversationBrief]:
+    async def list_conversations_by_title_substring(
+        self, title_query: str
+    ) -> List[UrlConversationBrief]:
         """List conversations where the title contains the given query (case-insensitive).
 
         Orders prefix matches first, then by most recently updated.
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
                 substring_pattern = f"%{title_query}%"
                 prefix_pattern = f"{title_query}%"
-                cursor.execute(
+                await cursor.execute(
                     """
                     SELECT id, title, updated_at, url
                     FROM conversations
@@ -243,7 +244,7 @@ class ConversationsMixin(ConnectionProvider):
                 """,
                     (substring_pattern, prefix_pattern),
                 )
-                rows = cursor.fetchall() or []
+                rows = await cursor.fetchall() or []
 
         return [
             UrlConversationBrief(
@@ -252,7 +253,7 @@ class ConversationsMixin(ConnectionProvider):
             for row in rows
         ]
 
-    def list_conversations(
+    async def list_conversations(
         self,
         limit: int = 100,
         offset: int = 0,
@@ -275,8 +276,8 @@ class ConversationsMixin(ConnectionProvider):
         Note: Filters are ANDed together. When run_status is provided,
         only conversations with at least one matching run are returned.
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
                 query = """
                     SELECT
                         c.id,
@@ -343,8 +344,8 @@ class ConversationsMixin(ConnectionProvider):
                 query += " ORDER BY c.updated_at DESC LIMIT %s OFFSET %s"
                 params.extend([limit, offset])
 
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
+                await cursor.execute(query, params)
+                rows = await cursor.fetchall()
 
         return [
             DashboardConversation(
@@ -368,7 +369,7 @@ class ConversationsMixin(ConnectionProvider):
             for row in rows
         ]
 
-    def create_manual_conversation(
+    async def create_manual_conversation(
         self,
         *,
         manual_title: str,
@@ -378,9 +379,9 @@ class ConversationsMixin(ConnectionProvider):
         """Create a conversation originating from manual seed data."""
         now = datetime.now()
         manual_url = f"manual://{uuid.uuid4()}"
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO conversations
                         (url, title, import_date, imported_chat, created_at, updated_at,
@@ -392,7 +393,7 @@ class ConversationsMixin(ConnectionProvider):
                         manual_url,
                         manual_title,
                         now,
-                        json.dumps([]),
+                        Jsonb([]),
                         now,
                         now,
                         imported_by_user_id,
@@ -400,57 +401,51 @@ class ConversationsMixin(ConnectionProvider):
                         manual_hypothesis,
                     ),
                 )
-                result = cursor.fetchone()
+                result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to create manual conversation: no ID returned")
-                conversation_id = int(result["id"])
-                conn.commit()
-        return conversation_id
+                return int(result["id"])
 
-    def delete_conversation(self, conversation_id: int) -> bool:
+    async def delete_conversation(self, conversation_id: int) -> bool:
         """Delete a conversation by its ID. Returns True if deleted, False if not found."""
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM conversations WHERE id = %s", (conversation_id,))
-                conn.commit()
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("DELETE FROM conversations WHERE id = %s", (conversation_id,))
                 return bool(cursor.rowcount > 0)
 
-    def update_conversation_title(self, conversation_id: int, new_title: str) -> bool:
+    async def update_conversation_title(self, conversation_id: int, new_title: str) -> bool:
         """Update a conversation's title. Returns True if updated, False if not found."""
         now = datetime.now()
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     "UPDATE conversations SET title = %s, updated_at = %s WHERE id = %s",
                     (new_title, now, conversation_id),
                 )
-                conn.commit()
                 return bool(cursor.rowcount > 0)
 
-    def update_conversation_messages(
+    async def update_conversation_messages(
         self, conversation_id: int, messages: List[ImportedChatMessage]
     ) -> bool:
         """Update an existing conversation's messages with new data. Returns updated conversation."""
         now = datetime.now()
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     """
                     UPDATE conversations
                     SET imported_chat = %s, updated_at = %s
                     WHERE id = %s
                 """,
                     (
-                        json.dumps([msg._asdict() for msg in messages]),
+                        Jsonb([msg._asdict() for msg in messages]),
                         now,
                         conversation_id,
                     ),
                 )
-                conn.commit()
-
         return True
 
-    def update_conversation_status(self, conversation_id: int, status: str) -> bool:
+    async def update_conversation_status(self, conversation_id: int, status: str) -> bool:
         """
         Update conversation status to 'with_research' after research run created.
 
@@ -470,9 +465,9 @@ class ConversationsMixin(ConnectionProvider):
             )
 
         now = datetime.now()
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
                     """
                     UPDATE conversations
                     SET status = %s, updated_at = %s
@@ -480,37 +475,4 @@ class ConversationsMixin(ConnectionProvider):
                     """,
                     (status, now, conversation_id),
                 )
-                conn.commit()
                 return bool(cursor.rowcount > 0)
-
-    def _update_conversation_status_with_cursor(
-        self, cursor: PsycopgCursor, conversation_id: int, status: str
-    ) -> None:
-        """
-        Update conversation status within existing transaction (no commit).
-
-        Used by create_research_pipeline_run to update status atomically
-        with the run creation.
-
-        Args:
-            cursor: Active database cursor from outer transaction
-            conversation_id: ID of conversation to update
-            status: New status value (validated against CONVERSATION_STATUSES)
-
-        Raises:
-            ValueError: If status not in CONVERSATION_STATUSES
-        """
-        if status not in CONVERSATION_STATUSES:
-            raise ValueError(
-                f"Invalid status '{status}'. Must be one of: {', '.join(CONVERSATION_STATUSES)}"
-            )
-
-        now = datetime.now()
-        cursor.execute(
-            """
-            UPDATE conversations
-            SET status = %s, updated_at = %s
-            WHERE id = %s
-            """,
-            (status, now, conversation_id),
-        )

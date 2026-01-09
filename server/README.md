@@ -100,19 +100,19 @@ display thresholds and redirect URLs.
 
 ### Playwright Setup
 
-Playwright is used for browser automation in the backend (e.g., scraping and browser-driven tests). After installing backend dependencies, install the browser binaries locally.
+Playwright is used for browser automation in the server (e.g., scraping and browser-driven tests). After installing backend dependencies, install the browser binaries locally.
 
 ```bash
-# Install Playwright browsers inside the backend virtualenv
-cd backend
+# Install Playwright browsers inside the server virtualenv
+cd server
 . .venv/bin/activate  # or use your preferred venv activation
-python -m playwright install firefox
+uv run playwright install firefox
 
 # Verify installation
-python -m playwright --version
+uv run playwright --version
 ```
 
-Docker users: the backend image installs Firefox via Playwright during build, so no additional setup is required inside the container.
+Docker users: the server image installs Firefox via Playwright during build, so no additional setup is required inside the container.
 
 ### Database Setup
 

@@ -37,7 +37,14 @@ from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_context import build_auto_review_context
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
-from ai_scientist.telemetry import EventPersistenceManager, EventQueueEmitter, WebhookClient
+from ai_scientist.sentry_config import set_sentry_run_context
+from ai_scientist.telemetry import (
+    EventPersistenceManager,
+    EventQueueEmitter,
+    HardwareStatsReporter,
+    WebhookClient,
+)
+from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
@@ -45,6 +52,7 @@ from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
 )
+from ai_scientist.treesearch.stage_identifiers import StageIdentifier
 from ai_scientist.treesearch.stages.base import StageMeta
 from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
@@ -61,6 +69,12 @@ from ai_scientist.treesearch.utils.config import (
     save_run,
 )
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
+from management_server import (
+    initialize_execution_registry,
+    shutdown_execution_registry_manager,
+    start_termination_server,
+    stop_termination_server,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -321,17 +335,18 @@ def _handle_gpu_shortage_event(
         logger.warning("Telemetry webhook not configured; cannot notify server about GPU shortage.")
         return
     try:
-        webhook_client.publish_gpu_shortage(
+        shortage_future = webhook_client.publish_gpu_shortage(
             required_gpus=event.required_gpus,
             available_gpus=event.available_gpus,
             message=event.message,
         )
+        shortage_future.result(timeout=None)
     except Exception:
         logger.exception("Failed to publish GPU shortage notification.")
 
 
 def setup_artifact_publisher(
-    *, telemetry_cfg: TelemetryConfig
+    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None = None
 ) -> tuple[ArtifactPublisher, ArtifactCallback]:
     try:
         aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
@@ -349,6 +364,7 @@ def setup_artifact_publisher(
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
         database_url=telemetry_cfg.database_url,
+        webhook_client=webhook_client,
     )
 
     def _callback(spec: ArtifactSpec) -> None:
@@ -412,12 +428,17 @@ def resume_run(
             stage1_name, stage1_journal = load_stage_journal(stage_dir=stage1_dir)
             if cfg_obj.telemetry:
                 stage1_journal.run_id = cfg_obj.telemetry.run_id
+            identifier = StageIdentifier.STAGE1
+            if stage1_name != identifier.prefixed_name:
+                logger.warning(
+                    "Stage 1 journal name %s did not match expected identifier %s",
+                    stage1_name,
+                    identifier.prefixed_name,
+                )
             stage1_meta = StageMeta(
-                name=stage1_name,
-                number=1,
-                slug=Stage1Baseline.MAIN_STAGE_SLUG,
+                identifier=identifier,
                 goals=Stage1Baseline.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(1),
+                max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                 num_drafts=0,
             )
             manager.stages.append(stage1_meta)
@@ -430,12 +451,17 @@ def resume_run(
                 stage2_name, stage2_journal = load_stage_journal(stage_dir=stage2_dir)
                 if cfg_obj.telemetry:
                     stage2_journal.run_id = cfg_obj.telemetry.run_id
+                identifier = StageIdentifier.STAGE2
+                if stage2_name != identifier.prefixed_name:
+                    logger.warning(
+                        "Stage 2 journal name %s did not match expected identifier %s",
+                        stage2_name,
+                        identifier.prefixed_name,
+                    )
                 stage2_meta = StageMeta(
-                    name=stage2_name,
-                    number=2,
-                    slug=Stage2Tuning.MAIN_STAGE_SLUG,
+                    identifier=identifier,
                     goals=Stage2Tuning.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(2),
+                    max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                     num_drafts=0,
                 )
                 manager.stages.append(stage2_meta)
@@ -450,12 +476,17 @@ def resume_run(
                 stage3_name, stage3_journal = load_stage_journal(stage_dir=stage3_dir)
                 if cfg_obj.telemetry:
                     stage3_journal.run_id = cfg_obj.telemetry.run_id
+                identifier = StageIdentifier.STAGE3
+                if stage3_name != identifier.prefixed_name:
+                    logger.warning(
+                        "Stage 3 journal name %s did not match expected identifier %s",
+                        stage3_name,
+                        identifier.prefixed_name,
+                    )
                 stage3_meta = StageMeta(
-                    name=stage3_name,
-                    number=3,
-                    slug=Stage3Plotting.MAIN_STAGE_SLUG,
+                    identifier=identifier,
                     goals=Stage3Plotting.DEFAULT_GOALS,
-                    max_iterations=manager.get_max_iterations(3),
+                    max_iterations=manager.get_max_iterations(stage_identifier=identifier),
                     num_drafts=0,
                 )
                 manager.stages.append(stage3_meta)
@@ -465,32 +496,21 @@ def resume_run(
                 pass
 
         if next_stage == 2:
-            next_meta = StageMeta(
-                name="2_" + Stage2Tuning.MAIN_STAGE_SLUG,
-                number=2,
-                slug=Stage2Tuning.MAIN_STAGE_SLUG,
-                goals=Stage2Tuning.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(2),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE2
+            next_goals = Stage2Tuning.DEFAULT_GOALS
         elif next_stage == 3:
-            next_meta = StageMeta(
-                name="3_" + Stage3Plotting.MAIN_STAGE_SLUG,
-                number=3,
-                slug=Stage3Plotting.MAIN_STAGE_SLUG,
-                goals=Stage3Plotting.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(3),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE3
+            next_goals = Stage3Plotting.DEFAULT_GOALS
         else:
-            next_meta = StageMeta(
-                name="4_" + Stage4Ablation.MAIN_STAGE_SLUG,
-                number=4,
-                slug=Stage4Ablation.MAIN_STAGE_SLUG,
-                goals=Stage4Ablation.DEFAULT_GOALS,
-                max_iterations=manager.get_max_iterations(4),
-                num_drafts=0,
-            )
+            next_identifier = StageIdentifier.STAGE4
+            next_goals = Stage4Ablation.DEFAULT_GOALS
+
+        next_meta = StageMeta(
+            identifier=next_identifier,
+            goals=next_goals,
+            max_iterations=manager.get_max_iterations(stage_identifier=next_identifier),
+            num_drafts=0,
+        )
 
         manager.stages.append(next_meta)
         manager.register_phase_definition(stage_meta=next_meta)
@@ -511,9 +531,13 @@ def resume_run(
             except Exception:
                 traceback.print_exc()
 
+        def iteration_started_callback(_stage: StageMeta, _journal: Journal) -> None:
+            return
+
         manager.run_stage(
             initial_substage=next_meta,
             step_callback=step_callback,
+            iteration_started_callback=iteration_started_callback,
         )
         return run_dir
     except Exception:
@@ -631,29 +655,39 @@ def run_writeup_stage(
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
-) -> bool:
-    if writeup_cfg is None or not should_run_reports or not agg_ok:
-        return False
+) -> None:
+    if writeup_cfg is None:
+        logger.info("Writeup configuration missing; skipping writeup stage.")
+        return
+    if not should_run_reports:
+        logger.info("Reports generation disabled; skipping writeup stage.")
+        return
+    if not agg_ok:
+        logger.info("Plot aggregation failed; skipping writeup stage.")
+        return
 
     writeup_type = writeup_cfg.writeup_type.lower()
     writeup_retries = writeup_cfg.writeup_retries
     num_cite_rounds = writeup_cfg.num_cite_rounds
     writeup_model = writeup_cfg.model
     citation_model = writeup_cfg.citation_model or writeup_model
+    base_path = Path(reports_base)
+    logs_dir = base_path / "logs"
+    run_name = run_dir_path.name if run_dir_path is not None else None
 
     citations_text = gather_citations(
-        base_folder=reports_base,
-        num_cite_rounds=num_cite_rounds,
+        base_path=base_path,
+        logs_dir=logs_dir,
         model=citation_model,
-        run_dir_name=run_dir_path.name if run_dir_path is not None else None,
         temperature=writeup_cfg.temperature,
-        event_callback=event_callback,
-        run_id=run_id,
+        num_cite_rounds=num_cite_rounds,
+        run_dir_name=run_name or "",
     )
     writeup_success = False
-    try:
-        for attempt in range(writeup_retries):
-            logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
+    last_error: Exception | None = None
+    for attempt in range(writeup_retries):
+        logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
+        try:
             if writeup_type == "normal":
                 writeup_success = perform_writeup(
                     base_folder=reports_base,
@@ -674,63 +708,64 @@ def run_writeup_stage(
                     run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                     temperature=writeup_cfg.temperature,
                 )
-            if writeup_success:
-                break
-    except Exception as e:
-        logger.exception(f"Writeup failed: {e}")
-        traceback.print_exc()
+        except Exception as exc:
+            last_error = exc
+            logger.exception("Writeup attempt %s failed.", attempt + 1)
+            continue
+        if writeup_success:
+            break
 
     if not writeup_success:
-        logger.error("Writeup process did not complete successfully after all retries.")
-    elif run_dir_path is not None:
-        run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
-        latex_path = run_out_dir / "latex"
-        pdf_paths = sorted(run_out_dir.glob("*.pdf"))
-        for pdf_path in pdf_paths:
-            try:
-                artifact_callback(
-                    ArtifactSpec(
-                        artifact_type="paper_pdf",
-                        path=pdf_path,
-                        packaging="file",
-                    )
+        error_message = "Writeup process did not complete successfully after all retries."
+        logger.error(error_message)
+        if last_error is not None:
+            raise RuntimeError(error_message) from last_error
+        raise RuntimeError(error_message)
+
+    if run_dir_path is None:
+        return
+
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    latex_path = run_out_dir / "latex"
+    pdf_paths = sorted(run_out_dir.glob("*.pdf"))
+    for pdf_path in pdf_paths:
+        try:
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="paper_pdf",
+                    path=pdf_path,
+                    packaging="file",
                 )
-            except Exception:
-                logger.exception("Failed to upload PDF artifact: %s", pdf_path)
-        if latex_path.exists():
-            try:
-                artifact_callback(
-                    ArtifactSpec(
-                        artifact_type="latex_archive",
-                        path=latex_path,
-                        packaging="zip",
-                        archive_name=f"{run_dir_path.name}-latex.zip",
-                    )
+            )
+        except Exception:
+            logger.exception("Failed to upload PDF artifact: %s", pdf_path)
+    if latex_path.exists():
+        try:
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="latex_archive",
+                    path=latex_path,
+                    packaging="zip",
+                    archive_name=f"{run_dir_path.name}-latex.zip",
                 )
-            except Exception:
-                logger.exception("Failed to upload LaTeX archive artifact: %s", latex_path)
-    return writeup_success
+            )
+        except Exception:
+            logger.exception("Failed to upload LaTeX archive artifact: %s", latex_path)
 
 
 def run_review_stage(
     review_cfg: ReviewConfig | None,
     reports_base: str,
     run_dir_path: Path | None,
-    writeup_success: bool,
     should_run_reports: bool,
     agg_ok: bool,
     artifact_callback: ArtifactCallback,
     telemetry_cfg: TelemetryConfig | None,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
+    webhook_client: WebhookClient | None = None,
 ) -> None:
-    if (
-        review_cfg is None
-        or run_dir_path is None
-        or not should_run_reports
-        or not agg_ok
-        or not writeup_success
-    ):
+    if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
         return
 
     pdf_path = find_pdf_path_for_review(
@@ -802,6 +837,7 @@ def run_review_stage(
             recorder = ReviewResponseRecorder.from_database_url(
                 database_url=telemetry_cfg.database_url,
                 run_id=telemetry_cfg.run_id,
+                webhook_client=webhook_client,
             )
             recorder.insert_review(review=review, source_path=review_json_path)
             figure_recorder = FigureReviewRecorder.from_database_url(
@@ -820,6 +856,8 @@ def run_review_stage(
 def execute_launcher(args: argparse.Namespace) -> None:
     base_config_path = Path(args.config_file)
     base_cfg = load_base_config(config_path=base_config_path)
+    if base_cfg.telemetry and base_cfg.telemetry.run_id:
+        set_sentry_run_context(run_id=base_cfg.telemetry.run_id)
     workspace_dir = base_cfg.workspace_dir
     os.environ["WORKSPACE_DIR"] = str(workspace_dir)
     apply_log_level(level_name=str(base_cfg.log_level))
@@ -839,6 +877,13 @@ def execute_launcher(args: argparse.Namespace) -> None:
     if review_cfg is not None and not writeup_enabled:
         logger.info("Review configuration provided but writeup is disabled; skipping review.")
 
+    stage_control.reset_stage_state()
+    initialize_execution_registry()
+    try:
+        start_termination_server(host="127.0.0.1", port=8090)
+    except Exception:
+        logger.exception("Failed to start termination server; continuing without it.")
+
     telemetry_hooks = setup_event_pipeline(telemetry_cfg=base_cfg.telemetry)
     event_persistence = telemetry_hooks.persistence
     webhook_client = telemetry_hooks.webhook
@@ -846,10 +891,12 @@ def execute_launcher(args: argparse.Namespace) -> None:
         telemetry_hooks.event_callback,
         webhook_client=webhook_client,
     )
+    stage_control.register_event_callback(event_callback)
     artifact_callback: ArtifactCallback
     if base_cfg.telemetry is not None:
         artifact_publisher, artifact_callback = setup_artifact_publisher(
-            telemetry_cfg=base_cfg.telemetry
+            telemetry_cfg=base_cfg.telemetry,
+            webhook_client=webhook_client,
         )
     else:
         artifact_publisher = None
@@ -862,6 +909,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
     heartbeat_thread: threading.Thread | None = None
     heartbeat_stop: threading.Event | None = None
+    hw_stats_reporter: HardwareStatsReporter | None = None
     if webhook_client is not None:
         try:
             webhook_client.publish_run_started()
@@ -878,6 +926,21 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
         heartbeat_thread.start()
+
+        hw_paths_env = os.environ.get("COLLECT_DISK_STATS_PATHS")
+        hw_paths = (
+            [path.strip() for path in hw_paths_env.split(",") if path.strip()]
+            if hw_paths_env
+            else []
+        )
+        if hw_paths:
+            hw_interval = int(os.environ.get("HW_STATS_INTERVAL_SECONDS", "600"))
+            hw_stats_reporter = HardwareStatsReporter(
+                webhook_client=webhook_client,
+                paths=hw_paths,
+                interval_seconds=hw_interval,
+            )
+            hw_stats_reporter.start()
 
     run_success = False
     failure_message: str | None = None
@@ -920,7 +983,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         cleanup_aggregated_results(reports_base=reports_base)
 
-        writeup_success = run_writeup_stage(
+        run_writeup_stage(
             writeup_cfg=writeup_cfg,
             reports_base=reports_base,
             run_dir_path=run_dir_path,
@@ -935,16 +998,18 @@ def execute_launcher(args: argparse.Namespace) -> None:
             review_cfg=review_cfg if review_enabled else None,
             reports_base=reports_base,
             run_dir_path=run_dir_path,
-            writeup_success=writeup_success,
             should_run_reports=should_run_reports,
             agg_ok=agg_ok,
             artifact_callback=artifact_callback,
             telemetry_cfg=base_cfg.telemetry,
             event_callback=event_callback,
             run_id=run_id,
+            webhook_client=webhook_client,
         )
 
         if artifact_callback is not None and run_dir_path is not None:
+            # This call is also performed by the server before terminating the pod.
+            # But we want to be sure to upload the log file and workspace archive.
             artifact_callback(
                 ArtifactSpec(
                     artifact_type="workspace_archive",
@@ -952,6 +1017,13 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     packaging="zip",
                     archive_name=f"{run_dir_path.name}-workspace.zip",
                     exclude_dir_names=(".ai_scientist_venv", ".venv"),
+                )
+            )
+            artifact_callback(
+                ArtifactSpec(
+                    artifact_type="run_log",
+                    path=Path("/workspace/research_pipeline.log"),
+                    packaging="file",
                 )
             )
 
@@ -963,15 +1035,27 @@ def execute_launcher(args: argparse.Namespace) -> None:
     finally:
         try:
             if webhook_client is not None:
-                webhook_client.publish_run_finished(success=run_success, message=failure_message)
+                try:
+                    run_finished_future = webhook_client.publish_run_finished(
+                        success=run_success,
+                        message=failure_message,
+                    )
+                    run_finished_future.result(timeout=None)
+                except Exception:
+                    logger.exception("Failed to publish run finished notification.")
             if heartbeat_stop is not None:
                 heartbeat_stop.set()
             if heartbeat_thread is not None:
                 heartbeat_thread.join(timeout=5)
             if event_persistence is not None:
                 event_persistence.stop()
+            if hw_stats_reporter is not None:
+                hw_stats_reporter.stop()
             if artifact_publisher is not None:
                 artifact_publisher.close()
+            stop_termination_server()
+            shutdown_execution_registry_manager()
+            stage_control.clear_stage_state()
         except Exception:
             logger.exception("Encountered an error while cleaning up the research pipeline run.")
 

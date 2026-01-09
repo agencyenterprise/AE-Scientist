@@ -785,6 +785,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/artifact-uploaded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Artifact Uploaded */
+        post: operations["ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/review-completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Review Completed */
+        post: operations["ingest_review_completed_api_research_pipeline_events_review_completed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/substage-summary": {
         parameters: {
             query?: never;
@@ -819,6 +853,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/stage-skip-window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Stage Skip Window */
+        post: operations["ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/tree-viz-stored": {
         parameters: {
             query?: never;
@@ -847,6 +898,40 @@ export interface paths {
         put?: never;
         /** Ingest Run Log */
         post: operations["ingest_run_log_api_research_pipeline_events_run_log_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/running-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Running Code */
+        post: operations["ingest_running_code_api_research_pipeline_events_running_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/run-completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Run Completed */
+        post: operations["ingest_run_completed_api_research_pipeline_events_run_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -904,6 +989,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/hw-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Hw Stats */
+        post: operations["ingest_hw_stats_api_research_pipeline_events_hw_stats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/gpu-shortage": {
         parameters: {
             query?: never;
@@ -947,6 +1049,23 @@ export interface paths {
         };
         /** Get Research Run Snapshot */
         get: operations["get_research_run_snapshot_api_conversations__conversation_id__idea_research_run__run_id__snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/research/gpu-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Research Gpu Types */
+        get: operations["list_research_gpu_types_api_conversations_research_gpu_types_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1003,6 +1122,43 @@ export interface paths {
         get: operations["get_research_run_review_api_conversations__conversation_id__idea_research_run__run_id__review_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Terminate Code Execution */
+        post: operations["terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/skip-stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Active Stage
+         * @description Request the running pipeline to skip the current stage.
+         */
+        post: operations["skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1271,6 +1427,27 @@ export interface components {
              * @description Original filename
              */
             filename: string;
+        };
+        /** ArtifactUploadedEvent */
+        ArtifactUploadedEvent: {
+            /** Artifact Id */
+            artifact_id: number;
+            /** Artifact Type */
+            artifact_type: string;
+            /** Filename */
+            filename: string;
+            /** File Size */
+            file_size: number;
+            /** File Type */
+            file_type: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** ArtifactUploadedPayload */
+        ArtifactUploadedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["ArtifactUploadedEvent"];
         };
         /**
          * AuthStatus
@@ -1973,10 +2150,29 @@ export interface components {
             /** Message */
             message?: string | null;
         };
+        /** GpuTypeListResponse */
+        GpuTypeListResponse: {
+            /** Gpu Types */
+            gpu_types: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HardwareStatsPartition */
+        HardwareStatsPartition: {
+            /** Partition */
+            partition: string;
+            /** Used Bytes */
+            used_bytes: number;
+        };
+        /** HardwareStatsPayload */
+        HardwareStatsPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Partitions */
+            partitions?: components["schemas"]["HardwareStatsPartition"][];
         };
         /** HeartbeatPayload */
         HeartbeatPayload: {
@@ -2386,6 +2582,11 @@ export interface components {
                 [key: string]: components["schemas"]["LLMModel"][];
             };
         };
+        /** LaunchResearchRunRequest */
+        LaunchResearchRunRequest: {
+            /** Gpu Type */
+            gpu_type: string;
+        };
         /**
          * LlmReviewNotFoundResponse
          * @description Response model when no review exists for a run.
@@ -2602,6 +2803,15 @@ export interface components {
             /** Cost */
             cost: number;
         };
+        /** ResearchRunArtifactEvent */
+        ResearchRunArtifactEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artifact";
+            data: components["schemas"]["ResearchRunArtifactMetadata"];
+        };
         /** ResearchRunArtifactMetadata */
         ResearchRunArtifactMetadata: {
             /**
@@ -2635,10 +2845,15 @@ export interface components {
              */
             created_at: string;
             /**
-             * Download Path
-             * @description API path to initiate a download
+             * Run Id
+             * @description Research run identifier
              */
-            download_path: string;
+            run_id: string;
+            /**
+             * Conversation Id
+             * @description ID of the associated conversation
+             */
+            conversation_id?: number | null;
         };
         /** ResearchRunBestNodeEvent */
         ResearchRunBestNodeEvent: {
@@ -2676,6 +2891,101 @@ export interface components {
              * @description ISO timestamp when the reasoning was recorded
              */
             created_at: string;
+        };
+        /**
+         * ResearchRunCodeExecution
+         * @description Latest code execution snapshot for a run.
+         */
+        ResearchRunCodeExecution: {
+            /**
+             * Execution Id
+             * @description Unique identifier for the code execution attempt
+             */
+            execution_id: string;
+            /**
+             * Stage Name
+             * @description Stage name reported by the research pipeline
+             */
+            stage_name: string;
+            /**
+             * Run Type
+             * @description Type of execution (e.g., main_execution)
+             */
+            run_type: string;
+            /**
+             * Code
+             * @description Python source code submitted for execution
+             */
+            code: string;
+            /**
+             * Status
+             * @description Execution status reported by the worker
+             */
+            status: string;
+            /**
+             * Started At
+             * @description ISO timestamp when execution began
+             */
+            started_at: string;
+            /**
+             * Completed At
+             * @description ISO timestamp when execution ended
+             */
+            completed_at?: string | null;
+            /**
+             * Exec Time
+             * @description Execution time reported by the worker
+             */
+            exec_time?: number | null;
+        };
+        /** ResearchRunCodeExecutionCompletedData */
+        ResearchRunCodeExecutionCompletedData: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Run Type */
+            run_type: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Exec Time */
+            exec_time: number;
+            /** Completed At */
+            completed_at: string;
+        };
+        /** ResearchRunCodeExecutionCompletedEvent */
+        ResearchRunCodeExecutionCompletedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "code_execution_completed";
+            data: components["schemas"]["ResearchRunCodeExecutionCompletedData"];
+        };
+        /** ResearchRunCodeExecutionStartedData */
+        ResearchRunCodeExecutionStartedData: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Run Type */
+            run_type: string;
+            /** Code */
+            code: string;
+            /** Started At */
+            started_at: string;
+        };
+        /** ResearchRunCodeExecutionStartedEvent */
+        ResearchRunCodeExecutionStartedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "code_execution_started";
+            data: components["schemas"]["ResearchRunCodeExecutionStartedData"];
         };
         /** ResearchRunCompleteData */
         ResearchRunCompleteData: {
@@ -2754,6 +3064,11 @@ export interface components {
              * @description Paper generation progress events (Stage 5)
              */
             paper_generation_progress?: components["schemas"]["ResearchRunPaperGenerationProgress"][];
+            /**
+             * Stage Skip Windows
+             * @description Windows indicating when each stage became skippable.
+             */
+            stage_skip_windows?: components["schemas"]["ResearchRunStageSkipWindow"][];
         };
         /** ResearchRunErrorEvent */
         ResearchRunErrorEvent: {
@@ -2976,10 +3291,17 @@ export interface components {
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
             /** Best Node Selections */
             best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
+            /**
+             * Stage Skip Windows
+             * @description Recorded windows when stages became skippable.
+             */
+            stage_skip_windows?: components["schemas"]["ResearchRunStageSkipWindow"][];
             /** @description Hardware cost estimate available when the initial snapshot was emitted. */
             hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
             /** @description Hardware cost billed so far, if available. */
             hw_cost_actual?: components["schemas"]["ResearchRunHwCostActualData"] | null;
+            /** @description Latest code execution snapshot available for the run. */
+            code_execution?: components["schemas"]["ResearchRunCodeExecution"] | null;
         };
         /**
          * ResearchRunListItem
@@ -3013,7 +3335,7 @@ export interface components {
             current_stage?: string | null;
             /**
              * Progress
-             * @description Progress percentage (0-1) from latest event
+             * @description Overall pipeline progress (0-1) computed as completed-stages-only buckets (0.0, 0.2, 0.4, 0.6, 0.8, 1.0).
              */
             progress?: number | null;
             /**
@@ -3163,6 +3485,15 @@ export interface components {
              */
             created_at: string;
         };
+        /** ResearchRunReviewCompletedEvent */
+        ResearchRunReviewCompletedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "review_completed";
+            data: components["schemas"]["LlmReviewResponse"];
+        };
         /** ResearchRunRunEvent */
         ResearchRunRunEvent: {
             /**
@@ -3239,6 +3570,62 @@ export interface components {
             type: "stage_progress";
             data: components["schemas"]["ResearchRunStageProgress"];
         };
+        /** ResearchRunStageSkipWindow */
+        ResearchRunStageSkipWindow: {
+            /**
+             * Id
+             * @description Unique identifier for the skip window record
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier where skipping became possible
+             */
+            stage: string;
+            /**
+             * Opened At
+             * @description ISO timestamp when the window opened
+             */
+            opened_at: string;
+            /**
+             * Opened Reason
+             * @description Reason provided when the window opened
+             */
+            opened_reason?: string | null;
+            /**
+             * Closed At
+             * @description ISO timestamp when the window closed (if closed)
+             */
+            closed_at?: string | null;
+            /**
+             * Closed Reason
+             * @description Reason provided when the window closed
+             */
+            closed_reason?: string | null;
+        };
+        /** ResearchRunStageSkipWindowEvent */
+        ResearchRunStageSkipWindowEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_skip_window";
+            data: components["schemas"]["ResearchRunStageSkipWindowUpdate"];
+        };
+        /** ResearchRunStageSkipWindowUpdate */
+        ResearchRunStageSkipWindowUpdate: {
+            /** Stage */
+            stage: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "opened" | "closed";
+            /** Timestamp */
+            timestamp: string;
+            /** Reason */
+            reason?: string | null;
+        };
         /** ResearchRunStopResponse */
         ResearchRunStopResponse: {
             /** Run Id */
@@ -3252,7 +3639,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -3418,6 +3805,80 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ReviewCompletedEvent */
+        ReviewCompletedEvent: {
+            /** Review Id */
+            review_id: number;
+            /** Summary */
+            summary: string;
+            /** Strengths */
+            strengths: string[];
+            /** Weaknesses */
+            weaknesses: string[];
+            /** Originality */
+            originality: number;
+            /** Quality */
+            quality: number;
+            /** Clarity */
+            clarity: number;
+            /** Significance */
+            significance: number;
+            /** Questions */
+            questions: string[];
+            /** Limitations */
+            limitations: string[];
+            /** Ethical Concerns */
+            ethical_concerns: boolean;
+            /** Soundness */
+            soundness: number;
+            /** Presentation */
+            presentation: number;
+            /** Contribution */
+            contribution: number;
+            /** Overall */
+            overall: number;
+            /** Confidence */
+            confidence: number;
+            /** Decision */
+            decision: string;
+            /** Source Path */
+            source_path: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** ReviewCompletedPayload */
+        ReviewCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["ReviewCompletedEvent"];
+        };
+        /** RunCompletedEventPayload */
+        RunCompletedEventPayload: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Exec Time */
+            exec_time: number;
+            /** Completed At */
+            completed_at: string;
+            /**
+             * Run Type
+             * @default main_execution
+             */
+            run_type: string;
+        };
+        /** RunCompletedPayload */
+        RunCompletedPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["RunCompletedEventPayload"];
+        };
         /** RunFinishedPayload */
         RunFinishedPayload: {
             /** Run Id */
@@ -3448,6 +3909,45 @@ export interface components {
             /** Run Id */
             run_id: string;
         };
+        /** RunningCodeEventPayload */
+        RunningCodeEventPayload: {
+            /** Execution Id */
+            execution_id: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Code */
+            code: string;
+            /** Started At */
+            started_at: string;
+            /**
+             * Run Type
+             * @default main_execution
+             */
+            run_type: string;
+        };
+        /** RunningCodePayload */
+        RunningCodePayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["RunningCodeEventPayload"];
+        };
+        /** SkipStageRequest */
+        SkipStageRequest: {
+            /** Stage */
+            stage?: string | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** SkipStageResponse */
+        SkipStageResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "pending";
+            /** Message */
+            message: string;
+        };
         /** StageProgressEvent */
         StageProgressEvent: {
             /** Stage */
@@ -3476,6 +3976,26 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["StageProgressEvent"];
+        };
+        /** StageSkipWindowEventModel */
+        StageSkipWindowEventModel: {
+            /** Stage */
+            stage: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "opened" | "closed";
+            /** Timestamp */
+            timestamp: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** StageSkipWindowPayload */
+        StageSkipWindowPayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["StageSkipWindowEventModel"];
         };
         /** SubstageCompletedEvent */
         SubstageCompletedEvent: {
@@ -3518,6 +4038,21 @@ export interface components {
              */
             summary: string;
         };
+        /** TerminateExecutionRequest */
+        TerminateExecutionRequest: {
+            /** Payload */
+            payload: string;
+        };
+        /** TerminateExecutionResponse */
+        TerminateExecutionResponse: {
+            /** Execution Id */
+            execution_id: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "terminating";
+        };
         /**
          * TreeVizItem
          * @description Stored tree visualization payload for a run stage.
@@ -3535,7 +4070,7 @@ export interface components {
             run_id: string;
             /**
              * Stage Id
-             * @description Stage identifier (Stage_1..Stage_4)
+             * @description Stage identifier (stage_1..stage_4)
              */
             stage_id: string;
             /**
@@ -4868,6 +5403,72 @@ export interface operations {
             };
         };
     };
+    ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactUploadedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_review_completed_api_research_pipeline_events_review_completed_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCompletedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_substage_summary_api_research_pipeline_events_substage_summary_post: {
         parameters: {
             query?: never;
@@ -4934,6 +5535,39 @@ export interface operations {
             };
         };
     };
+    ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageSkipWindowPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post: {
         parameters: {
             query?: never;
@@ -4979,6 +5613,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunLogPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_running_code_api_research_pipeline_events_running_code_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunningCodePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_run_completed_api_research_pipeline_events_run_completed_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunCompletedPayload"];
             };
         };
         responses: {
@@ -5099,6 +5799,39 @@ export interface operations {
             };
         };
     };
+    ingest_hw_stats_api_research_pipeline_events_hw_stats_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HardwareStatsPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post: {
         parameters: {
             query?: never;
@@ -5197,6 +5930,26 @@ export interface operations {
             };
         };
     };
+    list_research_gpu_types_api_conversations_research_gpu_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GpuTypeListResponse"];
+                };
+            };
+        };
+    };
     submit_idea_for_research_api_conversations__conversation_id__idea_research_run_post: {
         parameters: {
             query?: never;
@@ -5206,7 +5959,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LaunchResearchRunRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -5279,6 +6036,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmReviewResponse"] | components["schemas"]["LlmReviewNotFoundResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminate_code_execution_api_conversations__conversation_id__idea_research_run__run_id__executions__execution_id__terminate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+                execution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminateExecutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerminateExecutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_active_stage_api_conversations__conversation_id__idea_research_run__run_id__skip_stage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkipStageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkipStageResponse"];
                 };
             };
             /** @description Validation Error */

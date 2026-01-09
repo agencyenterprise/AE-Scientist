@@ -5,8 +5,7 @@ Database helpers for research pipeline LLM reviews.
 from datetime import datetime
 from typing import Any, Dict, NamedTuple, Optional
 
-import psycopg2
-import psycopg2.extras
+from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
 
@@ -37,7 +36,7 @@ class LlmReview(NamedTuple):
 class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
     """Helpers to read LLM review data stored in rp_llm_reviews."""
 
-    def get_review_by_run_id(self, run_id: str) -> Optional[Dict[str, Any]]:
+    async def get_review_by_run_id(self, run_id: str) -> Optional[Dict[str, Any]]:
         """Fetch the LLM review for a specific research run.
 
         Args:
@@ -55,10 +54,10 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
             WHERE run_id = %s
             LIMIT 1
         """
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(query, (run_id,))
-                row = cursor.fetchone()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                row = await cursor.fetchone()
         if not row:
             return None
         return dict(row)

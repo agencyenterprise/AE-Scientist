@@ -12,13 +12,16 @@ from pydantic import BaseModel, Field, RootModel
 from app.models.conversations import ConversationResponse
 from app.models.ideas import Idea
 from app.models.research_pipeline import (
+    LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
+    ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
+    ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
     TreeVizItem,
@@ -226,6 +229,10 @@ class ResearchRunInitialEventData(BaseModel):
     events: List[ResearchRunEvent]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
     best_node_selections: List[ResearchRunBestNodeSelection]
+    stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
+        default_factory=list,
+        description="Recorded windows when stages became skippable.",
+    )
     hw_cost_estimate: ResearchRunHwCostEstimateData | None = Field(
         None,
         description="Hardware cost estimate available when the initial snapshot was emitted.",
@@ -233,6 +240,10 @@ class ResearchRunInitialEventData(BaseModel):
     hw_cost_actual: ResearchRunHwCostActualData | None = Field(
         None,
         description="Hardware cost billed so far, if available.",
+    )
+    code_execution: ResearchRunCodeExecution | None = Field(
+        None,
+        description="Latest code execution snapshot available for the run.",
     )
 
 
@@ -272,6 +283,45 @@ class ResearchRunBestNodeEvent(BaseModel):
     data: ResearchRunBestNodeSelection
 
 
+class ResearchRunCodeExecutionStartedData(BaseModel):
+    execution_id: str
+    stage_name: str
+    run_type: str
+    code: str
+    started_at: str
+
+
+class ResearchRunCodeExecutionStartedEvent(BaseModel):
+    type: Literal["code_execution_started"]
+    data: ResearchRunCodeExecutionStartedData
+
+
+class ResearchRunCodeExecutionCompletedData(BaseModel):
+    execution_id: str
+    stage_name: str
+    run_type: str
+    status: Literal["success", "failed"]
+    exec_time: float
+    completed_at: str
+
+
+class ResearchRunCodeExecutionCompletedEvent(BaseModel):
+    type: Literal["code_execution_completed"]
+    data: ResearchRunCodeExecutionCompletedData
+
+
+class ResearchRunStageSkipWindowUpdate(BaseModel):
+    stage: str
+    state: Literal["opened", "closed"]
+    timestamp: str
+    reason: Optional[str] = None
+
+
+class ResearchRunStageSkipWindowEvent(BaseModel):
+    type: Literal["stage_skip_window"]
+    data: ResearchRunStageSkipWindowUpdate
+
+
 class ResearchRunSubstageCompletedEvent(BaseModel):
     type: Literal["substage_completed"]
     data: ResearchRunSubstageEvent
@@ -302,6 +352,16 @@ class ResearchRunErrorEvent(BaseModel):
     data: str
 
 
+class ResearchRunArtifactEvent(BaseModel):
+    type: Literal["artifact"]
+    data: ResearchRunArtifactMetadata
+
+
+class ResearchRunReviewCompletedEvent(BaseModel):
+    type: Literal["review_completed"]
+    data: "LlmReviewResponse"
+
+
 ResearchRunEventUnion = Annotated[
     Union[
         ResearchRunInitialEvent,
@@ -309,11 +369,16 @@ ResearchRunEventUnion = Annotated[
         ResearchRunStageProgressEvent,
         ResearchRunRunEvent,
         ResearchRunLogEvent,
+        ResearchRunArtifactEvent,
+        ResearchRunReviewCompletedEvent,
         ResearchRunBestNodeEvent,
         ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,
         ResearchRunSubstageEventStream,
         ResearchRunSubstageSummaryEvent,
+        ResearchRunCodeExecutionStartedEvent,
+        ResearchRunCodeExecutionCompletedEvent,
+        ResearchRunStageSkipWindowEvent,
         ResearchRunHeartbeatEvent,
         ResearchRunHwCostEstimateEvent,
         ResearchRunHwCostActualEvent,

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=UserListResponse)
-def list_users(request: Request) -> UserListResponse:
+async def list_users(request: Request) -> UserListResponse:
     """
     List all active users.
 
@@ -25,7 +25,7 @@ def list_users(request: Request) -> UserListResponse:
     get_current_user(request)
 
     db = get_database()
-    users = db.list_all_users()
+    users = await db.list_all_users()
 
     items = [UserListItem(id=u.id, email=u.email, name=u.name) for u in users]
 

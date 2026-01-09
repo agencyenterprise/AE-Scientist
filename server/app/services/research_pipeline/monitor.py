@@ -3,16 +3,73 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Dict, Optional, Protocol, cast
 
+from psycopg import AsyncConnection
+
+from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
+from app.models import ResearchRunEvent
+from app.models.sse import ResearchRunCompleteData
+from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
-from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import ResearchPipelineRun
-from app.services.research_pipeline import RunPodError, terminate_pod, upload_runpod_log_via_ssh
+from app.services.database.billing import CreditTransaction
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.research_pipeline import (
+    RunPodError,
+    terminate_pod,
+    upload_runpod_artifacts_via_ssh,
+)
 from app.services.research_pipeline.runpod_manager import RunPodManager
 
+
+class ResearchRunStore(Protocol):
+    async def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]: ...
+
+    async def update_research_pipeline_run(
+        self,
+        *,
+        run_id: str,
+        status: Optional[str] = None,
+        pod_update_info: Optional[PodUpdateInfo] = None,
+        error_message: Optional[str] = None,
+        last_heartbeat_at: Optional[datetime] = None,
+        heartbeat_failures: Optional[int] = None,
+        start_deadline_at: Optional[datetime] = None,
+        last_billed_at: Optional[datetime] = None,
+        started_running_at: Optional[datetime] = None,
+    ) -> None: ...
+
+    async def insert_research_pipeline_run_event(
+        self,
+        *,
+        run_id: str,
+        event_type: str,
+        metadata: Dict[str, object],
+        occurred_at: datetime,
+    ) -> None: ...
+
+    async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
+
+    async def get_user_wallet_balance(self, user_id: int) -> int: ...
+
+    async def add_completed_transaction(
+        self,
+        *,
+        user_id: int,
+        amount: int,
+        transaction_type: str,
+        description: Optional[str] = None,
+        metadata: Optional[Dict[str, object]] = None,
+        stripe_session_id: Optional[str] = None,
+    ) -> CreditTransaction: ...
+
+
 logger = logging.getLogger(__name__)
+
+_PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1 = 184467
+_PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2 = 991733
 
 
 class PipelineMonitorError(Exception):
@@ -46,7 +103,7 @@ class ResearchPipelineMonitor:
             return
         self._stop_event = asyncio.Event()
         self._task = asyncio.create_task(self._run(), name="PipelineMonitor")
-        logger.info("Research pipeline monitor started.")
+        logger.debug("Research pipeline monitor task started (pid=%s).", os.getpid())
 
     async def stop(self) -> None:
         if self._task is None:
@@ -62,7 +119,7 @@ class ResearchPipelineMonitor:
         finally:
             self._task = None
             self._stop_event = None
-        logger.info("Research pipeline monitor stopped.")
+        logger.debug("Research pipeline monitor task stopped (pid=%s).", os.getpid())
 
     async def _run(self) -> None:
         stop_event = self._stop_event
@@ -70,19 +127,72 @@ class ResearchPipelineMonitor:
             stop_event = asyncio.Event()
             self._stop_event = stop_event
         while not stop_event.is_set():
-            try:
-                await self._check_runs()
-            except PipelineMonitorError:
-                logger.exception("Pipeline monitor encountered an error.")
+            is_leader = await self._try_run_as_leader(stop_event=stop_event)
+            if is_leader:
+                continue
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
             except asyncio.TimeoutError:
                 continue
 
+    async def _try_run_as_leader(self, *, stop_event: asyncio.Event) -> bool:
+        db = get_database()
+        async with db.aget_connection() as conn:
+            lock_acquired = await self._try_acquire_global_monitor_lock(conn=conn)
+            if not lock_acquired:
+                return False
+
+            logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
+            try:
+                while not stop_event.is_set():
+                    try:
+                        await self._check_runs()
+                    except PipelineMonitorError:
+                        logger.exception("Pipeline monitor encountered an error.")
+                    try:
+                        await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
+                    except asyncio.TimeoutError:
+                        continue
+            finally:
+                await self._release_global_monitor_lock(conn=conn)
+                logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
+            return True
+
+    async def _try_acquire_global_monitor_lock(self, *, conn: AsyncConnection[object]) -> bool:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT pg_try_advisory_lock(%s, %s)",
+                    (
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1,
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2,
+                    ),
+                )
+                row = cast("tuple[object, ...] | None", await cursor.fetchone())
+                if row is None:
+                    return False
+                return bool(row[0])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to acquire pipeline monitor leader lock: %s", exc)
+            return False
+
+    async def _release_global_monitor_lock(self, *, conn: AsyncConnection[object]) -> None:
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT pg_advisory_unlock(%s, %s)",
+                    (
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1,
+                        _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2,
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to release pipeline monitor leader lock: %s", exc)
+
     async def _check_runs(self) -> None:
         try:
-            db = get_database()
-            runs = db.list_active_research_pipeline_runs()
+            db = cast("ResearchRunStore", get_database())
+            runs = await db.list_active_research_pipeline_runs()
             if not runs:
                 logger.debug("Pipeline monitor heartbeat: no active runs.")
                 return
@@ -101,7 +211,7 @@ class ResearchPipelineMonitor:
             raise PipelineMonitorError from exc
 
     async def _handle_pending_run(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         deadline = run.start_deadline_at
         if deadline is None:
@@ -127,7 +237,7 @@ class ResearchPipelineMonitor:
             )
 
     async def _handle_running_run(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         runtime = now - run.created_at
         if runtime > self._max_runtime:
@@ -138,6 +248,8 @@ class ResearchPipelineMonitor:
                 "pipeline_monitor",
             )
             return
+
+        await self._maybe_backfill_ssh_info(db=db, run=run, now=now)
 
         if run.last_heartbeat_at is None:
             deadline = run.start_deadline_at
@@ -166,7 +278,7 @@ class ResearchPipelineMonitor:
         delta = now - run.last_heartbeat_at
         if delta > self._heartbeat_timeout:
             failures = run.heartbeat_failures + 1
-            db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=failures)
+            await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=failures)
             logger.warning(
                 "Run %s missed heartbeat (delta %.0fs). Failure count %s/%s.",
                 run.run_id,
@@ -184,7 +296,7 @@ class ResearchPipelineMonitor:
             return
 
         if run.heartbeat_failures > 0:
-            db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
+            await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
 
         if run.pod_id:
             try:
@@ -216,18 +328,19 @@ class ResearchPipelineMonitor:
 
     async def _fail_run(
         self,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         run: ResearchPipelineRun,
         message: str,
         reason: str,
     ) -> None:
         logger.warning("Marking run %s as failed: %s", run.run_id, message)
-        db.update_research_pipeline_run(
+        now = datetime.now(timezone.utc)
+        await db.update_research_pipeline_run(
             run_id=run.run_id,
             status="failed",
             error_message=message,
         )
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="status_changed",
             metadata={
@@ -236,14 +349,50 @@ class ResearchPipelineMonitor:
                 "reason": reason,
                 "error_message": message,
             },
-            occurred_at=datetime.now(timezone.utc),
+            occurred_at=now,
+        )
+        run_event = ResearchRunEvent(
+            id=int(now.timestamp() * 1000),
+            run_id=run.run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run.status,
+                "to_status": "failed",
+                "reason": reason,
+                "error_message": message,
+            },
+            occurred_at=now.isoformat(),
+        )
+        publish_stream_event(
+            run.run_id,
+            SSERunEvent(
+                type="run_event",
+                data=run_event,
+            ),
+        )
+        publish_stream_event(
+            run.run_id,
+            SSECompleteEvent(
+                type="complete",
+                data=ResearchRunCompleteData(
+                    status="failed",
+                    success=False,
+                    message=message,
+                ),
+            ),
         )
         if run.pod_id:
-            self._upload_pod_log(run)
+            logger.info(
+                "Triggering pod artifacts upload for run %s before pod termination (trigger=%s, pod_id=%s).",
+                run.run_id,
+                reason,
+                run.pod_id,
+            )
+            await self._upload_pod_artifacts(run=run, reason=reason)
             try:
-                terminate_pod(pod_id=run.pod_id)
-            except RuntimeError as exc:
-                logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
+                await terminate_pod(pod_id=run.pod_id)
+            except RuntimeError:
+                logger.exception("Failed to terminate pod %s", run.pod_id)
             await self._record_pod_billing_event(
                 db=db,
                 run_id=run.run_id,
@@ -252,7 +401,7 @@ class ResearchPipelineMonitor:
             )
 
     async def _bill_run_if_needed(
-        self, db: "DatabaseManager", run: ResearchPipelineRun, now: datetime
+        self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
         rate = max(0, settings.RESEARCH_RUN_CREDITS_PER_MINUTE)
         if rate == 0:
@@ -263,12 +412,12 @@ class ResearchPipelineMonitor:
         if elapsed_minutes <= 0:
             return
 
-        user_id = db.get_run_owner_user_id(run.run_id)
+        user_id = await db.get_run_owner_user_id(run.run_id)
         if user_id is None:
             logger.warning("Unable to determine owner for run %s; skipping billing.", run.run_id)
             return
 
-        available = db.get_user_wallet_balance(user_id)
+        available = await db.get_user_wallet_balance(user_id)
         if available < rate:
             await self._fail_run(
                 db,
@@ -289,7 +438,7 @@ class ResearchPipelineMonitor:
             return
 
         charge_amount = billable_minutes * rate
-        db.add_completed_transaction(
+        await db.add_completed_transaction(
             user_id=user_id,
             amount=-charge_amount,
             transaction_type="debit",
@@ -297,7 +446,7 @@ class ResearchPipelineMonitor:
             metadata={"run_id": run.run_id, "minutes_billed": billable_minutes},
         )
         new_balance = available - charge_amount
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="billing_debit",
             metadata={
@@ -308,7 +457,7 @@ class ResearchPipelineMonitor:
             },
             occurred_at=now,
         )
-        db.update_research_pipeline_run(
+        await db.update_research_pipeline_run(
             run_id=run.run_id,
             last_billed_at=last_billed + timedelta(minutes=billable_minutes),
         )
@@ -323,7 +472,7 @@ class ResearchPipelineMonitor:
 
     async def _record_pod_billing_event(
         self,
-        db: "DatabaseManager",
+        db: "ResearchRunStore",
         *,
         run_id: str,
         pod_id: str,
@@ -339,25 +488,133 @@ class ResearchPipelineMonitor:
         metadata = summary._asdict()
         metadata["records"] = [record._asdict() for record in summary.records]
         metadata["context"] = context
-        db.insert_research_pipeline_run_event(
+        await db.insert_research_pipeline_run_event(
             run_id=run_id,
             event_type="pod_billing_summary",
             metadata=metadata,
             occurred_at=datetime.now(timezone.utc),
         )
 
-    def _upload_pod_log(self, run: ResearchPipelineRun) -> None:
+    async def _upload_pod_artifacts(self, run: ResearchPipelineRun, *, reason: str) -> None:
         if not run.public_ip or not run.ssh_port:
-            logger.info("Run %s missing SSH info; skipping log upload.", run.run_id)
+            logger.info(
+                "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
+                run.run_id,
+                reason,
+            )
             return
         try:
-            upload_runpod_log_via_ssh(
+            logger.info(
+                "Uploading pod artifacts for run %s (trigger=%s, host=%s, port=%s).",
+                run.run_id,
+                reason,
+                run.public_ip,
+                run.ssh_port,
+            )
+            await upload_runpod_artifacts_via_ssh(
                 host=run.public_ip,
                 port=run.ssh_port,
                 run_id=run.run_id,
+                trigger=f"pipeline_monitor_failure:{reason}",
             )
-        except Exception as exc:  # noqa: BLE001
+        except (RuntimeError, OSError) as exc:
             logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
+
+    async def _maybe_backfill_ssh_info(
+        self,
+        db: "ResearchRunStore",
+        run: ResearchPipelineRun,
+        now: datetime,
+    ) -> None:
+        if (
+            not run.pod_id
+            or (run.public_ip and run.ssh_port)
+            or not self._has_grace_period_elapsed(run=run, now=now)
+        ):
+            return
+        await self._refresh_pod_connection_info(db=db, run=run)
+
+    def _has_grace_period_elapsed(self, *, run: ResearchPipelineRun, now: datetime) -> bool:
+        deadline = run.start_deadline_at
+        if deadline is None and run.started_running_at is not None:
+            deadline = run.started_running_at + self._startup_grace
+        if deadline is None:
+            return False
+        return now >= deadline
+
+    async def _refresh_pod_connection_info(
+        self,
+        *,
+        db: "ResearchRunStore",
+        run: ResearchPipelineRun,
+    ) -> None:
+        assert run.pod_id  # mypy appeasement
+        logger.info(
+            "Backfilling SSH info for run %s (pod_id=%s) after grace period.",
+            run.run_id,
+            run.pod_id,
+        )
+        try:
+            pod = await self._runpod_manager.get_pod(run.pod_id)
+        except RunPodError as exc:
+            logger.warning(
+                "Failed to refresh pod %s info for run %s: %s", run.pod_id, run.run_id, exc
+            )
+            return
+
+        public_ip = pod.get("publicIp")
+        port_mappings = pod.get("portMappings") or {}
+        ssh_port_value = None
+        if isinstance(port_mappings, dict):
+            ssh_port_value = port_mappings.get("22")
+        if not public_ip or ssh_port_value is None:
+            logger.warning(
+                "Pod %s still missing SSH data (ip=%s, port=%s); will retry later.",
+                run.pod_id,
+                public_ip,
+                ssh_port_value,
+            )
+            return
+        ssh_port = str(ssh_port_value)
+
+        pod_host_id = run.pod_host_id
+        if not pod_host_id:
+            pod_host_id = await self._runpod_manager.get_pod_host_id(run.pod_id)
+
+        pod_name = run.pod_name or pod.get("name") or run.pod_id
+        machine = pod.get("machine") or {}
+        gpu_type = run.gpu_type or machine.get("gpuTypeId") or "unknown"
+
+        await db.update_research_pipeline_run(
+            run_id=run.run_id,
+            pod_update_info=PodUpdateInfo(
+                pod_id=run.pod_id,
+                pod_name=str(pod_name),
+                gpu_type=str(gpu_type),
+                cost=run.cost,
+                public_ip=str(public_ip),
+                ssh_port=ssh_port,
+                pod_host_id=pod_host_id,
+            ),
+        )
+        await db.insert_research_pipeline_run_event(
+            run_id=run.run_id,
+            event_type="pod_info_backfilled",
+            metadata={
+                "pod_id": run.pod_id,
+                "public_ip": public_ip,
+                "ssh_port": ssh_port,
+                "pod_host_id": pod_host_id,
+            },
+            occurred_at=datetime.now(timezone.utc),
+        )
+        logger.info(
+            "Backfilled SSH info for run %s: ip=%s port=%s host=%s",
+            run.run_id,
+            public_ip,
+            ssh_port,
+            pod_host_id,
+        )
 
 
 def _require_int(name: str) -> int:

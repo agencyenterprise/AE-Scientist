@@ -25,10 +25,11 @@ class TelemetryLike(Protocol):
 
 
 def _normalize_stage_id(stage_name: str) -> str:
+    """Normalize stage name to stage_N format (e.g., 'stage_1')."""
     if stage_name.startswith("stage_"):
         parts = stage_name.split("_")
         if len(parts) >= 2 and parts[1].isdigit():
-            return f"Stage_{parts[1]}"
+            return f"stage_{parts[1]}"
     return stage_name
 
 
@@ -158,12 +159,19 @@ def get_completed_stages(log_dir: Path) -> list[str]:
 
 def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
     edges = list(get_edges(jou))
-    logger.debug(f"Edges: {edges}")
-    try:
-        gen_layout = generate_layout(n_nodes=len(jou.nodes), edges=edges, layout_type="rt")
-    except Exception as e:
-        logger.exception(f"Error in generate_layout: {e}")
-        raise
+    logger.debug("Edges: %r", edges)
+    if not jou.nodes:
+        gen_layout = np.empty((0, 2), dtype=float)
+    else:
+        try:
+            gen_layout = generate_layout(
+                n_nodes=len(jou.nodes),
+                edges=edges,
+                layout_type="rt",
+            )
+        except Exception as exc:
+            logger.exception("Error in generate_layout: %s", exc)
+            raise
     try:
         layout = normalize_layout(gen_layout)
     except Exception as e:

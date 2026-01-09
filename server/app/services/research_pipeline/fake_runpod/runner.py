@@ -2,14 +2,14 @@ import json
 import logging
 import os
 import queue
+import re
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
-import psycopg2
-import psycopg2.extras
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel
@@ -22,6 +22,9 @@ from research_pipeline.ai_scientist.telemetry.event_persistence import (  # type
     PersistableEvent,
     WebhookClient,
 )
+
+from app.services.research_pipeline.fake_runpod.persistence import FakeRunPodPersistence
+from app.services.research_pipeline.fake_runpod.webhooks import FakeRunPodWebhookPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,11 @@ class PodRequest(BaseModel):
     dockerStartCmd: List[str]
 
 
+class SkipStageRequest(BaseModel):
+    run_id: str
+    reason: str
+
+
 class BillingRecord(NamedTuple):
     podId: str
     amount: float
@@ -64,10 +72,24 @@ class TelemetryRecord(NamedTuple):
     received_at: float
 
 
+class TerminateExecutionRequest(BaseModel):
+    payload: str
+
+
+class ExecutionRecord(NamedTuple):
+    run_id: str
+    stage_name: str
+    run_type: str
+    started_at: datetime
+    status: str
+
+
 app = FastAPI(title="Fake RunPod Server")
 _pods: Dict[str, PodRecord] = {}
 _lock = threading.Lock()
 _telemetry_events: List[TelemetryRecord] = []
+_runners_by_run_id: Dict[str, "FakeRunner"] = {}
+_executions_by_id: Dict[str, ExecutionRecord] = {}
 
 
 def _require_env(name: str) -> str:
@@ -75,6 +97,57 @@ def _require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"{name} is required for fake RunPod server")
     return value
+
+
+def _extract_bash_c_script(*, docker_start_cmd: List[str]) -> str:
+    if len(docker_start_cmd) < 3:
+        raise HTTPException(
+            status_code=400, detail="dockerStartCmd must be like: ['bash', '-c', '<script>']"
+        )
+    if docker_start_cmd[0] != "bash" or docker_start_cmd[1] != "-c":
+        raise HTTPException(
+            status_code=400, detail="dockerStartCmd must be like: ['bash', '-c', '<script>']"
+        )
+    script = docker_start_cmd[2]
+    if not script:
+        raise HTTPException(status_code=400, detail="dockerStartCmd script missing")
+    return script
+
+
+def _parse_env_file_from_docker_start_cmd(*, docker_start_cmd: List[str]) -> Dict[str, str]:
+    script = _extract_bash_c_script(docker_start_cmd=docker_start_cmd)
+
+    # Expect a heredoc of the form:
+    #   cat > .env << 'EOF'
+    #   KEY=value
+    #   ...
+    #   EOF
+    #
+    # Some callers escape quotes inside the string (e.g. << \'EOF\'), so we allow a
+    # leading backslash before quotes.
+    match = re.search(
+        r"cat\s+>\s+\.env\s+<<\s*\\?['\"]?EOF\\?['\"]?\n(?P<body>[\s\S]*?)\nEOF\b",
+        script,
+    )
+    if match is None:
+        raise HTTPException(status_code=400, detail="Could not find .env heredoc in dockerStartCmd")
+
+    env: Dict[str, str] = {}
+    for raw_line in match.group("body").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        env[key] = value
+    return env
 
 
 def _build_pod_response(record: PodRecord) -> Dict[str, object]:
@@ -151,7 +224,7 @@ def _start_fake_runner(
     aws_secret_access_key: str,
     aws_region: str,
     aws_s3_bucket_name: str,
-) -> None:
+) -> "FakeRunner":
     runner = FakeRunner(
         run_id=record.run_id,
         pod_id=record.id,
@@ -165,6 +238,7 @@ def _start_fake_runner(
     )
     thread = threading.Thread(target=runner.run, name=f"fake-runner-{record.run_id}", daemon=True)
     thread.start()
+    return runner
 
 
 @app.post("/pods")
@@ -174,20 +248,23 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     )
     if not request.gpuTypeIds:
         raise HTTPException(status_code=400, detail="gpuTypeIds required")
-    run_id = request.env.get("RUN_ID")
+
+    parsed_env = _parse_env_file_from_docker_start_cmd(docker_start_cmd=request.dockerStartCmd)
+
+    run_id = parsed_env.get("RUN_ID")
     if not run_id:
-        raise HTTPException(status_code=400, detail="RUN_ID env missing")
-    aws_access_key_id = request.env.get("AWS_ACCESS_KEY_ID")
-    aws_secret_access_key = request.env.get("AWS_SECRET_ACCESS_KEY")
-    aws_region = request.env.get("AWS_REGION")
-    aws_s3_bucket_name = request.env.get("AWS_S3_BUCKET_NAME")
+        raise HTTPException(status_code=400, detail="RUN_ID missing from dockerStartCmd .env")
+    aws_access_key_id = parsed_env.get("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = parsed_env.get("AWS_SECRET_ACCESS_KEY")
+    aws_region = parsed_env.get("AWS_REGION")
+    aws_s3_bucket_name = parsed_env.get("AWS_S3_BUCKET_NAME")
     if (
         not aws_access_key_id
         or not aws_secret_access_key
         or not aws_region
         or not aws_s3_bucket_name
     ):
-        raise HTTPException(status_code=400, detail="AWS_* env missing")
+        raise HTTPException(status_code=400, detail="AWS_* missing from dockerStartCmd .env")
     pod_id = f"fake-{uuid.uuid4()}"
     created_at = time.time()
     record = PodRecord(
@@ -209,7 +286,7 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
     webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
     db_url = _require_env("DATABASE_PUBLIC_URL")
-    _start_fake_runner(
+    runner = _start_fake_runner(
         record=record,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
@@ -219,6 +296,8 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
     )
+    with _lock:
+        _runners_by_run_id[record.run_id] = runner
     return _build_pod_response(record)
 
 
@@ -268,6 +347,39 @@ def graphql_query(body: Dict[str, object] = Body(...)) -> Dict[str, object]:
     return {"data": {}, "variables": variables}
 
 
+@app.post("/skip-stage")
+def skip_stage(request: SkipStageRequest = Body(...)) -> Dict[str, object]:
+    with _lock:
+        runner = _runners_by_run_id.get(request.run_id)
+    if runner is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    runner.request_stage_skip(reason=request.reason)
+    return {}
+
+
+@app.post("/terminate/{execution_id}")
+def terminate_execution(
+    execution_id: str,
+    request: TerminateExecutionRequest = Body(...),
+) -> Dict[str, object]:
+    with _lock:
+        record = _executions_by_id.get(execution_id)
+        runner = _runners_by_run_id.get(record.run_id) if record is not None else None
+
+    if record is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+    if runner is None:
+        raise HTTPException(status_code=404, detail="run not found")
+
+    status_code, detail = runner.terminate_execution(
+        execution_id=execution_id,
+        payload=request.payload,
+    )
+    if status_code == 200:
+        return {}
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 @app.post("/telemetry/run-started", status_code=204)
 def telemetry_run_started(payload: Dict[str, object] = Body(...)) -> None:
     _telemetry_events.append(
@@ -286,6 +398,13 @@ def telemetry_run_finished(payload: Dict[str, object] = Body(...)) -> None:
 def telemetry_heartbeat(payload: Dict[str, object] = Body(...)) -> None:
     _telemetry_events.append(
         TelemetryRecord(path="/telemetry/heartbeat", payload=payload, received_at=time.time())
+    )
+
+
+@app.post("/telemetry/hw-stats", status_code=204)
+def telemetry_hw_stats(payload: Dict[str, object] = Body(...)) -> None:
+    _telemetry_events.append(
+        TelemetryRecord(path="/telemetry/hw-stats", payload=payload, received_at=time.time())
     )
 
 
@@ -407,8 +526,80 @@ class FakeRunner:
         self._heartbeat_stop = threading.Event()
         self._log_stop = threading.Event()
         self._log_thread: Optional[threading.Thread] = None
-        self._data_dir = Path(__file__).parent / "fake_run_pod_data"
+        self._data_dir = Path(__file__).parent / "data"
         self._plot_filename: str | None = None
+        self._random_exec_time_seconds = 12.0
+        self._code_event_delay_seconds = 12.0
+        self._stage_skip_windows: Dict[str, Tuple[str, str]] = {}
+        self._db = FakeRunPodPersistence(database_url=self._database_url, run_id=self._run_id)
+        self._webhooks = FakeRunPodWebhookPublisher(
+            client=self._webhook_client, run_id=self._run_id
+        )
+        self._stage_skip_requested = threading.Event()
+        self._stage_skip_reason: str | None = None
+        self._stage_skip_lock = threading.Lock()
+
+    def request_stage_skip(self, *, reason: str) -> None:
+        with self._stage_skip_lock:
+            self._stage_skip_reason = reason
+        self._stage_skip_requested.set()
+
+    def _consume_stage_skip_request(self) -> str | None:
+        if not self._stage_skip_requested.is_set():
+            return None
+        self._stage_skip_requested.clear()
+        with self._stage_skip_lock:
+            reason = self._stage_skip_reason
+            self._stage_skip_reason = None
+        return reason
+
+    def _wait_or_skip(self, *, timeout_seconds: float) -> str | None:
+        if not self._stage_skip_requested.wait(timeout=timeout_seconds):
+            return None
+        return self._consume_stage_skip_request()
+
+    def terminate_execution(self, *, execution_id: str, payload: str) -> tuple[int, str]:
+        with _lock:
+            record = _executions_by_id.get(execution_id)
+            if record is None:
+                return 404, "Unknown execution_id"
+            if record.run_id != self._run_id:
+                return 404, "Unknown execution_id"
+            if record.status in ("success", "terminated"):
+                return 409, "Execution already completed or terminating"
+            if record.status == "terminating":
+                return 409, "Execution already completed or terminating"
+            _executions_by_id[execution_id] = record._replace(status="terminating")
+
+        now = datetime.now(timezone.utc)
+        exec_time = max(0.0, (now - record.started_at).total_seconds())
+        self._enqueue_event(
+            kind="run_log",
+            data={
+                "message": f"Termination requested for execution {execution_id}: {payload}",
+                "level": "warn",
+            },
+        )
+        try:
+            self._db.record_code_execution_completion(
+                execution_id=execution_id,
+                stage_name=record.stage_name,
+                completed_at=now,
+                exec_time=exec_time,
+                status="failed",
+                run_type=record.run_type,
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
+            logger.exception(
+                "Failed to persist terminated execution completion for %s (stage=%s)",
+                execution_id,
+                record.stage_name,
+            )
+        with _lock:
+            latest = _executions_by_id.get(execution_id)
+            if latest is not None and latest.run_id == self._run_id:
+                _executions_by_id[execution_id] = latest._replace(status="terminated")
+        return 200, ""
 
     def run(self) -> None:
         logger.info(
@@ -435,6 +626,7 @@ class FakeRunner:
             self._publish_fake_plot_artifact()
             self._emit_progress_flow()
             self._publish_fake_artifact()
+            self._emit_fake_review()
             self._publish_run_finished(True, "")
         finally:
             self._heartbeat_stop.set()
@@ -472,6 +664,117 @@ class FakeRunner:
             counter += 1
             self._log_stop.wait(timeout=self._periodic_log_interval_seconds)
 
+    def _enqueue_event(self, *, kind: str, data: dict[str, Any]) -> None:
+        try:
+            self._persistence.queue.put(PersistableEvent(kind=kind, data=data))
+        except Exception:
+            logger.exception("Failed to enqueue %s event for run %s", kind, self._run_id)
+
+    def _emit_stage_skip_window_event(self, *, stage_name: str, state: str, reason: str) -> None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "stage": stage_name,
+            "state": state,
+            "timestamp": timestamp,
+            "reason": reason,
+        }
+        logger.info(
+            "[FakeRunner %s] Stage skip window %s for %s",
+            self._run_id[:8],
+            state,
+            stage_name,
+        )
+        try:
+            self._db.record_stage_skip_window(
+                stage_name=stage_name, state=state, timestamp=timestamp, reason=reason
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
+            logger.exception(
+                "[FakeRunner %s] Failed to persist stage skip window (stage=%s state=%s)",
+                self._run_id[:8],
+                stage_name,
+                state,
+            )
+        try:
+            self._persistence.queue.put(
+                PersistableEvent(
+                    kind="stage_skip_window",
+                    data=payload,
+                )
+            )
+            logger.debug(
+                "[FakeRunner %s] Enqueued stage_skip_window event (stage=%s state=%s)",
+                self._run_id[:8],
+                stage_name,
+                state,
+            )
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to enqueue stage skip window event for stage %s",
+                self._run_id[:8],
+                stage_name,
+            )
+        self._webhooks.publish_stage_skip_window(payload)
+
+    def _emit_code_execution_events(self, *, stage_name: str, iteration: int) -> None:
+        execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
+        started_at = datetime.now(timezone.utc)
+        fake_code = (
+            f"# Fake experiment for {stage_name} iteration {iteration + 1}\n"
+            f"print('Simulating execution for run {self._run_id}')\n"
+        )
+        run_type = "main_execution"
+        with _lock:
+            _executions_by_id[execution_id] = ExecutionRecord(
+                run_id=self._run_id,
+                stage_name=stage_name,
+                run_type=run_type,
+                started_at=started_at,
+                status="running",
+            )
+        self._db.record_code_execution_start(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            code=fake_code,
+            started_at=started_at,
+            run_type=run_type,
+        )
+        self._webhooks.publish_running_code(
+            {
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": run_type,
+                "code": fake_code,
+                "started_at": started_at.isoformat(),
+            }
+        )
+        if self._code_event_delay_seconds > 0:
+            time.sleep(self._code_event_delay_seconds)
+        exec_time = self._random_exec_time_seconds
+        completed_at = started_at + timedelta(seconds=exec_time)
+        self._db.record_code_execution_completion(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            completed_at=completed_at,
+            exec_time=exec_time,
+            status="success",
+            run_type=run_type,
+        )
+        self._webhooks.publish_run_completed(
+            {
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": run_type,
+                "status": "success",
+                "exec_time": exec_time,
+                "completed_at": completed_at.isoformat(),
+            }
+        )
+        with _lock:
+            existing = _executions_by_id.get(execution_id)
+            if existing is not None:
+                _executions_by_id[execution_id] = existing._replace(status="success")
+
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage
         current_iter = 0
@@ -483,8 +786,26 @@ class FakeRunner:
                 len(self._stage_plan),
                 stage_name,
             )
+            self._emit_stage_skip_window_event(
+                stage_name=stage_name,
+                state="opened",
+                reason="Fake runner marked stage as skippable.",
+            )
+            stage_skipped = False
+            stage_skip_reason: str | None = None
             iterations_to_emit = min(self._iterations_per_stage, max_iterations)
             for iteration in range(iterations_to_emit):
+                pending_skip_reason = self._consume_stage_skip_request()
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
                 current_iter += 1
                 progress = (iteration + 1) / max_iterations
                 logger.debug(
@@ -494,31 +815,28 @@ class FakeRunner:
                     iteration + 1,
                     progress,
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_stage_progress",
-                        data={
-                            "stage": stage_name,
-                            "iteration": iteration + 1,
-                            "max_iterations": max_iterations,
-                            "progress": progress,
-                            "total_nodes": 10 + iteration,
-                            "buggy_nodes": iteration,
-                            "good_nodes": 9 - iteration,
-                            "best_metric": f"metric-{progress:.2f}",
-                            "eta_s": int((total_iterations - current_iter) * 20),
-                            "latest_iteration_time_s": 20,
-                        },
-                    )
+                self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data={
+                        "stage": stage_name,
+                        "iteration": iteration + 1,
+                        "max_iterations": max_iterations,
+                        "progress": progress,
+                        "total_nodes": 10 + iteration,
+                        "buggy_nodes": iteration,
+                        "good_nodes": 9 - iteration,
+                        "best_metric": f"metric-{progress:.2f}",
+                        "eta_s": int((total_iterations - current_iter) * 20),
+                        "latest_iteration_time_s": 20,
+                    },
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_log",
-                        data={
-                            "message": f"{stage_name} iteration {iteration + 1} complete",
-                            "level": "info",
-                        },
-                    )
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"{stage_name} iteration {iteration + 1} complete",
+                        "level": "info",
+                    },
                 )
                 # Mid-stage tree viz emit on second iteration (iteration index 1)
                 if iteration == 1:
@@ -530,7 +848,17 @@ class FakeRunner:
                             stage_name,
                             iteration + 1,
                         )
-                time.sleep(20)
+                pending_skip_reason = self._wait_or_skip(timeout_seconds=20)
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s during wait: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
                 logger.info(
                     "[FakeRunner %s]   Iteration %d/%d complete (%.0f%% overall)",
                     self._run_id[:8],
@@ -538,6 +866,58 @@ class FakeRunner:
                     iterations_to_emit,
                     (current_iter / total_iterations) * 100,
                 )
+            if stage_skipped:
+                effective_skip_reason = stage_skip_reason or "Stage skipped by operator."
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"Skipping stage {stage_name}: {effective_skip_reason}",
+                        "level": "warn",
+                    },
+                )
+                summary = {
+                    "goals": f"Goals for {stage_name}",
+                    "feedback": effective_skip_reason,
+                    "good_nodes": 0,
+                    "best_metric": None,
+                    "buggy_nodes": 0,
+                    "total_nodes": 0,
+                    "llm_summary": f"Stage {stage_name} skipped.",
+                }
+                self._enqueue_event(
+                    kind="substage_completed",
+                    data={
+                        "stage": stage_name,
+                        "main_stage_number": stage_index + 1,
+                        "reason": "skipped",
+                        "summary": summary,
+                    },
+                )
+                try:
+                    self._db.insert_substage_summary(stage_name=stage_name, summary=summary)
+                except Exception:  # noqa: BLE001 - fake runner best-effort
+                    logger.exception(
+                        "Failed to store skipped-stage summary for stage %s", stage_name
+                    )
+                try:
+                    self._enqueue_event(
+                        kind="substage_summary",
+                        data={
+                            "stage": stage_name,
+                            "summary": summary,
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to enqueue skipped-stage substage summary for stage %s",
+                        stage_name,
+                    )
+                self._emit_stage_skip_window_event(
+                    stage_name=stage_name,
+                    state="closed",
+                    reason=effective_skip_reason,
+                )
+                continue
             self._emit_fake_best_node(stage_name=stage_name, stage_index=stage_index)
             summary = {
                 "goals": f"Goals for {stage_name}",
@@ -549,30 +929,26 @@ class FakeRunner:
                 "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
             }
             logger.info("Emitting substage_completed for stage %s", stage_name)
-            self._persistence.queue.put(
-                PersistableEvent(
-                    kind="substage_completed",
-                    data={
-                        "stage": stage_name,
-                        "main_stage_number": stage_index + 1,
-                        "reason": "completed",
-                        "summary": summary,
-                    },
-                )
+            self._enqueue_event(
+                kind="substage_completed",
+                data={
+                    "stage": stage_name,
+                    "main_stage_number": stage_index + 1,
+                    "reason": "completed",
+                    "summary": summary,
+                },
             )
             try:
-                self._store_substage_summary(stage_name=stage_name, summary=summary)
-            except Exception:
+                self._db.insert_substage_summary(stage_name=stage_name, summary=summary)
+            except Exception:  # noqa: BLE001 - fake runner best-effort
                 logger.exception("Failed to store fake substage summary for stage %s", stage_name)
             try:
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="substage_summary",
-                        data={
-                            "stage": stage_name,
-                            "summary": summary,
-                        },
-                    )
+                self._enqueue_event(
+                    kind="substage_summary",
+                    data={
+                        "stage": stage_name,
+                        "summary": summary,
+                    },
                 )
             except Exception:
                 logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
@@ -581,6 +957,11 @@ class FakeRunner:
                 self._run_id[:8],
                 stage_index + 1,
                 len(self._stage_plan),
+            )
+            self._emit_stage_skip_window_event(
+                stage_name=stage_name,
+                state="closed",
+                reason="Stage completed in fake runner.",
             )
 
         # Stage 5: Paper Generation
@@ -638,30 +1019,26 @@ class FakeRunner:
                 step_progress = (substep_idx + 1) / len(substeps)
                 overall_progress = (step_idx + step_progress) / total_steps
 
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="paper_generation_progress",
-                        data={
-                            "step": step_name,
-                            "substep": substep_name,
-                            "progress": overall_progress,
-                            "step_progress": step_progress,
-                            "details": {
-                                **step_details,
-                                "current_substep": substep_idx + 1,
-                                "total_substeps": len(substeps),
-                            },
+                self._enqueue_event(
+                    kind="paper_generation_progress",
+                    data={
+                        "step": step_name,
+                        "substep": substep_name,
+                        "progress": overall_progress,
+                        "step_progress": step_progress,
+                        "details": {
+                            **step_details,
+                            "current_substep": substep_idx + 1,
+                            "total_substeps": len(substeps),
                         },
-                    )
+                    },
                 )
-                self._persistence.queue.put(
-                    PersistableEvent(
-                        kind="run_log",
-                        data={
-                            "message": f"Paper generation: {step_name} - {substep_name}",
-                            "level": "info",
-                        },
-                    )
+                self._enqueue_event(
+                    kind="run_log",
+                    data={
+                        "message": f"Paper generation: {step_name} - {substep_name}",
+                        "level": "info",
+                    },
                 )
                 # Shorter delay for paper generation steps (5s instead of 20s)
                 time.sleep(5)
@@ -673,16 +1050,114 @@ class FakeRunner:
                 )
 
         # Log completion
-        self._persistence.queue.put(
-            PersistableEvent(
-                kind="run_log",
-                data={
-                    "message": "Paper generation completed",
-                    "level": "info",
-                },
-            )
+        self._enqueue_event(
+            kind="run_log",
+            data={
+                "message": "Paper generation completed",
+                "level": "info",
+            },
         )
         logger.info("[FakeRunner %s] Paper generation complete", self._run_id[:8])
+
+    def _emit_fake_review(self) -> None:
+        """Emit a fake LLM review by storing it in the database and publishing a webhook."""
+        summary = "This paper presents a novel approach to the problem with solid experimental validation. The methodology is sound and the results demonstrate clear improvements over baseline approaches."
+        strengths = [
+            "Novel approach with clear motivation",
+            "Comprehensive experimental evaluation",
+            "Well-written and easy to follow",
+            "Strong empirical results across multiple benchmarks",
+        ]
+        weaknesses = [
+            "Limited comparison with recent state-of-the-art methods",
+            "Some experimental details could be clarified",
+            "Scalability concerns not fully addressed",
+        ]
+        questions = [
+            "How does the approach scale to larger datasets?",
+            "What is the computational overhead compared to baselines?",
+        ]
+        limitations = [
+            "Limited to specific domain",
+            "Requires significant computational resources",
+        ]
+        originality = 3.5
+        quality = 3.0
+        clarity = 3.5
+        significance = 3.0
+        soundness = 3.0
+        presentation = 3.5
+        contribution = 3.0
+        overall = 7.0
+        confidence = 4.0
+        decision = "Accept"
+        ethical_concerns = False
+        source_path = None
+
+        # Insert review into database first
+        try:
+            review_id, created_at = self._db.insert_review(
+                summary=summary,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                originality=originality,
+                quality=quality,
+                clarity=clarity,
+                significance=significance,
+                questions=questions,
+                limitations=limitations,
+                ethical_concerns=ethical_concerns,
+                soundness=soundness,
+                presentation=presentation,
+                contribution=contribution,
+                overall=overall,
+                confidence=confidence,
+                decision=decision,
+                source_path=source_path,
+            )
+            logger.info(
+                "[FakeRunner %s] Inserted fake review into database: id=%s decision=%s overall=%.1f",
+                self._run_id[:8],
+                review_id,
+                decision,
+                overall,
+            )
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to insert fake review into database", self._run_id[:8]
+            )
+            return
+
+        # Now publish the webhook with the database ID and timestamp
+        webhook_payload = {
+            "review_id": review_id,
+            "summary": summary,
+            "strengths": strengths,
+            "weaknesses": weaknesses,
+            "originality": originality,
+            "quality": quality,
+            "clarity": clarity,
+            "significance": significance,
+            "questions": questions,
+            "limitations": limitations,
+            "ethical_concerns": ethical_concerns,
+            "soundness": soundness,
+            "presentation": presentation,
+            "contribution": contribution,
+            "overall": overall,
+            "confidence": confidence,
+            "decision": decision,
+            "source_path": source_path,
+            "created_at": created_at.isoformat(),
+        }
+
+        try:
+            self._webhooks.publish_review_completed(webhook_payload)
+            logger.info("[FakeRunner %s] Posted review completed webhook", self._run_id[:8])
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to post review completed webhook", self._run_id[:8]
+            )
 
     def _publish_fake_artifact(self) -> None:
         temp_dir = Path(os.environ.get("TMPDIR") or "/tmp")
@@ -696,6 +1171,7 @@ class FakeRunner:
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
             database_url=self._database_url,
+            webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
             artifact_type="fake_result",
@@ -729,6 +1205,7 @@ class FakeRunner:
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
             database_url=self._database_url,
+            webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
             artifact_type="plot",
@@ -749,7 +1226,7 @@ class FakeRunner:
         try:
             if self._webhook_client is not None:
                 self._webhook_client.publish_run_started()
-        except Exception:
+        except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception("Failed to publish run-started for %s", self._run_id)
 
     def _publish_run_finished(self, success: bool, message: str) -> None:
@@ -759,7 +1236,7 @@ class FakeRunner:
                     success=success,
                     message=message,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception("Failed to publish run-finished for %s", self._run_id)
 
     def _store_tree_viz(self, *, stage_number: int, version: int = 1) -> None:
@@ -791,69 +1268,36 @@ class FakeRunner:
                     stage_id,
                 )
 
-        conn = psycopg2.connect(self._database_url)
-        tree_viz_id: int
         try:
-            with conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        INSERT INTO rp_tree_viz (run_id, stage_id, viz, version)
-                        VALUES (%s, %s, %s, %s)
-                        ON CONFLICT (run_id, stage_id)
-                        DO UPDATE SET
-                            viz = EXCLUDED.viz,
-                            version = EXCLUDED.version,
-                            updated_at = now()
-                        RETURNING id
-                        """,
-                        (self._run_id, stage_id, psycopg2.extras.Json(payload), version),
-                    )
-                    row = cursor.fetchone()
-                    if not row:
-                        raise RuntimeError("Failed to upsert rp_tree_viz in fake runner")
-                    tree_viz_id = int(row[0])
-                    cursor.execute(
-                        """
-                        INSERT INTO research_pipeline_run_events (run_id, event_type, metadata, occurred_at)
-                        VALUES (%s, %s, %s, now())
-                        """,
-                        (
-                            self._run_id,
-                            "tree_viz_stored",
-                            psycopg2.extras.Json(
-                                {
-                                    "stage_id": stage_id,
-                                    "tree_viz_id": tree_viz_id,
-                                    "version": version,
-                                }
-                            ),
-                        ),
-                    )
-        finally:
-            conn.close()
-        
+            tree_viz_id = self._db.insert_tree_viz(
+                stage_id=stage_id,
+                payload=payload,
+                version=version,
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
+            logger.exception(
+                "Failed to store tree viz for run=%s stage=%s",
+                self._run_id,
+                stage_id,
+            )
+            return
+
         # Publish tree_viz_stored event via webhook
         try:
-            if self._webhook_client:
-                self._webhook_client._post(
-                    path="/tree-viz-stored",
-                    payload={
-                        "run_id": self._run_id,
-                        "event": {
-                            "stage_id": stage_id,
-                            "tree_viz_id": tree_viz_id,
-                            "version": version,
-                        }
-                    }
-                )
-                logger.info(
-                    "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s", 
-                    self._run_id, 
-                    stage_id,
-                    tree_viz_id,
-                )
-        except Exception:
+            self._webhooks.publish_tree_viz_stored(
+                {
+                    "stage_id": stage_id,
+                    "tree_viz_id": tree_viz_id,
+                    "version": version,
+                }
+            )
+            logger.info(
+                "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
+                self._run_id,
+                stage_id,
+                tree_viz_id,
+            )
+        except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception(
                 "Failed to post tree_viz_stored webhook for run=%s stage=%s",
                 self._run_id,
@@ -866,10 +1310,10 @@ class FakeRunner:
             f"Selected synthetic best node for {stage_name} after stage index {stage_index + 1}."
         )
         try:
-            self._store_best_node_reasoning(
+            self._db.insert_best_node_reasoning(
                 stage_name=stage_name, node_id=node_id, reasoning=reasoning
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception("Failed to store fake best node reasoning for stage %s", stage_name)
         try:
             self._persistence.queue.put(
@@ -884,36 +1328,6 @@ class FakeRunner:
             )
         except Exception:
             logger.exception("Failed to enqueue fake best node event for stage %s", stage_name)
-
-    def _store_best_node_reasoning(self, *, stage_name: str, node_id: str, reasoning: str) -> None:
-        conn = psycopg2.connect(self._database_url)
-        try:
-            with conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        INSERT INTO rp_best_node_reasoning_events (run_id, stage, node_id, reasoning)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        (self._run_id, stage_name, node_id, reasoning),
-                    )
-        finally:
-            conn.close()
-
-    def _store_substage_summary(self, *, stage_name: str, summary: dict) -> None:
-        conn = psycopg2.connect(self._database_url)
-        try:
-            with conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        """
-                        INSERT INTO rp_substage_summary_events (run_id, stage, summary)
-                        VALUES (%s, %s, %s)
-                        """,
-                        (self._run_id, stage_name, psycopg2.extras.Json(summary)),
-                    )
-        finally:
-            conn.close()
 
 
 def main() -> None:

@@ -85,7 +85,7 @@ async def get_llm_defaults(
     try:
         # Get current default from database
         prompt_type_enum = PromptTypes(prompt_type)
-        llm_params = db.get_default_llm_parameters(prompt_type_enum)
+        llm_params = await db.get_default_llm_parameters(prompt_type_enum)
 
         current_default = LLMDefault(
             llm_provider=llm_params.llm_provider,
@@ -149,7 +149,7 @@ async def update_llm_defaults(
 
     try:
         # Update default in database
-        success = db.set_default_llm_parameters(
+        success = await db.set_default_llm_parameters(
             prompt_type=prompt_type,
             llm_model=request_data.llm_model,
             llm_provider=request_data.llm_provider,

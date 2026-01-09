@@ -60,13 +60,13 @@ async def get_idea(
     db = get_database()
 
     # Check if conversation exists
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Get idea
-    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if not idea_data:
         response.status_code = 404
         return ErrorResponse(error="Idea not found", detail="No idea found for this conversation")
@@ -116,13 +116,13 @@ async def update_idea(
     db = get_database()
 
     # Check if conversation exists
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Check if idea exists
-    existing_idea_data = db.get_idea_by_conversation_id(conversation_id)
+    existing_idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if not existing_idea_data:
         response.status_code = 404
         return ErrorResponse(error="Idea not found", detail="No idea found for this conversation")
@@ -130,7 +130,7 @@ async def update_idea(
     try:
         # Create new version with manual update
         user = get_current_user(request)
-        db.create_idea_version(
+        await db.create_idea_version(
             idea_id=existing_idea_data.idea_id,
             title=idea_data.title,
             short_hypothesis=idea_data.short_hypothesis,
@@ -144,7 +144,7 @@ async def update_idea(
         )
 
         # Get updated idea
-        updated_idea_data = db.get_idea_by_conversation_id(conversation_id)
+        updated_idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not updated_idea_data:
             response.status_code = 500
             return ErrorResponse(error="Retrieval failed", detail="Failed to retrieve updated idea")
@@ -196,20 +196,20 @@ async def get_idea_versions(
     db = get_database()
 
     # Check if conversation exists
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Check if idea exists
-    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if not idea_data:
         response.status_code = 404
         return ErrorResponse(error="Idea not found", detail="No idea found for this conversation")
 
     try:
         # Get all versions
-        versions_data = db.get_idea_versions(idea_data.idea_id)
+        versions_data = await db.get_idea_versions(idea_data.idea_id)
 
         # Convert to IdeaVersion models
         versions = [
@@ -259,13 +259,13 @@ async def activate_idea_version(
     db = get_database()
 
     # Check if conversation exists
-    existing_conversation = db.get_conversation_by_id(conversation_id)
+    existing_conversation = await db.get_conversation_by_id(conversation_id)
     if not existing_conversation:
         response.status_code = 404
         return ErrorResponse(error="Conversation not found", detail="Conversation not found")
 
     # Check if idea exists
-    idea_data = db.get_idea_by_conversation_id(conversation_id)
+    idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if not idea_data:
         response.status_code = 404
         return ErrorResponse(error="Idea not found", detail="No idea found for this conversation")
@@ -273,7 +273,7 @@ async def activate_idea_version(
     try:
         # Create a new version by copying the specified version (recovery)
         user = get_current_user(request)
-        new_version_id = db.recover_idea_version(
+        new_version_id = await db.recover_idea_version(
             idea_data.idea_id, version_id, created_by_user_id=user.id
         )
 
@@ -284,7 +284,7 @@ async def activate_idea_version(
             )
 
         # Get updated idea
-        updated_idea_data = db.get_idea_by_conversation_id(conversation_id)
+        updated_idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not updated_idea_data:
             response.status_code = 500
             return ErrorResponse(error="Retrieval failed", detail="Failed to retrieve updated idea")

@@ -4,9 +4,11 @@ Database helpers for billing, wallets, and Stripe checkout metadata.
 
 import logging
 from datetime import datetime
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
-import psycopg2.extras
+from psycopg import AsyncCursor
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -46,27 +48,37 @@ class StripeCheckoutSession(NamedTuple):
     updated_at: datetime
 
 
-class BillingDatabaseMixin(ConnectionProvider):
+class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Mixin providing billing-specific persistence helpers."""
 
-    def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
+    async def ensure_user_wallet_with_cursor(
+        self, *, cursor: AsyncCursor[Any], user_id: int, has_free_credits: bool
+    ) -> None:
         """Create a wallet row for the user if one does not yet exist."""
         balance = 10_000 if has_free_credits else 10
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO billing_user_wallets (user_id, balance)
-                    VALUES (%s, %s)
-                    ON CONFLICT (user_id) DO NOTHING
-                    """,
-                    (user_id, balance),
+        await cursor.execute(
+            """
+            INSERT INTO billing_user_wallets (user_id, balance)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id) DO NOTHING
+            """,
+            (user_id, balance),
+        )
+
+    async def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
+        """Create a wallet row for the user if one does not yet exist."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await self.ensure_user_wallet_with_cursor(
+                    cursor=cursor,
+                    user_id=user_id,
+                    has_free_credits=has_free_credits,
                 )
 
-    def get_user_wallet(self, user_id: int) -> Optional[BillingWallet]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+    async def get_user_wallet(self, user_id: int) -> Optional[BillingWallet]:
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT user_id, balance, updated_at
                     FROM billing_user_wallets
@@ -74,21 +86,21 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (user_id,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
         return BillingWallet(**row) if row else None
 
-    def get_user_wallet_balance(self, user_id: int) -> int:
-        wallet = self.get_user_wallet(user_id)
+    async def get_user_wallet_balance(self, user_id: int) -> int:
+        wallet = await self.get_user_wallet(user_id)
         if wallet is None:
             return 0
         return wallet.balance
 
-    def list_credit_transactions(
+    async def list_credit_transactions(
         self, user_id: int, *, limit: int = 20, offset: int = 0
     ) -> List[CreditTransaction]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT
                         id,
@@ -108,10 +120,10 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (user_id, limit, offset),
                 )
-                rows = cursor.fetchall() or []
+                rows = await cursor.fetchall() or []
         return [CreditTransaction(**row) for row in rows]
 
-    def add_completed_transaction(
+    async def add_completed_transaction(
         self,
         *,
         user_id: int,
@@ -122,9 +134,9 @@ class BillingDatabaseMixin(ConnectionProvider):
         stripe_session_id: Optional[str] = None,
     ) -> CreditTransaction:
         """Insert a completed transaction and atomically update the wallet balance."""
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO billing_credit_transactions (
                         user_id,
@@ -153,15 +165,15 @@ class BillingDatabaseMixin(ConnectionProvider):
                         amount,
                         transaction_type,
                         description,
-                        psycopg2.extras.Json(metadata or {}),
+                        Jsonb(metadata or {}),
                         stripe_session_id,
                     ),
                 )
-                transaction_row = cursor.fetchone()
+                transaction_row = await cursor.fetchone()
                 if transaction_row is None:
                     raise RuntimeError(f"Failed to insert credit transaction for user {user_id}")
 
-                cursor.execute(
+                await cursor.execute(
                     """
                     INSERT INTO billing_user_wallets (user_id, balance)
                     VALUES (%s, %s)
@@ -169,7 +181,7 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (user_id, max(amount, 0)),
                 )
-                cursor.execute(
+                await cursor.execute(
                     """
                     UPDATE billing_user_wallets
                     SET balance = balance + %s, updated_at = NOW()
@@ -178,26 +190,26 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (amount, user_id),
                 )
-                wallet_row = cursor.fetchone()
+                wallet_row = await cursor.fetchone()
                 if wallet_row is None:
                     raise RuntimeError(f"Failed to update wallet balance for user {user_id}")
 
         return CreditTransaction(**transaction_row)
 
-    def create_stripe_checkout_session_record(
+    async def create_stripe_checkout_session_record(
         self,
         *,
         user_id: int,
         stripe_session_id: str,
         price_id: str,
-        credits: int,
+        credit_amount: int,
         amount_cents: int,
         currency: str,
         metadata: Optional[Dict[str, object]] = None,
     ) -> StripeCheckoutSession:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     INSERT INTO billing_stripe_checkout_sessions (
                         user_id,
@@ -227,25 +239,25 @@ class BillingDatabaseMixin(ConnectionProvider):
                         user_id,
                         stripe_session_id,
                         price_id,
-                        credits,
+                        credit_amount,
                         amount_cents,
                         currency,
-                        psycopg2.extras.Json(metadata or {}),
+                        Jsonb(metadata or {}),
                     ),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
                 if row is None:
                     raise RuntimeError(
                         f"Failed to persist Stripe checkout session for user {user_id}"
                     )
         return StripeCheckoutSession(**row)
 
-    def update_stripe_checkout_session_status(
+    async def update_stripe_checkout_session_status(
         self, stripe_session_id: str, status: str
     ) -> Optional[StripeCheckoutSession]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     UPDATE billing_stripe_checkout_sessions
                     SET status = %s, updated_at = NOW()
@@ -265,15 +277,15 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (status, stripe_session_id),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
         return StripeCheckoutSession(**row) if row else None
 
-    def get_stripe_checkout_session(
+    async def get_stripe_checkout_session(
         self, stripe_session_id: str
     ) -> Optional[StripeCheckoutSession]:
-        with self._get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
                     """
                     SELECT
                         id,
@@ -292,5 +304,5 @@ class BillingDatabaseMixin(ConnectionProvider):
                     """,
                     (stripe_session_id,),
                 )
-                row = cursor.fetchone()
+                row = await cursor.fetchone()
         return StripeCheckoutSession(**row) if row else None
