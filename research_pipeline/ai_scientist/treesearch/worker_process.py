@@ -54,6 +54,40 @@ _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
 RESEARCH_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _parent_node_dict_for_codex_input(*, parent_node: Node) -> dict[str, object]:
+    """
+    The raw Node dict contains very large fields (notably `_term_out`, which in Codex mode is the
+    entire `codex_session.log`). Including that in `codex_input.json` creates runaway payload growth
+    across iterations and can cause Codex to ingest its own previous logs.
+    """
+    raw = parent_node.to_dict()
+    # Keep only the fields we actually want Codex to see.
+    keep_keys = {
+        "id",
+        "step",
+        "parent_id",
+        "plan",
+        "overall_plan",
+        "code",
+        "analysis",
+        "metric",
+        "is_buggy",
+        "is_buggy_plots",
+        "exc_type",
+        "exec_time",
+        "exec_time_feedback",
+        "exp_results_dir",
+        "plot_analyses",
+        "vlm_feedback_summary",
+        "datasets_successfully_tested",
+        "hyperparam_name",
+        "ablation_name",
+        "is_seed_node",
+        "is_seed_agg_node",
+    }
+    return {k: raw[k] for k in keep_keys if k in raw}
+
+
 def _summarize_execution_with_llm(
     *,
     cfg: AppConfig,
@@ -623,6 +657,11 @@ def _write_codex_input_file(
     cfg: AppConfig,
     user_feedback_payload: str,
 ) -> Path:
+    parent_node_dict = (
+        _parent_node_dict_for_codex_input(parent_node=parent_node)
+        if parent_node is not None
+        else None
+    )
     payload: dict[str, object] = {
         "execution_id": execution_id,
         "research_idea": task_desc,
@@ -635,7 +674,7 @@ def _write_codex_input_file(
         "gpu_id": gpu_id,
         "agent_file_name": cfg.exec.agent_file_name,
         "timeout_seconds": cfg.exec.timeout,
-        "parent_node": parent_node.to_dict() if parent_node is not None else None,
+        "parent_node": parent_node_dict,
         "user_feedback_payload": user_feedback_payload,
         "environment_context": _build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec),
     }
