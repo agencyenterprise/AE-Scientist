@@ -13,6 +13,8 @@ from typing import Callable, Literal, TypedDict
 
 import humanize  # pyright: ignore[reportMissingImports]
 
+from ai_scientist.llm import structured_query_with_schema
+
 from . import execution_registry
 from .codex_cli_runner import CodexCliRunner
 from .datasets_context import (
@@ -42,12 +44,54 @@ from .stages.node_result_contracts import (
 from .utils.config import Config as AppConfig
 from .utils.config import apply_log_level
 from .utils.metric import WorstMetricValue
+from .utils.response import trim_long_string, wrap_code
+from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, TrainingReview
 
 logger = logging.getLogger("ai-scientist")
 WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
 _MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
 _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
 RESEARCH_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _summarize_execution_with_llm(
+    *,
+    cfg: AppConfig,
+    task_desc: str,
+    stage_identifier: StageIdentifier,
+    term_out: str,
+    exc_type: str | None,
+    exec_time: float,
+) -> TrainingReview | None:
+    prompt = {
+        "Introduction": (
+            "Analyze the execution output, determine if there were any bugs, and provide a summary of the findings. "
+            "If there is a bug, summarize the failure and propose a concrete fix direction."
+        ),
+        "Research idea": task_desc,
+        "Stage": stage_identifier.name,
+        "Execution output": wrap_code(term_out, lang=""),
+        "Exception type": str(exc_type or ""),
+        "Execution time (seconds)": exec_time,
+    }
+    try:
+        response = structured_query_with_schema(
+            system_message=prompt,
+            user_message=None,
+            model=cfg.agent.feedback.model,
+            temperature=cfg.agent.feedback.temperature,
+            schema_class=REVIEW_RESPONSE_SCHEMA,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to summarize execution output via LLM.")
+        return None
+    return response
+
+
+def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
+    # We intentionally attach relationships here so that `Node.to_dict()` emits `parent_id`,
+    # which `Node.from_dict(..., journal=...)` uses to reconstruct the tree in the main process.
+    child_node.parent = parent_node
 
 
 def _legacy_available_datasets_text(*, environment_context: dict[str, object]) -> str:
@@ -630,10 +674,22 @@ def _write_codex_task_file(
     parent_node_obj = input_obj.get("parent_node")
     base_code = ""
     exec_time_feedback = ""
+    parent_term_out = ""
+    parent_analysis = ""
+    parent_exc_type = ""
+    parent_vlm_feedback_summary = ""
     user_feedback_payload = str(input_obj.get("user_feedback_payload") or "").strip()
     if isinstance(parent_node_obj, dict):
         base_code = str(parent_node_obj.get("code") or "")
         exec_time_feedback = str(parent_node_obj.get("exec_time_feedback") or "")
+        parent_analysis = str(parent_node_obj.get("analysis") or "").strip()
+        parent_exc_type = str(parent_node_obj.get("exc_type") or "").strip()
+        raw_term_out = parent_node_obj.get("_term_out")
+        if isinstance(raw_term_out, list):
+            parent_term_out = trim_long_string("".join([str(x) for x in raw_term_out]))
+        raw_vlm = parent_node_obj.get("vlm_feedback_summary")
+        if isinstance(raw_vlm, list):
+            parent_vlm_feedback_summary = "\n".join([str(x) for x in raw_vlm]).strip()
 
     context_sections: list[str] = []
     context_sections.append("## Task context")
@@ -728,6 +784,22 @@ def _write_codex_task_file(
         context_sections.append("```python")
         context_sections.append(base_code.rstrip())
         context_sections.append("```")
+    if parent_term_out.strip():
+        context_sections.append("")
+        context_sections.append("### Previous execution output (from parent node)")
+        context_sections.append(parent_term_out.strip())
+    if parent_exc_type:
+        context_sections.append("")
+        context_sections.append("### Previous exception type (from parent node)")
+        context_sections.append(parent_exc_type)
+    if parent_analysis:
+        context_sections.append("")
+        context_sections.append("### Previous analysis / summary (from parent node)")
+        context_sections.append(parent_analysis)
+    if parent_vlm_feedback_summary:
+        context_sections.append("")
+        context_sections.append("### Feedback based on generated plots (from parent node)")
+        context_sections.append(parent_vlm_feedback_summary)
     if exec_time_feedback.strip():
         context_sections.append("")
         context_sections.append("### Feedback about execution time")
@@ -1018,7 +1090,7 @@ def process_node(
         child_node.exc_info = exc_info or {}
         child_node.metric = WorstMetricValue()
         if parent_node is not None:
-            child_node.parent = parent_node
+            _attach_parent(child_node=child_node, parent_node=parent_node)
         _move_experiment_artifacts(
             cfg=cfg,
             child_node=child_node,
@@ -1058,7 +1130,7 @@ def process_node(
         )
         child_node.metric = WorstMetricValue()
         if parent_node is not None:
-            child_node.parent = parent_node
+            _attach_parent(child_node=child_node, parent_node=parent_node)
         child_node.absorb_exec_result(
             SimpleNamespace(
                 term_out=term_out,
@@ -1081,7 +1153,7 @@ def process_node(
 
     try:
         child_node = Node.from_dict(dict(node_result), journal=None)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Never crash the worker on schema drift: mark the node buggy and return a valid Node dict.
         tb = traceback.format_exc()
         child_node = Node(
@@ -1100,7 +1172,7 @@ def process_node(
         )
         child_node.metric = WorstMetricValue()
         if parent_node is not None:
-            child_node.parent = parent_node
+            _attach_parent(child_node=child_node, parent_node=parent_node)
     child_node.absorb_exec_result(
         SimpleNamespace(
             term_out=term_out,
@@ -1113,9 +1185,26 @@ def process_node(
     child_node.exec_time = exec_time
     child_node.exc_type = exc_type
     child_node.exc_info = exc_info or {}
+    if parent_node is not None and child_node.parent is None:
+        _attach_parent(child_node=child_node, parent_node=parent_node)
     if child_node.metric is None:
         child_node.metric = WorstMetricValue()
         child_node.is_buggy = True if child_node.is_buggy is None else child_node.is_buggy
+    if child_node.analysis is None or not str(child_node.analysis).strip():
+        llm_review = _summarize_execution_with_llm(
+            cfg=cfg,
+            task_desc=task_desc,
+            stage_identifier=stage_identifier,
+            term_out="".join(term_out),
+            exc_type=exc_type,
+            exec_time=float(exec_time),
+        )
+        if llm_review is not None:
+            summary = str(llm_review.summary or "").strip()
+            if summary:
+                child_node.analysis = summary
+            if llm_review.is_bug:
+                child_node.is_buggy = True
 
     _move_experiment_artifacts(
         cfg=cfg,
