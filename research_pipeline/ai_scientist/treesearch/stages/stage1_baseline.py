@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import logging
-from typing import ClassVar
+from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
-from ..codegen_agent import MinimalAgent
-from ..journal import Journal, Node
+from ..journal import Journal
+from ..node_result_contract import NodeResultContractContext
 from ..stage_identifiers import StageIdentifier
-from ..types import PromptType
 from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
@@ -26,49 +27,6 @@ class Stage1Baseline(Stage):
     _substage_completion_cache: dict[str, tuple[bool, str]] = {}
 
     @staticmethod
-    def draft(agent: "MinimalAgent") -> Node:
-        """Stage 1: Generate initial baseline implementation."""
-        prompt: PromptType = {
-            "Introduction": (
-                "You are an AI researcher who is looking to publish a paper that will contribute significantly to the field."
-                "Your first task is to write a python code to implement a solid baseline based on your research idea provided below, "
-                "from data preparation to model training, as well as evaluation and visualization. "
-                "Focus on getting a simple but working implementation first, before any sophisticated improvements. "
-                "We will explore more advanced variations in later stages."
-            ),
-            "Research idea": agent.task_desc,
-            "Memory": agent.memory_summary if agent.memory_summary else "",
-            "Instructions": {},
-        }
-
-        instructions: dict[str, str | list[str]] = {}
-        instructions |= {
-            "Experiment design sketch guideline": [
-                "This first experiment design should be relatively simple, without extensive hyper-parameter optimization.",
-                "Take the Memory section into consideration when proposing the design. ",
-                "The solution sketch should be 6-10 sentences. ",
-                "Don't suggest to do EDA.",
-                "Use real public datasets appropriate to the task.",
-                "If the research idea specifies dataset URLs or names, use those.",
-                "Otherwise, research where suitable datasets are available (common sources: HuggingFace, GitHub, academic repositories, etc.).",
-                "Only fall back to synthetic data if no suitable dataset is available or synthetic generation is essential to the experiment.",
-                "",
-            ],
-            "Evaluation Metric(s)": agent.evaluation_metrics or "",
-        }
-        instructions |= agent.prompt_impl_guideline
-        prompt["Instructions"] = instructions
-
-        logger.debug("MinimalAgent: Getting plan and code")
-        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
-        logger.debug("MinimalAgent: Draft complete")
-        logger.debug("----- LLM code start -----")
-        logger.debug(code)
-        logger.debug("----- LLM code end -----")
-        logger.info(f"✓ Generated {len(code)} characters of code")
-        return Node(plan=plan, code=code)
-
-    @staticmethod
     def compute_stage_completion(*, journal: Journal) -> tuple[bool, str]:
         if len(journal.good_nodes) > 0:
             return True, "Found working implementation"
@@ -86,13 +44,15 @@ class Stage1Baseline(Stage):
         cached = Stage1Baseline._substage_completion_cache.get(cache_key)
         if cached is not None:
             logger.debug(
-                f"Stage1 substage-completion cache HIT for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Goals unchanged. Skipping LLM."
+                "Stage1 substage-completion cache HIT for best_node=%s (metric=%s). Goals unchanged.",
+                best_node.id[:8],
+                metric_val,
             )
             return cached
         logger.debug(
-            f"Stage1 substage-completion cache MISS for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
+            "Stage1 substage-completion cache MISS for best_node=%s (metric=%s). Invoking LLM.",
+            best_node.id[:8],
+            metric_val,
         )
         prompt = f"""
         Evaluate if the current sub-stage is complete.
@@ -115,25 +75,28 @@ class Stage1Baseline(Stage):
             result = True, str(evaluation.reasoning or "sub-stage complete")
             Stage1Baseline._substage_completion_cache[cache_key] = result
             logger.debug(
-                f"Stage1 substage-completion result cached for best_node={best_node.id[:8]} "
-                f"(metric={metric_val})."
+                "Stage1 substage-completion result cached for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return result
         missing = ", ".join(evaluation.missing_criteria)
         result = False, "Missing criteria: " + missing
         Stage1Baseline._substage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage1 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Missing: {missing}"
+            "Stage1 substage-completion result cached (incomplete) for best_node=%s (metric=%s). Missing: %s",
+            best_node.id[:8],
+            metric_val,
+            missing,
         )
         return result
 
-    def evaluate_substage_completion(self) -> tuple[bool, str]:
+    def evaluate_substage_completion(self) -> Tuple[bool, str]:
         return Stage1Baseline.compute_substage_completion(
             goals=self._meta.goals, journal=self._context.journal, cfg=self._context.cfg
         )
 
-    def evaluate_stage_completion(self) -> tuple[bool, str]:
+    def evaluate_stage_completion(self) -> Tuple[bool, str]:
         return Stage1Baseline.compute_stage_completion(journal=self._context.journal)
 
     def reset_skip_state(self) -> None:
@@ -154,3 +117,16 @@ class Stage1Baseline(Stage):
         reason = "Produce a working baseline implementation before skipping."
         logger.info("Stage 1 skip blocked: %s", reason)
         self._set_skip_state(can_skip=False, reason=reason)
+
+
+def codex_node_result_contract_prompt_lines() -> list[str]:
+    # Stage 1 doesn't require additional node_result fields beyond the common contract.
+    return []
+
+
+def validate_node_result_contract(
+    *, node_result: dict[str, object], ctx: NodeResultContractContext
+) -> list[str]:
+    # Stage 1 does not impose additional constraints beyond the common contract.
+    del node_result, ctx
+    return []

@@ -550,6 +550,22 @@ def _installation_commands() -> list[str]:
     ]
 
 
+def _codex_installation_commands() -> list[str]:
+    return [
+        "# === Codex CLI Installation ===",
+        'echo "Ensuring Codex CLI is installed..."',
+        "if ! command -v codex >/dev/null 2>&1; then",
+        "  if ! command -v npm >/dev/null 2>&1; then",
+        '    echo "npm not found; installing Node.js + npm..."',
+        "    apt-get update && apt-get install -y nodejs npm",
+        "  fi",
+        "  npm install -g @openai/codex",
+        "fi",
+        "codex --version || true",
+        "",
+    ]
+
+
 def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
     return [
         "# === AWS Credentials Setup ===",
@@ -605,6 +621,7 @@ def _build_remote_script(
     ]
     script_parts += _repository_setup_commands()
     script_parts += _installation_commands()
+    script_parts += _codex_installation_commands()
     script_parts += [
         "# === Environment Setup ===",
         'echo "Creating .env file..."',

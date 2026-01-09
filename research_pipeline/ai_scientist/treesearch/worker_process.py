@@ -1,54 +1,462 @@
+import json
 import logging
 import multiprocessing
 import os
 import pickle
-import time
-import traceback
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Literal, Optional, TypedDict, TypeVar
+from types import SimpleNamespace
+from typing import Callable, Literal, TypedDict
 
-from ai_scientist.llm import structured_query_with_schema
+import humanize  # pyright: ignore[reportMissingImports]
 
 from . import execution_registry
-from .codegen_agent import MinimalAgent
+from .codex_cli_runner import CodexCliRunner
+from .datasets_context import (
+    S3DatasetEntry,
+    build_s3_download_snippet,
+    build_s3_upload_snippet,
+    get_available_datasets,
+    get_research_pipeline_env_file,
+)
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
-from .interpreter import ExecutionResult, Interpreter
 from .journal import Node
-from .plotting import analyze_plots_with_vlm, generate_plotting_code
+from .node_result_contract import (
+    NodeResultContractContext,
+    codex_node_result_contract_prompt_lines_common,
+    count_working_pngs,
+)
+from .seed_aggregation import (
+    codex_node_result_contract_prompt_lines as codex_seed_agg_contract_lines,
+)
+from .seed_aggregation import codex_seed_aggregation_instructions_lines
 from .stage_identifiers import StageIdentifier
-from .stages.stage1_baseline import Stage1Baseline
-from .stages.stage2_tuning import HyperparamTuningIdea, Stage2Tuning
-from .stages.stage4_ablation import AblationIdea, Stage4Ablation
-from .types import PromptType
+from .stages.node_result_contracts import (
+    codex_node_result_contract_prompt_lines_for_stage,
+    validate_node_result_contract_for_stage,
+)
 from .utils.config import Config as AppConfig
 from .utils.config import apply_log_level
-from .utils.metric import MetricValue, WorstMetricValue
-from .utils.response import wrap_code
-from .vlm_function_specs import METRIC_PARSE_SCHEMA
-
-T = TypeVar("T")
+from .utils.metric import WorstMetricValue
 
 logger = logging.getLogger("ai-scientist")
-_LLM_PARSE_TIMEOUT_SECONDS = 300
+WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
+_MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
+_MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
+
+
+def _legacy_available_datasets_text(*, environment_context: dict[str, object]) -> str:
+    datasets = environment_context.get("datasets")
+    if not isinstance(datasets, dict):
+        return "You may use any dataset from any source, but avoid re-downloading available data."
+    hf_lines = datasets.get("hf_cache_lines")
+    local_lines = datasets.get("local_datasets_lines")
+    s3_lines = datasets.get("s3_folder_lines")
+    s3_download_snippet = datasets.get("s3_download_snippet")
+    s3_upload_snippet = datasets.get("s3_upload_snippet")
+    local_dir = str(datasets.get("datasets_local_dir", "")).strip()
+
+    out: list[str] = []
+    out.append("You may use any dataset from any source, but avoid re-downloading available data.")
+    out.append("")
+    out.append("**Hugging Face cache (already cached):**")
+    if isinstance(hf_lines, list):
+        out.extend([str(x) for x in hf_lines])
+    else:
+        out.append("- (unknown)")
+    out.append("")
+    out.append(
+        f"**Local datasets (already downloaded):** (use subfolders per dataset under {local_dir})"
+    )
+    if isinstance(local_lines, list):
+        out.extend([str(x) for x in local_lines])
+    else:
+        out.append("- (unknown)")
+    if isinstance(s3_lines, list) and s3_lines:
+        out.append("")
+        out.append(
+            "**Some datasets are available on S3, you can download them if you need to (the download is very fast):**"
+        )
+        out.extend([str(x) for x in s3_lines])
+        if isinstance(s3_download_snippet, str) and s3_download_snippet.strip():
+            out.append("")
+            out.append(
+                "**How to download from S3 into the local dataset cache (paste into your script):**"
+            )
+            out.append("")
+            out.append(s3_download_snippet.strip())
+        if isinstance(s3_upload_snippet, str) and s3_upload_snippet.strip():
+            out.append("")
+            out.append(
+                "**How to upload a dataset to S3 for future runs (paste into your script):**"
+            )
+            out.append("")
+            out.append(s3_upload_snippet.strip())
+    return "\n".join(out).strip()
+
+
+def _legacy_gpu_text(*, environment_context: dict[str, object]) -> str:
+    gpu = environment_context.get("gpu")
+    if not isinstance(gpu, dict):
+        return ""
+    gpu_id = gpu.get("gpu_id")
+    gpu_spec = gpu.get("gpu_spec")
+    if gpu_id is None or gpu_spec is None:
+        return ""
+    if not isinstance(gpu_spec, dict):
+        return ""
+    name = str(gpu_spec.get("name", "GPU"))
+    mem = gpu_spec.get("memory_total_mib")
+    mem_str = str(mem) if mem is not None else "unknown"
+    return (
+        "\n\n**Available Hardware**: You have access to ONE "
+        f"{name} GPU with {mem_str}MiB VRAM.\n"
+        "\n**GPU Selection**: Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `cuda:0`."
+    )
+
+
+def _legacy_storage_text(*, environment_context: dict[str, object]) -> str:
+    storage = environment_context.get("storage")
+    if not isinstance(storage, dict):
+        return ""
+    cap_h = storage.get("workspace_disk_capacity_human")
+    free_h = storage.get("workspace_disk_free_human")
+    if not isinstance(cap_h, str) or not isinstance(free_h, str):
+        return ""
+    return (
+        "\n\n**Storage Availability**: "
+        f"a dedicated workspace volume of ~{cap_h}; {free_h} free right now on your workspace volume. "
+        "Use disk space responsibly when downloading datasets."
+    )
+
+
+def _legacy_impl_guideline_lines(
+    *,
+    cfg: AppConfig,
+    environment_context: dict[str, object],
+) -> list[str]:
+    """
+    Legacy prompt parity: copy the core “Implementation guideline” bullets used by MinimalAgent.
+    """
+    lines: list[str] = []
+    lines.extend(
+        [
+            "CRITICAL GPU REQUIREMENTS - Your code MUST include ALL of these:",
+            "  - At the start of your code, add these lines to handle GPU/CPU:",
+        ]
+    )
+    gpu = environment_context.get("gpu")
+    gpu_id = gpu.get("gpu_id") if isinstance(gpu, dict) else None
+    if isinstance(gpu_id, int):
+        lines.extend(
+            [
+                "    ```python",
+                "    # CUDA_VISIBLE_DEVICES is already set; prefer cuda:0 inside the process",
+                "    device = torch.device('cuda:0')",
+                "    print(f'Using device: {device}')",
+                "    ```",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "    ```python",
+                "    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')",
+                "    print(f'Using device: {device}')",
+                "    ```",
+            ]
+        )
+    lines.extend(
+        [
+            "  - ALWAYS move models to device using the `.to(device)` method",
+            "  - ALWAYS move input tensors to device using the `.to(device)` method",
+            "  - ALWAYS move model related tensors to device using the `.to(device)` method",
+            "  - For optimizers, create them AFTER moving model to device",
+            "  - When using DataLoader, move batch tensors to device in training loop: `batch = {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}`",
+            "CRITICAL MODEL INPUT GUIDELINES:",
+            "  - Always pay extra attention to the input to the model being properly normalized",
+            "  - This is extremely important because the input to the model's forward pass directly affects the output, and the loss function is computed based on the output",
+        ]
+    )
+    num_syn_datasets = int(cfg.experiment.num_syn_datasets)
+    if num_syn_datasets > 1:
+        lines.extend(
+            [
+                f"You MUST evaluate your solution on at least {num_syn_datasets} different datasets to ensure robustness:",
+                "  - Use dataset sizes appropriate to the experiment at hand",
+                "  - Use standard benchmark datasets when available",
+                f"  - If using synthetic data, generate at least {num_syn_datasets} variants with different characteristics",
+                "  - For very large datasets (>10GB), use streaming=True to avoid memory issues",
+                "  - Report metrics separately for each dataset",
+                "  - Compute and report the average metric across all datasets",
+            ]
+        )
+    lines.extend(
+        [
+            "For generative modeling tasks, you must:",
+            "  - Generate a set of samples from your model",
+            "  - Compare these samples with ground truth data using appropriate visualizations",
+            "  - When saving plots, always use the 'working_dir' variable that will be defined at the start of the script",
+            "  - Make sure to give each figure a unique and appropriate name based on the dataset it represents, rather than reusing the same filename.",
+            "Important code structure requirements:",
+            "  - Do NOT put any execution code inside 'if __name__ == \"__main__\":' block",
+            "  - All code should be at the global scope or in functions that are called from the global scope",
+            "  - The script should execute immediately when run, without requiring any special entry point",
+            "The code should start with:",
+            "  import os",
+            "  working_dir = os.path.join(os.getcwd(), 'working')",
+            "  os.makedirs(working_dir, exist_ok=True)",
+            "The code should be a single-file python program that is self-contained and can be executed as-is.",
+            "No parts of the code should be skipped, don't terminate the code execution before finishing the script.",
+            "Your response should only contain a single code block.",
+            f"Be aware of the running time of the code, it should complete within {humanize.naturaldelta(cfg.exec.timeout)}.",
+            'You can also use the "./working" directory to store any temporary files that your code needs to create.',
+            "Data saving requirements:",
+            "- Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using np.save()",
+            "- Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
+        ]
+    )
+    return lines
+
+
+def _legacy_stage_intro(*, stage_identifier: StageIdentifier) -> str:
+    if stage_identifier is StageIdentifier.STAGE1:
+        return (
+            "You are an AI researcher who is looking to publish a paper that will contribute significantly to the field. "
+            "Your first task is to write a python code to implement a solid baseline based on your research idea provided below, "
+            "from data preparation to model training, as well as evaluation and visualization. "
+            "Focus on getting a simple but working implementation first, before any sophisticated improvements. "
+            "We will explore more advanced variations in later stages."
+        )
+    if stage_identifier is StageIdentifier.STAGE2:
+        return (
+            "You are an experienced AI researcher. You are provided with a previously developed baseline implementation. "
+            "Your task is to implement hyperparameter tuning to improve performance WITHOUT changing the model architecture."
+        )
+    if stage_identifier is StageIdentifier.STAGE3:
+        return (
+            "You are an experienced AI researcher. You are provided with a previously developed implementation. "
+            "Your task is to explore novel improvements and run experiments to reveal new insights, and produce plots."
+        )
+    if stage_identifier is StageIdentifier.STAGE4:
+        return (
+            "You are an experienced AI researcher. You are provided with a previously developed implementation. "
+            "Your task is to conduct systematic ablations that reveal the contribution of each component, and produce comparison plots."
+        )
+    return "You are an experienced AI researcher."
+
+
+def _legacy_stage1_design_sketch_guideline_lines() -> list[str]:
+    return [
+        "This first experiment design should be relatively simple, without extensive hyper-parameter optimization.",
+        "Take the Memory section into consideration when proposing the design.",
+        "The solution sketch should be 6-10 sentences.",
+        "Don't suggest to do EDA.",
+        "Use real public datasets appropriate to the task.",
+        "If the research idea specifies dataset URLs or names, use those.",
+        "Otherwise, research where suitable datasets are available (common sources: HuggingFace, GitHub, academic repositories, etc.).",
+        "Only fall back to synthetic data if no suitable dataset is available or synthetic generation is essential to the experiment.",
+    ]
+
+
+def _legacy_plotting_guideline_lines(*, experiment_code_hint: str) -> list[str]:
+    return [
+        "AVAILABLE DATA:",
+        "Experiment Data: experiment_data.npy",
+        "REQUIREMENTS:",
+        "The code should start with:",
+        "  import matplotlib.pyplot as plt",
+        "  import numpy as np",
+        "  import os",
+        "  working_dir = os.path.join(os.getcwd(), 'working')",
+        "Create standard visualizations of experiment results",
+        "Save all plots to working_dir",
+        "Include training/validation curves if available",
+        "ONLY plot data that exists in experiment_data.npy - DO NOT make up or simulate any values",
+        "Use basic matplotlib without custom styles",
+        "Each plot should be in a separate try-except block",
+        "Always close figures after saving",
+        "Always include a title for each plot, and be sure to use clear subtitles—such as 'Left: Ground Truth, Right: Generated Samples'—while also specifying the type of dataset being used.",
+        "Make sure to use descriptive names for figures when saving e.g. always include the dataset name and the type of plot in the name",
+        "When there are many similar figures to plot (e.g. generated samples at each epoch), make sure to plot only at a suitable interval of epochs so that you only plot at most 5 figures.",
+        "Use the following experiment code to infer the data to plot: " + experiment_code_hint,
+        "Example to extract data from experiment_data: experiment_data['dataset_name_1']['metrics']['train']",
+    ]
+
+
+def _format_s3_entries_for_prompt(
+    *,
+    datasets_aws_folder: str,
+    entries: list[S3DatasetEntry],
+) -> list[str]:
+    folder = datasets_aws_folder.strip("/")
+    prefix = f"{folder}/" if folder else ""
+
+    grouped: dict[str, list[tuple[str, int]]] = {}
+    for entry in entries:
+        s3_uri = entry.s3_uri
+        size_bytes = entry.size_on_disk_bytes
+        without_scheme = s3_uri.removeprefix("s3://")
+        parts = without_scheme.split("/", 1)
+        key = parts[1] if len(parts) == 2 else ""
+        relative = key[len(prefix) :] if key.startswith(prefix) else key
+        group = relative.split("/", 1)[0] if "/" in relative else "(root)"
+        grouped.setdefault(group, []).append((relative, size_bytes))
+
+    lines: list[str] = []
+    for group_name in sorted(grouped.keys())[:_MAX_S3_DATASET_GROUPS_FOR_PROMPT]:
+        lines.append(f"- {group_name}/")
+        group_entries = grouped[group_name]
+        shown = 0
+        for rel_path, size_bytes in group_entries:
+            if shown >= _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT:
+                break
+            child_path = rel_path.split("/", 1)[1] if "/" in rel_path else rel_path
+            lines.append(f"  - {child_path} | size={size_bytes} bytes")
+            shown += 1
+        remaining = max(len(group_entries) - shown, 0)
+        if remaining:
+            lines.append(f"  - ... ({remaining} more)")
+    return lines
+
+
+def _load_workspace_usage_file() -> int | None:
+    if not WORKSPACE_USAGE_FILE.exists():
+        return None
+    try:
+        raw_text = WORKSPACE_USAGE_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.debug(
+            "Could not read workspace usage file at %s", WORKSPACE_USAGE_FILE, exc_info=True
+        )
+        return None
+    if not raw_text:
+        return None
+    try:
+        return int(raw_text)
+    except ValueError:
+        logger.debug(
+            "Malformed workspace usage file contents at %s: %s", WORKSPACE_USAGE_FILE, raw_text
+        )
+        return None
+
+
+def _build_environment_context(
+    *, gpu_id: int | None, gpu_spec: GPUSpec | None
+) -> dict[str, object]:
+    """
+    Best-effort capture of environment context that the legacy codegen agent used to inject into prompts:
+    - disk capacity/usage hints
+    - dataset cache inventory (HF + local + S3)
+    - S3 copy snippets
+    """
+    context: dict[str, object] = {
+        "gpu": {
+            "gpu_id": gpu_id,
+            "gpu_spec": gpu_spec,
+            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+            # We set CUDA_VISIBLE_DEVICES to a single value in this worker process.
+            # Inside the experiment script, frameworks like PyTorch typically see that as cuda:0.
+            "recommended_device": "cuda:0" if gpu_id is not None else "cpu",
+        }
+    }
+
+    # Disk usage hints (optional)
+    capacity_raw = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES", "")
+    capacity_int = int(capacity_raw) if capacity_raw.isdigit() else 0
+    used_int = _load_workspace_usage_file()
+    if capacity_int and used_int is not None:
+        free_bytes_val = max(capacity_int - used_int, 0)
+        context["storage"] = {
+            "workspace_disk_capacity_bytes": capacity_int,
+            "workspace_disk_used_bytes": used_int,
+            "workspace_disk_free_bytes": free_bytes_val,
+            "workspace_disk_capacity_human": humanize.naturalsize(capacity_int, binary=True),
+            "workspace_disk_free_human": humanize.naturalsize(free_bytes_val, binary=True),
+        }
+
+    # Dataset cache inventory (best effort; never fail the run because of this)
+    datasets_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
+    local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
+    try:
+        datasets_info = get_available_datasets(
+            local_datasets_dir=local_datasets_dir, datasets_aws_folder=datasets_aws_folder
+        )
+        hf_lines: list[str] = []
+        for repo in datasets_info.hf_cache:
+            revs = ", ".join(repo.revision_hashes)
+            hf_lines.append(
+                f"- {repo.repo_id} ({repo.repo_type}) | size={repo.size_on_disk_bytes} bytes | revisions=[{revs}]"
+            )
+        if not hf_lines:
+            hf_lines.append("- (none detected)")
+
+        local_lines: list[str] = []
+        for ds in datasets_info.local_datasets:
+            local_lines.append(
+                f"- {ds.dataset_name} | path={ds.path} | size={ds.size_on_disk_bytes} bytes"
+            )
+        if not local_lines:
+            local_lines.append(
+                f"- (empty) Create a subfolder per dataset under {local_datasets_dir}"
+            )
+
+        s3_lines: list[str] = []
+        if datasets_info.s3_folder_entries:
+            s3_lines = _format_s3_entries_for_prompt(
+                datasets_aws_folder=datasets_aws_folder,
+                entries=datasets_info.s3_folder_entries,
+            )
+
+        env_file = get_research_pipeline_env_file()
+        s3_download_snippet = build_s3_download_snippet(
+            datasets_aws_folder=datasets_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=env_file,
+        )
+        s3_upload_snippet = build_s3_upload_snippet(
+            datasets_aws_folder=datasets_aws_folder,
+            local_datasets_dir=local_datasets_dir,
+            env_file=env_file,
+        )
+
+        context["datasets"] = {
+            "datasets_local_dir": str(local_datasets_dir),
+            "datasets_aws_folder": datasets_aws_folder,
+            "hf_cache_lines": hf_lines,
+            "local_datasets_lines": local_lines,
+            "s3_folder_lines": s3_lines,
+            "s3_download_snippet": s3_download_snippet,
+            "s3_upload_snippet": s3_upload_snippet,
+        }
+    except (OSError, RuntimeError, ValueError):
+        logger.exception("Failed building datasets context for Codex input", exc_info=True)
+
+    # Key requirements (ported from legacy prompt guidelines) that Codex should obey.
+    context["implementation_requirements"] = {
+        "working_dir_relative": "working/",
+        "save_experiment_data_filename": "experiment_data.npy",
+        "do_not_prompt_user": True,
+    }
+
+    return context
 
 
 class NodeTask(TypedDict):
     node_data: dict[str, object] | None
     task_desc: str
+    evaluation_metric_spec: dict[str, object]
     cfg: AppConfig
-    evaluation_metrics: str
     memory_summary: str
     stage_identifier: StageIdentifier
     seed_eval: bool
+    seed_value: int
+    seed_aggregation: dict[str, object] | None
     event_callback: Callable[[BaseEvent], None]
     gpu_id: int | None
-    new_ablation_idea: AblationIdea | None
-    new_hyperparam_idea: HyperparamTuningIdea | None
-    best_stage3_plot_code: str | None
     execution_id: str
     user_feedback_payload: str
 
@@ -56,58 +464,68 @@ class NodeTask(TypedDict):
 class ExecutionTerminatedError(RuntimeError):
     """Raised when the execution was intentionally terminated via user action."""
 
-    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+    def __init__(self, execution_id: str, *, exec_time: float | None) -> None:
         super().__init__(f"Execution {execution_id} terminated intentionally")
         self.execution_id = execution_id
         self.exec_time = exec_time
 
 
 class ExecutionCrashedError(RuntimeError):
-    """Raised when the interpreter process died unexpectedly."""
+    """Raised when the Codex process died unexpectedly."""
 
-    def __init__(self, execution_id: str, *, exec_time: float | None = None):
+    def __init__(self, execution_id: str, *, exec_time: float | None) -> None:
         super().__init__(f"Execution {execution_id} crashed unexpectedly")
         self.execution_id = execution_id
         self.exec_time = exec_time
 
 
-def _call_with_timeout(
-    *,
-    func: Callable[..., T],
-    timeout_seconds: int,
-    kwargs: dict[str, object],
-) -> T:
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func, **kwargs)
-        return future.result(timeout=timeout_seconds)
-
-
 def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
-    """Best-effort logging configuration for the worker process."""
     try:
         apply_log_level(level_name=cfg.log_level)
-    except Exception:
-        # Never fail the worker due to logging configuration
+    except (ValueError, TypeError):
         pass
 
 
-def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[str, str]:
-    """Create and return workspace and working directory paths for this worker."""
+def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[Path, Path]:
     workspace_path = Path(cfg.workspace_dir) / f"process_{process_id}"
     workspace_path.mkdir(parents=True, exist_ok=True)
     working_dir_path = workspace_path / "working"
     working_dir_path.mkdir(parents=True, exist_ok=True)
-    return str(workspace_path), str(working_dir_path)
+    return workspace_path, working_dir_path
 
 
-def _should_run_plotting_and_vlm(*, stage_identifier: StageIdentifier) -> bool:
-    """Return True if plotting + VLM analysis should run for this stage."""
-    # Skip plotting and VLM for Stage 1 and Stage 2; only run for later stages
-    return stage_identifier not in (StageIdentifier.STAGE1, StageIdentifier.STAGE2)
+def _ensure_codex_venv(*, workspace_dir: Path) -> Path:
+    venv_dir = workspace_dir / ".venv"
+    venv_python = venv_dir / "bin" / "python"
+    if venv_python.exists():
+        return venv_dir
+    subprocess.run(
+        [sys.executable, "-m", "venv", str(venv_dir)],
+        check=True,
+        cwd=str(workspace_dir),
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+    )
+    return venv_dir
+
+
+def _build_codex_env(*, venv_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    bin_dir = venv_dir / "bin"
+    env["VIRTUAL_ENV"] = str(venv_dir)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    env["PIP_REQUIRE_VIRTUALENV"] = "1"
+    env["PYTHONNOUSERSITE"] = "1"
+    # Encourage CLI tools to behave in non-interactive / CI mode.
+    env["CI"] = "1"
+    env["NO_UPDATE_NOTIFIER"] = "1"
+    env["DISABLE_UPDATE_NOTIFIER"] = "1"
+    env["npm_config_update_notifier"] = "false"
+    return env
 
 
 def _configure_gpu_for_worker(*, gpu_id: int | None) -> GPUSpec | None:
-    """Configure CUDA visibility and return GPU specs if a GPU is assigned."""
     if gpu_id is None:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         return None
@@ -115,448 +533,302 @@ def _configure_gpu_for_worker(*, gpu_id: int | None) -> GPUSpec | None:
     return get_gpu_specs(gpu_id)
 
 
-def _assign_datasets_from_metrics_response(
-    *,
-    child_node: Node,
-    metrics_response: dict[str, object],
-) -> None:
-    """Populate datasets_successfully_tested from the structured metrics response."""
-    raw_metric_names = metrics_response.get("metric_names", [])
-    metric_entries: list[object] = (
-        list(raw_metric_names) if isinstance(raw_metric_names, list) else []
-    )
-
-    dataset_names: list[str] = []
-    for metric_entry in metric_entries:
-        if not isinstance(metric_entry, dict):
-            continue
-        data_entries = metric_entry.get("data", [])
-        if not isinstance(data_entries, list):
-            continue
-        for data_entry in data_entries:
-            if not isinstance(data_entry, dict):
-                continue
-            dataset_name = data_entry.get("dataset_name")
-            if isinstance(dataset_name, str) and dataset_name:
-                dataset_names.append(dataset_name)
-
-    seen: set[str] = set()
-    unique_datasets: list[str] = []
-    for name in dataset_names:
-        if name not in seen:
-            seen.add(name)
-            unique_datasets.append(name)
-
-    if unique_datasets:
-        child_node.datasets_successfully_tested = unique_datasets
-
-
-def _create_worker_agent(
-    *,
-    task_desc: str,
-    cfg: AppConfig,
-    gpu_id: int | None,
-    gpu_spec: GPUSpec | None,
-    memory_summary: str,
-    evaluation_metrics: str,
-    stage_identifier: StageIdentifier,
-    skip_checker: Callable[[], None],
-) -> MinimalAgent:
-    return MinimalAgent(
-        task_desc=task_desc,
-        cfg=cfg,
-        gpu_id=gpu_id,
-        gpu_spec=gpu_spec,
-        memory_summary=memory_summary,
-        evaluation_metrics=evaluation_metrics,
-        stage_identifier=stage_identifier,
-        skip_checker=skip_checker,
-    )
-
-
-def _create_interpreter(*, cfg: AppConfig, workspace: str) -> Interpreter:
-    return Interpreter(
-        working_dir=workspace,
-        timeout=cfg.exec.timeout,
-        format_tb_ipython=cfg.exec.format_tb_ipython,
-        agent_file_name=cfg.exec.agent_file_name,
-    )
-
-
 def _load_parent_node(*, node_data: dict[str, object] | None) -> Node | None:
-    if node_data:
-        return Node.from_dict(node_data, journal=None)
-    return None
+    if node_data is None:
+        return None
+    return Node.from_dict(node_data, journal=None)
 
 
 def _abort_if_skip_requested(*, execution_id: str) -> None:
     skip_pending, reason = execution_registry.is_skip_pending(execution_id)
     if skip_pending:
         logger.info(
-            "Skip pending for execution_id=%s (reason=%s); aborting before code generation.",
+            "Skip pending for execution_id=%s (reason=%s); aborting before Codex run.",
             execution_id,
             reason,
         )
         raise ExecutionTerminatedError(execution_id=execution_id, exec_time=0.0)
 
 
-def _create_child_node(
+def _write_codex_input_file(
     *,
-    worker_agent: MinimalAgent,
+    workspace_dir: Path,
+    execution_id: str,
+    task_desc: str,
+    evaluation_metric_spec: dict[str, object],
+    memory_summary: str,
+    stage_identifier: StageIdentifier,
     parent_node: Node | None,
     seed_eval: bool,
-    new_ablation_idea: AblationIdea | None,
-    new_hyperparam_idea: HyperparamTuningIdea | None,
-    event_callback: Callable[[BaseEvent], None],
-    execution_id: str,
-) -> Node:
-    _abort_if_skip_requested(execution_id=execution_id)
-    if seed_eval:
-        assert parent_node is not None, "parent_node must be provided for seed evaluation"
-        event_callback(RunLogEvent(message="Running multi-seed evaluation", level="info"))
-        child_node = worker_agent.generate_seed_node(parent_node)
-        child_node.parent = parent_node
-        child_node.plot_code = parent_node.plot_code
-        return child_node
-
-    if parent_node is None:
-        event_callback(RunLogEvent(message="Generating new implementation code", level="info"))
-        child_node = Stage1Baseline.draft(worker_agent)
-        event_callback(RunLogEvent(message="Code generation complete", level="info"))
-        child_node.id = execution_id
-        return child_node
-
-    if parent_node.is_buggy:
-        event_callback(
-            RunLogEvent(message="Debugging failed node (attempt to fix bugs)", level="info")
-        )
-        child_node = worker_agent.debug(parent_node)
-        child_node.parent = parent_node
-        event_callback(RunLogEvent(message="Fix attempt generated", level="info"))
-        child_node.id = execution_id
-        return child_node
-
-    if new_hyperparam_idea is not None and new_ablation_idea is None:
-        logger.info(f"Building hyperparam tuning node {parent_node.id}")
-        child_node = Stage2Tuning.build_hyperparam_tuning_node(
-            agent=worker_agent,
-            parent_node=parent_node,
-            hyperparam_idea=new_hyperparam_idea,
-        )
-        child_node.parent = parent_node
-        child_node.id = execution_id
-        return child_node
-
-    if new_ablation_idea is not None and new_hyperparam_idea is None:
-        logger.info(f"Building ablation node {parent_node.id}")
-        child_node = Stage4Ablation.build_ablation_node(
-            agent=worker_agent,
-            parent_node=parent_node,
-            ablation_idea=new_ablation_idea,
-        )
-        child_node.parent = parent_node
-        child_node.id = execution_id
-        return child_node
-
-    logger.info(f"Improving node {parent_node.id}")
-    child_node = _improve_existing_implementation(
-        worker_agent=worker_agent,
-        parent_node=parent_node,
-    )
-    child_node.parent = parent_node
-    child_node.id = execution_id
-    return child_node
-
-
-def _improve_existing_implementation(
-    *,
-    worker_agent: MinimalAgent,
-    parent_node: Node,
-) -> Node:
-    """Improve an existing implementation based on the current experimental stage."""
-    user_feedback = parent_node.user_feedback_payload
-    introduction = (
-        "You are an experienced AI researcher. You are provided with a previously developed "
-        "implementation. Your task is to improve it based on the current experimental stage."
-    )
-    if user_feedback:
-        introduction = (
-            "You are an experienced AI researcher. Your previous code for research experiment was terminated by user request. "
-            "Based on the user feedback, you should revise it to satisfy that request. "
-            "Your main goal is to satisfy the user request. "
-        )
-    prompt: PromptType = {
-        "Introduction": introduction,
-        "Research idea": worker_agent.task_desc,
-        "Memory": worker_agent.memory_summary if worker_agent.memory_summary else "",
-        "Feedback based on generated plots": parent_node.vlm_feedback_summary,
-        "Feedback about execution time": parent_node.exec_time_feedback,
-        "Instructions": {},
-    }
-    if user_feedback is not None:
-        prompt["User feedback"] = user_feedback
-    prompt["Previous solution"] = {
-        "Code": wrap_code(code=parent_node.code),
-    }
-
-    improve_instructions: dict[str, str | list[str]] = {}
-    improve_instructions |= worker_agent.prompt_impl_guideline
-    prompt["Instructions"] = improve_instructions
-
-    logger.debug("Improve prompt for stage=%s: %s", worker_agent.stage_name, prompt)
-    plan, code = worker_agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
-    logger.debug("----- LLM code start (improve) -----")
-    logger.debug(code)
-    logger.debug("----- LLM code end (improve) -----")
-    return Node(
-        plan=plan,
-        code=code,
-        parent=parent_node,
-    )
-
-
-def _execute_experiment(
-    *,
-    child_node: Node,
+    seed_value: int,
+    seed_aggregation: dict[str, object] | None,
+    gpu_id: int | None,
+    gpu_spec: GPUSpec | None,
     cfg: AppConfig,
-    process_interpreter: Interpreter,
-    event_callback: Callable[[BaseEvent], None],
+    user_feedback_payload: str,
+) -> Path:
+    payload: dict[str, object] = {
+        "execution_id": execution_id,
+        "research_idea": task_desc,
+        "evaluation_metric_spec": evaluation_metric_spec,
+        "memory_summary": memory_summary,
+        "stage_identifier": stage_identifier.name,
+        "seed_eval": seed_eval,
+        "seed_value": seed_value,
+        "seed_aggregation": seed_aggregation,
+        "gpu_id": gpu_id,
+        "agent_file_name": cfg.exec.agent_file_name,
+        "timeout_seconds": cfg.exec.timeout,
+        "parent_node": parent_node.to_dict() if parent_node is not None else None,
+        "user_feedback_payload": user_feedback_payload,
+        "environment_context": _build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec),
+    }
+    path = workspace_dir / "codex_input.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def _write_codex_task_file(
+    *,
+    workspace_dir: Path,
+    execution_id: str,
+    stage_identifier: StageIdentifier,
     stage_name: str,
-    execution_id: str,
-) -> ExecutionResult:
-    _abort_if_skip_requested(execution_id=execution_id)
-    logger.info(f"→ Executing experiment code (timeout: {cfg.exec.timeout}s)...")
-    logger.debug("Starting first interpreter: executing experiment code")
-    event_callback(RunLogEvent(message="Executing experiment code on GPU...", level="info"))
-    started_at = datetime.now(timezone.utc)
-    event_callback(
-        RunningCodeEvent(
-            execution_id=child_node.id,
-            stage_name=stage_name,
-            code=child_node.code,
-            started_at=started_at,
-        )
-    )
-    timer_start = time.monotonic()
-
-    def _pid_tracker(pid: int) -> None:
-        logger.info("Worker recorded pid=%s for execution_id=%s", pid, execution_id)
-        execution_registry.update_pid(execution_id=execution_id, pid=pid)
-
-    def _termination_checker() -> bool:
-        return execution_registry.is_terminated(execution_id=execution_id)
-
-    process_interpreter.set_pid_callback(_pid_tracker)
-    process_interpreter.set_termination_checker(checker=_termination_checker)
-    try:
-        process_interpreter.set_run_context(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            purpose="experiment",
-        )
-        exec_result = process_interpreter.run(code=child_node.code, reset_session=True)
-    except Exception as exc:
-        process_interpreter.set_pid_callback(None)
-        process_interpreter.cleanup_session()
-        completed_at = datetime.now(timezone.utc)
-        duration = time.monotonic() - timer_start
-        terminated = execution_registry.is_terminated(execution_id)
-        event_callback(
-            RunCompletedEvent(
-                execution_id=child_node.id,
-                stage_name=stage_name,
-                status="failed",
-                exec_time=duration,
-                completed_at=completed_at,
-            )
-        )
-        logger.info(
-            "Clearing PID reference for execution_id=%s due to execution failure.", execution_id
-        )
-        execution_registry.clear_pid(execution_id)
-        if terminated:
-            logger.info(
-                "Execution %s was intentionally terminated; skipping further processing.",
-                execution_id,
-            )
-            raise ExecutionTerminatedError(
-                execution_id=execution_id,
-                exec_time=duration,
-            ) from exc
-        # Avoid Sentry log spam: the controller (main process) is responsible for emitting a single
-        # Sentry event for true crashes. Worker logs should remain non-error level.
-        logger.warning("Execution %s crashed unexpectedly; propagating failure.", execution_id)
-        raise ExecutionCrashedError(
-            execution_id=execution_id,
-            exec_time=duration,
-        ) from exc
-    finally:
-        process_interpreter.clear_run_context()
-        process_interpreter.set_pid_callback(None)
-        process_interpreter.clear_termination_checker()
-    process_interpreter.cleanup_session()
-    logger.info(f"✓ Code execution completed in {exec_result.exec_time:.1f}s")
-    event_callback(
-        RunLogEvent(
-            message=f"Code execution completed ({exec_result.exec_time:.1f}s)", level="info"
-        )
-    )
-    completed_at = datetime.now(timezone.utc)
-    status: Literal["success", "failed"] = "success" if exec_result.exc_type is None else "failed"
-    event_callback(
-        RunCompletedEvent(
-            execution_id=child_node.id,
-            stage_name=stage_name,
-            status=status,
-            exec_time=exec_result.exec_time,
-            completed_at=completed_at,
-        )
-    )
-    logger.info("Marking execution_id=%s as completed in registry.", execution_id)
-    execution_registry.mark_completed(execution_id)
-    return exec_result
-
-
-def _analyze_results_and_metrics(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    parent_node: Node | None,
+    timeout_seconds: int,
+    agent_file_name: str,
+    input_json_file: Path,
+    output_json_file: Path,
     cfg: AppConfig,
-    working_dir: str,
-    process_interpreter: Interpreter,
-    seed_eval: bool,
-    exec_result: ExecutionResult,
-    event_callback: Callable[[BaseEvent], None],
-) -> None:
-    logger.info("→ Analyzing results and extracting metrics (execution_id=%s)...", child_node.id)
-    event_callback(RunLogEvent(message="Analyzing results and extracting metrics", level="info"))
-    worker_agent.parse_exec_result(
-        node=child_node,
-        exec_result=exec_result,
+) -> Path:
+    task_path = workspace_dir / "codex_task.md"
+    # Legacy prompt parity: construct a prompt-like payload in the task file so Codex sees
+    # the same guidance the previous LLM agent saw (across all stages).
+    # We embed the key sections as markdown; Codex reads task_file as plain text.
+    try:
+        input_obj = json.loads((workspace_dir / input_json_file.name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        input_obj = {}
+    if not isinstance(input_obj, dict):
+        input_obj = {}
+    env_ctx = input_obj.get("environment_context")
+    env_ctx_dict = env_ctx if isinstance(env_ctx, dict) else {}
+    memory_summary = str(input_obj.get("memory_summary") or "").strip()
+    eval_metric_spec = input_obj.get("evaluation_metric_spec")
+    eval_metric_str = json.dumps(eval_metric_spec, indent=2) if eval_metric_spec is not None else ""
+    parent_node_obj = input_obj.get("parent_node")
+    base_code = ""
+    exec_time_feedback = ""
+    user_feedback_payload = str(input_obj.get("user_feedback_payload") or "").strip()
+    if isinstance(parent_node_obj, dict):
+        base_code = str(parent_node_obj.get("code") or "")
+        exec_time_feedback = str(parent_node_obj.get("exec_time_feedback") or "")
+
+    legacy_sections: list[str] = []
+    legacy_sections.append("## Legacy prompt parity (for Codex)")
+    legacy_sections.append("")
+    legacy_sections.append("### Introduction")
+    legacy_sections.append(_legacy_stage_intro(stage_identifier=stage_identifier))
+    legacy_sections.append("")
+    legacy_sections.append("### Research idea")
+    legacy_sections.append(str(input_obj.get("research_idea") or "").strip())
+    legacy_sections.append("")
+    legacy_sections.append("### Memory")
+    legacy_sections.append(memory_summary if memory_summary else "(empty)")
+    legacy_sections.append("")
+    legacy_sections.append("### Installed Packages")
+    legacy_sections.append(
+        "Use any packages available in the environment (inspect/install as needed)."
+        + _legacy_gpu_text(environment_context=env_ctx_dict)
+        + _legacy_storage_text(environment_context=env_ctx_dict)
     )
-    parse_and_assign_metrics(
-        worker_agent=worker_agent,
-        child_node=child_node,
-        parent_node=parent_node,
-        cfg=cfg,
-        working_dir=working_dir,
-        process_interpreter=process_interpreter,
-        seed_eval=seed_eval,
-        event_callback=event_callback,
-    )
-    logger.info(
-        "✓ Metrics extracted (execution_id=%s). Buggy: %s",
-        child_node.id,
-        child_node.is_buggy,
-    )
-
-
-def _select_plotting_code(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    parent_node: Node | None,
-    seed_eval: bool,
-    best_stage3_plot_code: str | None,
-) -> str:
-    if seed_eval:
-        assert parent_node is not None
-        return parent_node.plot_code or ""
-
-    plot_code_from_prev_stage: str | None
-    if worker_agent.stage_identifier is StageIdentifier.STAGE4 and best_stage3_plot_code:
-        plot_code_from_prev_stage = best_stage3_plot_code
-    else:
-        plot_code_from_prev_stage = None
-
-    return generate_plotting_code(
-        agent=worker_agent,
-        node=child_node,
-        parent_node=parent_node,
-        plot_code_from_prev_stage=plot_code_from_prev_stage,
+    legacy_sections.append("")
+    legacy_sections.append("### Available Datasets")
+    legacy_sections.append(_legacy_available_datasets_text(environment_context=env_ctx_dict))
+    legacy_sections.append("")
+    legacy_sections.append("### Evaluation Metric(s)")
+    legacy_sections.append(eval_metric_str if eval_metric_str else "(none)")
+    legacy_sections.append("")
+    legacy_sections.append("### Implementation guideline")
+    legacy_sections.extend(
+        [
+            f"- {line}"
+            for line in _legacy_impl_guideline_lines(cfg=cfg, environment_context=env_ctx_dict)
+        ]
     )
 
-
-def _execute_plotting_with_retries(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    parent_node: Node | None,
-    process_interpreter: Interpreter,
-    seed_eval: bool,
-    best_stage3_plot_code: str | None,
-    event_callback: Callable[[BaseEvent], None],
-) -> str:
-    logger.info("→ Generating visualization plots...")
-    event_callback(RunLogEvent(message="Generating visualization plots", level="info"))
-    retry_count = 0
-    plotting_code = ""
-    while True:
-        plotting_code = _select_plotting_code(
-            worker_agent=worker_agent,
-            child_node=child_node,
-            parent_node=parent_node,
-            seed_eval=seed_eval,
-            best_stage3_plot_code=best_stage3_plot_code,
+    if stage_identifier is StageIdentifier.STAGE1:
+        legacy_sections.append("")
+        legacy_sections.append("### Experiment design sketch guideline (Stage 1 baseline)")
+        legacy_sections.extend(
+            [f"- {line}" for line in _legacy_stage1_design_sketch_guideline_lines()]
         )
-        event_callback(RunLogEvent(message="Executing plotting code", level="info"))
-        process_interpreter.set_run_context(
-            execution_id=child_node.id,
-            stage_name=worker_agent.stage_name,
-            purpose="plotting",
+
+    if stage_identifier is StageIdentifier.STAGE2:
+        legacy_sections.append("")
+        legacy_sections.append("### Stage 2 hyperparameter-tuning requirements (legacy parity)")
+        legacy_sections.extend(
+            [
+                "- DO NOT change model architecture from the previous stage.",
+                "- Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.",
+                "- Save data in `working/experiment_data.npy` with a structure like:",
+                "- ```python",
+                "- experiment_data = {",
+                "-     'hyperparam_tuning_type_1': {",
+                "-         'dataset_name_1': {",
+                "-             'metrics': {'train': [], 'val': []},",
+                "-             'losses': {'train': [], 'val': []},",
+                "-             'predictions': [],",
+                "-             'ground_truth': [],",
+                "-         },",
+                "-     },",
+                "- }",
+                "- ```",
+            ]
         )
-        try:
-            plot_exec_result = process_interpreter.run(
-                code=plotting_code,
-                reset_session=True,
-            )
-        finally:
-            process_interpreter.clear_run_context()
-        process_interpreter.cleanup_session()
-        child_node.absorb_plot_exec_result(plot_exec_result)
-        if child_node.plot_exc_type and retry_count < 3:
-            term_lines = child_node.plot_term_out or []
-            tail = "".join(term_lines[-50:]) if isinstance(term_lines, list) else str(term_lines)
-            event_callback(
-                RunLogEvent(
-                    message=f"Plotting error ({child_node.plot_exc_type}); retrying {retry_count + 1}/3. Tail of output:\n{tail}",
-                    level="warn",
+
+    if stage_identifier is StageIdentifier.STAGE4:
+        legacy_sections.append("")
+        legacy_sections.append("### Stage 4 ablation requirements (legacy parity)")
+        legacy_sections.extend(
+            [
+                "- Choose ONE ablation idea for this run and set `ablation_name` in node_result.json accordingly.",
+                "- Save data in `working/experiment_data.npy` with a structure like:",
+                "- ```python",
+                "- experiment_data = {",
+                "-     'ablation_type_1': {",
+                "-         'dataset_name_1': {",
+                "-             'metrics': {'train': [], 'val': []},",
+                "-             'losses': {'train': [], 'val': []},",
+                "-             'predictions': [],",
+                "-             'ground_truth': [],",
+                "-         },",
+                "-     },",
+                "- }",
+                "- ```",
+            ]
+        )
+
+    if base_code.strip():
+        legacy_sections.append("")
+        legacy_sections.append("### Base code you are working on (from parent node)")
+        legacy_sections.append("```python")
+        legacy_sections.append(base_code.rstrip())
+        legacy_sections.append("```")
+    if exec_time_feedback.strip():
+        legacy_sections.append("")
+        legacy_sections.append("### Feedback about execution time")
+        legacy_sections.append(exec_time_feedback.strip())
+    if user_feedback_payload:
+        legacy_sections.append("")
+        legacy_sections.append("### User feedback")
+        legacy_sections.append(user_feedback_payload)
+
+    if stage_identifier in (StageIdentifier.STAGE3, StageIdentifier.STAGE4):
+        legacy_sections.append("")
+        legacy_sections.append("### Plotting code guideline (legacy)")
+        experiment_code_hint = (
+            "Use the final experiment code you wrote in the agent file to infer what data exists in experiment_data.npy."
+            if not base_code
+            else base_code
+        )
+        legacy_sections.extend(
+            [
+                f"- {line}"
+                for line in _legacy_plotting_guideline_lines(
+                    experiment_code_hint=experiment_code_hint
                 )
-            )
-            retry_count += 1
-            continue
-        break
-    return plotting_code
+            ]
+        )
+    legacy_prompt_block = "\n".join(legacy_sections).strip() + "\n\n"
+
+    is_seed_aggregation = isinstance(input_obj.get("seed_aggregation"), dict)
+    if is_seed_aggregation:
+        # Override stage contract for seed-aggregation runs: keep common contract + add explicit
+        # aggregation requirements (including is_seed_agg_node=true).
+        contract_lines = (
+            codex_node_result_contract_prompt_lines_common() + codex_seed_agg_contract_lines()
+        )
+        seed_agg_instructions = "\n".join(codex_seed_aggregation_instructions_lines()).strip()
+        seed_agg_block = seed_agg_instructions + "\n\n"
+    else:
+        contract_lines = codex_node_result_contract_prompt_lines_for_stage(
+            stage_identifier=stage_identifier
+        )
+        seed_agg_block = ""
+    contract_block = "\n".join(contract_lines).strip() + "\n\n"
+
+    task_text = (
+        "You are an autonomous coding agent running inside a sandboxed workspace.\\n"
+        "You must not ask the user for input; proceed with reasonable defaults.\\n"
+        "You have full permission to install packages, download data, edit files, and run commands.\\n\\n"
+        f"## Context\\n- execution_id: `{execution_id}`\\n"
+        f"- stage_identifier: `{stage_identifier.name}`\\n"
+        f"- stage_name: `{stage_name}`\\n"
+        f"- wall_clock_timeout_seconds: {timeout_seconds}\\n\\n"
+        "## Inputs\\n"
+        f"- Read `{input_json_file.name}` for the full task context.\\n"
+        "  - Use `environment_context.datasets` for available datasets and S3 download/upload snippets.\\n"
+        "  - Use `environment_context.gpu` for GPU id/specs and `recommended_device`.\\n\\n"
+        f"{seed_agg_block}"
+        "## Required outputs (MUST)\\n"
+        f"- Write a complete Node dict to `{output_json_file.name}` using the same schema as Node.to_dict.\\n"
+        f"- Write your final experiment code to `{agent_file_name}`.\\n"
+        "- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).\\n"
+        "- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.\\n\\n"
+        f"{contract_block}"
+        "## Hard requirements (ported from the legacy code-generation agent)\\n"
+        "- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.\\n"
+        "- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.\\n"
+        "- Avoid re-downloading data if it's already present in the dataset caches described in `codex_input.json`.\\n\\n"
+        "## Metric requirement\\n"
+        "- Read `evaluation_metric_spec` from `codex_input.json` and use it as the primary metric definition.\\n"
+        "- Populate `metric` in `node_result.json` with:\\n"
+        "  - `metric.name` exactly matching `evaluation_metric_spec.name`\\n"
+        "  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`\\n"
+        "  - `metric.description` matching `evaluation_metric_spec.description`\\n"
+        "  - `metric.value` as a numeric value from your evaluation run\\n\\n"
+        "## Seed requirement\\n"
+        "- Read `seed_eval` and `seed_value` from `codex_input.json`.\\n"
+        "- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:\\n"
+        "  - `random.seed(seed_value)`\\n"
+        "  - `numpy.random.seed(seed_value)`\\n"
+        "  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`\\n"
+        "- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.\\n"
+        '- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").\\n\\n'
+        "## GPU requirement\\n"
+        "- If `environment_context.gpu.gpu_id` is not null, you MUST use the GPU when applicable (training/inference).\\n"
+        "- Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.\\n\\n"
+        "## Execution contract\\n"
+        "- Run any commands you need.\\n"
+        f"- Run the final experiment with: `python {agent_file_name}`.\\n"
+        "- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.\\n"
+    )
+    task_path.write_text(legacy_prompt_block + task_text, encoding="utf-8")
+    return task_path
+
+
+def _load_node_result(*, output_json_file: Path) -> dict[str, object] | None:
+    if not output_json_file.exists():
+        return None
+    try:
+        parsed = json.loads(output_json_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.debug("Failed reading node_result.json at %s", output_json_file, exc_info=True)
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
 
 
 def _move_experiment_artifacts(
     *,
     cfg: AppConfig,
     child_node: Node,
-    working_dir: str,
-    plotting_code: str,
+    working_dir: Path,
     event_callback: Callable[[BaseEvent], None],
 ) -> None:
-    plots_dir = Path(working_dir)
-    logger.debug(f"Checking plots_dir: {plots_dir}, exists={plots_dir.exists()}")
-    if not plots_dir.exists():
-        logger.warning(f"plots_dir {plots_dir} does not exist!")
+    if not working_dir.exists():
         return
-
-    plot_count = len(list(plots_dir.glob("*.png")))
-    logger.debug(f"Found {plot_count} plot files in working directory")
-    if plot_count > 0:
-        event_callback(RunLogEvent(message=f"✓ Generated {plot_count} plot file(s)", level="info"))
-    else:
-        event_callback(
-            RunLogEvent(
-                message="No plot files (*.png) found in working directory after plotting",
-                level="warn",
-            )
-        )
-        logger.warning(f"No plot files found in {plots_dir} after plotting code execution")
-
     base_dir = Path(cfg.workspace_dir).parent
     run_name = Path(cfg.workspace_dir).name
     exp_results_dir = (
@@ -566,530 +838,274 @@ def _move_experiment_artifacts(
         / "experiment_results"
         / f"experiment_{child_node.id}_proc_{os.getpid()}"
     )
-    logger.debug(f"Creating exp_results_dir: {exp_results_dir}")
     child_node.exp_results_dir = str(exp_results_dir)
     exp_results_dir.mkdir(parents=True, exist_ok=True)
 
-    plot_code_path = exp_results_dir / "plotting_code.py"
-    with open(plot_code_path, "w") as f:
-        f.write(plotting_code)
-    exp_code_path = exp_results_dir / "experiment_code.py"
-    with open(exp_code_path, "w") as f:
-        f.write(child_node.code)
-    for exp_data_file in plots_dir.glob("*.npy"):
+    code_src = (working_dir.parent / cfg.exec.agent_file_name).resolve()
+    if code_src.exists():
+        (exp_results_dir / "experiment_code.py").write_text(
+            code_src.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+    for exp_data_file in working_dir.glob("*.npy"):
         exp_data_path = exp_results_dir / exp_data_file.name
         exp_data_file.resolve().rename(exp_data_path)
 
-    plot_files_found = list(plots_dir.glob("*.png"))
-    logger.debug(f"Found {len(plot_files_found)} plot files to move for node {child_node.id}")
-    logger.debug(
-        "Before moving: "
-        f"plots={len(child_node.plots) if child_node.plots else 0}, "
-        f"plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
-    )
-    if len(plot_files_found) == 0:
-        logger.warning(
-            "No plot files to move! This means plots were generated but not found, "
-            "or already moved."
+    plot_files_found = list(working_dir.glob("*.png"))
+    if plot_files_found:
+        event_callback(
+            RunLogEvent(message=f"✓ Generated {len(plot_files_found)} plot file(s)", level="info")
         )
-        logger.warning(f"Current plots list: {child_node.plots}")
-        logger.warning(f"Current plot_paths list: {child_node.plot_paths}")
     for plot_file in plot_files_found:
         final_path = exp_results_dir / plot_file.name
-        try:
-            plot_file.resolve().rename(final_path)
-            web_path = (
-                f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/"
-                f"experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
-            )
-            logger.debug(f"Moving plot: {plot_file.name} -> {final_path}, web_path: {web_path}")
-            child_node.plots.append(web_path)
-            child_node.plot_paths.append(str(final_path.absolute()))
-            logger.debug(f"Moved plot: {plot_file.name} -> {final_path}")
-        except Exception as move_error:
-            logger.error(f"Failed to move plot {plot_file.name}: {move_error}")
-            logger.error("This could cause plots/plot_paths mismatch")
-    logger.debug(
-        "After moving plots: "
-        f"plots={len(child_node.plots)}, plot_paths={len(child_node.plot_paths)}"
-    )
-
-
-def _run_vlm_analysis(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    event_callback: Callable[[BaseEvent], None],
-) -> None:
-    try:
-        logger.info(f"→ Analyzing {len(child_node.plots)} plots with Vision Language Model...")
-        event_callback(
-            RunLogEvent(
-                message=f"Analyzing {len(child_node.plots)} generated plots with VLM", level="info"
-            )
+        plot_file.resolve().rename(final_path)
+        web_path = (
+            f"../../logs/{Path(cfg.workspace_dir).name}/experiment_results/"
+            f"experiment_{child_node.id}_proc_{os.getpid()}/{plot_file.name}"
         )
-        analyze_plots_with_vlm(agent=worker_agent, node=child_node)
-        logger.info(f"✓ VLM analysis complete. Valid plots: {not child_node.is_buggy_plots}")
-        event_callback(RunLogEvent(message="✓ Plot analysis complete", level="info"))
-    except Exception as e:
-        tb = traceback.format_exc()
-        event_callback(
-            RunLogEvent(message=f"Plot analysis failed with exception: {str(e)}", level="warn")
-        )
-        event_callback(RunLogEvent(message=f"Plot analysis traceback:\n{tb}", level="warn"))
-
-
-def _run_plotting_and_vlm(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    parent_node: Node | None,
-    cfg: AppConfig,
-    working_dir: str,
-    process_interpreter: Interpreter,
-    seed_eval: bool,
-    best_stage3_plot_code: str | None,
-    event_callback: Callable[[BaseEvent], None],
-) -> None:
-    logger.debug(
-        f"Starting plotting for node {child_node.id}: "
-        f"plots={len(child_node.plots) if child_node.plots else 0}, "
-        f"plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
-    )
-    try:
-        plotting_code = _execute_plotting_with_retries(
-            worker_agent=worker_agent,
-            child_node=child_node,
-            parent_node=parent_node,
-            process_interpreter=process_interpreter,
-            seed_eval=seed_eval,
-            best_stage3_plot_code=best_stage3_plot_code,
-            event_callback=event_callback,
-        )
-        _move_experiment_artifacts(
-            cfg=cfg,
-            child_node=child_node,
-            working_dir=working_dir,
-            plotting_code=plotting_code,
-            event_callback=event_callback,
-        )
-    except Exception as e:
-        tb = traceback.format_exc()
-        event_callback(
-            RunLogEvent(message=f"Plotting failed with exception: {str(e)}", level="warn")
-        )
-        event_callback(RunLogEvent(message=f"Plotting traceback:\n{tb}", level="warn"))
-    logger.debug(
-        "Before VLM check: "
-        f"plots={len(child_node.plots) if child_node.plots else 0}, "
-        f"plot_paths={len(child_node.plot_paths) if child_node.plot_paths else 0}"
-    )
-    if not child_node.plots:
-        return
-    if not child_node.plot_paths:
-        logger.warning(
-            f"MISMATCH: child_node.plots has {len(child_node.plots)} items but "
-            f"plot_paths is empty for node {child_node.id}"
-        )
-        logger.warning(
-            "This suggests plots were populated but plot_paths wasn't. " "This can happen if:"
-        )
-        logger.warning("   1. Exception occurred during file moving in the plotting step")
-        logger.warning("   2. Plots were populated from a previous attempt/retry")
-        logger.warning("   3. plot_paths list was cleared/reset somewhere")
-        return
-    _run_vlm_analysis(
-        worker_agent=worker_agent,
-        child_node=child_node,
-        event_callback=event_callback,
-    )
-
-
-def parse_and_assign_metrics(
-    *,
-    worker_agent: MinimalAgent,
-    child_node: Node,
-    parent_node: Node | None,
-    cfg: AppConfig,
-    working_dir: str,
-    process_interpreter: Interpreter,
-    seed_eval: bool,
-    event_callback: Callable[[BaseEvent], None],
-) -> None:
-    """Generate/execute metrics parsing code and assign structured metrics to the node."""
-    try:
-        working_path = Path(working_dir)
-        data_files = list(working_path.glob("*.npy"))
-        if not data_files:
-            event_callback(
-                RunLogEvent(
-                    message="No .npy files found in working directory. Data may not have been saved properly.",
-                    level="warn",
-                )
-            )
-
-        # Prepare or reuse metrics parsing code
-        if seed_eval and parent_node is not None:
-            parse_metrics_plan = parent_node.parse_metrics_plan
-            parse_metrics_code = parent_node.parse_metrics_code
-        else:
-            parse_metrics_prompt: PromptType = {
-                "Introduction": (
-                    "You are an AI researcher analyzing experimental results stored in numpy files. "
-                    "Write code to load and analyze the metrics from experiment_data.npy."
-                ),
-                "Context": [
-                    "Original Code: " + child_node.code,
-                ],
-                "Instructions": [
-                    "0. Make sure to get the working directory from os.path.join(os.getcwd(), 'working')",
-                    "1. Load the experiment_data.npy file, which is located in the working directory",
-                    "2. Extract metrics for each dataset. Refer to the original code to understand the data structure.",
-                    "3. Always print the name of the dataset before printing the metrics",
-                    "4. Always print the name of the metric before printing the value with precise labels (e.g., 'train accuracy', 'validation loss', 'test F1 score').",
-                    "5. Only print the best or final value for each metric for each dataset",
-                    "6. DO NOT CREATE ANY PLOTS",
-                    "Important code structure requirements:",
-                    "  - Do NOT put any execution code inside if __name__ == '" + "__main__" + "':",
-                    "  - All code should be at the global scope or in functions that are called from the global scope",
-                    "  - The script should execute immediately when run, without requiring any special entry point",
-                ],
-                "Example data loading code": [
-                    (
-                        "\nimport numpy as np\nimport os\n"
-                        "experiment_data = np.load(os.path.join(os.getcwd(), 'working', 'experiment_data.npy'), allow_pickle=True).item()\n"
-                    )
-                ],
-            }
-            logger.debug(
-                "Generating metric parsing code to extract metrics from experiment results"
-            )
-            parse_metrics_plan, parse_metrics_code = worker_agent.plan_and_code_query(
-                prompt=parse_metrics_prompt,
-                enforce_gpu=False,
-            )
-        child_node.parse_metrics_plan = parse_metrics_plan
-        child_node.parse_metrics_code = parse_metrics_code
-
-        # Execute metric parsing code
-        logger.debug(
-            "Starting second interpreter: executing metric parsing code (execution_id=%s, stage=%s)",
-            child_node.id,
-            worker_agent.stage_name,
-        )
-        process_interpreter.set_run_context(
-            execution_id=child_node.id,
-            stage_name=worker_agent.stage_name,
-            purpose="metrics_parsing",
-        )
-        try:
-            metrics_exec_result = process_interpreter.run(
-                code=parse_metrics_code, reset_session=True
-            )
-        finally:
-            process_interpreter.clear_run_context()
-        process_interpreter.cleanup_session()
-        child_node.parse_term_out = metrics_exec_result.term_out
-        child_node.parse_exc_type = metrics_exec_result.exc_type
-        child_node.parse_exc_info = metrics_exec_result.exc_info
-        child_node.parse_exc_stack = metrics_exec_result.exc_stack
-
-        if metrics_exec_result.exc_type is None:
-            # Extract structured metrics from stdout
-            metrics_prompt = {
-                "Introduction": (
-                    "Parse the metrics from the execution output. You only need the final or best value "
-                    "of each metric for each dataset."
-                ),
-                "Execution Output": metrics_exec_result.term_out,
-            }
-            try:
-                logger.info(
-                    "→ Parsing metrics with LLM (timeout=%ds, model=%s)",
-                    _LLM_PARSE_TIMEOUT_SECONDS,
-                    cfg.agent.feedback.model,
-                )
-                metrics_model = _call_with_timeout(
-                    func=structured_query_with_schema,
-                    timeout_seconds=_LLM_PARSE_TIMEOUT_SECONDS,
-                    kwargs={
-                        "system_message": metrics_prompt,
-                        "user_message": None,
-                        "model": cfg.agent.feedback.model,
-                        "temperature": cfg.agent.feedback.temperature,
-                        "schema_class": METRIC_PARSE_SCHEMA,
-                    },
-                )
-                logger.info("✓ Metrics parsing LLM completed")
-            except FuturesTimeoutError:
-                logger.warning(
-                    "Metrics parsing LLM timed out after %ds; marking node as buggy",
-                    _LLM_PARSE_TIMEOUT_SECONDS,
-                )
-                event_callback(
-                    RunLogEvent(
-                        message=(
-                            "Metrics parsing timed out while waiting for the LLM "
-                            f"(>{_LLM_PARSE_TIMEOUT_SECONDS}s)."
-                        ),
-                        level="warn",
-                    )
-                )
-                child_node.metric = WorstMetricValue()
-                child_node.is_buggy = True
-                return
-            metrics_response = metrics_model.model_dump(by_alias=True)
-            if metrics_model.valid_metrics_received:
-                metric_names = metrics_response.get("metric_names", [])
-                child_node.metric = MetricValue(value={"metric_names": metric_names})
-                _assign_datasets_from_metrics_response(
-                    child_node=child_node,
-                    metrics_response=metrics_response,
-                )
-            else:
-                child_node.metric = WorstMetricValue()
-                child_node.is_buggy = True
-        else:
-            child_node.metric = WorstMetricValue()
-            child_node.is_buggy = True
-
-        # Emit validation outcome
-        if child_node.is_buggy:
-            bug_summary = child_node.analysis or "Unknown error"
-            event_callback(
-                RunLogEvent(message=f"Implementation has bugs: {bug_summary}", level="warn")
-            )
-        else:
-            event_callback(RunLogEvent(message="Implementation passed validation", level="info"))
-    except Exception:
-        # On any unexpected error while parsing metrics, mark as worst
-        child_node.metric = WorstMetricValue()
-        child_node.is_buggy = True
+        child_node.plots.append(web_path)
+        child_node.plot_paths.append(str(final_path.absolute()))
 
 
 def process_node(
     *,
     node_data: dict[str, object] | None,
     task_desc: str,
+    evaluation_metric_spec: dict[str, object],
     cfg: AppConfig,
-    evaluation_metrics: str,
     memory_summary: str,
     stage_identifier: StageIdentifier,
     seed_eval: bool,
+    seed_value: int,
+    seed_aggregation: dict[str, object] | None,
     event_callback: Callable[[BaseEvent], None],
-    gpu_id: Optional[int] = None,
-    new_ablation_idea: Optional[AblationIdea] = None,
-    new_hyperparam_idea: Optional[HyperparamTuningIdea] = None,
-    best_stage3_plot_code: Optional[str] = None,
+    gpu_id: int | None,
     execution_id: str,
     user_feedback_payload: str,
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
-
     process_id = multiprocessing.current_process().name
-    workspace, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
-
+    workspace_dir, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
+    venv_dir = _ensure_codex_venv(workspace_dir=workspace_dir)
+    codex_env = _build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)
     stage_name = stage_identifier.prefixed_name
-    logger.info(
-        "Worker process %s handling execution_id=%s stage=%s (parent_node=%s, user_feedback=%s)",
-        process_id,
-        execution_id,
-        stage_name,
-        parent_node.id if parent_node else "draft",
-        bool(parent_node.user_feedback_payload) if parent_node else False,
-    )
 
-    worker_agent = _create_worker_agent(
+    _abort_if_skip_requested(execution_id=execution_id)
+
+    output_json_file = workspace_dir / "node_result.json"
+    input_json_file = _write_codex_input_file(
+        workspace_dir=workspace_dir,
+        execution_id=execution_id,
         task_desc=task_desc,
-        cfg=cfg,
+        evaluation_metric_spec=evaluation_metric_spec,
+        memory_summary=memory_summary,
+        stage_identifier=stage_identifier,
+        parent_node=parent_node,
+        seed_eval=seed_eval,
+        seed_value=seed_value,
+        seed_aggregation=seed_aggregation,
         gpu_id=gpu_id,
         gpu_spec=gpu_spec,
-        memory_summary=memory_summary,
-        evaluation_metrics=evaluation_metrics,
+        cfg=cfg,
+        user_feedback_payload=user_feedback_payload,
+    )
+    task_file = _write_codex_task_file(
+        workspace_dir=workspace_dir,
+        execution_id=execution_id,
         stage_identifier=stage_identifier,
-        skip_checker=lambda: _abort_if_skip_requested(execution_id=execution_id),
+        stage_name=stage_name,
+        timeout_seconds=cfg.exec.timeout,
+        agent_file_name=cfg.exec.agent_file_name,
+        input_json_file=input_json_file,
+        output_json_file=output_json_file,
+        cfg=cfg,
     )
-    parent_feedback = user_feedback_payload or (
-        parent_node.user_feedback_payload if parent_node else ""
-    )
-    if parent_node is not None and parent_feedback:
-        # Ensure stage-specific prompt builders that read parent_node.user_feedback_payload
-        # can see the one-shot payload.
-        parent_node.is_user_feedback = True
-        parent_node.user_feedback_payload = parent_feedback
-    logger.info(
-        "Worker agent ready for execution_id=%s. User feedback present=%s",
-        execution_id,
-        bool(parent_feedback),
-    )
-    if parent_feedback:
-        logger.debug(
-            "User feedback payload for execution_id=%s:\n%s",
-            execution_id,
-            parent_feedback,
-        )
 
-    process_interpreter = _create_interpreter(cfg=cfg, workspace=workspace)
+    runner = CodexCliRunner(
+        workspace_dir=workspace_dir,
+        timeout_seconds=cfg.exec.timeout,
+        argv=[
+            "codex",
+            "exec",
+            "--full-auto",
+            "--sandbox",
+            "danger-full-access",
+            "--skip-git-repo-check",
+            "--json",
+        ],
+        env=codex_env,
+    )
 
-    try:
-        logger.info(
-            "Building child node for execution_id=%s (seed_eval=%s, stage=%s)",
-            execution_id,
-            seed_eval,
-            stage_name,
-        )
-        _abort_if_skip_requested(execution_id=execution_id)
-        child_node = _create_child_node(
-            worker_agent=worker_agent,
-            parent_node=parent_node,
-            seed_eval=seed_eval,
-            new_ablation_idea=new_ablation_idea,
-            new_hyperparam_idea=new_hyperparam_idea,
-            event_callback=event_callback,
+    started_at = datetime.now(timezone.utc)
+    event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
+    event_callback(
+        RunningCodeEvent(
             execution_id=execution_id,
+            stage_name=stage_name,
+            code="(Codex-managed)",
+            started_at=started_at,
         )
-        logger.info(
-            "Child node %s prepared (feedback=%s)",
-            child_node.id,
-            child_node.is_user_feedback,
+    )
+
+    def _pid_tracker(pid: int) -> None:
+        execution_registry.update_pid(execution_id=execution_id, pid=pid)
+
+    def _termination_checker() -> bool:
+        return execution_registry.is_terminated(execution_id=execution_id)
+
+    term_out, exec_time, exc_type, exc_info = runner.run(
+        task_file=task_file,
+        pid_callback=_pid_tracker,
+        termination_checker=_termination_checker,
+        success_file=output_json_file,
+        stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
+    )
+
+    completed_at = datetime.now(timezone.utc)
+    status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
+    event_callback(
+        RunCompletedEvent(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            status=status,
+            exec_time=exec_time,
+            completed_at=completed_at,
         )
+    )
+    if exc_type is None:
+        execution_registry.mark_completed(execution_id=execution_id)
+    else:
+        execution_registry.clear_pid(execution_id=execution_id)
 
-        exec_result: ExecutionResult | None = None
-        exec_failed = False
-        terminated_by_user = False
-        failure_reason: str | None = None
-        try:
-            _abort_if_skip_requested(execution_id=execution_id)
-            exec_result = _execute_experiment(
-                child_node=child_node,
-                cfg=cfg,
-                process_interpreter=process_interpreter,
-                event_callback=event_callback,
-                stage_name=stage_name,
-                execution_id=execution_id,
+    node_result = _load_node_result(output_json_file=output_json_file)
+    if node_result is None:
+        child_node = Node(
+            id=execution_id,
+            plan="",
+            code="",
+            is_buggy=True,
+            analysis="Codex did not produce a valid node_result.json.",
+            exc_type=exc_type or "CodexError",
+            exec_time=exec_time,
+        )
+        child_node.absorb_exec_result(
+            SimpleNamespace(
+                term_out=term_out,
+                exec_time=exec_time,
+                exc_type=exc_type,
+                exc_info=exc_info,
+                exc_stack=None,
             )
-        except ExecutionTerminatedError as term_exc:
-            exec_failed = True
-            terminated_by_user = True
-            payload_text = child_node.user_feedback_payload or ""
-            if not payload_text:
-                payload_text = execution_registry.get_termination_payload(execution_id) or ""
-            if payload_text:
-                child_node.is_user_feedback = True
-                child_node.user_feedback_payload = payload_text
-                child_node.user_feedback_pending = True
-                logger.info(
-                    "Attached termination payload (%s chars) to node %s after user kill.",
-                    len(payload_text),
-                    child_node.id,
-                )
-            if payload_text:
-                failure_reason = (
-                    "Execution terminated by user request. User feedback: " f"{payload_text}"
-                )
-            else:
-                failure_reason = "Execution terminated by user request."
-            exec_result = ExecutionResult(
-                term_out=[],
-                exec_time=term_exc.exec_time or 0.0,
-                exc_type="Terminated",
-            )
-        except ExecutionCrashedError as crash_exc:
-            exec_failed = True
-            failure_reason = "Execution process crashed unexpectedly."
-            exec_result = ExecutionResult(
-                term_out=[],
-                exec_time=crash_exc.exec_time or 0.0,
-                exc_type="Crashed",
-            )
-
-        if exec_failed or exec_result is None:
-            logger.warning(
-                "Skipping result analysis for execution_id=%s (terminated=%s).",
-                execution_id,
-                terminated_by_user,
-            )
-            child_node.metric = WorstMetricValue()
-            child_node.is_buggy = True
-            child_node.analysis = (
-                failure_reason
-                if failure_reason
-                else "Execution failed before metrics could be collected."
-            )
-            child_node.exec_time = exec_result.exec_time if exec_result else None
-            child_node.exc_type = exec_result.exc_type if exec_result else "Unknown"
-            if exec_result:
-                child_node._term_out = exec_result.term_out
-            child_node.exc_info = {}
-            child_node.exc_stack = []
-            child_node.is_buggy_plots = True
-        else:
-            _analyze_results_and_metrics(
-                worker_agent=worker_agent,
-                child_node=child_node,
-                parent_node=parent_node,
-                cfg=cfg,
-                working_dir=working_dir,
-                process_interpreter=process_interpreter,
-                seed_eval=seed_eval,
-                exec_result=exec_result,
-                event_callback=event_callback,
-            )
-
-            if not child_node.is_buggy:
-                if _should_run_plotting_and_vlm(stage_identifier=worker_agent.stage_identifier):
-                    _run_plotting_and_vlm(
-                        worker_agent=worker_agent,
-                        child_node=child_node,
-                        parent_node=parent_node,
-                        cfg=cfg,
-                        working_dir=working_dir,
-                        process_interpreter=process_interpreter,
-                        seed_eval=seed_eval,
-                        best_stage3_plot_code=best_stage3_plot_code,
-                        event_callback=event_callback,
-                    )
-                elif child_node.is_buggy_plots is None:
-                    # If plotting/VLM is skipped (e.g., Stage 1), treat plots as non-buggy
-                    child_node.is_buggy_plots = False
-
+        )
+        child_node.exc_info = exc_info or {}
+        child_node.metric = WorstMetricValue()
+        if parent_node is not None:
+            child_node.parent = parent_node
+        _move_experiment_artifacts(
+            cfg=cfg,
+            child_node=child_node,
+            working_dir=working_dir,
+            event_callback=event_callback,
+        )
         result_data = child_node.to_dict()
-        # sanity pickle
-
         pickle.dumps(result_data)
         return result_data
-    except Exception:
 
-        traceback.print_exc()
-        raise
-    finally:
-        if process_interpreter:
-            process_interpreter.cleanup_session()
+    node_result["id"] = execution_id
+    node_result["parent_id"] = None if parent_node is None else parent_node.id
+
+    contract_ctx = NodeResultContractContext(
+        stage_identifier=stage_identifier,
+        is_seed_aggregation=seed_aggregation is not None,
+        seed_eval=seed_eval,
+        seed_value=seed_value,
+        working_png_count=count_working_pngs(working_dir=working_dir),
+    )
+    contract_errors = validate_node_result_contract_for_stage(
+        node_result=node_result,
+        ctx=contract_ctx,
+    )
+    if contract_errors:
+        child_node = Node(
+            id=execution_id,
+            plan=str(node_result.get("plan") or ""),
+            code=str(node_result.get("code") or ""),
+            is_buggy=True,
+            is_buggy_plots=True,
+            analysis=(
+                "Codex node_result contract violation(s):\n- " + "\n- ".join(contract_errors)
+            ),
+            exc_type=exc_type or "CodexContractError",
+            exec_time=exec_time,
+        )
+        child_node.metric = WorstMetricValue()
+        if parent_node is not None:
+            child_node.parent = parent_node
+        child_node.absorb_exec_result(
+            SimpleNamespace(
+                term_out=term_out,
+                exec_time=exec_time,
+                exc_type=exc_type,
+                exc_info=exc_info,
+                exc_stack=None,
+            )
+        )
+        child_node.exc_info = exc_info or {}
+        _move_experiment_artifacts(
+            cfg=cfg,
+            child_node=child_node,
+            working_dir=working_dir,
+            event_callback=event_callback,
+        )
+        result_data = child_node.to_dict()
+        pickle.dumps(result_data)
+        return result_data
+
+    child_node = Node.from_dict(dict(node_result), journal=None)
+    child_node.absorb_exec_result(
+        SimpleNamespace(
+            term_out=term_out,
+            exec_time=exec_time,
+            exc_type=exc_type,
+            exc_info=exc_info,
+            exc_stack=None,
+        )
+    )
+    child_node.exec_time = exec_time
+    child_node.exc_type = exc_type
+    child_node.exc_info = exc_info or {}
+    if child_node.metric is None:
+        child_node.metric = WorstMetricValue()
+        child_node.is_buggy = True if child_node.is_buggy is None else child_node.is_buggy
+
+    _move_experiment_artifacts(
+        cfg=cfg,
+        child_node=child_node,
+        working_dir=working_dir,
+        event_callback=event_callback,
+    )
+
+    result_data = child_node.to_dict()
+    pickle.dumps(result_data)
+    return result_data
 
 
 def process_node_task(task: NodeTask) -> dict[str, object]:
-    """
-    Pickle/type-checker friendly wrapper for ProcessPoolExecutor submission.
-
-    We submit a single dict positional arg to the executor, then call the keyword-only
-    `process_node` using named args.
-    """
     return process_node(
         node_data=task["node_data"],
         task_desc=task["task_desc"],
+        evaluation_metric_spec=task["evaluation_metric_spec"],
         cfg=task["cfg"],
-        evaluation_metrics=task["evaluation_metrics"],
         memory_summary=task["memory_summary"],
         stage_identifier=task["stage_identifier"],
         seed_eval=task["seed_eval"],
+        seed_value=task["seed_value"],
+        seed_aggregation=task["seed_aggregation"],
         event_callback=task["event_callback"],
         gpu_id=task["gpu_id"],
-        new_ablation_idea=task["new_ablation_idea"],
-        new_hyperparam_idea=task["new_hyperparam_idea"],
-        best_stage3_plot_code=task["best_stage3_plot_code"],
         execution_id=task["execution_id"],
         user_feedback_payload=task["user_feedback_payload"],
     )

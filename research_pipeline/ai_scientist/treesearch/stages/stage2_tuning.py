@@ -1,43 +1,17 @@
-import logging
-from typing import ClassVar, List, Protocol, Tuple
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import logging
+from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
-from ..journal import Journal, Node
+from ..journal import Journal
+from ..node_result_contract import NodeResultContractContext, is_non_empty_string
 from ..stage_identifiers import StageIdentifier
-from ..types import PromptType
 from ..utils.config import Config as AppConfig
-from ..utils.response import wrap_code
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
-
-
-class HyperparamTuningIdea(BaseModel):
-    name: str = Field(
-        description=(
-            "A short, descriptive name for the proposed hyperparameter tuning idea. "
-            "It should clearly identify which hyperparameter is being tuned."
-        ),
-    )
-    description: str = Field(
-        description=(
-            "A brief description (3-5 sentences) of which hyperparameter is being tuned, how it will be changed, "
-            "and why this change is expected to improve performance."
-        ),
-    )
-
-
-class SupportsStage2Agent(Protocol):
-    def plan_and_code_query(
-        self,
-        *,
-        prompt: PromptType,
-        retries: int = 3,
-        enforce_gpu: bool,
-    ) -> Tuple[str, str]: ...
 
 
 class Stage2Tuning(Stage):
@@ -54,121 +28,6 @@ class Stage2Tuning(Stage):
     _stage_completion_cache: dict[str, tuple[bool, str]] = {}
 
     @staticmethod
-    def build_hyperparam_tuning_node(
-        *, agent: SupportsStage2Agent, parent_node: Node, hyperparam_idea: HyperparamTuningIdea
-    ) -> Node:
-        prompt: PromptType = {
-            "Introduction": (
-                "You are an experienced AI researcher. You are provided with a previously developed "
-                "baseline implementation. Your task is to implement hyperparameter tuning for the following idea: "
-                + hyperparam_idea.name
-                + ". "
-                + hyperparam_idea.description
-            ),
-            "Base code you are working on": wrap_code(parent_node.code),
-            "Feedback about execution time": parent_node.exec_time_feedback,
-            "Instructions": {},
-        }
-        if parent_node.user_feedback_payload:
-            prompt["User feedback"] = parent_node.user_feedback_payload
-        hp_instructions: dict[str, str | list[str]] = {}
-        hp_instructions |= {
-            "Implementation guideline": [
-                "The code should be a single-file python program that is self-contained and can be executed as-is.",
-                "No parts of the code should be skipped, don't terminate the code execution before finishing the script.",
-                "Data saving requirements:",
-                "- Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using np.save()",
-                "- Use the following naming convention for saved files:",
-                "  ```python",
-                "  # At the start of your code",
-                "  experiment_data = {",
-                "      'hyperparam_tuning_type_1': {",
-                "          'dataset_name_1': {",
-                "              'metrics': {'train': [], 'val': []},",
-                "              'losses': {'train': [], 'val': []},",
-                "              'predictions': [],",
-                "              'ground_truth': [],",
-                "          },",
-                "      },",
-                "  }",
-                "Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
-            ]
-        }
-        prompt["Instructions"] = hp_instructions
-        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
-        logger.debug("----- LLM code start (stage2 tuning) -----")
-        logger.debug(code)
-        logger.debug("----- LLM code end (stage2 tuning) -----")
-        return Node(
-            plan="Hyperparam tuning name: " + hyperparam_idea.name + ".\n" + plan,
-            code=code,
-            parent=parent_node,
-            hyperparam_name=hyperparam_idea.name,
-        )
-
-    @staticmethod
-    def propose_next_hyperparam_idea(
-        *, base_stage1_code: str, tried: List[str], model: str, temperature: float
-    ) -> HyperparamTuningIdea:
-        hyperparam_tuning_prompt: dict[str, object] = {
-            "Introduction": (
-                "You are an AI researcher conducting hyperparameter tuning for baseline experiments. "
-                "Based on the current implementation and previous hyperparameter tuning attempts (if any), "
-                "propose ONE new hyperparameter tuning idea to see if it improves the performance."
-                "You should first check if simply training longer (more epochs) improves the performance."
-                "Then try tuning common hyperparameters such as learning rate, batch size, etc."
-                "Only propose algorithm-specific and/or model-specific hyperparameters after you have tried the above."
-            ),
-            "Base code you are working on": wrap_code(base_stage1_code),
-            "Previous Hyperparam Tuning Attempts": {
-                "Has been tried": tried if tried else "Nothing has been tried yet.",
-            },
-            "Instructions": {
-                "Requirements": [
-                    "1. Identify ONE specific hyperparameter to tune.",
-                    "2. Ensure the hyperparameter is different from previous attempts.",
-                ]
-            },
-        }
-
-        retry_count = 0
-        retry_limit = 5
-        while retry_count < retry_limit:
-            try:
-                result = structured_query_with_schema(
-                    system_message=hyperparam_tuning_prompt,
-                    model=model,
-                    temperature=temperature,
-                    schema_class=HyperparamTuningIdea,
-                )
-            except Exception:
-                retry_count += 1
-                continue
-
-            name = result.name.strip()
-            description = result.description.strip()
-            if name and description:
-                return HyperparamTuningIdea(name=name, description=description)
-
-            retry_count += 1
-
-        return HyperparamTuningIdea(
-            name="increase learning rate", description="increase learning rate"
-        )
-
-    @staticmethod
-    def update_hyperparam_state(
-        *, stage_identifier: StageIdentifier, result_node: Node, state_set: set[str]
-    ) -> None:
-        if stage_identifier is not StageIdentifier.STAGE2:
-            return
-        hyperparam_name = result_node.hyperparam_name
-        if hyperparam_name is None:
-            return
-        if not result_node.is_buggy:
-            state_set.add(hyperparam_name)
-
-    @staticmethod
     def compute_substage_completion(
         *, goals: str, journal: Journal, cfg: AppConfig
     ) -> tuple[bool, str]:
@@ -180,13 +39,15 @@ class Stage2Tuning(Stage):
         cached = Stage2Tuning._substage_completion_cache.get(cache_key)
         if cached is not None:
             logger.debug(
-                f"Stage2 substage-completion cache HIT for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Goals unchanged. Skipping LLM."
+                "Stage2 substage-completion cache HIT for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return cached
         logger.debug(
-            f"Stage2 substage-completion cache MISS for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
+            "Stage2 substage-completion cache MISS for best_node=%s (metric=%s). Invoking LLM.",
+            best_node.id[:8],
+            metric_val,
         )
         eval_prompt = f"""
         Evaluate if Stage 2 (baseline tuning) sub-stage is complete.
@@ -209,16 +70,19 @@ class Stage2Tuning(Stage):
             result = True, str(evaluation.reasoning or "sub-stage complete")
             Stage2Tuning._substage_completion_cache[cache_key] = result
             logger.debug(
-                f"Stage2 substage-completion result cached for best_node={best_node.id[:8]} "
-                f"(metric={metric_val})."
+                "Stage2 substage-completion result cached for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return result
         missing = ", ".join(evaluation.missing_criteria)
         result = False, "Missing criteria: " + missing
         Stage2Tuning._substage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage2 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Missing: {missing}"
+            "Stage2 substage-completion result cached (incomplete) for best_node=%s (metric=%s). Missing: %s",
+            best_node.id[:8],
+            metric_val,
+            missing,
         )
         return result
 
@@ -230,19 +94,20 @@ class Stage2Tuning(Stage):
         if best_node == journal.nodes[0]:
             return False, "No improvement from base node"
         metric_val = best_node.metric.value if best_node.metric is not None else None
-        # Static requirement goals for Stage 2 completion encoded as a short signature
         goals_sig = "stable_convergence;two_datasets;no_training_instabilities"
         cache_key = f"stage=2_stage|id={best_node.id}|metric={metric_val}|goals={goals_sig}"
         cached = Stage2Tuning._stage_completion_cache.get(cache_key)
         if cached is not None:
             logger.debug(
-                f"Stage2 stage-completion cache HIT for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Requirements unchanged. Skipping LLM."
+                "Stage2 stage-completion cache HIT for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return cached
         logger.debug(
-            f"Stage2 stage-completion cache MISS for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Requirements changed or new best node. Invoking LLM."
+            "Stage2 stage-completion cache MISS for best_node=%s (metric=%s). Invoking LLM.",
+            best_node.id[:8],
+            metric_val,
         )
         eval_prompt = f"""
         Evaluate if Stage 2 (baseline tuning) is complete based on the following evidence:
@@ -267,25 +132,28 @@ class Stage2Tuning(Stage):
             result = True, str(evaluation.reasoning or "stage complete")
             Stage2Tuning._stage_completion_cache[cache_key] = result
             logger.debug(
-                f"Stage2 stage-completion result cached for best_node={best_node.id[:8]} "
-                f"(metric={metric_val})."
+                "Stage2 stage-completion result cached for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return result
         missing = ", ".join(evaluation.missing_criteria)
         result = False, "Missing criteria: " + missing
         Stage2Tuning._stage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage2 stage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Missing: {missing}"
+            "Stage2 stage-completion result cached (incomplete) for best_node=%s (metric=%s). Missing: %s",
+            best_node.id[:8],
+            metric_val,
+            missing,
         )
         return result
 
-    def evaluate_substage_completion(self) -> tuple[bool, str]:
+    def evaluate_substage_completion(self) -> Tuple[bool, str]:
         return Stage2Tuning.compute_substage_completion(
             goals=self._meta.goals, journal=self._context.journal, cfg=self._context.cfg
         )
 
-    def evaluate_stage_completion(self) -> tuple[bool, str]:
+    def evaluate_stage_completion(self) -> Tuple[bool, str]:
         return Stage2Tuning.compute_stage_completion(
             journal=self._context.journal, cfg=self._context.cfg
         )
@@ -308,9 +176,22 @@ class Stage2Tuning(Stage):
             self._set_skip_state(can_skip=False, reason=reason)
             return
         reason = "Stage 2 has a working node."
-        logger.info(
-            "Stage 2 skip allowed: %s (best_node=%s)",
-            reason,
-            best_node_id,
-        )
+        logger.info("Stage 2 skip allowed: %s (best_node=%s)", reason, best_node_id)
         self._set_skip_state(can_skip=True, reason=reason)
+
+
+def codex_node_result_contract_prompt_lines() -> list[str]:
+    return [
+        "- Stage-specific required fields:",
+        "  - Stage 2: `hyperparam_name` must be a non-empty string.",
+    ]
+
+
+def validate_node_result_contract(
+    *, node_result: dict[str, object], ctx: NodeResultContractContext
+) -> list[str]:
+    errors: list[str] = []
+    del ctx
+    if not is_non_empty_string(value=node_result.get("hyperparam_name")):
+        errors.append("Stage2 requires hyperparam_name to be a non-empty string")
+    return errors

@@ -13,7 +13,10 @@ High-level responsibilities:
 import copy
 import json
 import logging
+import os
 import pickle
+import shutil
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +24,6 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple
 
 from pydantic import BaseModel
 
-from ai_scientist.llm import structured_query_with_schema
 from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
@@ -34,7 +36,6 @@ from ai_scientist.treesearch.events import (
 from . import stage_control
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
-from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent
 from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stage_identifiers import StageIdentifier
@@ -114,6 +115,105 @@ class AgentManager:
         self._forced_stage_completion_reasons: Dict[str, str] = {}
         self._stage_skip_states: Dict[str, bool] = {}
         stage_control.reset_stage_state()
+        self.evaluation_metric_spec = self._define_global_evaluation_metric_spec()
+
+    def _define_global_evaluation_metric_spec(self) -> dict[str, object]:
+        """
+        Define the run-wide evaluation metric spec before any experiment code is generated.
+
+        Historically this was done via an LLM call; in Codex-only mode we use `codex exec`
+        with an output schema to keep the result machine-readable.
+        """
+        codex_path = shutil.which("codex")
+        if not codex_path:
+            raise RuntimeError("`codex` not found in PATH; cannot define evaluation metric spec.")
+
+        schema_path = (self.workspace_dir / "evaluation_metric_schema.json").resolve()
+        schema_path.write_text(
+            json.dumps(
+                {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "maximize": {"type": "boolean"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["name", "maximize", "description"],
+                    "additionalProperties": False,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        prompt = (
+            "You are defining the single primary evaluation metric for an automated research run.\n"
+            "Return JSON that matches the provided schema.\n\n"
+            "Guidelines:\n"
+            "- Pick ONE metric that best captures success for this research idea.\n"
+            "- It must be computable from experiment outputs.\n"
+            "- If unsure, prefer a standard validation-set metric.\n\n"
+            f"Research idea:\n{self.task_desc.title}\n\n{self.task_desc.abstract}\n\n"
+            f"Hypothesis:\n{self.task_desc.short_hypothesis}\n"
+        )
+
+        try:
+            self.event_callback(
+                RunLogEvent(
+                    message="Defining global evaluation metric spec via Codex...", level="info"
+                )
+            )
+        except (OSError, RuntimeError, ValueError, TypeError):
+            logger.exception("Failed to emit run log event for metric definition.")
+
+        env = dict(**os.environ)
+        env["CI"] = "1"
+        env["NO_UPDATE_NOTIFIER"] = "1"
+        env["DISABLE_UPDATE_NOTIFIER"] = "1"
+        env["npm_config_update_notifier"] = "false"
+
+        result = subprocess.run(
+            [
+                "codex",
+                "exec",
+                "--full-auto",
+                "--sandbox",
+                "danger-full-access",
+                "--skip-git-repo-check",
+                "--output-schema",
+                str(schema_path),
+                prompt,
+            ],
+            cwd=str(self.workspace_dir),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Codex failed to define evaluation metric spec. "
+                f"returncode={result.returncode} stderr_tail={result.stderr[-500:]}"
+            )
+
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Codex metric spec output was not JSON: {result.stdout[:500]}"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(f"Codex metric spec output was not an object: {parsed!r}")
+        # Basic validation
+        if not isinstance(parsed.get("name"), str) or not parsed.get("name"):
+            raise RuntimeError(f"Invalid metric spec name: {parsed!r}")
+        if not isinstance(parsed.get("maximize"), bool):
+            raise RuntimeError(f"Invalid metric spec maximize: {parsed!r}")
+        if not isinstance(parsed.get("description"), str) or not parsed.get("description"):
+            raise RuntimeError(f"Invalid metric spec description: {parsed!r}")
+        return parsed
 
     def get_max_iterations(self, *, stage_identifier: StageIdentifier) -> int:
         """Get max iterations for a stage from config."""
@@ -349,6 +449,7 @@ Your research idea:\n\n
             "cfg": self.cfg,
             "workspace_dir": self.workspace_dir,
             "current_stage": self.current_stage,
+            "evaluation_metric_spec": self.evaluation_metric_spec,
         }
         logger.info(f"Saving checkpoint to {save_path}")
         with open(save_path, "wb") as f:
@@ -397,6 +498,7 @@ Your research idea:\n\n
         # Construct the worker agent for this substage
         return ParallelAgent(
             task_desc=task_desc,
+            evaluation_metric_spec=self.evaluation_metric_spec,
             cfg=stage_cfg,
             journal=self.journals[stage.name],
             stage_identifier=stage.identifier,
@@ -483,59 +585,21 @@ Your research idea:\n\n
         issues = identify_issues(journal=journal)
         progress = analyze_progress(journal=journal)
 
-        # Create prompt for the LLM
         best_metric = metrics.get("best_metric")
         best_value_str = "N/A"
         if isinstance(best_metric, dict):
             val = best_metric.get("value")
             best_value_str = str(val) if val is not None else "N/A"
-        prompt = f"""
-        Based on the current experimental progress, generate focused goals for the next sub-stage.
 
-        Main Stage Goals:
-        {main_stage_goal}
-
-        Current Progress:
-        - Total attempts: {metrics['total_nodes']}
-        - Successful implementations: {metrics['good_nodes']}
-        - Best performance: {best_value_str}
-        - Convergence status: {progress['convergence_status']}
-
-        Current Issues:
-        {json.dumps(issues, indent=2)}
-
-        Recent Changes:
-        {json.dumps(progress['recent_changes'], indent=2)}
-
-        Generate specific, actionable sub-stage goals that:
-        1. Address current issues and limitations
-        2. Build on recent progress
-        3. Move towards main stage goals
-        4. Are concrete and measurable
-        """
-
-        try:
-            # Get response from LLM
-            response = structured_query_with_schema(
-                system_message=prompt,
-                user_message=None,
-                model=self.cfg.agent.feedback.model,
-                temperature=self.cfg.agent.feedback.temperature,
-                schema_class=SubstageGoalResponse,
-            )
-            goal_str = f"""
-            {response.goals}
-            """
-
-            return goal_str.strip()
-
-        except Exception:
-            logger.exception("Error generating sub-stage goals")
-            # Provide fallback goals if LLM fails
-            return """
-            Sub-stage Goals:
-            Continue progress on main stage objectives while addressing current issues.
-            """.strip()
+        top_issues = json.dumps(issues, indent=2)[:800]
+        recent_changes = json.dumps(progress.get("recent_changes", []), indent=2)[:800]
+        return (
+            "Sub-stage Goals:\n"
+            f"- Maintain alignment with main stage goals:\n{main_stage_goal}\n"
+            f"- Improve best metric (current best: {best_value_str})\n"
+            f"- Address top issues:\n{top_issues}\n"
+            f"- Continue iterating based on recent changes:\n{recent_changes}\n"
+        ).strip()
 
     def _create_next_substage(
         self, current_substage: StageMeta, journal: Journal
@@ -608,7 +672,7 @@ Your research idea:\n\n
         current_substage: StageMeta,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
     ) -> bool:
-        """Run multi-seed evaluation and plot aggregation when a main stage completes.
+        """Run multi-seed evaluation (and a Codex seed aggregation task) when a main stage completes.
 
         Returns True on success, False if a required best node could not be found.
         """
@@ -619,10 +683,7 @@ Your research idea:\n\n
             )
             return False
 
-        seed_nodes = agent._run_multi_seed_evaluation(best_node)
-        if step_callback:
-            step_callback(current_substage, self.journals[current_substage.name])
-        run_plot_aggregation(agent=agent, node=best_node, seed_nodes=seed_nodes)
+        agent._run_multi_seed_evaluation(best_node)
         if step_callback:
             step_callback(current_substage, self.journals[current_substage.name])
         logger.info(f"Stage {current_substage.name} multi-seed eval done.")
