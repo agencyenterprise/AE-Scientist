@@ -515,9 +515,10 @@ Your research idea:\n\n
         self, current_substage: StageMeta, journal: Journal
     ) -> Tuple[bool, str]:
         """Check if the current sub-stage is complete"""
-        # Terminate if max iterations reached
+        # Terminate if max iterations reached (count attempts, not nodes).
         limit = current_substage.max_iterations
-        if len(journal.nodes) >= limit:
+        current_iter = self.get_attempt_iteration(stage_name=current_substage.name)
+        if current_iter >= limit:
             logger.info(f"Stage {current_substage.name} completed: reached max iterations")
             return True, "Reached max iterations"
         stage_obj = self._build_stage_impl(current_substage, journal)
@@ -526,9 +527,10 @@ Your research idea:\n\n
     def _check_stage_completion(self, stage: StageMeta) -> Tuple[bool, str]:
         """Check if current stage is complete based on criteria"""
         journal = self.journals[stage.name]
-        # Terminate if max iterations reached
+        # Terminate if max iterations reached (count attempts, not nodes).
         limit = stage.max_iterations
-        if len(journal.nodes) >= limit:
+        current_iter = self.get_attempt_iteration(stage_name=stage.name)
+        if current_iter >= limit:
             logger.info(f"Stage {stage.name} completed: reached max iterations")
             if stage.identifier is StageIdentifier.STAGE1:
                 # For initial stage, if it didn't even find a working implementation until max iterations,

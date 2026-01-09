@@ -4,6 +4,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, cast
 
@@ -287,6 +288,8 @@ class Node(DataClassJsonMixin):
     @classmethod
     def from_dict(cls, data: dict, journal: Optional["Journal"] = None) -> "Node":
         """Create a Node from a dictionary, optionally linking to journal for relationships"""
+        # Work on a copy: callers may reuse the original dict (e.g. for logging).
+        data = dict(data)
         # Remove relationship IDs from constructor data
         parent_id = data.pop("parent_id", None)
         data.pop("children", [])
@@ -307,8 +310,10 @@ class Node(DataClassJsonMixin):
                     WorstMetricValue() if data.get("is_buggy") else MetricValue(metric_data)
                 )
 
-        # Create node instance
-        node = cls(**data)
+        # Create node instance (ignore unknown keys)
+        allowed_keys = {f.name for f in dataclass_fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in allowed_keys}
+        node = cls(**filtered)
 
         # If journal is provided, restore relationships
         if journal is not None and isinstance(parent_id, str):

@@ -170,7 +170,7 @@ Key behavior:
 - File: `research_pipeline/ai_scientist/treesearch/worker_process.py`
 - Role:
   - Prepare workspace and working directory (`process_{id}/working`)
-  - Create/reuse a per-workspace `.venv` for Codex (and enforce it via env variables)
+  - Create/reuse a shared `research_pipeline/.venv` for Codex (and enforce it via env variables)
   - Write:
     - `codex_input.json` (structured context)
     - `codex_task.md` (instructions)

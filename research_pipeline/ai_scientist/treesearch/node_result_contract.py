@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
+from .journal import Node
 from .stage_identifiers import StageIdentifier
 
 
@@ -55,14 +57,31 @@ def codex_node_result_contract_prompt_lines_common() -> list[str]:
         "  - `vlm_feedback`: object/dict (can be empty `{}`)",
         "  - `datasets_successfully_tested`: list of strings (can be empty)",
         "  - `is_seed_agg_node`: boolean (false for normal runs; true only for seed aggregation runs)",
+        "- Do not add extra top-level keys to `node_result.json` beyond the Node schema; unexpected keys are treated as contract violations.",
         "- If `seed_eval` is true, you MUST include `is_seed_node=true`.",
     ]
+
+
+def _unexpected_node_result_keys(*, node_result: dict[str, object]) -> list[str]:
+    allowed = {f.name for f in dataclass_fields(Node)}
+    # Serialized form includes relationship IDs rather than `parent`/`children` objects.
+    allowed.add("parent_id")
+    allowed.add("children")
+    # Metric is serialized as a nested object/dict in node_result.json.
+    allowed.add("metric")
+
+    extras = sorted({str(k) for k in node_result.keys()} - allowed)
+    if not extras:
+        return []
+    return [f"Unexpected key(s) in node_result.json: {extras}. Remove them."]
 
 
 def validate_common_node_result_contract(
     *, node_result: dict[str, object], ctx: NodeResultContractContext
 ) -> list[str]:
     errors: list[str] = []
+
+    errors.extend(_unexpected_node_result_keys(node_result=node_result))
 
     if not isinstance(node_result.get("is_buggy_plots"), bool):
         errors.append("is_buggy_plots must be a boolean (true/false)")

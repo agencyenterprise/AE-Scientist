@@ -5,6 +5,7 @@ import os
 import pickle
 import subprocess
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,6 +47,7 @@ logger = logging.getLogger("ai-scientist")
 WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
 _MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
 _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
+RESEARCH_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _legacy_available_datasets_text(*, environment_context: dict[str, object]) -> str:
@@ -494,15 +496,22 @@ def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[Path, Path]:
     return workspace_path, working_dir_path
 
 
-def _ensure_codex_venv(*, workspace_dir: Path) -> Path:
-    venv_dir = workspace_dir / ".venv"
+def _ensure_codex_venv(*, research_pipeline_root: Path) -> Path:
+    """
+    Ensure a shared Codex venv exists for the research_pipeline codebase.
+
+    We intentionally avoid creating per-workspace venvs (e.g. per process workspace) because that
+    leads to repeated installs across runs. Instead, Codex is run with env vars that point to this
+    shared venv so `python` / `pip` resolve consistently.
+    """
+    venv_dir = research_pipeline_root / ".venv"
     venv_python = venv_dir / "bin" / "python"
     if venv_python.exists():
         return venv_dir
     subprocess.run(
         [sys.executable, "-m", "venv", str(venv_dir)],
         check=True,
-        cwd=str(workspace_dir),
+        cwd=str(research_pipeline_root),
         env=os.environ.copy(),
         capture_output=True,
         text=True,
@@ -601,11 +610,11 @@ def _write_codex_task_file(
     agent_file_name: str,
     input_json_file: Path,
     output_json_file: Path,
+    venv_dir: Path,
     cfg: AppConfig,
 ) -> Path:
     task_path = workspace_dir / "codex_task.md"
-    # Legacy prompt parity: construct a prompt-like payload in the task file so Codex sees
-    # the same guidance the previous LLM agent saw (across all stages).
+    # Construct a prompt-like payload in the task file so Codex has all needed context.
     # We embed the key sections as markdown; Codex reads task_file as plain text.
     try:
         input_obj = json.loads((workspace_dir / input_json_file.name).read_text(encoding="utf-8"))
@@ -626,33 +635,35 @@ def _write_codex_task_file(
         base_code = str(parent_node_obj.get("code") or "")
         exec_time_feedback = str(parent_node_obj.get("exec_time_feedback") or "")
 
-    legacy_sections: list[str] = []
-    legacy_sections.append("## Legacy prompt parity (for Codex)")
-    legacy_sections.append("")
-    legacy_sections.append("### Introduction")
-    legacy_sections.append(_legacy_stage_intro(stage_identifier=stage_identifier))
-    legacy_sections.append("")
-    legacy_sections.append("### Research idea")
-    legacy_sections.append(str(input_obj.get("research_idea") or "").strip())
-    legacy_sections.append("")
-    legacy_sections.append("### Memory")
-    legacy_sections.append(memory_summary if memory_summary else "(empty)")
-    legacy_sections.append("")
-    legacy_sections.append("### Installed Packages")
-    legacy_sections.append(
-        "Use any packages available in the environment (inspect/install as needed)."
+    context_sections: list[str] = []
+    context_sections.append("## Task context")
+    context_sections.append("")
+    context_sections.append("### Introduction")
+    context_sections.append(_legacy_stage_intro(stage_identifier=stage_identifier))
+    context_sections.append("")
+    context_sections.append("### Research idea")
+    context_sections.append(str(input_obj.get("research_idea") or "").strip())
+    context_sections.append("")
+    context_sections.append("### Memory")
+    context_sections.append(memory_summary if memory_summary else "(empty)")
+    context_sections.append("")
+    context_sections.append("### Installed Packages")
+    context_sections.append(
+        "A Python virtualenv is already set up and active at "
+        f"`{venv_dir}` (so `python` / `pip` resolve to that environment). "
+        "Reuse it; do not create a new venv. Install missing packages into this venv only if required."
         + _legacy_gpu_text(environment_context=env_ctx_dict)
         + _legacy_storage_text(environment_context=env_ctx_dict)
     )
-    legacy_sections.append("")
-    legacy_sections.append("### Available Datasets")
-    legacy_sections.append(_legacy_available_datasets_text(environment_context=env_ctx_dict))
-    legacy_sections.append("")
-    legacy_sections.append("### Evaluation Metric(s)")
-    legacy_sections.append(eval_metric_str if eval_metric_str else "(none)")
-    legacy_sections.append("")
-    legacy_sections.append("### Implementation guideline")
-    legacy_sections.extend(
+    context_sections.append("")
+    context_sections.append("### Available Datasets")
+    context_sections.append(_legacy_available_datasets_text(environment_context=env_ctx_dict))
+    context_sections.append("")
+    context_sections.append("### Evaluation Metric(s)")
+    context_sections.append(eval_metric_str if eval_metric_str else "(none)")
+    context_sections.append("")
+    context_sections.append("### Implementation guideline")
+    context_sections.extend(
         [
             f"- {line}"
             for line in _legacy_impl_guideline_lines(cfg=cfg, environment_context=env_ctx_dict)
@@ -660,16 +671,16 @@ def _write_codex_task_file(
     )
 
     if stage_identifier is StageIdentifier.STAGE1:
-        legacy_sections.append("")
-        legacy_sections.append("### Experiment design sketch guideline (Stage 1 baseline)")
-        legacy_sections.extend(
+        context_sections.append("")
+        context_sections.append("### Experiment design sketch guideline (Stage 1 baseline)")
+        context_sections.extend(
             [f"- {line}" for line in _legacy_stage1_design_sketch_guideline_lines()]
         )
 
     if stage_identifier is StageIdentifier.STAGE2:
-        legacy_sections.append("")
-        legacy_sections.append("### Stage 2 hyperparameter-tuning requirements (legacy parity)")
-        legacy_sections.extend(
+        context_sections.append("")
+        context_sections.append("### Stage 2 hyperparameter-tuning requirements")
+        context_sections.extend(
             [
                 "- DO NOT change model architecture from the previous stage.",
                 "- Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.",
@@ -690,9 +701,9 @@ def _write_codex_task_file(
         )
 
     if stage_identifier is StageIdentifier.STAGE4:
-        legacy_sections.append("")
-        legacy_sections.append("### Stage 4 ablation requirements (legacy parity)")
-        legacy_sections.extend(
+        context_sections.append("")
+        context_sections.append("### Stage 4 ablation requirements")
+        context_sections.extend(
             [
                 "- Choose ONE ablation idea for this run and set `ablation_name` in node_result.json accordingly.",
                 "- Save data in `working/experiment_data.npy` with a structure like:",
@@ -712,29 +723,29 @@ def _write_codex_task_file(
         )
 
     if base_code.strip():
-        legacy_sections.append("")
-        legacy_sections.append("### Base code you are working on (from parent node)")
-        legacy_sections.append("```python")
-        legacy_sections.append(base_code.rstrip())
-        legacy_sections.append("```")
+        context_sections.append("")
+        context_sections.append("### Base code you are working on (from parent node)")
+        context_sections.append("```python")
+        context_sections.append(base_code.rstrip())
+        context_sections.append("```")
     if exec_time_feedback.strip():
-        legacy_sections.append("")
-        legacy_sections.append("### Feedback about execution time")
-        legacy_sections.append(exec_time_feedback.strip())
+        context_sections.append("")
+        context_sections.append("### Feedback about execution time")
+        context_sections.append(exec_time_feedback.strip())
     if user_feedback_payload:
-        legacy_sections.append("")
-        legacy_sections.append("### User feedback")
-        legacy_sections.append(user_feedback_payload)
+        context_sections.append("")
+        context_sections.append("### User feedback")
+        context_sections.append(user_feedback_payload)
 
     if stage_identifier in (StageIdentifier.STAGE3, StageIdentifier.STAGE4):
-        legacy_sections.append("")
-        legacy_sections.append("### Plotting code guideline (legacy)")
+        context_sections.append("")
+        context_sections.append("### Plotting code guideline")
         experiment_code_hint = (
             "Use the final experiment code you wrote in the agent file to infer what data exists in experiment_data.npy."
             if not base_code
             else base_code
         )
-        legacy_sections.extend(
+        context_sections.extend(
             [
                 f"- {line}"
                 for line in _legacy_plotting_guideline_lines(
@@ -742,7 +753,7 @@ def _write_codex_task_file(
                 )
             ]
         )
-    legacy_prompt_block = "\n".join(legacy_sections).strip() + "\n\n"
+    context_block = "\n".join(context_sections).strip() + "\n\n"
 
     is_seed_aggregation = isinstance(input_obj.get("seed_aggregation"), dict)
     if is_seed_aggregation:
@@ -779,7 +790,7 @@ def _write_codex_task_file(
         "- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).\\n"
         "- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.\\n\\n"
         f"{contract_block}"
-        "## Hard requirements (ported from the legacy code-generation agent)\\n"
+        "## Hard requirements\\n"
         "- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.\\n"
         "- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.\\n"
         "- Avoid re-downloading data if it's already present in the dataset caches described in `codex_input.json`.\\n\\n"
@@ -806,7 +817,7 @@ def _write_codex_task_file(
         f"- Run the final experiment with: `python {agent_file_name}`.\\n"
         "- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.\\n"
     )
-    task_path.write_text(legacy_prompt_block + task_text, encoding="utf-8")
+    task_path.write_text(context_block + task_text, encoding="utf-8")
     return task_path
 
 
@@ -890,7 +901,7 @@ def process_node(
     process_id = multiprocessing.current_process().name
     workspace_dir, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
-    venv_dir = _ensure_codex_venv(workspace_dir=workspace_dir)
+    venv_dir = _ensure_codex_venv(research_pipeline_root=RESEARCH_PIPELINE_ROOT)
     codex_env = _build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)
@@ -924,6 +935,7 @@ def process_node(
         agent_file_name=cfg.exec.agent_file_name,
         input_json_file=input_json_file,
         output_json_file=output_json_file,
+        venv_dir=venv_dir,
         cfg=cfg,
     )
 
@@ -1067,7 +1079,28 @@ def process_node(
         pickle.dumps(result_data)
         return result_data
 
-    child_node = Node.from_dict(dict(node_result), journal=None)
+    try:
+        child_node = Node.from_dict(dict(node_result), journal=None)
+    except Exception as exc:
+        # Never crash the worker on schema drift: mark the node buggy and return a valid Node dict.
+        tb = traceback.format_exc()
+        child_node = Node(
+            id=execution_id,
+            plan=str(node_result.get("plan") or ""),
+            code=str(node_result.get("code") or ""),
+            is_buggy=True,
+            is_buggy_plots=True,
+            analysis=(
+                "Failed to parse node_result.json into Node.\n"
+                f"Exception: {exc}\n\n"
+                f"Traceback:\n{tb}"
+            ),
+            exc_type=exc_type or "NodeParseError",
+            exec_time=exec_time,
+        )
+        child_node.metric = WorstMetricValue()
+        if parent_node is not None:
+            child_node.parent = parent_node
     child_node.absorb_exec_result(
         SimpleNamespace(
             term_out=term_out,
