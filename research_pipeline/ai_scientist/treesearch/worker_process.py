@@ -517,6 +517,9 @@ def _build_codex_env(*, venv_dir: Path) -> dict[str, str]:
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     env["PIP_REQUIRE_VIRTUALENV"] = "1"
     env["PYTHONNOUSERSITE"] = "1"
+    openai_api_key = env.get("OPENAI_API_KEY")
+    if openai_api_key:
+        env["CODEX_API_KEY"] = openai_api_key
     # Encourage CLI tools to behave in non-interactive / CI mode.
     env["CI"] = "1"
     env["NO_UPDATE_NOTIFIER"] = "1"

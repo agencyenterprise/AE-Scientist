@@ -167,6 +167,9 @@ class AgentManager:
             logger.exception("Failed to emit run log event for metric definition.")
 
         env = dict(**os.environ)
+        openai_api_key = env.get("OPENAI_API_KEY")
+        if openai_api_key:
+            env["CODEX_API_KEY"] = openai_api_key
         env["CI"] = "1"
         env["NO_UPDATE_NOTIFIER"] = "1"
         env["DISABLE_UPDATE_NOTIFIER"] = "1"

@@ -38,6 +38,9 @@ def _build_research_pipeline_venv_env(*, research_pipeline_root: Path) -> dict[s
     env["NO_UPDATE_NOTIFIER"] = "1"
     env["DISABLE_UPDATE_NOTIFIER"] = "1"
     env["npm_config_update_notifier"] = "false"
+    openai_api_key = env.get("OPENAI_API_KEY")
+    if openai_api_key:
+        env["CODEX_API_KEY"] = openai_api_key
     return env
 
 
