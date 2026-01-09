@@ -725,11 +725,12 @@ async def launch_research_pipeline_run(
 
     creator = RunPodManager(api_key=runpod_api_key)
     github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
+    runpod_repo_branch = os.environ.get("RUN_POD_REPO_BRANCH", "main")
     pod_env = {
         "GIT_SSH_KEY_B64": github_key_b64,
         "REPO_NAME": "AE-Scientist",
         "REPO_ORG": "agencyenterprise",
-        "REPO_BRANCH": "main",
+        "REPO_BRANCH": runpod_repo_branch,
     }
     if not gpu_types:
         raise ValueError("At least one GPU type must be provided when launching a pod.")
