@@ -9,10 +9,10 @@ import logging
 from typing import Optional
 
 from app.config import settings
+from app.services.clerk_service import ClerkService
 from app.services.database import get_database
 from app.services.database.users import UserData
 from app.services.google_oauth_service import GoogleOAuthService
-from app.services.clerk_service import ClerkService
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class AuthService:
             logger.exception(f"Error authenticating with Google: {e}")
             return None
 
-    def authenticate_with_clerk(self, session_token: str) -> Optional[dict]:
+    async def authenticate_with_clerk(self, session_token: str) -> Optional[dict]:
         """
         Authenticate user with Clerk session token.
 
@@ -106,12 +106,12 @@ class AuthService:
                 return None
 
             # Check if user already exists by Clerk ID (new Clerk users)
-            user = self.db.get_user_by_clerk_id(user_info["clerk_user_id"])
+            user = await self.db.get_user_by_clerk_id(user_info["clerk_user_id"])
 
             if user:
                 # User already has Clerk ID - just update their info
                 logger.info(f"Found existing Clerk user: {user.email}")
-                updated_user = self.db.update_user(
+                updated_user = await self.db.update_user(
                     user_id=user.id, email=user_info["email"], name=user_info["name"]
                 )
                 if not updated_user:
@@ -120,16 +120,16 @@ class AuthService:
                 user = updated_user
             else:
                 # Check if user exists by email (migration from Google OAuth)
-                user = self.db.get_user_by_email(user_info["email"])
+                user = await self.db.get_user_by_email(user_info["email"])
 
                 if user:
                     # Existing user from Google OAuth - link Clerk ID to their account
                     logger.info(f"Migrating existing user to Clerk: {user.email}")
-                    updated_user = self.db.update_user(
+                    updated_user = await self.db.update_user(
                         user_id=user.id,
                         email=user_info["email"],
                         name=user_info["name"],
-                        clerk_user_id=user_info["clerk_user_id"]
+                        clerk_user_id=user_info["clerk_user_id"],
                     )
                     if not updated_user:
                         logger.error("Failed to link Clerk ID to existing user")
@@ -138,7 +138,7 @@ class AuthService:
                 else:
                     # Brand new user - create account
                     logger.info(f"Creating new Clerk user: {user_info['email']}")
-                    user = self.db.create_user(
+                    user = await self.db.create_user(
                         clerk_user_id=user_info["clerk_user_id"],
                         email=user_info["email"],
                         name=user_info["name"],
@@ -148,7 +148,7 @@ class AuthService:
                         return None
 
             # Create our internal session (for backward compatibility)
-            internal_session_token = self.db.create_user_session(
+            internal_session_token = await self.db.create_user_session(
                 user_id=user.id, expires_in_hours=settings.SESSION_EXPIRE_HOURS
             )
             if not internal_session_token:

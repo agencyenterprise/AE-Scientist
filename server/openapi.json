@@ -6013,6 +6013,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "artifact"
+            ],
             "const": "artifact",
             "title": "Type"
           },
@@ -6263,6 +6266,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "code_execution_completed"
+            ],
             "const": "code_execution_completed",
             "title": "Type"
           },
@@ -6314,6 +6320,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "code_execution_started"
+            ],
             "const": "code_execution_started",
             "title": "Type"
           },
@@ -7305,6 +7314,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "review_completed"
+            ],
             "const": "review_completed",
             "title": "Type"
           },
@@ -7519,6 +7531,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "stage_skip_window"
+            ],
             "const": "stage_skip_window",
             "title": "Type"
           },
@@ -8330,6 +8345,9 @@
         "properties": {
           "status": {
             "type": "string",
+            "enum": [
+              "pending"
+            ],
             "const": "pending",
             "title": "Status"
           },
@@ -8609,6 +8627,9 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "terminating"
+            ],
             "const": "terminating",
             "title": "Status"
           }

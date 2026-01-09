@@ -3943,6 +3943,7 @@ export interface components {
             /**
              * Status
              * @constant
+             * @enum {string}
              */
             status: "pending";
             /** Message */
@@ -4050,6 +4051,7 @@ export interface components {
             /**
              * Status
              * @constant
+             * @enum {string}
              */
             status: "terminating";
         };

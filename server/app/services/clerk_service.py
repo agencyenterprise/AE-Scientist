@@ -4,13 +4,13 @@ Clerk authentication service.
 Handles Clerk JWT verification and user info retrieval.
 """
 
+import base64
 import logging
 from typing import Optional
 
 import jwt
-from jwt import PyJWKClient
-import base64
 from clerk_backend_api import Clerk
+from jwt import PyJWKClient
 
 from app.config import settings
 
@@ -25,7 +25,7 @@ class ClerkService:
         if not settings.CLERK_SECRET_KEY:
             logger.warning("CLERK_SECRET_KEY not configured")
         self.client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
-        
+
         # JWKS client for JWT verification (networkless)
         # Extract the Clerk frontend API URL from the publishable key
         # Format: pk_test_<instance>.clerk.accounts.dev or pk_live_<instance>.clerk.com
@@ -35,11 +35,11 @@ class ClerkService:
             # The key is base64 encoded and contains the domain
             try:
                 # Get the part after pk_test_ or pk_live_
-                key_parts = settings.CLERK_PUBLISHABLE_KEY.split('_')
+                key_parts = settings.CLERK_PUBLISHABLE_KEY.split("_")
                 if len(key_parts) >= 3:
-                    encoded_domain = '_'.join(key_parts[2:])
+                    encoded_domain = "_".join(key_parts[2:])
                     # Decode base64 to get the domain, strip any null bytes or special chars
-                    domain = base64.b64decode(encoded_domain + '==').decode('utf-8').rstrip('\x00$')
+                    domain = base64.b64decode(encoded_domain + "==").decode("utf-8").rstrip("\x00$")
                     self.jwks_url = f"https://{domain}/.well-known/jwks.json"
                 else:
                     # Fallback to a generic URL (won't work but will log the issue)
@@ -51,7 +51,7 @@ class ClerkService:
         else:
             logger.error("CLERK_PUBLISHABLE_KEY not configured")
             self.jwks_url = "https://clerk.dev/.well-known/jwks.json"
-        
+
         logger.info(f"Using Clerk JWKS URL: {self.jwks_url}")
         self.jwks_client = PyJWKClient(self.jwks_url)
 
@@ -68,7 +68,7 @@ class ClerkService:
         try:
             # Get the signing key from Clerk's JWKS
             signing_key = self.jwks_client.get_signing_key_from_jwt(jwt_token)
-            
+
             # Verify the JWT signature and decode claims
             decoded = jwt.decode(
                 jwt_token,
@@ -78,9 +78,9 @@ class ClerkService:
                     "verify_signature": True,
                     "verify_exp": True,
                     "verify_aud": False,  # Clerk doesn't always set aud
-                }
+                },
             )
-            
+
             # Extract user_id from JWT claims
             user_id = decoded.get("sub")  # 'sub' claim contains user_id
             if not user_id:
@@ -91,7 +91,7 @@ class ClerkService:
 
             # Get full user details from Clerk API
             user = self.client.users.get(user_id=user_id)
-            
+
             if not user:
                 logger.warning(f"User not found in Clerk: {user_id}")
                 return None
@@ -109,7 +109,9 @@ class ClerkService:
             user_info = {
                 "clerk_user_id": user.id,
                 "email": primary_email or "",
-                "name": f"{user.first_name or ''} {user.last_name or ''}".strip() or primary_email or "User",
+                "name": f"{user.first_name or ''} {user.last_name or ''}".strip()
+                or primary_email
+                or "User",
             }
 
             logger.info(f"Successfully verified Clerk user: {user_info['email']}")
@@ -124,4 +126,3 @@ class ClerkService:
         except Exception as e:
             logger.exception(f"Error verifying Clerk JWT: {e}")
             return None
-

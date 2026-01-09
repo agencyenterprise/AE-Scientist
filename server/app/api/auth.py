@@ -197,13 +197,13 @@ async def cleanup_expired_sessions() -> Dict[str, str]:
 async def clerk_session_exchange(request: Request) -> Dict[str, Any]:
     """
     Exchange Clerk session token for internal session token.
-    
+
     This allows the frontend to use Clerk for auth UI,
     but still use our internal session system for API calls.
-    
+
     Args:
         request: Request with Authorization header containing Clerk session token
-    
+
     Returns:
         Dict with internal session_token and user info
     """
@@ -219,7 +219,7 @@ async def clerk_session_exchange(request: Request) -> Dict[str, Any]:
         clerk_session_token = authorization_header.split(" ", 1)[1]
 
         # Authenticate with Clerk
-        auth_result = auth_service.authenticate_with_clerk(clerk_session_token)
+        auth_result = await auth_service.authenticate_with_clerk(clerk_session_token)
         if not auth_result:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Clerk session"

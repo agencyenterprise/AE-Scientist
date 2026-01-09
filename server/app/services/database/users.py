@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, NamedTuple, Optional
 
-import psycopg2.extras
 from dotenv import load_dotenv
 from psycopg.rows import dict_row
 
@@ -55,12 +54,12 @@ def should_give_free_credits(email: str) -> bool:
 class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Mixin for user and session database operations."""
 
-    def create_user(
-            self,
-            email: str,
-            name: str,
-            google_id: Optional[str] = None,
-            clerk_user_id: Optional[str] = None,
+    async def create_user(
+        self,
+        email: str,
+        name: str,
+        google_id: Optional[str] = None,
+        clerk_user_id: Optional[str] = None,
     ) -> Optional[UserData]:
         """
         Create a new user.
@@ -142,7 +141,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
             logger.exception(f"Error getting user by Google ID: {e}")
             return None
 
-    def get_user_by_clerk_id(self, clerk_user_id: str) -> Optional[UserData]:
+    async def get_user_by_clerk_id(self, clerk_user_id: str) -> Optional[UserData]:
         """
         Get user by Clerk user ID.
 
@@ -153,9 +152,9 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
             User data if found, None otherwise
         """
         try:
-            with self._get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    cursor.execute(
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
                         """
                         SELECT id,
                                google_id,
@@ -171,10 +170,45 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         """,
                         (clerk_user_id,),
                     )
-                    result = cursor.fetchone()
+                    result = await cursor.fetchone()
                     return UserData(**result) if result else None
         except Exception as e:
             logger.exception(f"Error getting user by Clerk ID: {e}")
+            return None
+
+    async def get_user_by_email(self, email: str) -> Optional[UserData]:
+        """
+        Get user by email address.
+
+        Args:
+            email: User email address
+
+        Returns:
+            User data if found, None otherwise
+        """
+        try:
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        SELECT id,
+                               google_id,
+                               clerk_user_id,
+                               email,
+                               name,
+                               is_active,
+                               created_at,
+                               updated_at
+                        FROM users
+                        WHERE email = %s
+                          AND is_active = TRUE
+                        """,
+                        (email,),
+                    )
+                    result = await cursor.fetchone()
+                    return UserData(**result) if result else None
+        except Exception as e:
+            logger.exception(f"Error getting user by email: {e}")
             return None
 
     async def get_user_by_id(self, user_id: int) -> Optional[UserData]:
@@ -211,11 +245,13 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
             logger.exception("Error getting user by id %s: %s", user_id, e)
             return None
 
-    async def update_user(self,
-                          user_id: int,
-                          email: str,
-                          name: str,
-                          clerk_user_id: Optional[str] = None, ) -> Optional[UserData]:
+    async def update_user(
+        self,
+        user_id: int,
+        email: str,
+        name: str,
+        clerk_user_id: Optional[str] = None,
+    ) -> Optional[UserData]:
         """
         Update user information.
 
