@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import traceback
 import unicodedata
 from pathlib import Path
@@ -733,7 +734,11 @@ def perform_writeup(
         # Generate VLM-based descriptions
         try:
             desc_map = {}
-            for pf in plot_names:
+            vlm_started_at = time.monotonic()
+            logger.info("Generating VLM figure descriptions for %s plot(s)...", len(plot_names))
+            for idx, pf in enumerate(plot_names, start=1):
+                one_started_at = time.monotonic()
+                logger.info("VLM figure description %s/%s: %s", idx, len(plot_names), pf)
                 ppath = osp.join(figures_dir, pf)
                 if not osp.exists(ppath):
                     logger.warning(f"Warning: Referenced plot file not found: {ppath}")
@@ -751,12 +756,24 @@ def perform_writeup(
                     desc_map[pf] = review_data.get("Img_description", "No description found")
                 else:
                     desc_map[pf] = "No description found"
+                logger.info(
+                    "VLM figure description complete %s/%s: %s (%.1fs)",
+                    idx,
+                    len(plot_names),
+                    pf,
+                    time.monotonic() - one_started_at,
+                )
 
             plot_descriptions_list = []
             for fname in plot_names:
                 desc_text = desc_map.get(fname, "No description found")
                 plot_descriptions_list.append(f"{fname}: {desc_text}")
             plot_descriptions_str = "\n".join(plot_descriptions_list)
+            logger.info(
+                "VLM figure description generation complete (plots=%s, total_time=%.1fs).",
+                len(plot_names),
+                time.monotonic() - vlm_started_at,
+            )
         except Exception:
             logger.exception("EXCEPTION in VLM figure description generation:")
             plot_descriptions_str = "No descriptions available."
