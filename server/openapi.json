@@ -187,6 +187,29 @@
         }
       }
     },
+    "/api/auth/clerk-session": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "summary": "Clerk Session Exchange",
+        "description": "Exchange Clerk session token for internal session token.\n\nThis allows the frontend to use Clerk for auth UI,\nbut still use our internal session system for API calls.\n\nArgs:\n    request: Request with Authorization header containing Clerk session token\n\nReturns:\n    Dict with internal session_token and user info",
+        "operationId": "clerk_session_exchange_api_auth_clerk_session_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Clerk Session Exchange Api Auth Clerk Session Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/billing/wallet": {
       "get": {
         "tags": [
@@ -3735,6 +3758,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "content"
+            ],
             "const": "content",
             "title": "Type"
           },
@@ -3773,6 +3799,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "done"
+            ],
             "const": "done",
             "title": "Type"
           },
@@ -3791,6 +3820,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "error"
+            ],
             "const": "error",
             "title": "Type"
           },
@@ -3841,6 +3873,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "idea_updated"
+            ],
             "const": "idea_updated",
             "title": "Type"
           },
@@ -3860,6 +3895,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "status"
+            ],
             "const": "status",
             "title": "Type"
           },
@@ -3968,6 +4006,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "conflict"
+            ],
             "const": "conflict",
             "title": "Type"
           },
@@ -4014,6 +4055,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "content"
+            ],
             "const": "content",
             "title": "Type"
           },
@@ -4070,6 +4114,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "done"
+            ],
             "const": "done",
             "title": "Type"
           },
@@ -4088,6 +4135,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "error"
+            ],
             "const": "error",
             "title": "Type"
           },
@@ -4142,6 +4192,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "model_limit_conflict"
+            ],
             "const": "model_limit_conflict",
             "title": "Type"
           },
@@ -4160,6 +4213,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "progress"
+            ],
             "const": "progress",
             "title": "Type"
           },
@@ -4201,6 +4257,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "section_update"
+            ],
             "const": "section_update",
             "title": "Type"
           },
@@ -4225,6 +4284,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "state"
+            ],
             "const": "state",
             "title": "Type"
           },
@@ -4681,7 +4743,6 @@
             "title": "Description"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -5235,6 +5296,9 @@
           },
           "duplicate_resolution": {
             "type": "string",
+            "enum": [
+              "create_new"
+            ],
             "const": "create_new",
             "title": "Duplicate Resolution"
           }
@@ -5269,6 +5333,9 @@
           },
           "duplicate_resolution": {
             "type": "string",
+            "enum": [
+              "prompt"
+            ],
             "const": "prompt",
             "title": "Duplicate Resolution"
           }
@@ -5303,6 +5370,9 @@
           },
           "duplicate_resolution": {
             "type": "string",
+            "enum": [
+              "update_existing"
+            ],
             "const": "update_existing",
             "title": "Duplicate Resolution"
           },
@@ -5849,7 +5919,6 @@
           "details": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -5944,6 +6013,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "artifact"
+            ],
             "const": "artifact",
             "title": "Type"
           },
@@ -6024,6 +6096,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "best_node_selection"
+            ],
             "const": "best_node_selection",
             "title": "Type"
           },
@@ -6191,6 +6266,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "code_execution_completed"
+            ],
             "const": "code_execution_completed",
             "title": "Type"
           },
@@ -6242,6 +6320,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "code_execution_started"
+            ],
             "const": "code_execution_started",
             "title": "Type"
           },
@@ -6302,6 +6383,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "complete"
+            ],
             "const": "complete",
             "title": "Type"
           },
@@ -6434,6 +6518,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "error"
+            ],
             "const": "error",
             "title": "Type"
           },
@@ -6467,7 +6554,6 @@
             "description": "Audit event type label"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata",
             "description": "Structured metadata captured for the event"
@@ -6491,13 +6577,15 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "heartbeat"
+            ],
             "const": "heartbeat",
             "title": "Type"
           },
           "data": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6526,7 +6614,6 @@
             "description": "ISO timestamp when the billing summary was recorded."
           },
           "billing_summary": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Billing Summary",
             "description": "Raw billing summary metadata returned by RunPod."
@@ -6543,6 +6630,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "hw_cost_actual"
+            ],
             "const": "hw_cost_actual",
             "title": "Type"
           },
@@ -6593,6 +6683,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "hw_cost_estimate"
+            ],
             "const": "hw_cost_estimate",
             "title": "Type"
           },
@@ -6775,6 +6868,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "initial"
+            ],
             "const": "initial",
             "title": "Type"
           },
@@ -7108,6 +7204,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "log"
+            ],
             "const": "log",
             "title": "Type"
           },
@@ -7126,6 +7225,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "paper_generation_progress"
+            ],
             "const": "paper_generation_progress",
             "title": "Type"
           },
@@ -7182,7 +7284,6 @@
           "details": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7213,6 +7314,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "review_completed"
+            ],
             "const": "review_completed",
             "title": "Type"
           },
@@ -7231,6 +7335,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "run_event"
+            ],
             "const": "run_event",
             "title": "Type"
           },
@@ -7341,6 +7448,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "stage_progress"
+            ],
             "const": "stage_progress",
             "title": "Type"
           },
@@ -7421,6 +7531,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "stage_skip_window"
+            ],
             "const": "stage_skip_window",
             "title": "Type"
           },
@@ -7587,6 +7700,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "substage_completed"
+            ],
             "const": "substage_completed",
             "title": "Type"
           },
@@ -7626,7 +7742,6 @@
             "description": "Optional identifier associated with the sub-stage (reserved for future use)"
           },
           "summary": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Summary",
             "description": "Summary payload stored for this sub-stage"
@@ -7650,6 +7765,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "substage_event"
+            ],
             "const": "substage_event",
             "title": "Type"
           },
@@ -7677,7 +7795,6 @@
             "description": "Stage identifier"
           },
           "summary": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Summary",
             "description": "LLM-generated summary payload"
@@ -7701,6 +7818,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "substage_summary"
+            ],
             "const": "substage_summary",
             "title": "Type"
           },
@@ -8225,6 +8345,9 @@
         "properties": {
           "status": {
             "type": "string",
+            "enum": [
+              "pending"
+            ],
             "const": "pending",
             "title": "Status"
           },
@@ -8403,7 +8526,6 @@
             "title": "Reason"
           },
           "summary": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Summary"
           }
@@ -8441,7 +8563,6 @@
             "title": "Stage"
           },
           "summary": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Summary"
           }
@@ -8506,6 +8627,9 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "terminating"
+            ],
             "const": "terminating",
             "title": "Status"
           }
@@ -8540,7 +8664,6 @@
             "description": "Version counter for the stored viz"
           },
           "viz": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Viz",
             "description": "Tree visualization payload"
@@ -8710,6 +8833,9 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "credits"
+            ],
             "const": "credits",
             "title": "Type"
           },
@@ -8728,13 +8854,15 @@
         "properties": {
           "type": {
             "type": "string",
+            "enum": [
+              "heartbeat"
+            ],
             "const": "heartbeat",
             "title": "Type"
           },
           "data": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {

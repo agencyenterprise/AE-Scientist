@@ -6,10 +6,10 @@ Handles user authentication via Google OAuth 2.0.
 
 import logging
 import secrets
-from typing import Dict
+from typing import Any, Dict
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.auth.tokens import extract_bearer_token
@@ -191,3 +191,56 @@ async def cleanup_expired_sessions() -> Dict[str, str]:
     except Exception as e:
         logger.exception(f"Error cleaning up sessions: {e}")
         raise HTTPException(status_code=500, detail="Failed to cleanup sessions") from e
+
+
+@router.post("/clerk-session")
+async def clerk_session_exchange(request: Request) -> Dict[str, Any]:
+    """
+    Exchange Clerk session token for internal session token.
+
+    This allows the frontend to use Clerk for auth UI,
+    but still use our internal session system for API calls.
+
+    Args:
+        request: Request with Authorization header containing Clerk session token
+
+    Returns:
+        Dict with internal session_token and user info
+    """
+    try:
+        # Extract Clerk session token from Authorization header
+        authorization_header = request.headers.get("authorization")
+        if not authorization_header or not authorization_header.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing or invalid authorization header",
+            )
+
+        clerk_session_token = authorization_header.split(" ", 1)[1]
+
+        # Authenticate with Clerk
+        auth_result = await auth_service.authenticate_with_clerk(clerk_session_token)
+        if not auth_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Clerk session"
+            )
+
+        user = auth_result["user"]
+        internal_session_token = auth_result["session_token"]
+
+        return {
+            "session_token": internal_session_token,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error exchanging Clerk session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to exchange session"
+        ) from e
