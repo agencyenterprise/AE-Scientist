@@ -6,6 +6,7 @@ import os.path as osp
 import re
 import shutil
 import subprocess
+import time
 import traceback
 import unicodedata
 import uuid
@@ -944,10 +945,20 @@ def perform_writeup(
             update_references_block(writeup_path=writeup_file, citations_text=citations_text)
 
         try:
+            vlm_started_at = time.monotonic()
             desc_map: Dict[str, str] = {}
-            for plot_name in plot_names:
+            logger.info("Generating VLM figure descriptions for %s plot(s)...", len(plot_names))
+            for idx, plot_name in enumerate(plot_names, start=1):
+                one_started_at = time.monotonic()
+                logger.info(
+                    "VLM figure description %s/%s: %s",
+                    idx,
+                    len(plot_names),
+                    plot_name,
+                )
                 plot_path = figures_dir / plot_name
                 if not plot_path.exists():
+                    logger.warning("Plot file not found for VLM review: %s", plot_path)
                     continue
                 img_dict = {
                     "images": [str(plot_path)],
@@ -963,11 +974,23 @@ def perform_writeup(
                     if review_data
                     else "No description found"
                 )
+                logger.info(
+                    "VLM figure description complete %s/%s: %s (%.1fs)",
+                    idx,
+                    len(plot_names),
+                    plot_name,
+                    time.monotonic() - one_started_at,
+                )
             plot_descriptions_list = [
                 f"{plot_name}: {desc_map.get(plot_name, 'No description found')}"
                 for plot_name in plot_names
             ]
             plot_descriptions_str = "\n".join(plot_descriptions_list)
+            logger.info(
+                "VLM figure description generation complete (plots=%s, total_time=%.1fs).",
+                len(plot_names),
+                time.monotonic() - vlm_started_at,
+            )
         except Exception:
             logger.exception("EXCEPTION in VLM figure description generation:")
             plot_descriptions_str = "No descriptions available."
