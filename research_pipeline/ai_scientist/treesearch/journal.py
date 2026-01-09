@@ -629,7 +629,7 @@ class Journal:
             f"include_code={include_code}, "
             f"good_nodes_count={len(good_ids)}, "
             f"buggy_nodes_count={len(buggy_ids)}. "
-            "Invoking LLM to generate summary."
+            "Building deterministic summary from current journal state."
         )
 
         best = self.get_best_node(only_good=True, use_val_metric_only=True)
@@ -664,6 +664,7 @@ class Journal:
                     lines.append(f"  user_feedback={fb_preview}")
 
         summary_text = "\n".join(lines).strip()
+        logger.debug("Summary text (include_code=%s):\n%s", include_code, summary_text)
         # Cache and return
         self._summary_cache[cache_key] = summary_text
         logger.debug(

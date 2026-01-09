@@ -926,14 +926,69 @@ def _move_experiment_artifacts(
     )
     child_node.exp_results_dir = str(exp_results_dir)
     exp_results_dir.mkdir(parents=True, exist_ok=True)
+    logger.debug(
+        "artifacts.begin node=%s working_dir=%s exp_results_dir=%s",
+        child_node.id[:8],
+        working_dir,
+        exp_results_dir,
+    )
+
+    workspace_dir = working_dir.parent
+    for fname in (
+        "codex_input.json",
+        "codex_task.md",
+        "codex_session.log",
+        "codex_events.jsonl",
+        "node_result.json",
+    ):
+        src = workspace_dir / fname
+        if not src.exists():
+            continue
+        dst = exp_results_dir / fname
+        try:
+            dst.write_bytes(src.read_bytes())
+        except OSError:
+            logger.debug("artifacts.copy_failed src=%s dst=%s", src, dst, exc_info=True)
+        else:
+            logger.debug("artifacts.copied src=%s dst=%s bytes=%s", src, dst, dst.stat().st_size)
+
+    summary_path = working_dir / "summary.json"
+    if summary_path.exists():
+        try:
+            summary_text = summary_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            logger.debug(
+                "artifacts.summary_json read_failed path=%s",
+                summary_path,
+                exc_info=True,
+            )
+        else:
+            logger.debug(
+                "artifacts.summary_json captured path=%s chars=%s preview=\n%s",
+                summary_path,
+                len(summary_text),
+                trim_long_string(string=summary_text, threshold=2000, k=700),
+            )
 
     code_src = (working_dir.parent / cfg.exec.agent_file_name).resolve()
     if code_src.exists():
-        (exp_results_dir / "experiment_code.py").write_text(
-            code_src.read_text(encoding="utf-8"), encoding="utf-8"
+        code_text = code_src.read_text(encoding="utf-8")
+        (exp_results_dir / "experiment_code.py").write_text(code_text, encoding="utf-8")
+        logger.debug(
+            "artifacts.experiment_code captured path=%s chars=%s preview=\n%s",
+            exp_results_dir / "experiment_code.py",
+            len(code_text),
+            trim_long_string(string=code_text, threshold=2400, k=800),
         )
 
-    for exp_data_file in working_dir.glob("*.npy"):
+    npy_files = list(working_dir.glob("*.npy"))
+    if npy_files:
+        logger.debug(
+            "artifacts.npy_files count=%s names=%s",
+            len(npy_files),
+            [p.name for p in npy_files],
+        )
+    for exp_data_file in npy_files:
         exp_data_path = exp_results_dir / exp_data_file.name
         exp_data_file.resolve().rename(exp_data_path)
 
@@ -941,6 +996,11 @@ def _move_experiment_artifacts(
     if plot_files_found:
         event_callback(
             RunLogEvent(message=f"✓ Generated {len(plot_files_found)} plot file(s)", level="info")
+        )
+        logger.debug(
+            "artifacts.png_files count=%s names=%s",
+            len(plot_files_found),
+            [p.name for p in plot_files_found],
         )
     for plot_file in plot_files_found:
         final_path = exp_results_dir / plot_file.name
@@ -951,6 +1011,13 @@ def _move_experiment_artifacts(
         )
         child_node.plots.append(web_path)
         child_node.plot_paths.append(str(final_path.absolute()))
+    logger.debug(
+        "artifacts.done node=%s exp_results_dir=%s plots=%s npy_files=%s",
+        child_node.id[:8],
+        exp_results_dir,
+        len(child_node.plots),
+        len(npy_files),
+    )
 
 
 def process_node(
@@ -978,6 +1045,30 @@ def process_node(
 
     parent_node = _load_parent_node(node_data=node_data)
     stage_name = stage_identifier.prefixed_name
+    logger.debug(
+        "worker.begin execution_id=%s process_id=%s stage=%s seed_eval=%s seed_value=%s gpu_id=%s parent=%s workspace_dir=%s working_dir=%s",
+        execution_id[:8],
+        process_id,
+        stage_name,
+        seed_eval,
+        seed_value,
+        gpu_id,
+        None if parent_node is None else parent_node.id[:8],
+        workspace_dir,
+        working_dir,
+    )
+    if seed_aggregation is not None:
+        logger.debug(
+            "worker.seed_aggregation enabled execution_id=%s keys=%s",
+            execution_id[:8],
+            sorted(list(seed_aggregation.keys()))[:30],
+        )
+    if user_feedback_payload.strip():
+        logger.debug(
+            "worker.user_feedback provided execution_id=%s payload_preview=%s",
+            execution_id[:8],
+            user_feedback_payload[:200].replace("\n", " "),
+        )
 
     _abort_if_skip_requested(execution_id=execution_id)
 
@@ -998,6 +1089,32 @@ def process_node(
         cfg=cfg,
         user_feedback_payload=user_feedback_payload,
     )
+    logger.debug(
+        "codex.input.written execution_id=%s path=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
+        execution_id[:8],
+        input_json_file,
+        stage_name,
+        str(evaluation_metric_spec.get("name") or ""),
+        seed_eval,
+        seed_value,
+    )
+    try:
+        codex_input_text = input_json_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug(
+            "codex.input.read_failed execution_id=%s path=%s",
+            execution_id[:8],
+            input_json_file,
+            exc_info=True,
+        )
+    else:
+        logger.debug(
+            "codex.input.contents execution_id=%s path=%s chars=%s\n%s",
+            execution_id[:8],
+            input_json_file,
+            len(codex_input_text),
+            codex_input_text,
+        )
     task_file = _write_codex_task_file(
         workspace_dir=workspace_dir,
         execution_id=execution_id,
@@ -1010,6 +1127,29 @@ def process_node(
         venv_dir=venv_dir,
         cfg=cfg,
     )
+    logger.debug(
+        "codex.task.written execution_id=%s path=%s chars=%s",
+        execution_id[:8],
+        task_file,
+        len(task_file.read_text(encoding="utf-8", errors="replace")),
+    )
+    try:
+        codex_task_text = task_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug(
+            "codex.task.read_failed execution_id=%s path=%s",
+            execution_id[:8],
+            task_file,
+            exc_info=True,
+        )
+    else:
+        logger.debug(
+            "codex.task.contents execution_id=%s path=%s chars=%s\n%s",
+            execution_id[:8],
+            task_file,
+            len(codex_task_text),
+            codex_task_text,
+        )
 
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
@@ -1050,6 +1190,17 @@ def process_node(
         success_file=output_json_file,
         stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
     )
+    logger.debug(
+        "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
+        execution_id[:8],
+        "success" if exc_type is None else "failed",
+        exec_time,
+        exc_type,
+        exc_info,
+        workspace_dir,
+        workspace_dir / "codex_session.log",
+        workspace_dir / "codex_events.jsonl",
+    )
 
     completed_at = datetime.now(timezone.utc)
     status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
@@ -1069,6 +1220,11 @@ def process_node(
 
     node_result = _load_node_result(output_json_file=output_json_file)
     if node_result is None:
+        logger.debug(
+            "codex.output.missing_node_result execution_id=%s expected_path=%s",
+            execution_id[:8],
+            output_json_file,
+        )
         child_node = Node(
             id=execution_id,
             plan="",
@@ -1103,6 +1259,12 @@ def process_node(
 
     node_result["id"] = execution_id
     node_result["parent_id"] = None if parent_node is None else parent_node.id
+    logger.debug(
+        "codex.output.node_result_loaded execution_id=%s keys=%s plan_preview=%s",
+        execution_id[:8],
+        sorted(list(node_result.keys()))[:40],
+        str(node_result.get("plan") or "")[:200].replace("\n", " "),
+    )
 
     contract_ctx = NodeResultContractContext(
         stage_identifier=stage_identifier,
@@ -1116,6 +1278,12 @@ def process_node(
         ctx=contract_ctx,
     )
     if contract_errors:
+        logger.debug(
+            "codex.output.contract_failed execution_id=%s errors_count=%s errors=%s",
+            execution_id[:8],
+            len(contract_errors),
+            contract_errors,
+        )
         child_node = Node(
             id=execution_id,
             plan=str(node_result.get("plan") or ""),
@@ -1173,6 +1341,18 @@ def process_node(
         child_node.metric = WorstMetricValue()
         if parent_node is not None:
             _attach_parent(child_node=child_node, parent_node=parent_node)
+    logger.debug(
+        "worker.node_parsed execution_id=%s is_buggy=%s is_buggy_plots=%s metric=%s plan_preview=%s analysis_preview=%s plot_analyses=%s vlm_feedback_summary=%s datasets_successfully_tested=%s",
+        execution_id[:8],
+        child_node.is_buggy,
+        child_node.is_buggy_plots,
+        None if child_node.metric is None else str(child_node.metric),
+        (child_node.plan or "")[:160].replace("\n", " "),
+        (str(child_node.analysis or ""))[:160].replace("\n", " "),
+        len(child_node.plot_analyses),
+        len(child_node.vlm_feedback_summary),
+        len(child_node.datasets_successfully_tested),
+    )
     child_node.absorb_exec_result(
         SimpleNamespace(
             term_out=term_out,

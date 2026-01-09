@@ -398,9 +398,23 @@ class ParallelAgent:
         nodes_to_process: list[Optional[Node]] = []
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
-        logger.debug(f"self.num_workers: {self.num_workers}, ")
+        logger.debug(
+            "node_selection.begin stage=%s num_workers=%s total_nodes=%s good_nodes=%s buggy_nodes=%s draft_roots=%s",
+            self.stage_name,
+            self.num_workers,
+            len(self.journal.nodes),
+            len(self.journal.good_nodes),
+            len(self.journal.buggy_nodes),
+            len(self.journal.draft_nodes),
+        )
 
         feedback_nodes = [node for node in self.journal.nodes if node.user_feedback_pending]
+        if feedback_nodes:
+            logger.debug(
+                "node_selection.user_feedback_pending count=%s ids=%s",
+                len(feedback_nodes),
+                [n.id[:8] for n in feedback_nodes[:5]],
+            )
         for node in feedback_nodes:
             if len(nodes_to_process) >= self.num_workers:
                 break
@@ -441,6 +455,11 @@ class ParallelAgent:
                 f"Checking draft nodes... num of journal.draft_nodes: {len(self.journal.draft_nodes)}, search_cfg.num_drafts: {search_cfg.num_drafts}"
             )
             if len(self.journal.draft_nodes) < search_cfg.num_drafts:
+                logger.debug(
+                    "node_selection.decision decision=draft reason=insufficient_draft_roots current=%s target=%s",
+                    len(self.journal.draft_nodes),
+                    search_cfg.num_drafts,
+                )
                 nodes_to_process.append(None)
                 continue
 
@@ -450,9 +469,20 @@ class ParallelAgent:
                 for root in self.journal.draft_nodes
                 if not all(leaf.is_buggy for leaf in self._get_leaves(root))
             ]
+            logger.debug(
+                "node_selection.viable_trees count=%s total_draft_roots=%s",
+                len(viable_trees),
+                len(self.journal.draft_nodes),
+            )
 
             # Debugging phase (probabilistic)
-            if random.random() < search_cfg.debug_prob:
+            debug_roll = random.random()
+            if debug_roll < search_cfg.debug_prob:
+                logger.debug(
+                    "node_selection.debug_roll roll=%s threshold=%s decision=debug",
+                    debug_roll,
+                    search_cfg.debug_prob,
+                )
                 logger.debug("Checking debuggable nodes")
                 debuggable_nodes: list[Node] = []
                 try:
@@ -475,6 +505,13 @@ class ParallelAgent:
                 if debuggable_nodes:
                     logger.debug("Found debuggable nodes")
                     node = random.choice(debuggable_nodes)
+                    logger.debug(
+                        "node_selection.debug_choice node=%s debug_depth=%s max_debug_depth=%s exc_type=%s",
+                        node.id[:8],
+                        node.debug_depth,
+                        search_cfg.max_debug_depth,
+                        node.exc_type,
+                    )
                     tree_root = node
                     while tree_root.parent:
                         tree_root = tree_root.parent
@@ -484,6 +521,12 @@ class ParallelAgent:
                         nodes_to_process.append(node)
                         processed_trees.add(tree_id)
                         continue
+            else:
+                logger.debug(
+                    "node_selection.debug_roll roll=%s threshold=%s decision=skip_debug",
+                    debug_roll,
+                    search_cfg.debug_prob,
+                )
 
             # Stage-specific selection: Ablation Studies
             logger.debug(f"self.stage_name: {self.stage_name}")
@@ -494,10 +537,18 @@ class ParallelAgent:
                         level="info",
                     )
                 )
+                logger.debug(
+                    "node_selection.decision decision=ablation parent=%s",
+                    None if self.best_stage3_node is None else self.best_stage3_node.id[:8],
+                )
                 nodes_to_process.append(self.best_stage3_node)
                 continue
             # Stage-specific selection: Hyperparameter Tuning
             elif stage_identifier is StageIdentifier.STAGE2:
+                logger.debug(
+                    "node_selection.decision decision=tuning parent=%s",
+                    None if self.best_stage1_node is None else self.best_stage1_node.id[:8],
+                )
                 nodes_to_process.append(self.best_stage1_node)
                 continue
             else:  # Stage 1, 3: normal best-first search
@@ -505,12 +556,19 @@ class ParallelAgent:
                 logger.debug("Checking good nodes..")
                 good_nodes = self.journal.good_nodes
                 if not good_nodes:
+                    logger.debug(
+                        "node_selection.decision decision=draft reason=no_good_nodes good_nodes=0",
+                    )
                     nodes_to_process.append(None)  # Back to drafting
                     continue
 
                 # Get best node from unprocessed tree if possible
                 best_node = self.journal.get_best_node()
                 if best_node is None:
+                    logger.debug(
+                        "node_selection.decision decision=draft reason=no_best_node total_good_nodes=%s",
+                        len(good_nodes),
+                    )
                     nodes_to_process.append(None)
                     continue
                 tree_root = best_node
@@ -519,6 +577,13 @@ class ParallelAgent:
 
                 tree_id = id(tree_root)
                 if tree_id not in processed_trees or len(processed_trees) >= len(viable_trees):
+                    logger.debug(
+                        "node_selection.decision decision=improve node=%s tree_root=%s processed_trees=%s viable_trees=%s",
+                        best_node.id[:8],
+                        tree_root.id[:8],
+                        len(processed_trees),
+                        len(viable_trees),
+                    )
                     nodes_to_process.append(best_node)
                     processed_trees.add(tree_id)
                     continue
@@ -534,6 +599,13 @@ class ParallelAgent:
                         tree_root = tree_root.parent
                     tree_id = id(tree_root)
                     if tree_id not in processed_trees or len(processed_trees) >= len(viable_trees):
+                        logger.debug(
+                            "node_selection.decision decision=improve_fallback node=%s tree_root=%s processed_trees=%s viable_trees=%s",
+                            node.id[:8],
+                            tree_root.id[:8],
+                            len(processed_trees),
+                            len(viable_trees),
+                        )
                         nodes_to_process.append(node)
                         processed_trees.add(tree_id)
                         break
