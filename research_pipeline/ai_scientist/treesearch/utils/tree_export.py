@@ -3,7 +3,6 @@
 import json
 import logging
 import textwrap
-from ast import literal_eval
 from pathlib import Path
 from typing import Iterator, Protocol, cast
 
@@ -31,27 +30,6 @@ def _normalize_stage_id(stage_name: str) -> str:
         if len(parts) >= 2 and parts[1].isdigit():
             return f"stage_{parts[1]}"
     return stage_name
-
-
-def _normalize_vlm_feedback(val: object) -> str | list[str]:
-    """
-    Preserve list feedback; parse stringified lists into real lists; otherwise cast to string.
-    """
-    if val is None:
-        return ""
-    if isinstance(val, list):
-        return [str(x) for x in val if str(x).strip()]
-    if isinstance(val, str):
-        stripped = val.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            try:
-                parsed = literal_eval(stripped)
-                if isinstance(parsed, list):
-                    return [str(x) for x in parsed if str(x).strip()]
-            except Exception:
-                pass
-        return stripped
-    return str(val)
 
 
 def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
@@ -327,7 +305,8 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
 
     try:
         tmp["vlm_feedback_summary"] = [
-            _normalize_vlm_feedback(n.vlm_feedback_summary) for n in jou.nodes
+            (str(n.vlm_feedback_summary).strip() if n.vlm_feedback_summary is not None else "")
+            for n in jou.nodes
         ]
     except Exception as e:
         logger.error(f"Error setting vlm_feedback_summary: {e}")

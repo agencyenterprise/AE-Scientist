@@ -32,16 +32,4 @@ def validate_node_result_contract(
             errors.append(
                 "seed aggregation requires at least one .png in ./working when is_buggy_plots=false"
             )
-        plot_analyses_val = node_result.get("plot_analyses")
-        if isinstance(plot_analyses_val, list) and len(plot_analyses_val) == 0:
-            errors.append(
-                "seed aggregation requires plot_analyses to be non-empty when is_buggy_plots=false"
-            )
-        vlm_feedback_summary_val = node_result.get("vlm_feedback_summary")
-        if isinstance(vlm_feedback_summary_val, list) and not any(
-            is_non_empty_string(value=x) for x in vlm_feedback_summary_val
-        ):
-            errors.append(
-                "seed aggregation requires vlm_feedback_summary to be non-empty when is_buggy_plots=false"
-            )
     return errors

@@ -52,6 +52,26 @@ def codex_node_result_contract_prompt_lines_common() -> list[str]:
     return render_lines(template_name="contracts/common.txt.j2", context={})
 
 
+def _validate_metric(*, value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return ["metric must be an object/dict"]
+    errors: list[str] = []
+    name = value.get("name")
+    maximize = value.get("maximize")
+    description = value.get("description")
+    metric_value = value.get("value")
+
+    if not is_non_empty_string(value=name):
+        errors.append("metric.name must be a non-empty string")
+    if not isinstance(maximize, bool):
+        errors.append("metric.maximize must be a boolean")
+    if not is_non_empty_string(value=description):
+        errors.append("metric.description must be a non-empty string")
+    if metric_value is not None and not isinstance(metric_value, (int, float)):
+        errors.append("metric.value must be a number (int/float) or null")
+    return errors
+
+
 def _unexpected_node_result_keys(*, node_result: dict[str, object]) -> list[str]:
     allowed = {f.name for f in dataclass_fields(Node)}
     # Serialized form includes relationship IDs rather than `parent`/`children` objects.
@@ -73,6 +93,12 @@ def validate_common_node_result_contract(
 
     errors.extend(_unexpected_node_result_keys(node_result=node_result))
 
+    metric_val = node_result.get("metric")
+    if metric_val is None:
+        errors.append("metric is required (use an object/dict; not null)")
+    else:
+        errors.extend(_validate_metric(value=metric_val))
+
     if not isinstance(node_result.get("is_buggy_plots"), bool):
         errors.append("is_buggy_plots must be a boolean (true/false)")
     if not isinstance(node_result.get("is_seed_agg_node", False), bool):
@@ -84,24 +110,6 @@ def validate_common_node_result_contract(
     else:
         if is_seed_agg_node is True:
             errors.append("non-aggregation run requires is_seed_agg_node=false")
-
-    plot_analyses_val = node_result.get("plot_analyses")
-    if plot_analyses_val is None:
-        errors.append("plot_analyses is required (use [] if none)")
-    else:
-        errors.extend(validate_plot_analyses(value=plot_analyses_val))
-
-    vlm_feedback_summary_val = node_result.get("vlm_feedback_summary")
-    if vlm_feedback_summary_val is None:
-        errors.append("vlm_feedback_summary is required (use [] if none)")
-    elif not is_list_of_strings(value=vlm_feedback_summary_val):
-        errors.append("vlm_feedback_summary must be a list of strings")
-
-    vlm_feedback_val = node_result.get("vlm_feedback")
-    if vlm_feedback_val is None:
-        errors.append("vlm_feedback is required (use {} if none)")
-    elif not isinstance(vlm_feedback_val, dict):
-        errors.append("vlm_feedback must be an object/dict")
 
     datasets_val = node_result.get("datasets_successfully_tested")
     if datasets_val is None:

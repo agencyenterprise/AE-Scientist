@@ -93,7 +93,7 @@ class ParentNodeSummary(NamedTuple):
     exec_time_feedback: str
     exp_results_dir: str | None
     plot_analyses: list[dict[str, Any]]
-    vlm_feedback_summary: list[str]
+    vlm_feedback_summary: str
     datasets_successfully_tested: list[str]
     hyperparam_name: str | None
     ablation_name: str | None
@@ -116,7 +116,7 @@ class ParentNodeSummary(NamedTuple):
             "exec_time_feedback": self.exec_time_feedback,
             "exp_results_dir": self.exp_results_dir,
             "plot_analyses": list(self.plot_analyses),
-            "vlm_feedback_summary": list(self.vlm_feedback_summary),
+            "vlm_feedback_summary": self.vlm_feedback_summary,
             "datasets_successfully_tested": list(self.datasets_successfully_tested),
             "hyperparam_name": self.hyperparam_name,
             "ablation_name": self.ablation_name,

@@ -3,7 +3,7 @@ from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
-from ..codex.node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..codex.node_result_contract import NodeResultContractContext
 from ..config import Config as AppConfig
 from ..journal import Journal, Node
 from ..prompts.render import render_lines, render_text
@@ -186,15 +186,5 @@ def validate_node_result_contract(
         if ctx.working_png_count <= 0:
             errors.append(
                 "Stage3 requires at least one .png in ./working when is_buggy_plots=false"
-            )
-        plot_analyses_val = node_result.get("plot_analyses")
-        if isinstance(plot_analyses_val, list) and len(plot_analyses_val) == 0:
-            errors.append("Stage3 requires plot_analyses to be non-empty when is_buggy_plots=false")
-        vlm_feedback_summary_val = node_result.get("vlm_feedback_summary")
-        if isinstance(vlm_feedback_summary_val, list) and not any(
-            is_non_empty_string(value=x) for x in vlm_feedback_summary_val
-        ):
-            errors.append(
-                "Stage3 requires vlm_feedback_summary to be non-empty when is_buggy_plots=false"
             )
     return errors

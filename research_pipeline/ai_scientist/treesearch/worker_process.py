@@ -47,6 +47,7 @@ from .stages.node_result_contracts import (
 )
 from .utils.metric import WorstMetricValue
 from .utils.response import trim_long_string, wrap_code
+from .vlm_feedback import generate_vlm_feedback
 from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, TrainingReview
 
 logger = logging.getLogger("ai-scientist")
@@ -111,7 +112,7 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
         exec_time_feedback=parent_node.exec_time_feedback,
         exp_results_dir=exp_results_dir,
         plot_analyses=plot_analyses,
-        vlm_feedback_summary=list(parent_node.vlm_feedback_summary),
+        vlm_feedback_summary=str(parent_node.vlm_feedback_summary or "").strip(),
         datasets_successfully_tested=list(parent_node.datasets_successfully_tested),
         hyperparam_name=parent_node.hyperparam_name,
         ablation_name=parent_node.ablation_name,
@@ -307,9 +308,7 @@ def _write_codex_task_file(
         raw_term_out = parent_node._term_out
         if isinstance(raw_term_out, list):
             parent_term_out = trim_long_string("".join([str(x) for x in raw_term_out]))
-        raw_vlm = parent_node.vlm_feedback_summary
-        if isinstance(raw_vlm, list):
-            parent_vlm_feedback_summary = "\n".join([str(x) for x in raw_vlm]).strip()
+        parent_vlm_feedback_summary = str(parent_node.vlm_feedback_summary or "").strip()
 
     is_seed_aggregation = task_context.seed_aggregation is not None
     if is_seed_aggregation:
@@ -866,7 +865,7 @@ def process_node(
         (child_node.plan or "")[:160].replace("\n", " "),
         (str(child_node.analysis or ""))[:160].replace("\n", " "),
         len(child_node.plot_analyses),
-        len(child_node.vlm_feedback_summary),
+        len(str(child_node.vlm_feedback_summary or "")),
         len(child_node.datasets_successfully_tested),
     )
     child_node.absorb_exec_result(
@@ -909,6 +908,17 @@ def process_node(
         working_dir=working_dir,
         event_callback=event_callback,
     )
+    # only run VLM for later stages, and only for non-buggy nodes.
+    if child_node.is_buggy is False and stage_identifier in (
+        StageIdentifier.STAGE3,
+        StageIdentifier.STAGE4,
+    ):
+        generate_vlm_feedback(
+            cfg=cfg,
+            node=child_node,
+            stage_identifier=stage_identifier,
+            event_callback=event_callback,
+        )
 
     result_data = child_node.to_dict()
     pickle.dumps(result_data)

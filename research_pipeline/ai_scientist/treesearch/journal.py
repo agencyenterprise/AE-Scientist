@@ -95,7 +95,7 @@ class Node(DataClassJsonMixin):
 
     # ---- VLM feedback ----
     plot_analyses: list[dict[str, Any]] = field(default_factory=list)
-    vlm_feedback_summary: List[str] = field(default_factory=list)
+    vlm_feedback_summary: str = field(default="", kw_only=True)
     datasets_successfully_tested: List[str] = field(default_factory=list)
 
     # ---- execution time feedback ----
