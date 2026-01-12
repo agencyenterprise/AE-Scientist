@@ -644,9 +644,7 @@ def process_node(
         argv=[
             "codex",
             "exec",
-            "--full-auto",
-            "--sandbox",
-            "danger-full-access",
+            "--yolo",
             "--skip-git-repo-check",
             "--json",
         ],
