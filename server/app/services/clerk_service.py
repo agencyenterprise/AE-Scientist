@@ -19,38 +19,50 @@ logger = logging.getLogger(__name__)
 
 class ClerkService:
     """Service for handling Clerk authentication."""
-    jwks_url: str
-    client: Clerk
-    jwks_client: PyJWKClient
+    jwks_url: Optional[str]
+    client: Optional[Clerk]
+    jwks_client: Optional[PyJWKClient]
+    _is_configured: bool
 
     def __init__(self) -> None:
         """Initialize the Clerk service."""
-        if not settings.CLERK_SECRET_KEY:
-            logger.warning("CLERK_SECRET_KEY not configured")
-        self.client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+        self._is_configured = False
+        self.jwks_url = None
+        self.client = None
+        self.jwks_client = None
 
-        # JWKS client for JWT verification (networkless)
-        # Extract the Clerk frontend API URL from the publishable key
-        # Format: pk_test_<instance>.clerk.accounts.dev or pk_live_<instance>.clerk.com
-        if settings.CLERK_PUBLISHABLE_KEY:
+        if not settings.CLERK_SECRET_KEY:
+            logger.warning("CLERK_SECRET_KEY not configured - Clerk authentication will not work")
+            return
+
+        if not settings.CLERK_PUBLISHABLE_KEY:
+            logger.warning("CLERK_PUBLISHABLE_KEY not configured - Clerk authentication will not work")
+            return
+
+        try:
+            self.client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+
+            # JWKS client for JWT verification (networkless)
+            # Extract the Clerk frontend API URL from the publishable key
+            # Format: pk_test_<instance>.clerk.accounts.dev or pk_live_<instance>.clerk.com
             # Extract domain from publishable key
             # Example: pk_test_ZG9taW5hbnQtZHJhZ29uLTg4LmNsZXJrLmFjY291bnRzLmRldg==
             # The key is base64 encoded and contains the domain
-            try:
-                # Get the part after pk_test_ or pk_live_
-                key_parts = settings.CLERK_PUBLISHABLE_KEY.split("_")
-                if len(key_parts) >= 3:
-                    encoded_domain = "_".join(key_parts[2:])
-                    # Decode base64 to get the domain, strip any null bytes or special chars
-                    domain = base64.b64decode(encoded_domain + "==").decode("utf-8").rstrip("\x00$")
-                    self.jwks_url = f"https://{domain}/.well-known/jwks.json"
-            except Exception as e:
-                raise ValueError(f"Error parsing Clerk publishable key: {e}") from e
-
-        if not self.jwks_url:
-            raise ValueError("CLERK_PUBLISHABLE_KEY not configured")
-
-        self.jwks_client = PyJWKClient(self.jwks_url)
+            # Get the part after pk_test_ or pk_live_
+            key_parts = settings.CLERK_PUBLISHABLE_KEY.split("_")
+            if len(key_parts) >= 3:
+                encoded_domain = "_".join(key_parts[2:])
+                # Decode base64 to get the domain, strip any null bytes or special chars
+                domain = base64.b64decode(encoded_domain + "==").decode("utf-8").rstrip("\x00$")
+                self.jwks_url = f"https://{domain}/.well-known/jwks.json"
+                self.jwks_client = PyJWKClient(self.jwks_url)
+                self._is_configured = True
+                logger.info("Clerk service initialized successfully")
+            else:
+                logger.warning("Invalid CLERK_PUBLISHABLE_KEY format")
+        except Exception as e:
+            logger.warning(f"Error initializing Clerk service: {e}")
+            self._is_configured = False
 
     def verify_session_token(self, jwt_token: str) -> Optional[dict]:
         """
@@ -62,6 +74,10 @@ class ClerkService:
         Returns:
             Dict with user info if valid, None otherwise
         """
+        if not self._is_configured:
+            logger.error("Clerk service is not properly configured")
+            return None
+
         try:
             # Get the signing key from Clerk's JWKS
             signing_key = self.jwks_client.get_signing_key_from_jwt(jwt_token)
