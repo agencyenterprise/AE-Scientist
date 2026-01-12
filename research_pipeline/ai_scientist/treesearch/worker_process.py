@@ -163,6 +163,9 @@ def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
 class NodeTask(TypedDict):
     node_data: dict[str, object] | None
     task_desc: str
+    example_code: str
+    experiment_plan: str
+    risk_factors_and_limitations: str
     evaluation_metric_spec: EvaluationMetricSpec
     cfg: AppConfig
     memory_summary: str
@@ -203,11 +206,21 @@ def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
         pass
 
 
-def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[Path, Path]:
+def _prepare_workspace(*, cfg: AppConfig, process_id: str, example_code: str) -> tuple[Path, Path]:
     workspace_path = Path(cfg.workspace_dir) / f"process_{process_id}"
     workspace_path.mkdir(parents=True, exist_ok=True)
     working_dir_path = workspace_path / "working"
     working_dir_path.mkdir(parents=True, exist_ok=True)
+
+    try:
+        (workspace_path / "example_code.py").write_text(str(example_code), encoding="utf-8")
+    except OSError:
+        logger.debug(
+            "Failed writing example_code.py into worker workspace (dst=%s)",
+            workspace_path / "example_code.py",
+            exc_info=True,
+        )
+
     return workspace_path, working_dir_path
 
 
@@ -328,7 +341,9 @@ def _write_codex_task_file(
         stage_identifier_name=stage_identifier.name,
         stage_name=stage_name,
         timeout_seconds=timeout_seconds,
-        research_idea=str(task_context.research_idea or "").strip(),
+        research_idea=task_context.research_idea,
+        experiment_plan=task_context.experiment_plan,
+        risk_factors_and_limitations=task_context.risk_factors_and_limitations,
         memory_summary=memory_summary,
         venv_dir=str(venv_dir),
         environment_context=env_ctx_dict,
@@ -491,6 +506,9 @@ def process_node(
     *,
     node_data: dict[str, object] | None,
     task_desc: str,
+    example_code: str,
+    experiment_plan: str,
+    risk_factors_and_limitations: str,
     evaluation_metric_spec: EvaluationMetricSpec,
     cfg: AppConfig,
     memory_summary: str,
@@ -507,7 +525,9 @@ def process_node(
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
     process_id = multiprocessing.current_process().name
-    workspace_dir, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
+    workspace_dir, working_dir = _prepare_workspace(
+        cfg=cfg, process_id=process_id, example_code=example_code
+    )
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
     venv_dir = ensure_codex_venv(
         workspace_dir=workspace_dir,
@@ -565,6 +585,8 @@ def process_node(
         parent_node=parent_node_summary,
         user_feedback_payload=user_feedback_payload,
         research_idea=task_desc,
+        experiment_plan=experiment_plan,
+        risk_factors_and_limitations=risk_factors_and_limitations,
         evaluation_metric_spec=evaluation_metric_spec,
         memory_summary=memory_summary,
     )

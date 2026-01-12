@@ -17,7 +17,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple
 
 from pydantic import BaseModel
 
@@ -46,6 +46,11 @@ from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
+from .stages.task_description import (
+    build_base_task_description,
+    format_experiments,
+    format_risk_factors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,33 +149,6 @@ class AgentManager:
         """Return how many iterations have been attempted for a stage."""
         return self._attempt_iteration_by_stage.get(stage_name, 0)
 
-    def _get_task_desc_str(self) -> str:
-        task_desc = """You are an ambitious AI researcher who is looking to publish a paper that will contribute significantly to the field.
-You have an idea and you want to conduct creative experiments to gain scientific insights.
-Your aim is to run experiments to gather sufficient results for a top conference paper.
-Your research idea:\n\n
-"""
-        task_desc += (
-            "Title:\n"
-            + self.task_desc.title
-            + "\n"
-            + "Abstract:\n"
-            + self.task_desc.abstract
-            + "\n"
-            + "Short Hypothesis:\n"
-            + self.task_desc.short_hypothesis
-            + "\n"
-        )
-        if self.task_desc.code is not None:
-            logger.info("Loading code example from idea input")
-            task_desc += "Code To Use:\n" + self.task_desc.code + "\n"
-        else:
-            logger.info("Loading example code from example_code.py")
-            example_code_path = Path(__file__).parent.parent / "example_code.py"
-            example_code = example_code_path.read_text()
-            task_desc += "Code To Use:\n" + example_code + "\n"
-        return task_desc
-
     def _create_initial_stage(self) -> None:
         """Create the initial stage configuration"""
         # Seed Stage 1 (baseline) with defaults defined by the stage class
@@ -226,7 +204,7 @@ Your research idea:\n\n
     def _build_stage_impl(self, stage_meta: StageMeta, journal: Journal) -> StageImpl:
         ctx = StageContext(
             cfg=self.cfg,
-            task_desc=self._curate_task_desc(stage_meta),
+            task_desc=self._base_task_desc(),
             stage_identifier=stage_meta.identifier,
             journal=journal,
             workspace_dir=self.workspace_dir,
@@ -320,34 +298,14 @@ Your research idea:\n\n
                 )
         return None
 
-    def _curate_task_desc(self, stage: StageMeta) -> str:
-        task_desc = self._get_task_desc_str()
+    def _base_task_desc(self) -> str:
+        return build_base_task_description(task_desc=self.task_desc)
 
-        if stage.slug == Stage3Plotting.MAIN_STAGE_SLUG:
-            experiments = self.task_desc.experiments
-            experiment_str: Optional[str] = None
-
-            if isinstance(experiments, list) and experiments:
-                if isinstance(experiments[0], str):
-                    experiment_str = "\n".join(cast(List[str], experiments))
-                elif isinstance(experiments[0], dict):
-                    experiments_list = cast(List[Dict[str, str]], experiments)
-                    experiment_str = "\n".join(
-                        [f"{k}: {v}" for d in experiments_list for k, v in d.items()]
-                    )
-            elif isinstance(experiments, str):
-                experiment_str = experiments
-
-            if experiment_str is not None:
-                task_desc += "Experiment Plan: " + experiment_str + "\n"
-        elif stage.slug == Stage4Ablation.MAIN_STAGE_SLUG:
-            if isinstance(self.task_desc.risk_factors_and_limitations, list):
-                risk_factors_str = "\n".join(self.task_desc.risk_factors_and_limitations)
-            else:
-                risk_factors_str = self.task_desc.risk_factors_and_limitations
-            task_desc += "Risk Factors and Limitations: " + risk_factors_str + "\n"
-
-        return task_desc
+    def _example_code_for_codex(self) -> str:
+        if self.task_desc.code is not None and str(self.task_desc.code).strip():
+            return str(self.task_desc.code)
+        example_code_path = Path(__file__).resolve().parents[1] / "example_code.py"
+        return example_code_path.read_text(encoding="utf-8")
 
     def _save_checkpoint(self) -> None:
         """Save the current state of the experiment"""
@@ -381,7 +339,12 @@ Your research idea:\n\n
         # Derive a stage-local copy of config and curated task description
         stage_cfg = copy.deepcopy(self.cfg)
         stage_cfg.agent.search.num_drafts = stage.num_drafts
-        task_desc = self._curate_task_desc(stage)
+        task_desc = self._base_task_desc()
+        experiment_plan = (format_experiments(experiments=self.task_desc.experiments) or "").strip()
+        risk_factors_and_limitations = format_risk_factors(
+            risk_factors=self.task_desc.risk_factors_and_limitations
+        ).strip()
+        example_code = self._example_code_for_codex()
 
         task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
         task_desc += f"Sub-stage goals: {stage.goals}"
@@ -419,6 +382,9 @@ Your research idea:\n\n
         # Construct the worker agent for this substage
         return ParallelAgent(
             task_desc=task_desc,
+            example_code=example_code,
+            experiment_plan=experiment_plan,
+            risk_factors_and_limitations=risk_factors_and_limitations,
             evaluation_metric_spec=self.evaluation_metric_spec,
             cfg=stage_cfg,
             journal=self.journals[stage.name],

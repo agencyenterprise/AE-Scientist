@@ -10,6 +10,8 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     timeout_seconds: int
 
     research_idea: str
+    experiment_plan: str
+    risk_factors_and_limitations: str
     memory_summary: str
 
     venv_dir: str
@@ -48,6 +50,8 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "stage_name": self.stage_name,
             "timeout_seconds": self.timeout_seconds,
             "research_idea": self.research_idea,
+            "experiment_plan": self.experiment_plan,
+            "risk_factors_and_limitations": self.risk_factors_and_limitations,
             "memory_summary": self.memory_summary,
             "venv_dir": self.venv_dir,
             "environment_context": dict(self.environment_context),

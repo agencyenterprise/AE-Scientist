@@ -45,7 +45,7 @@ def perform_experiments_bfts(
 
     # Prepare a clean agent workspace for the run
     logger.info("Preparing agent workspace (copying and extracting files) ...")
-    prep_agent_workspace(cfg)
+    prep_agent_workspace(cfg=cfg)
 
     def cleanup() -> None:
         if global_step == 0:

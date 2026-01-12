@@ -3,8 +3,21 @@
 ### Introduction
 {% include "fragments/stage_intro.md.j2" %}
 
+You are an ambitious AI researcher who is looking to publish a paper that will contribute significantly to the field.
+You have an idea and you want to conduct creative experiments to gain scientific insights.
+Your aim is to run experiments to gather sufficient results for a top conference paper.
+
 ### Research idea
 {{ research_idea }}
+
+### Experiment plan
+{% if experiment_plan %}{{ experiment_plan }}{% else %}(empty){% endif %}
+
+### Risk factors and limitations
+{% if risk_factors_and_limitations %}{{ risk_factors_and_limitations }}{% else %}(empty){% endif %}
+
+### Example code
+A starting code file is available at `./example_code.py`.
 
 ### Memory
 {% if memory_summary %}{{ memory_summary }}{% else %}(empty){% endif %}

@@ -137,6 +137,8 @@ class CodexTaskContext(NamedTuple):
     parent_node: ParentNodeSummary | None
     user_feedback_payload: str
     research_idea: str
+    experiment_plan: str
+    risk_factors_and_limitations: str
     evaluation_metric_spec: EvaluationMetricSpec
     memory_summary: str
 
@@ -165,6 +167,8 @@ class CodexTaskContext(NamedTuple):
             "parent_node": None if self.parent_node is None else self.parent_node.to_json_dict(),
             "user_feedback_payload": self.user_feedback_payload,
             "research_idea": self.research_idea,
+            "experiment_plan": self.experiment_plan,
+            "risk_factors_and_limitations": self.risk_factors_and_limitations,
             "evaluation_metric_spec": self.evaluation_metric_spec.to_json_dict(),
             "memory_summary": self.memory_summary,
         }

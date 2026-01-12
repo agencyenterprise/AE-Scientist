@@ -286,7 +286,7 @@ def load_task_desc(cfg: Config) -> TaskDescription:
     return model
 
 
-def prep_agent_workspace(cfg: Config) -> None:
+def prep_agent_workspace(*, cfg: Config) -> None:
     """Setup the agent's workspace and preprocess data if necessary."""
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
