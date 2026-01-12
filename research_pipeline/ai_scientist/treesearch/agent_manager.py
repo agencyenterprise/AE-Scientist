@@ -46,11 +46,6 @@ from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
-from .stages.task_description import (
-    build_base_task_description,
-    format_experiments,
-    format_risk_factors,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +199,7 @@ class AgentManager:
     def _build_stage_impl(self, stage_meta: StageMeta, journal: Journal) -> StageImpl:
         ctx = StageContext(
             cfg=self.cfg,
-            task_desc=self._base_task_desc(),
+            task_desc=self.task_desc,
             stage_identifier=stage_meta.identifier,
             journal=journal,
             workspace_dir=self.workspace_dir,
@@ -298,15 +293,6 @@ class AgentManager:
                 )
         return None
 
-    def _base_task_desc(self) -> str:
-        return build_base_task_description(task_desc=self.task_desc)
-
-    def _example_code_for_codex(self) -> str:
-        if self.task_desc.code is not None and str(self.task_desc.code).strip():
-            return str(self.task_desc.code)
-        example_code_path = Path(__file__).resolve().parents[1] / "example_code.py"
-        return example_code_path.read_text(encoding="utf-8")
-
     def _save_checkpoint(self) -> None:
         """Save the current state of the experiment"""
         # Persist journals, config and current stage for resuming/review
@@ -339,15 +325,6 @@ class AgentManager:
         # Derive a stage-local copy of config and curated task description
         stage_cfg = copy.deepcopy(self.cfg)
         stage_cfg.agent.search.num_drafts = stage.num_drafts
-        task_desc = self._base_task_desc()
-        experiment_plan = (format_experiments(experiments=self.task_desc.experiments) or "").strip()
-        risk_factors_and_limitations = format_risk_factors(
-            risk_factors=self.task_desc.risk_factors_and_limitations
-        ).strip()
-        example_code = self._example_code_for_codex()
-
-        task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
-        task_desc += f"Sub-stage goals: {stage.goals}"
 
         # Determine carryover best nodes based on current main stage
         if stage.identifier is StageIdentifier.STAGE2:
@@ -381,10 +358,8 @@ class AgentManager:
 
         # Construct the worker agent for this substage
         return ParallelAgent(
-            task_desc=task_desc,
-            example_code=example_code,
-            experiment_plan=experiment_plan,
-            risk_factors_and_limitations=risk_factors_and_limitations,
+            task_desc=self.task_desc,
+            stage_goals=stage.goals,
             evaluation_metric_spec=self.evaluation_metric_spec,
             cfg=stage_cfg,
             journal=self.journals[stage.name],

@@ -3,18 +3,45 @@
 ### Introduction
 {% include "fragments/stage_intro.md.j2" %}
 
-You are an ambitious AI researcher who is looking to publish a paper that will contribute significantly to the field.
-You have an idea and you want to conduct creative experiments to gain scientific insights.
-Your aim is to run experiments to gather sufficient results for a top conference paper.
-
 ### Research idea
-{{ research_idea }}
+**Title**: {{ task_desc.title }}
+
+**Abstract**:
+{{ task_desc.abstract }}
+
+**Short hypothesis**:
+{{ task_desc.short_hypothesis }}
+
+**Related work**:
+{{ task_desc.related_work }}
+
+### Stage goals
+{% if stage_goals %}{{ stage_goals }}{% else %}(empty){% endif %}
+
 
 ### Experiment plan
-{% if experiment_plan %}{{ experiment_plan }}{% else %}(empty){% endif %}
+{% if task_desc.experiments is string %}
+{{ task_desc.experiments }}
+{% elif task_desc.experiments %}
+{% for exp in task_desc.experiments %}
+{% if exp is string %}
+- {{ exp }}
+{% else %}
+{% for k, v in exp.items() %}
+- {{ k }}: {{ v }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% else %}(empty){% endif %}
 
 ### Risk factors and limitations
-{% if risk_factors_and_limitations %}{{ risk_factors_and_limitations }}{% else %}(empty){% endif %}
+{% if task_desc.risk_factors_and_limitations is string %}
+{{ task_desc.risk_factors_and_limitations }}
+{% elif task_desc.risk_factors_and_limitations %}
+{% for item in task_desc.risk_factors_and_limitations %}
+- {{ item }}
+{% endfor %}
+{% else %}(empty){% endif %}
 
 ### Example code
 A starting code file is available at `./example_code.py`.
@@ -24,7 +51,10 @@ A starting code file is available at `./example_code.py`.
 
 
 ### Installed Packages
-A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python` / `pip` resolve to that environment). Reuse it; do not create a new venv. Install missing packages into this venv only if required.{% include "fragments/gpu_text.md.j2" %}{% include "fragments/storage_text.md.j2" %}
+A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python` / `pip` resolve to that environment). Reuse it; do not create a new venv. Install missing packages into this venv only if required.
+{% include "fragments/gpu_text.md.j2" %}
+{% include "fragments/storage_text.md.j2" %}
+
 
 ### Available Datasets
 {% include "fragments/available_datasets_text.md.j2" %}

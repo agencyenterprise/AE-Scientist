@@ -1,5 +1,7 @@
 from typing import Any, NamedTuple
 
+from ..config import TaskDescription
+
 
 class EvaluationMetricSpec(NamedTuple):
     name: str
@@ -136,39 +138,7 @@ class CodexTaskContext(NamedTuple):
     timeout_seconds: int
     parent_node: ParentNodeSummary | None
     user_feedback_payload: str
-    research_idea: str
-    experiment_plan: str
-    risk_factors_and_limitations: str
+    task_desc: TaskDescription
+    stage_goals: str
     evaluation_metric_spec: EvaluationMetricSpec
     memory_summary: str
-
-    def to_json_dict(self) -> dict[str, object]:
-        return {
-            "execution_id": self.execution_id,
-            "stage_identifier": self.stage_identifier,
-            "seed_eval": self.seed_eval,
-            "seed_value": self.seed_value,
-            "seed_aggregation": (
-                None if self.seed_aggregation is None else self.seed_aggregation.to_json_dict()
-            ),
-            "stage2_hyperparam_idea": (
-                None
-                if self.stage2_hyperparam_idea is None
-                else self.stage2_hyperparam_idea.to_json_dict()
-            ),
-            "stage4_ablation_idea": (
-                None
-                if self.stage4_ablation_idea is None
-                else self.stage4_ablation_idea.to_json_dict()
-            ),
-            "gpu_id": self.gpu_id,
-            "agent_file_name": self.agent_file_name,
-            "timeout_seconds": self.timeout_seconds,
-            "parent_node": None if self.parent_node is None else self.parent_node.to_json_dict(),
-            "user_feedback_payload": self.user_feedback_payload,
-            "research_idea": self.research_idea,
-            "experiment_plan": self.experiment_plan,
-            "risk_factors_and_limitations": self.risk_factors_and_limitations,
-            "evaluation_metric_spec": self.evaluation_metric_spec.to_json_dict(),
-            "memory_summary": self.memory_summary,
-        }

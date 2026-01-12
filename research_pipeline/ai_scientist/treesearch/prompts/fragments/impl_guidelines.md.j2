@@ -1,55 +1,64 @@
 {% set gpu = environment_context["gpu"] %}
 {% set gpu_id = gpu.get("gpu_id") %}
-- CRITICAL GPU REQUIREMENTS - Your code MUST include ALL of these:
--   - At the start of your code, add these lines to handle GPU/CPU:
+CRITICAL GPU REQUIREMENTS - Your code MUST include ALL of these:
+
+- At the start of your code, add these lines to handle GPU/CPU:
 {% if gpu_id is not none %}
--     ```python
--     # CUDA_VISIBLE_DEVICES is already set; prefer cuda:0 inside the process
--     device = torch.device('cuda:0')
--     print(f'Using device: {device}')
--     ```
+```python
+# CUDA_VISIBLE_DEVICES is already set; prefer cuda:0 inside the process
+device = torch.device('cuda:0')
+print(f'Using device: {device}')
+```
 {% else %}
--     ```python
--     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
--     print(f'Using device: {device}')
--     ```
+```python
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using device: {device}')
+```
 {% endif %}
--   - ALWAYS move models to device using the `.to(device)` method
--   - ALWAYS move input tensors to device using the `.to(device)` method
--   - ALWAYS move model related tensors to device using the `.to(device)` method
--   - For optimizers, create them AFTER moving model to device
--   - When using DataLoader, move batch tensors to device in training loop: `batch = {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}`
-- CRITICAL MODEL INPUT GUIDELINES:
--   - Always pay extra attention to the input to the model being properly normalized
--   - This is extremely important because the input to the model's forward pass directly affects the output, and the loss function is computed based on the output
+
+- ALWAYS move models to device using the `.to(device)` method
+- ALWAYS move input tensors to device using the `.to(device)` method
+- ALWAYS move model related tensors to device using the `.to(device)` method
+- For optimizers, create them AFTER moving model to device
+- When using DataLoader, move batch tensors to device in training loop: `batch = {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}`
+
+CRITICAL MODEL INPUT GUIDELINES:
+
+- Always pay extra attention to the input to the model being properly normalized
+- This is extremely important because the input to the model's forward pass directly affects the output, and the loss function is computed based on the output
 {% if num_syn_datasets > 1 %}
-- You MUST evaluate your solution on at least {{ num_syn_datasets }} different datasets to ensure robustness:
--   - Use dataset sizes appropriate to the experiment at hand
--   - Use standard benchmark datasets when available
--   - If using synthetic data, generate at least {{ num_syn_datasets }} variants with different characteristics
--   - For very large datasets (>10GB), use streaming=True to avoid memory issues
--   - Report metrics separately for each dataset
--   - Compute and report the average metric across all datasets
+You MUST evaluate your solution on at least {{ num_syn_datasets }} different datasets to ensure robustness:
+
+- Use dataset sizes appropriate to the experiment at hand
+- Use standard benchmark datasets when available
+- If using synthetic data, generate at least {{ num_syn_datasets }} variants with different characteristics
+- For very large datasets (>10GB), use streaming=True to avoid memory issues
+- Report metrics separately for each dataset
+- Compute and report the average metric across all datasets
 {% endif %}
 - For generative modeling tasks, you must:
--   - Generate a set of samples from your model
--   - Compare these samples with ground truth data using appropriate visualizations
--   - When saving plots, always use the 'working_dir' variable that will be defined at the start of the script
--   - Make sure to give each figure a unique and appropriate name based on the dataset it represents, rather than reusing the same filename.
-- Important code structure requirements:
--   - Do NOT put any execution code inside 'if __name__ == "__main__":' block
--   - All code should be at the global scope or in functions that are called from the global scope
--   - The script should execute immediately when run, without requiring any special entry point
+  - Generate a set of samples from your model
+  - Compare these samples with ground truth data using appropriate visualizations
+  - When saving plots, always use the 'working_dir' variable that will be defined at the start of the script
+  - Make sure to give each figure a unique and appropriate name based on the dataset it represents, rather than reusing the same filename.
+
+Important code structure requirements:
+
+- Do NOT put any execution code inside `if __name__ == "__main__":` block
+- All code should be at the global scope or in functions that are called from the global scope
+- The script should execute immediately when run, without requiring any special entry point
 - The code should start with:
--   import os
--   working_dir = os.path.join(os.getcwd(), 'working')
--   os.makedirs(working_dir, exist_ok=True)
+  - `import os`
+  - `working_dir = os.path.join(os.getcwd(), 'working')`
+  - `os.makedirs(working_dir, exist_ok=True)`
 - The code should be a single-file python program that is self-contained and can be executed as-is.
-- No parts of the code should be skipped, don't terminate the code execution before finishing the script.
+- No parts of the code should be skipped; don't terminate execution before finishing the script.
 - Your response should only contain a single code block.
-- Be aware of the running time of the code, it should complete within {{ timeout_seconds | naturaldelta }}.
-- You can also use the "./working" directory to store any temporary files that your code needs to create.
-- Data saving requirements:
-- - Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using np.save()
-- - Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.
+- Be aware of the running time of the code; it should complete within {{ timeout_seconds | naturaldelta }}.
+- You can also use the `./working` directory to store any temporary files that your code needs to create.
+
+Data saving requirements:
+
+- Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using `np.save()`
+- Use filename `experiment_data.npy` to save the data (do not use a different filename).
 

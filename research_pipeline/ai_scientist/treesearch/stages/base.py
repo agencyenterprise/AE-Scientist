@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Tuple
 
 from pydantic import BaseModel
 
-from ..config import Config
+from ..config import Config, TaskDescription
 from ..events import BaseEvent
 from ..journal import Journal, Node
 from ..stage_identifiers import StageIdentifier
@@ -39,7 +39,7 @@ class StageMeta:
 @dataclass
 class StageContext:
     cfg: Config
-    task_desc: str
+    task_desc: TaskDescription
     stage_identifier: StageIdentifier
     journal: Journal
     workspace_dir: Path

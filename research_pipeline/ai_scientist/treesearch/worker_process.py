@@ -31,7 +31,7 @@ from .codex.seed_aggregation import (
 )
 from .codex.seed_aggregation import codex_seed_aggregation_instructions_lines
 from .config import Config as AppConfig
-from .config import apply_log_level
+from .config import TaskDescription, apply_log_level
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
@@ -123,7 +123,8 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
 def _summarize_execution_with_llm(
     *,
     cfg: AppConfig,
-    task_desc: str,
+    task_desc: TaskDescription,
+    stage_goals: str,
     stage_identifier: StageIdentifier,
     term_out: str,
     exc_type: str | None,
@@ -134,8 +135,9 @@ def _summarize_execution_with_llm(
             "Analyze the execution output, determine if there were any bugs, and provide a summary of the findings. "
             "If there is a bug, summarize the failure and propose a concrete fix direction."
         ),
-        "Research idea": task_desc,
+        "Research idea": task_desc.model_dump(by_alias=True),
         "Stage": stage_identifier.name,
+        "Stage goals": stage_goals,
         "Execution output": wrap_code(term_out, lang=""),
         "Exception type": str(exc_type or ""),
         "Execution time (seconds)": exec_time,
@@ -162,10 +164,8 @@ def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
 
 class NodeTask(TypedDict):
     node_data: dict[str, object] | None
-    task_desc: str
-    example_code: str
-    experiment_plan: str
-    risk_factors_and_limitations: str
+    task_desc: TaskDescription
+    stage_goals: str
     evaluation_metric_spec: EvaluationMetricSpec
     cfg: AppConfig
     memory_summary: str
@@ -206,12 +206,18 @@ def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
         pass
 
 
-def _prepare_workspace(*, cfg: AppConfig, process_id: str, example_code: str) -> tuple[Path, Path]:
+def _prepare_workspace(
+    *, cfg: AppConfig, process_id: str, task_desc: TaskDescription
+) -> tuple[Path, Path]:
     workspace_path = Path(cfg.workspace_dir) / f"process_{process_id}"
     workspace_path.mkdir(parents=True, exist_ok=True)
     working_dir_path = workspace_path / "working"
     working_dir_path.mkdir(parents=True, exist_ok=True)
 
+    example_code = task_desc.code
+    if example_code is None or not str(example_code).strip():
+        example_code_path = Path(__file__).resolve().parents[1] / "example_code.py"
+        example_code = example_code_path.read_text(encoding="utf-8")
     try:
         (workspace_path / "example_code.py").write_text(str(example_code), encoding="utf-8")
     except OSError:
@@ -341,9 +347,8 @@ def _write_codex_task_file(
         stage_identifier_name=stage_identifier.name,
         stage_name=stage_name,
         timeout_seconds=timeout_seconds,
-        research_idea=task_context.research_idea,
-        experiment_plan=task_context.experiment_plan,
-        risk_factors_and_limitations=task_context.risk_factors_and_limitations,
+        task_desc=task_context.task_desc,
+        stage_goals=task_context.stage_goals,
         memory_summary=memory_summary,
         venv_dir=str(venv_dir),
         environment_context=env_ctx_dict,
@@ -505,10 +510,8 @@ def _move_experiment_artifacts(
 def process_node(
     *,
     node_data: dict[str, object] | None,
-    task_desc: str,
-    example_code: str,
-    experiment_plan: str,
-    risk_factors_and_limitations: str,
+    task_desc: TaskDescription,
+    stage_goals: str,
     evaluation_metric_spec: EvaluationMetricSpec,
     cfg: AppConfig,
     memory_summary: str,
@@ -526,7 +529,7 @@ def process_node(
     _ensure_worker_log_level(cfg=cfg)
     process_id = multiprocessing.current_process().name
     workspace_dir, working_dir = _prepare_workspace(
-        cfg=cfg, process_id=process_id, example_code=example_code
+        cfg=cfg, process_id=process_id, task_desc=task_desc
     )
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
     venv_dir = ensure_codex_venv(
@@ -584,9 +587,8 @@ def process_node(
         timeout_seconds=cfg.exec.timeout,
         parent_node=parent_node_summary,
         user_feedback_payload=user_feedback_payload,
-        research_idea=task_desc,
-        experiment_plan=experiment_plan,
-        risk_factors_and_limitations=risk_factors_and_limitations,
+        task_desc=task_desc,
+        stage_goals=stage_goals,
         evaluation_metric_spec=evaluation_metric_spec,
         memory_summary=memory_summary,
     )
@@ -869,6 +871,7 @@ def process_node(
         llm_review = _summarize_execution_with_llm(
             cfg=cfg,
             task_desc=task_desc,
+            stage_goals=stage_goals,
             stage_identifier=stage_identifier,
             term_out="".join(term_out),
             exc_type=exc_type,

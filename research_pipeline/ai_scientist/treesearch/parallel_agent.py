@@ -31,7 +31,7 @@ from .codex.codex_task_types import (
     SeedNodeSummary,
     StageIdea,
 )
-from .config import Config
+from .config import Config, TaskDescription
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
@@ -67,10 +67,8 @@ def _safe_pickle_test(obj: object, name: str = "object") -> bool:
 class ParallelAgent:
     def __init__(
         self,
-        task_desc: str,
-        example_code: str,
-        experiment_plan: str,
-        risk_factors_and_limitations: str,
+        task_desc: TaskDescription,
+        stage_goals: str,
         evaluation_metric_spec: EvaluationMetricSpec,
         cfg: Config,
         journal: Journal,
@@ -82,9 +80,7 @@ class ParallelAgent:
     ) -> None:
         # Store run context (idea, configuration, journal, stage)
         self.task_desc = task_desc
-        self.example_code = example_code
-        self.experiment_plan = experiment_plan
-        self.risk_factors_and_limitations = risk_factors_and_limitations
+        self.stage_goals = stage_goals
         self.evaluation_metric_spec = evaluation_metric_spec
         self.cfg = cfg
         self.journal = journal
@@ -247,9 +243,7 @@ class ParallelAgent:
             task: NodeTask = {
                 "node_data": node_data,
                 "task_desc": self.task_desc,
-                "example_code": self.example_code,
-                "experiment_plan": self.experiment_plan,
-                "risk_factors_and_limitations": self.risk_factors_and_limitations,
+                "stage_goals": self.stage_goals,
                 "evaluation_metric_spec": self.evaluation_metric_spec,
                 "cfg": self.cfg,
                 "gpu_id": gpu_id,
@@ -347,9 +341,7 @@ class ParallelAgent:
                 agg_task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
-                    "example_code": self.example_code,
-                    "experiment_plan": self.experiment_plan,
-                    "risk_factors_and_limitations": self.risk_factors_and_limitations,
+                    "stage_goals": self.stage_goals,
                     "evaluation_metric_spec": self.evaluation_metric_spec,
                     "cfg": self.cfg,
                     "gpu_id": None,
@@ -777,9 +769,7 @@ class ParallelAgent:
                 task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
-                    "example_code": self.example_code,
-                    "experiment_plan": self.experiment_plan,
-                    "risk_factors_and_limitations": self.risk_factors_and_limitations,
+                    "stage_goals": self.stage_goals,
                     "evaluation_metric_spec": self.evaluation_metric_spec,
                     "cfg": self.cfg,
                     "gpu_id": gpu_id,
