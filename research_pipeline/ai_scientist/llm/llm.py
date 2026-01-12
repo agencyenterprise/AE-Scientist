@@ -12,7 +12,7 @@ from .token_tracker import TrackCostCallbackHandler
 logger = logging.getLogger("ai-scientist")
 
 
-PromptType = str | dict[str, Any] | list[Any] | None
+PromptType = str | dict[str, Any] | list[Any] | int | float | bool | None
 FunctionCallType = dict[str, Any]
 OutputType = str | FunctionCallType
 TStructured = TypeVar("TStructured", bound=BaseModel)

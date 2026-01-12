@@ -11,12 +11,9 @@ High-level steps:
 - Optionally generate final summary reports at the end
 """
 
-import atexit
 import json
 import logging
-import os
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -42,28 +39,9 @@ def perform_experiments_bfts(
     # Load the task description (idea) for the experiment
     task_desc = load_task_desc(cfg)
 
-    global_step = 0
-
     # Prepare a clean agent workspace for the run
     logger.info("Preparing agent workspace (copying and extracting files) ...")
     prep_agent_workspace(cfg=cfg)
-
-    def cleanup() -> None:
-        if global_step == 0:
-            # Preserve the workspace (useful for debugging), but clearly mark it.
-            workspace_dir = Path(cfg.workspace_dir)
-            ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            renamed_dir = workspace_dir.parent / f"{ts}_{os.getpid()}_{workspace_dir.name}"
-            try:
-                workspace_dir.rename(target=renamed_dir)
-            except OSError:
-                logger.exception(
-                    "Failed to rename empty-step workspace %s -> %s",
-                    workspace_dir,
-                    renamed_dir,
-                )
-
-    atexit.register(cleanup)
 
     # Initialize the AgentManager (orchestrates stages and substages)
     manager = AgentManager(

@@ -757,7 +757,7 @@ class Journal:
             lines.append("Recent successful experiments:")
             for n in recent_good:
                 metric_str = str(n.metric) if n.metric is not None else "N/A"
-                plan_preview = (n.plan or "").strip().replace("\n", " ")[:160]
+                plan_preview = (n.plan or "").strip().replace("\n", " ")
                 lines.append(f"- {n.id[:8]} metric={metric_str} plan={plan_preview}")
                 if include_code and n.code:
                     lines.append(f"  code_chars={len(n.code)}")
@@ -767,10 +767,10 @@ class Journal:
             lines.append("Recent failures:")
             for n in recent_bad:
                 exc = n.exc_type or "Unknown"
-                analysis_preview = (n.analysis or "").strip().replace("\n", " ")[:160]
+                analysis_preview = (n.analysis or "").strip().replace("\n", " ")
                 lines.append(f"- {n.id[:8]} exc_type={exc} analysis={analysis_preview}")
                 if n.user_feedback_payload:
-                    fb_preview = n.user_feedback_payload.strip().replace("\n", " ")[:160]
+                    fb_preview = n.user_feedback_payload.strip().replace("\n", " ")
                     lines.append(f"  user_feedback={fb_preview}")
 
         summary_text = "\n".join(lines).strip()

@@ -207,10 +207,29 @@ def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
 
 
 def _prepare_workspace(
-    *, cfg: AppConfig, process_id: str, task_desc: TaskDescription
+    *,
+    cfg: AppConfig,
+    stage_name: str,
+    task_desc: TaskDescription,
 ) -> tuple[Path, Path]:
-    workspace_path = Path(cfg.workspace_dir) / f"process_{process_id}"
-    workspace_path.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_workspace_dir = Path(cfg.workspace_dir)
+    exec_root_dir = run_workspace_dir / "executions"
+    exec_root_dir.mkdir(parents=True, exist_ok=True)
+
+    base_name = f"{stage_name}_{ts}_{os.getpid()}"
+    workspace_path = exec_root_dir / base_name
+    for suffix in range(1000):
+        candidate = workspace_path if suffix == 0 else exec_root_dir / f"{base_name}_{suffix}"
+        try:
+            candidate.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            continue
+        workspace_path = candidate
+        break
+    else:
+        raise RuntimeError(f"Failed to create unique execution workspace dir under {exec_root_dir}")
+
     working_dir_path = workspace_path / "working"
     working_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -528,8 +547,11 @@ def process_node(
 ) -> dict[str, object]:
     _ensure_worker_log_level(cfg=cfg)
     process_id = multiprocessing.current_process().name
+    stage_name = stage_identifier.prefixed_name
     workspace_dir, working_dir = _prepare_workspace(
-        cfg=cfg, process_id=process_id, task_desc=task_desc
+        cfg=cfg,
+        stage_name=stage_name,
+        task_desc=task_desc,
     )
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
     venv_dir = ensure_codex_venv(
@@ -539,7 +561,6 @@ def process_node(
     codex_env = build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)
-    stage_name = stage_identifier.prefixed_name
     logger.debug(
         "worker.begin execution_id=%s process_id=%s stage=%s seed_eval=%s seed_value=%s gpu_id=%s parent=%s workspace_dir=%s working_dir=%s",
         execution_id[:8],
