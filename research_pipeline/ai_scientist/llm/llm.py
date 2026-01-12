@@ -127,6 +127,9 @@ def compile_prompt_to_md(
         if prompt is None:
             return ""
 
+        if isinstance(prompt, (int, float, bool)):
+            return str(prompt).strip() + "\n"
+
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
 
@@ -169,7 +172,7 @@ def compile_prompt_to_md(
         raise ValueError(f"Unsupported prompt type: {type(prompt)}")
 
     except Exception as exc:
-        logger.error("Error in compile_prompt_to_md:")
+        logger.exception("Error in compile_prompt_to_md:")
         logger.error("Input type: %s", type(prompt))
         logger.error("Input content: %s", prompt)
         logger.error("Error: %s", str(exc))

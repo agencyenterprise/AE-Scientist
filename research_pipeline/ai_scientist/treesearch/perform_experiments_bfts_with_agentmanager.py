@@ -14,8 +14,9 @@ High-level steps:
 import atexit
 import json
 import logging
-import shutil
+import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -49,8 +50,18 @@ def perform_experiments_bfts(
 
     def cleanup() -> None:
         if global_step == 0:
-            # Remove workspace if the run produced no steps
-            shutil.rmtree(cfg.workspace_dir)
+            # Preserve the workspace (useful for debugging), but clearly mark it.
+            workspace_dir = Path(cfg.workspace_dir)
+            ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            renamed_dir = workspace_dir.parent / f"{ts}_{os.getpid()}_{workspace_dir.name}"
+            try:
+                workspace_dir.rename(target=renamed_dir)
+            except OSError:
+                logger.exception(
+                    "Failed to rename empty-step workspace %s -> %s",
+                    workspace_dir,
+                    renamed_dir,
+                )
 
     atexit.register(cleanup)
 
