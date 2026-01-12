@@ -509,7 +509,10 @@ def process_node(
     process_id = multiprocessing.current_process().name
     workspace_dir, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
-    venv_dir = ensure_codex_venv(research_pipeline_root=RESEARCH_PIPELINE_ROOT)
+    venv_dir = ensure_codex_venv(
+        workspace_dir=workspace_dir,
+        research_pipeline_root=RESEARCH_PIPELINE_ROOT,
+    )
     codex_env = build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)

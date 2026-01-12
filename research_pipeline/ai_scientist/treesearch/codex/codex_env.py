@@ -1,28 +1,70 @@
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 
-def ensure_codex_venv(*, research_pipeline_root: Path) -> Path:
-    """
-    Ensure a shared venv exists for the research_pipeline codebase.
+def _managed_venv_dir(*, workspace_dir: Path) -> Path:
+    return workspace_dir / ".ai_scientist_venv"
 
-    We intentionally avoid creating per-workspace venvs (e.g. per process workspace) because that
-    leads to repeated installs across runs. Instead, Codex is run with env vars that point to this
-    shared venv so `python` / `pip` resolve consistently.
-    """
-    venv_dir = research_pipeline_root / ".venv"
-    venv_python = venv_dir / "bin" / "python"
-    if venv_python.exists():
-        return venv_dir
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(venv_dir)],
+
+def _venv_python_path(*, venv_dir: Path) -> Path:
+    python_path = venv_dir / "bin" / "python"
+    if python_path.exists():
+        return python_path
+    raise FileNotFoundError(f"Python executable not found in venv at {venv_dir}")
+
+
+def _run_uv(
+    *, args: list[str], timeout_seconds: int, extra_env: dict[str, str], cwd: Path
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    for key, value in extra_env.items():
+        env[key] = value
+    return subprocess.run(
+        args=["uv", *args],
         check=True,
-        cwd=str(research_pipeline_root),
-        env=os.environ.copy(),
         capture_output=True,
         text=True,
+        timeout=float(timeout_seconds),
+        env=env,
+        cwd=str(cwd),
+    )
+
+
+def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> Path:
+    """
+    Ensure a per-workspace venv exists (under the worker's workspace dir) and has project deps.
+
+    This venv is used by Codex so `python` / `pip` resolve consistently during the run.
+    """
+    venv_dir = _managed_venv_dir(workspace_dir=workspace_dir)
+    if not venv_dir.exists():
+        _run_uv(
+            args=["venv", "--system-site-packages", str(venv_dir)],
+            timeout_seconds=600,
+            extra_env={},
+            cwd=workspace_dir,
+        )
+    venv_python = _venv_python_path(venv_dir=venv_dir)
+
+    src_pyproject = research_pipeline_root / "pyproject.toml"
+    dst_pyproject = workspace_dir / "pyproject.toml"
+    if src_pyproject.exists():
+        dst_pyproject.write_text(src_pyproject.read_text(encoding="utf-8"), encoding="utf-8")
+
+    src_lock = research_pipeline_root / "uv.lock"
+    dst_lock = workspace_dir / "uv.lock"
+    if src_lock.exists():
+        dst_lock.write_text(src_lock.read_text(encoding="utf-8"), encoding="utf-8")
+
+    _run_uv(
+        args=["sync"],
+        timeout_seconds=600,
+        extra_env={
+            "UV_PROJECT_ENVIRONMENT": str(venv_dir),
+            "UV_PYTHON": str(venv_python),
+        },
+        cwd=workspace_dir,
     )
     return venv_dir
 
