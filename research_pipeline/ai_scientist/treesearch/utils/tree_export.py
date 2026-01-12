@@ -199,7 +199,7 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
             if isinstance(n.metric.value, dict) and "metric_names" in n.metric.value:
                 metrics.append(n.metric.value)
             else:
-                # Handle legacy format by wrapping it in the new structure
+                # Handle older format by wrapping it in the new structure
                 metrics.append(
                     {
                         "metric_names": [

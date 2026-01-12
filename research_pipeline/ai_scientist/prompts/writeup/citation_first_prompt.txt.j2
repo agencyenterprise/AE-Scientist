@@ -1,0 +1,25 @@
+Round {{ current_round }}/{{ total_rounds }}:
+
+You planned and executed the following idea:
+```markdown
+{{ idea_text }}
+```
+
+You produced the following report:
+```markdown
+{{ report }}
+```
+
+Your current list of citations is:
+```
+{{ citations }}
+```
+
+Identify the most important citation that you still need to add, and the query to find the paper.
+
+Return a JSON object matching the CitationSearchResponse schema:
+- "needs_more_citations": whether another citation is still required.
+- "description": purpose of the desired citation (what you are looking for).
+- "query": Semantic Scholar search query to find the paper.
+If "needs_more_citations" is false, leave the other fields blank.
+

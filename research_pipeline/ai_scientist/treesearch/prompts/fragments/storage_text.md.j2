@@ -1,0 +1,6 @@
+{% set storage = environment_context.get("storage") %}
+{% if storage is mapping and storage.get("workspace_disk_capacity_bytes") is not none and storage.get("workspace_disk_free_bytes") is not none %}
+
+**Storage Availability**: a dedicated workspace volume of ~{{ storage.get("workspace_disk_capacity_bytes") | naturalsize }}; {{ storage.get("workspace_disk_free_bytes") | naturalsize }} free right now on your workspace volume. Use disk space responsibly when downloading datasets.
+{% endif %}
+

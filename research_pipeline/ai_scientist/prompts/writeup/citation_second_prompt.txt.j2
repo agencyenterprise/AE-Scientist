@@ -1,0 +1,10 @@
+Search has recovered the following articles:
+
+{{ papers }}
+
+Return a JSON object matching the CitationSelectionResponse schema:
+- "should_add": whether any of the retrieved papers should be added.
+- "selected_indices": array of integer indices referencing the papers above.
+- "description": brief summary of the selected work(s), their relevance, and where to cite them.
+If "should_add" is false, leave "selected_indices" empty.
+

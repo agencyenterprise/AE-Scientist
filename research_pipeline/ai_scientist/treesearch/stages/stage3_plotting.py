@@ -1,14 +1,13 @@
-from __future__ import annotations
-
 import logging
 from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
+from ..codex.node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..config import Config as AppConfig
 from ..journal import Journal, Node
-from ..node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..prompts.render import render_lines, render_text
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -79,16 +78,10 @@ class Stage3Plotting(Stage):
             metric_val,
         )
         vlm_feedback = Stage3Plotting.parse_vlm_feedback(node=best_node)
-        eval_prompt = f"""
-        Evaluate if the current sub-stage is complete based on the following evidence:
-        1. Figure Analysis:
-        {vlm_feedback}
-
-        Requirements for completion:
-        - {goals}
-
-        Provide a detailed evaluation of completion status.
-        """
+        eval_prompt = render_text(
+            template_name="stage_completion/stage3_substage.txt.j2",
+            context={"vlm_feedback": vlm_feedback, "goals": goals},
+        )
         evaluation = structured_query_with_schema(
             system_message=eval_prompt,
             user_message=None,
@@ -181,13 +174,7 @@ class Stage3Plotting(Stage):
 
 
 def codex_node_result_contract_prompt_lines() -> list[str]:
-    return [
-        "- Stage-specific required fields:",
-        "  - Stage 3 (plotting stage):",
-        "    - If `is_buggy_plots` is false, you MUST write at least 1 `.png` plot into `./working/`.",
-        "    - If `is_buggy_plots` is false, you MUST provide at least 1 `plot_analyses` entry with an `analysis` string.",
-        "    - If `is_buggy_plots` is false, you MUST provide a non-empty `vlm_feedback_summary` list.",
-    ]
+    return render_lines(template_name="contracts/stage3.txt.j2", context={})
 
 
 def validate_node_result_contract(

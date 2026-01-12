@@ -1,0 +1,200 @@
+## Machine-readable context (JSON)
+```json
+{{ task_context_json }}
+```
+
+## Task context
+
+### Introduction
+{% include "fragments/stage_intro.md.j2" %}
+
+### Research idea
+{{ research_idea }}
+
+### Memory
+{% if memory_summary %}{{ memory_summary }}{% else %}(empty){% endif %}
+
+### Installed Packages
+A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python` / `pip` resolve to that environment). Reuse it; do not create a new venv. Install missing packages into this venv only if required.{% include "fragments/gpu_text.md.j2" %}{% include "fragments/storage_text.md.j2" %}
+
+### Available Datasets
+{% include "fragments/available_datasets_text.md.j2" %}
+
+### Evaluation Metric(s)
+{% if evaluation_metric_json %}{{ evaluation_metric_json }}{% else %}(none){% endif %}
+
+### Implementation guideline
+{% include "fragments/impl_guidelines.md.j2" %}
+
+{% if stage_identifier_name == "STAGE1" %}
+### Experiment design sketch guideline (Stage 1 baseline)
+- This first experiment design should be relatively simple, without extensive hyper-parameter optimization.
+- Take the Memory section into consideration when proposing the design.
+- The solution sketch should be 6-10 sentences.
+- Don't suggest to do EDA.
+- Use real public datasets appropriate to the task.
+- If the research idea specifies dataset URLs or names, use those.
+- Otherwise, research where suitable datasets are available (common sources: HuggingFace, GitHub, academic repositories, etc.).
+- Only fall back to synthetic data if no suitable dataset is available or synthetic generation is essential to the experiment.
+{% endif %}
+
+{% if stage_identifier_name == "STAGE2" %}
+### Stage 2 hyperparameter-tuning requirements
+- DO NOT change model architecture from the previous stage.
+- Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.
+- Save data in `working/experiment_data.npy` with a structure like:
+- ```python
+- experiment_data = {
+-     'hyperparam_tuning_type_1': {
+-         'dataset_name_1': {
+-             'metrics': {'train': [], 'val': []},
+-             'losses': {'train': [], 'val': []},
+-             'predictions': [],
+-             'ground_truth': [],
+-         },
+-     },
+- }
+- ```
+
+{% if assigned_hyperparam_name or assigned_hyperparam_description %}
+### Assigned hyperparameter-tuning idea (MUST follow)
+{% if assigned_hyperparam_name %}
+- **Idea name**: {{ assigned_hyperparam_name }}
+- **Contract**: set `hyperparam_name` in `node_result.json` to exactly `{{ assigned_hyperparam_name }}`
+{% endif %}
+{% if assigned_hyperparam_description %}
+- **Idea description**: {{ assigned_hyperparam_description }}
+{% endif %}
+{% if assigned_hyperparam_tried_names %}
+- **Previously tried idea names**: {{ assigned_hyperparam_tried_names }}
+{% endif %}
+{% endif %}
+{% endif %}
+
+{% if stage_identifier_name == "STAGE4" %}
+### Stage 4 ablation requirements
+- Choose ONE ablation idea for this run and set `ablation_name` in node_result.json accordingly.
+- Save data in `working/experiment_data.npy` with a structure like:
+- ```python
+- experiment_data = {
+-     'ablation_type_1': {
+-         'dataset_name_1': {
+-             'metrics': {'train': [], 'val': []},
+-             'losses': {'train': [], 'val': []},
+-             'predictions': [],
+-             'ground_truth': [],
+-         },
+-     },
+- }
+- ```
+
+{% if assigned_ablation_name or assigned_ablation_description %}
+### Assigned ablation idea (MUST follow)
+{% if assigned_ablation_name %}
+- **Idea name**: {{ assigned_ablation_name }}
+- **Contract**: set `ablation_name` in `node_result.json` to exactly `{{ assigned_ablation_name }}`
+{% endif %}
+{% if assigned_ablation_description %}
+- **Idea description**: {{ assigned_ablation_description }}
+{% endif %}
+{% if assigned_ablation_tried_names %}
+- **Previously tried idea names**: {{ assigned_ablation_tried_names }}
+{% endif %}
+{% endif %}
+{% endif %}
+
+{% if base_code %}
+### Base code you are working on (from parent node)
+```python
+{{ base_code }}
+```
+{% endif %}
+
+{% if parent_term_out %}
+### Previous execution output (from parent node)
+{{ parent_term_out }}
+{% endif %}
+
+{% if parent_exc_type %}
+### Previous exception type (from parent node)
+{{ parent_exc_type }}
+{% endif %}
+
+{% if parent_analysis %}
+### Previous analysis / summary (from parent node)
+{{ parent_analysis }}
+{% endif %}
+
+{% if parent_vlm_feedback_summary %}
+### Feedback based on generated plots (from parent node)
+{{ parent_vlm_feedback_summary }}
+{% endif %}
+
+{% if exec_time_feedback %}
+### Feedback about execution time
+{{ exec_time_feedback }}
+{% endif %}
+
+{% if user_feedback_payload %}
+### User feedback
+{{ user_feedback_payload }}
+{% endif %}
+
+{% if show_plotting_guidelines %}
+### Plotting code guideline
+{% include "fragments/plotting_guidelines.md.j2" %}
+{% endif %}
+
+You are an autonomous coding agent running inside a sandboxed workspace.
+You must not ask the user for input; proceed with reasonable defaults.
+You have full permission to install packages, download data, edit files, and run commands.
+
+## Context
+- execution_id: `{{ execution_id }}`
+- stage_identifier: `{{ stage_identifier_name }}`
+- stage_name: `{{ stage_name }}`
+- wall_clock_timeout_seconds: {{ timeout_seconds }}
+
+## Inputs
+- Read the JSON object in this file under **Machine-readable context (JSON)**.
+- Read the rest of this markdown file for the human-readable task context.
+
+{{ seed_agg_block }}
+## Required outputs (MUST)
+- Write a complete Node dict to `{{ output_json_name }}` using the same schema as Node.to_dict.
+- Write your final experiment code to `{{ agent_file_name }}`.
+- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).
+- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.
+
+{{ contract_block }}
+## Hard requirements
+- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.
+- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.
+- Avoid re-downloading data if it's already present in the dataset caches described above.
+
+## Metric requirement
+- Read `evaluation_metric_spec` from the JSON context and use it as the primary metric definition.
+- Populate `metric` in `node_result.json` with:
+  - `metric.name` exactly matching `evaluation_metric_spec.name`
+  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`
+  - `metric.description` matching `evaluation_metric_spec.description`
+  - `metric.value` as a numeric value from your evaluation run
+
+## Seed requirement
+- Read `seed_eval` and `seed_value` from the JSON context.
+- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:
+  - `random.seed(seed_value)`
+  - `numpy.random.seed(seed_value)`
+  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`
+- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.
+- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").
+
+## GPU requirement
+- If `gpu_id` is not null in the JSON context, you MUST use the GPU when applicable (training/inference).
+- Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.
+
+## Execution contract
+- Run any commands you need.
+- Run the final experiment with: `python {{ agent_file_name }}`.
+- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.
+

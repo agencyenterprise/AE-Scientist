@@ -1,14 +1,13 @@
-from __future__ import annotations
-
 import logging
 from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
+from ..codex.node_result_contract import NodeResultContractContext
+from ..config import Config as AppConfig
 from ..journal import Journal
-from ..node_result_contract import NodeResultContractContext
+from ..prompts.render import render_text
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -54,16 +53,16 @@ class Stage1Baseline(Stage):
             best_node.id[:8],
             metric_val,
         )
-        prompt = f"""
-        Evaluate if the current sub-stage is complete.
-
-        Evidence:
-        - Best metric: {best_node.metric.value if best_node.metric is not None else 'N/A'}
-        - Is buggy: {best_node.is_buggy}
-
-        Requirements for completion:
-        - {goals}
-        """
+        prompt = render_text(
+            template_name="stage_completion/stage1_substage.txt.j2",
+            context={
+                "best_metric_value": (
+                    best_node.metric.value if best_node.metric is not None else "N/A"
+                ),
+                "is_buggy": best_node.is_buggy,
+                "goals": goals,
+            },
+        )
         evaluation = structured_query_with_schema(
             system_message=prompt,
             user_message=None,

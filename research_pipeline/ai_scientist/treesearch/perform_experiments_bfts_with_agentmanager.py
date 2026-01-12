@@ -20,11 +20,11 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .agent_manager import AgentManager
+from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .journal import Journal
 from .log_summarization import overall_summarize
 from .stages.base import StageMeta
-from .utils.config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 
 logger = logging.getLogger("ai-scientist")
 

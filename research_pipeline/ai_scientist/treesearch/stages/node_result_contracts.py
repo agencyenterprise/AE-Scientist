@@ -1,11 +1,9 @@
-from __future__ import annotations
-
-from ..node_result_contract import (
+from ..codex.node_result_contract import (
     NodeResultContractContext,
     codex_node_result_contract_prompt_lines_common,
     validate_common_node_result_contract,
 )
-from ..seed_aggregation import validate_node_result_contract as validate_seed_agg_contract
+from ..codex.seed_aggregation import validate_node_result_contract as validate_seed_agg_contract
 from ..stage_identifiers import StageIdentifier
 from . import stage1_baseline, stage2_tuning, stage3_plotting, stage4_ablation
 
@@ -16,7 +14,7 @@ def codex_node_result_contract_prompt_lines_for_stage(
     common = codex_node_result_contract_prompt_lines_common()
     # Seed aggregation is orthogonal to the main stages. We still include the common section,
     # but the seed-aggregation task adds additional requirements.
-    # (The harness decides whether this is a seed-aggregation run via codex_input.json.)
+    # (The harness decides whether this is a seed-aggregation run via JSON context in codex_task.md.)
     if stage_identifier is StageIdentifier.STAGE1:
         return common + stage1_baseline.codex_node_result_contract_prompt_lines()
     if stage_identifier is StageIdentifier.STAGE2:

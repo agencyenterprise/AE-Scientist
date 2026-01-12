@@ -25,6 +25,13 @@ from typing import List, Optional
 import sentry_sdk
 
 from . import execution_registry
+from .codex.codex_task_types import (
+    EvaluationMetricSpec,
+    SeedAggregationPayload,
+    SeedNodeSummary,
+    StageIdea,
+)
+from .config import Config
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
@@ -33,14 +40,8 @@ from .stage_identifiers import StageIdentifier
 from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
 from .stages.stage2_tuning import propose_next_hyperparam_idea
 from .stages.stage4_ablation import propose_next_ablation_idea
-from .utils.config import Config
 from .utils.metric import WorstMetricValue
-from .worker_process import (
-    ExecutionCrashedError,
-    ExecutionTerminatedError,
-    NodeTask,
-    process_node_task,
-)
+from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, NodeTask, process_node
 
 logger = logging.getLogger("ai-scientist")
 
@@ -67,7 +68,7 @@ class ParallelAgent:
     def __init__(
         self,
         task_desc: str,
-        evaluation_metric_spec: dict[str, object],
+        evaluation_metric_spec: EvaluationMetricSpec,
         cfg: Config,
         journal: Journal,
         stage_identifier: StageIdentifier,
@@ -254,7 +255,7 @@ class ParallelAgent:
                 "execution_id": execution_id,
                 "user_feedback_payload": "",
             }
-            future = executor.submit(process_node_task, task)
+            future = executor.submit(process_node, **task)
             futures.append(future)
             execution_ids.append(execution_id)
 
@@ -314,26 +315,26 @@ class ParallelAgent:
                     node=node,
                     stage_name=f"{self.stage_name}_seed_aggregation",
                 )
-                seed_payload: list[dict[str, object]] = []
+                seed_payload: list[SeedNodeSummary] = []
                 for seed_node in seed_nodes:
                     seed_payload.append(
-                        {
-                            "id": seed_node.id,
-                            "exp_results_dir": seed_node.exp_results_dir,
-                            "metric": (
+                        SeedNodeSummary(
+                            id=seed_node.id,
+                            exp_results_dir=seed_node.exp_results_dir,
+                            metric=(
                                 seed_node.metric.to_dict() if seed_node.metric is not None else None
                             ),
-                            "plots": seed_node.plots,
-                            "plot_paths": seed_node.plot_paths,
-                            "is_buggy": seed_node.is_buggy,
-                            "is_buggy_plots": seed_node.is_buggy_plots,
-                        }
+                            plots=list(seed_node.plots),
+                            plot_paths=list(seed_node.plot_paths),
+                            is_buggy=bool(seed_node.is_buggy is True),
+                            is_buggy_plots=bool(seed_node.is_buggy_plots is True),
+                        )
                     )
-                seed_aggregation: dict[str, object] = {
-                    "parent_node_id": node.id,
-                    "stage_name": self.stage_name,
-                    "seed_nodes": seed_payload,
-                }
+                seed_aggregation = SeedAggregationPayload(
+                    parent_node_id=node.id,
+                    stage_name=self.stage_name,
+                    seed_nodes=seed_payload,
+                )
                 agg_task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
@@ -351,7 +352,7 @@ class ParallelAgent:
                     "execution_id": aggregation_execution_id,
                     "user_feedback_payload": "",
                 }
-                agg_future = executor.submit(process_node_task, agg_task)
+                agg_future = executor.submit(process_node, **agg_task)
                 agg_data = agg_future.result(timeout=self.timeout)
                 agg_node = Node.from_dict(agg_data, self.journal)
                 execution_registry.attach_node(
@@ -400,7 +401,7 @@ class ParallelAgent:
         )
         stage_identifier = self.stage_identifier
         # Codex-only pipeline: all idea generation (baseline/tuning/plotting/ablation) happens inside
-        # the worker via Codex, using stage goals + context in codex_input.json/codex_task.md.
+        # the worker via Codex, using stage goals + context embedded in codex_task.md (JSON + markdown).
         nodes_to_process: list[Optional[Node]] = []
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
@@ -717,7 +718,7 @@ class ParallelAgent:
                 user_feedback_payload = ""
                 if node is not None:
                     user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
-                stage2_hyperparam_idea: dict[str, object] | None = None
+                stage2_hyperparam_idea: StageIdea | None = None
                 if self.stage_identifier is StageIdentifier.STAGE2 and node is not None:
                     base_code = node.code or ""
                     tried_hyperparam_set: set[str] = set()
@@ -734,12 +735,12 @@ class ParallelAgent:
                         temperature=self.cfg.agent.feedback.temperature,
                     )
                     scheduled_stage2_names.add(hyperparam_idea.name)
-                    stage2_hyperparam_idea = {
-                        "name": hyperparam_idea.name,
-                        "description": hyperparam_idea.description,
-                        "tried_hyperparams": tried_hyperparams,
-                    }
-                stage4_ablation_idea: dict[str, object] | None = None
+                    stage2_hyperparam_idea = StageIdea(
+                        name=hyperparam_idea.name,
+                        description=hyperparam_idea.description,
+                        tried_names=list(tried_hyperparams),
+                    )
+                stage4_ablation_idea: StageIdea | None = None
                 if self.stage_identifier is StageIdentifier.STAGE4 and node is not None:
                     base_code = node.code or ""
                     tried_ablation_set: set[str] = set()
@@ -756,12 +757,11 @@ class ParallelAgent:
                         temperature=self.cfg.agent.feedback.temperature,
                     )
                     scheduled_stage4_names.add(ablation_idea.name)
-                    stage4_ablation_idea = {
-                        "name": ablation_idea.name,
-                        "description": ablation_idea.description,
-                        "tried_ablations": tried_ablations,
-                    }
-                # TODO: is node_data ever not None?
+                    stage4_ablation_idea = StageIdea(
+                        name=ablation_idea.name,
+                        description=ablation_idea.description,
+                        tried_names=list(tried_ablations),
+                    )
                 task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
@@ -779,7 +779,7 @@ class ParallelAgent:
                     "execution_id": execution_id,
                     "user_feedback_payload": user_feedback_payload,
                 }
-                future = executor.submit(process_node_task, task)
+                future = executor.submit(process_node, **task)
                 futures.append(future)
                 self._future_execution_ids[future] = execution_id
                 self._future_process_ids[future] = process_id

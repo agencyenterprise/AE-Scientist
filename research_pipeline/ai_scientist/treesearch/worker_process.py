@@ -3,89 +3,121 @@ import logging
 import multiprocessing
 import os
 import pickle
-import subprocess
-import sys
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Literal, TypedDict
-
-import humanize  # pyright: ignore[reportMissingImports]
+from typing import Any, Callable, Literal, TypedDict
 
 from ai_scientist.llm import structured_query_with_schema
 
 from . import execution_registry
-from .codex_cli_runner import CodexCliRunner
-from .datasets_context import (
-    S3DatasetEntry,
-    build_s3_download_snippet,
-    build_s3_upload_snippet,
-    get_available_datasets,
-    get_research_pipeline_env_file,
+from .codex.codex_cli_runner import CodexCliRunner
+from .codex.codex_env import build_codex_env, ensure_codex_venv
+from .codex.codex_task_types import (
+    CodexTaskContext,
+    EvaluationMetricSpec,
+    ParentNodeSummary,
+    SeedAggregationPayload,
+    StageIdea,
 )
-from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
-from .gpu_manager import GPUSpec, get_gpu_specs
-from .journal import Node
-from .node_result_contract import (
+from .codex.node_result_contract import (
     NodeResultContractContext,
     codex_node_result_contract_prompt_lines_common,
     count_working_pngs,
 )
-from .seed_aggregation import (
+from .codex.seed_aggregation import (
     codex_node_result_contract_prompt_lines as codex_seed_agg_contract_lines,
 )
-from .seed_aggregation import codex_seed_aggregation_instructions_lines
+from .codex.seed_aggregation import codex_seed_aggregation_instructions_lines
+from .config import Config as AppConfig
+from .config import apply_log_level
+from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
+from .gpu_manager import GPUSpec, get_gpu_specs
+from .journal import Node
+from .prompts.codex_task.codex_task_template import (
+    CodexTaskMarkdownRenderContext,
+    render_codex_task_markdown,
+)
+from .prompts.environment_context import build_environment_context
 from .stage_identifiers import StageIdentifier
 from .stages.node_result_contracts import (
     codex_node_result_contract_prompt_lines_for_stage,
     validate_node_result_contract_for_stage,
 )
-from .utils.config import Config as AppConfig
-from .utils.config import apply_log_level
 from .utils.metric import WorstMetricValue
 from .utils.response import trim_long_string, wrap_code
 from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, TrainingReview
 
 logger = logging.getLogger("ai-scientist")
-WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
-_MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
-_MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
 RESEARCH_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _parent_node_dict_for_codex_input(*, parent_node: Node) -> dict[str, object]:
+def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSummary:
     """
-    The raw Node dict contains very large fields (notably `_term_out`, which in Codex mode is the
-    entire `codex_session.log`). Including that in `codex_input.json` creates runaway payload growth
-    across iterations and can cause Codex to ingest its own previous logs.
+    A minimal parent-node payload for the JSON context embedded in codex_task.md.
+
+    We intentionally exclude large fields (notably `code`) to keep the prompt size bounded; the
+    parent code is embedded separately as a python code block in the markdown context.
     """
-    raw = parent_node.to_dict()
-    # Keep only the fields we actually want Codex to see.
-    keep_keys = {
-        "id",
-        "step",
-        "parent_id",
-        "plan",
-        "overall_plan",
-        "code",
-        "analysis",
-        "metric",
-        "is_buggy",
-        "is_buggy_plots",
-        "exc_type",
-        "exec_time",
-        "exec_time_feedback",
-        "exp_results_dir",
-        "plot_analyses",
-        "vlm_feedback_summary",
-        "datasets_successfully_tested",
-        "hyperparam_name",
-        "ablation_name",
-        "is_seed_node",
-        "is_seed_agg_node",
-    }
-    return {k: raw[k] for k in keep_keys if k in raw}
+    parent_id = parent_node.parent.id if parent_node.parent is not None else None
+
+    metric = (
+        None
+        if parent_node.metric is None
+        else {
+            "value": parent_node.metric.value,
+            "maximize": parent_node.metric.maximize,
+            "name": parent_node.metric.name,
+            "description": parent_node.metric.description,
+        }
+    )
+
+    exp_results_dir: str | None
+    if parent_node.exp_results_dir is None:
+        exp_results_dir = None
+    else:
+        try:
+            exp_results_dir = str(
+                Path(parent_node.exp_results_dir).resolve().relative_to(Path.cwd())
+            )
+        except Exception:
+            exp_results_dir = str(Path(parent_node.exp_results_dir).resolve())
+
+    plot_analyses: list[dict[str, Any]] = []
+    for analysis in parent_node.plot_analyses:
+        plot_path = analysis.get("plot_path")
+        if isinstance(plot_path, str) and plot_path.strip():
+            try:
+                rel_plot_path = str(Path(plot_path).resolve().relative_to(Path.cwd()))
+            except Exception:
+                rel_plot_path = str(Path(plot_path).resolve())
+            plot_analyses.append({**analysis, "plot_path": rel_plot_path})
+        else:
+            plot_analyses.append(dict(analysis))
+
+    return ParentNodeSummary(
+        id=parent_node.id,
+        step=parent_node.step,
+        parent_id=parent_id,
+        plan=parent_node.plan,
+        overall_plan=parent_node.overall_plan,
+        analysis=parent_node.analysis,
+        metric=metric,
+        is_buggy=parent_node.is_buggy,
+        is_buggy_plots=parent_node.is_buggy_plots,
+        exc_type=parent_node.exc_type,
+        exec_time=parent_node.exec_time,
+        exec_time_feedback=parent_node.exec_time_feedback,
+        exp_results_dir=exp_results_dir,
+        plot_analyses=plot_analyses,
+        vlm_feedback_summary=list(parent_node.vlm_feedback_summary),
+        datasets_successfully_tested=list(parent_node.datasets_successfully_tested),
+        hyperparam_name=parent_node.hyperparam_name,
+        ablation_name=parent_node.ablation_name,
+        is_seed_node=parent_node.is_seed_node,
+        is_seed_agg_node=parent_node.is_seed_agg_node,
+    )
 
 
 def _summarize_execution_with_llm(
@@ -128,415 +160,18 @@ def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
     child_node.parent = parent_node
 
 
-def _legacy_available_datasets_text(*, environment_context: dict[str, object]) -> str:
-    datasets = environment_context.get("datasets")
-    if not isinstance(datasets, dict):
-        return "You may use any dataset from any source, but avoid re-downloading available data."
-    hf_lines = datasets.get("hf_cache_lines")
-    local_lines = datasets.get("local_datasets_lines")
-    s3_lines = datasets.get("s3_folder_lines")
-    s3_download_snippet = datasets.get("s3_download_snippet")
-    s3_upload_snippet = datasets.get("s3_upload_snippet")
-    local_dir = str(datasets.get("datasets_local_dir", "")).strip()
-
-    out: list[str] = []
-    out.append("You may use any dataset from any source, but avoid re-downloading available data.")
-    out.append("")
-    out.append("**Hugging Face cache (already cached):**")
-    if isinstance(hf_lines, list):
-        out.extend([str(x) for x in hf_lines])
-    else:
-        out.append("- (unknown)")
-    out.append("")
-    out.append(
-        f"**Local datasets (already downloaded):** (use subfolders per dataset under {local_dir})"
-    )
-    if isinstance(local_lines, list):
-        out.extend([str(x) for x in local_lines])
-    else:
-        out.append("- (unknown)")
-    if isinstance(s3_lines, list) and s3_lines:
-        out.append("")
-        out.append(
-            "**Some datasets are available on S3, you can download them if you need to (the download is very fast):**"
-        )
-        out.extend([str(x) for x in s3_lines])
-        if isinstance(s3_download_snippet, str) and s3_download_snippet.strip():
-            out.append("")
-            out.append(
-                "**How to download from S3 into the local dataset cache (paste into your script):**"
-            )
-            out.append("")
-            out.append(s3_download_snippet.strip())
-        if isinstance(s3_upload_snippet, str) and s3_upload_snippet.strip():
-            out.append("")
-            out.append(
-                "**How to upload a dataset to S3 for future runs (paste into your script):**"
-            )
-            out.append("")
-            out.append(s3_upload_snippet.strip())
-    return "\n".join(out).strip()
-
-
-def _legacy_gpu_text(*, environment_context: dict[str, object]) -> str:
-    gpu = environment_context.get("gpu")
-    if not isinstance(gpu, dict):
-        return ""
-    gpu_id = gpu.get("gpu_id")
-    gpu_spec = gpu.get("gpu_spec")
-    if gpu_id is None or gpu_spec is None:
-        return ""
-    if not isinstance(gpu_spec, dict):
-        return ""
-    name = str(gpu_spec.get("name", "GPU"))
-    mem = gpu_spec.get("memory_total_mib")
-    mem_str = str(mem) if mem is not None else "unknown"
-    return (
-        "\n\n**Available Hardware**: You have access to ONE "
-        f"{name} GPU with {mem_str}MiB VRAM.\n"
-        "\n**GPU Selection**: Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `cuda:0`."
-    )
-
-
-def _legacy_storage_text(*, environment_context: dict[str, object]) -> str:
-    storage = environment_context.get("storage")
-    if not isinstance(storage, dict):
-        return ""
-    cap_h = storage.get("workspace_disk_capacity_human")
-    free_h = storage.get("workspace_disk_free_human")
-    if not isinstance(cap_h, str) or not isinstance(free_h, str):
-        return ""
-    return (
-        "\n\n**Storage Availability**: "
-        f"a dedicated workspace volume of ~{cap_h}; {free_h} free right now on your workspace volume. "
-        "Use disk space responsibly when downloading datasets."
-    )
-
-
-def _legacy_impl_guideline_lines(
-    *,
-    cfg: AppConfig,
-    environment_context: dict[str, object],
-) -> list[str]:
-    """
-    Legacy prompt parity: copy the core “Implementation guideline” bullets used by MinimalAgent.
-    """
-    lines: list[str] = []
-    lines.extend(
-        [
-            "CRITICAL GPU REQUIREMENTS - Your code MUST include ALL of these:",
-            "  - At the start of your code, add these lines to handle GPU/CPU:",
-        ]
-    )
-    gpu = environment_context.get("gpu")
-    gpu_id = gpu.get("gpu_id") if isinstance(gpu, dict) else None
-    if isinstance(gpu_id, int):
-        lines.extend(
-            [
-                "    ```python",
-                "    # CUDA_VISIBLE_DEVICES is already set; prefer cuda:0 inside the process",
-                "    device = torch.device('cuda:0')",
-                "    print(f'Using device: {device}')",
-                "    ```",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                "    ```python",
-                "    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')",
-                "    print(f'Using device: {device}')",
-                "    ```",
-            ]
-        )
-    lines.extend(
-        [
-            "  - ALWAYS move models to device using the `.to(device)` method",
-            "  - ALWAYS move input tensors to device using the `.to(device)` method",
-            "  - ALWAYS move model related tensors to device using the `.to(device)` method",
-            "  - For optimizers, create them AFTER moving model to device",
-            "  - When using DataLoader, move batch tensors to device in training loop: `batch = {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}`",
-            "CRITICAL MODEL INPUT GUIDELINES:",
-            "  - Always pay extra attention to the input to the model being properly normalized",
-            "  - This is extremely important because the input to the model's forward pass directly affects the output, and the loss function is computed based on the output",
-        ]
-    )
-    num_syn_datasets = int(cfg.experiment.num_syn_datasets)
-    if num_syn_datasets > 1:
-        lines.extend(
-            [
-                f"You MUST evaluate your solution on at least {num_syn_datasets} different datasets to ensure robustness:",
-                "  - Use dataset sizes appropriate to the experiment at hand",
-                "  - Use standard benchmark datasets when available",
-                f"  - If using synthetic data, generate at least {num_syn_datasets} variants with different characteristics",
-                "  - For very large datasets (>10GB), use streaming=True to avoid memory issues",
-                "  - Report metrics separately for each dataset",
-                "  - Compute and report the average metric across all datasets",
-            ]
-        )
-    lines.extend(
-        [
-            "For generative modeling tasks, you must:",
-            "  - Generate a set of samples from your model",
-            "  - Compare these samples with ground truth data using appropriate visualizations",
-            "  - When saving plots, always use the 'working_dir' variable that will be defined at the start of the script",
-            "  - Make sure to give each figure a unique and appropriate name based on the dataset it represents, rather than reusing the same filename.",
-            "Important code structure requirements:",
-            "  - Do NOT put any execution code inside 'if __name__ == \"__main__\":' block",
-            "  - All code should be at the global scope or in functions that are called from the global scope",
-            "  - The script should execute immediately when run, without requiring any special entry point",
-            "The code should start with:",
-            "  import os",
-            "  working_dir = os.path.join(os.getcwd(), 'working')",
-            "  os.makedirs(working_dir, exist_ok=True)",
-            "The code should be a single-file python program that is self-contained and can be executed as-is.",
-            "No parts of the code should be skipped, don't terminate the code execution before finishing the script.",
-            "Your response should only contain a single code block.",
-            f"Be aware of the running time of the code, it should complete within {humanize.naturaldelta(cfg.exec.timeout)}.",
-            'You can also use the "./working" directory to store any temporary files that your code needs to create.',
-            "Data saving requirements:",
-            "- Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using np.save()",
-            "- Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
-        ]
-    )
-    return lines
-
-
-def _legacy_stage_intro(*, stage_identifier: StageIdentifier) -> str:
-    if stage_identifier is StageIdentifier.STAGE1:
-        return (
-            "You are an AI researcher who is looking to publish a paper that will contribute significantly to the field. "
-            "Your first task is to write a python code to implement a solid baseline based on your research idea provided below, "
-            "from data preparation to model training, as well as evaluation and visualization. "
-            "Focus on getting a simple but working implementation first, before any sophisticated improvements. "
-            "We will explore more advanced variations in later stages."
-        )
-    if stage_identifier is StageIdentifier.STAGE2:
-        return (
-            "You are an experienced AI researcher. You are provided with a previously developed baseline implementation. "
-            "Your task is to implement hyperparameter tuning to improve performance WITHOUT changing the model architecture."
-        )
-    if stage_identifier is StageIdentifier.STAGE3:
-        return (
-            "You are an experienced AI researcher. You are provided with a previously developed implementation. "
-            "Your task is to explore novel improvements and run experiments to reveal new insights, and produce plots."
-        )
-    if stage_identifier is StageIdentifier.STAGE4:
-        return (
-            "You are an experienced AI researcher. You are provided with a previously developed implementation. "
-            "Your task is to conduct systematic ablations that reveal the contribution of each component, and produce comparison plots."
-        )
-    return "You are an experienced AI researcher."
-
-
-def _legacy_stage1_design_sketch_guideline_lines() -> list[str]:
-    return [
-        "This first experiment design should be relatively simple, without extensive hyper-parameter optimization.",
-        "Take the Memory section into consideration when proposing the design.",
-        "The solution sketch should be 6-10 sentences.",
-        "Don't suggest to do EDA.",
-        "Use real public datasets appropriate to the task.",
-        "If the research idea specifies dataset URLs or names, use those.",
-        "Otherwise, research where suitable datasets are available (common sources: HuggingFace, GitHub, academic repositories, etc.).",
-        "Only fall back to synthetic data if no suitable dataset is available or synthetic generation is essential to the experiment.",
-    ]
-
-
-def _legacy_plotting_guideline_lines(*, experiment_code_hint: str) -> list[str]:
-    return [
-        "AVAILABLE DATA:",
-        "Experiment Data: experiment_data.npy",
-        "REQUIREMENTS:",
-        "The code should start with:",
-        "  import matplotlib.pyplot as plt",
-        "  import numpy as np",
-        "  import os",
-        "  working_dir = os.path.join(os.getcwd(), 'working')",
-        "Create standard visualizations of experiment results",
-        "Save all plots to working_dir",
-        "Include training/validation curves if available",
-        "ONLY plot data that exists in experiment_data.npy - DO NOT make up or simulate any values",
-        "Use basic matplotlib without custom styles",
-        "Each plot should be in a separate try-except block",
-        "Always close figures after saving",
-        "Always include a title for each plot, and be sure to use clear subtitles—such as 'Left: Ground Truth, Right: Generated Samples'—while also specifying the type of dataset being used.",
-        "Make sure to use descriptive names for figures when saving e.g. always include the dataset name and the type of plot in the name",
-        "When there are many similar figures to plot (e.g. generated samples at each epoch), make sure to plot only at a suitable interval of epochs so that you only plot at most 5 figures.",
-        "Use the following experiment code to infer the data to plot: " + experiment_code_hint,
-        "Example to extract data from experiment_data: experiment_data['dataset_name_1']['metrics']['train']",
-    ]
-
-
-def _format_s3_entries_for_prompt(
-    *,
-    datasets_aws_folder: str,
-    entries: list[S3DatasetEntry],
-) -> list[str]:
-    folder = datasets_aws_folder.strip("/")
-    prefix = f"{folder}/" if folder else ""
-
-    grouped: dict[str, list[tuple[str, int]]] = {}
-    for entry in entries:
-        s3_uri = entry.s3_uri
-        size_bytes = entry.size_on_disk_bytes
-        without_scheme = s3_uri.removeprefix("s3://")
-        parts = without_scheme.split("/", 1)
-        key = parts[1] if len(parts) == 2 else ""
-        relative = key[len(prefix) :] if key.startswith(prefix) else key
-        group = relative.split("/", 1)[0] if "/" in relative else "(root)"
-        grouped.setdefault(group, []).append((relative, size_bytes))
-
-    lines: list[str] = []
-    for group_name in sorted(grouped.keys())[:_MAX_S3_DATASET_GROUPS_FOR_PROMPT]:
-        lines.append(f"- {group_name}/")
-        group_entries = grouped[group_name]
-        shown = 0
-        for rel_path, size_bytes in group_entries:
-            if shown >= _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT:
-                break
-            child_path = rel_path.split("/", 1)[1] if "/" in rel_path else rel_path
-            lines.append(f"  - {child_path} | size={size_bytes} bytes")
-            shown += 1
-        remaining = max(len(group_entries) - shown, 0)
-        if remaining:
-            lines.append(f"  - ... ({remaining} more)")
-    return lines
-
-
-def _load_workspace_usage_file() -> int | None:
-    if not WORKSPACE_USAGE_FILE.exists():
-        return None
-    try:
-        raw_text = WORKSPACE_USAGE_FILE.read_text(encoding="utf-8").strip()
-    except OSError:
-        logger.debug(
-            "Could not read workspace usage file at %s", WORKSPACE_USAGE_FILE, exc_info=True
-        )
-        return None
-    if not raw_text:
-        return None
-    try:
-        return int(raw_text)
-    except ValueError:
-        logger.debug(
-            "Malformed workspace usage file contents at %s: %s", WORKSPACE_USAGE_FILE, raw_text
-        )
-        return None
-
-
-def _build_environment_context(
-    *, gpu_id: int | None, gpu_spec: GPUSpec | None
-) -> dict[str, object]:
-    """
-    Best-effort capture of environment context that the legacy codegen agent used to inject into prompts:
-    - disk capacity/usage hints
-    - dataset cache inventory (HF + local + S3)
-    - S3 copy snippets
-    """
-    context: dict[str, object] = {
-        "gpu": {
-            "gpu_id": gpu_id,
-            "gpu_spec": gpu_spec,
-            "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-            # We set CUDA_VISIBLE_DEVICES to a single value in this worker process.
-            # Inside the experiment script, frameworks like PyTorch typically see that as cuda:0.
-            "recommended_device": "cuda:0" if gpu_id is not None else "cpu",
-        }
-    }
-
-    # Disk usage hints (optional)
-    capacity_raw = os.environ.get("PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES", "")
-    capacity_int = int(capacity_raw) if capacity_raw.isdigit() else 0
-    used_int = _load_workspace_usage_file()
-    if capacity_int and used_int is not None:
-        free_bytes_val = max(capacity_int - used_int, 0)
-        context["storage"] = {
-            "workspace_disk_capacity_bytes": capacity_int,
-            "workspace_disk_used_bytes": used_int,
-            "workspace_disk_free_bytes": free_bytes_val,
-            "workspace_disk_capacity_human": humanize.naturalsize(capacity_int, binary=True),
-            "workspace_disk_free_human": humanize.naturalsize(free_bytes_val, binary=True),
-        }
-
-    # Dataset cache inventory (best effort; never fail the run because of this)
-    datasets_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
-    local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
-    try:
-        datasets_info = get_available_datasets(
-            local_datasets_dir=local_datasets_dir, datasets_aws_folder=datasets_aws_folder
-        )
-        hf_lines: list[str] = []
-        for repo in datasets_info.hf_cache:
-            revs = ", ".join(repo.revision_hashes)
-            hf_lines.append(
-                f"- {repo.repo_id} ({repo.repo_type}) | size={repo.size_on_disk_bytes} bytes | revisions=[{revs}]"
-            )
-        if not hf_lines:
-            hf_lines.append("- (none detected)")
-
-        local_lines: list[str] = []
-        for ds in datasets_info.local_datasets:
-            local_lines.append(
-                f"- {ds.dataset_name} | path={ds.path} | size={ds.size_on_disk_bytes} bytes"
-            )
-        if not local_lines:
-            local_lines.append(
-                f"- (empty) Create a subfolder per dataset under {local_datasets_dir}"
-            )
-
-        s3_lines: list[str] = []
-        if datasets_info.s3_folder_entries:
-            s3_lines = _format_s3_entries_for_prompt(
-                datasets_aws_folder=datasets_aws_folder,
-                entries=datasets_info.s3_folder_entries,
-            )
-
-        env_file = get_research_pipeline_env_file()
-        s3_download_snippet = build_s3_download_snippet(
-            datasets_aws_folder=datasets_aws_folder,
-            local_datasets_dir=local_datasets_dir,
-            env_file=env_file,
-        )
-        s3_upload_snippet = build_s3_upload_snippet(
-            datasets_aws_folder=datasets_aws_folder,
-            local_datasets_dir=local_datasets_dir,
-            env_file=env_file,
-        )
-
-        context["datasets"] = {
-            "datasets_local_dir": str(local_datasets_dir),
-            "datasets_aws_folder": datasets_aws_folder,
-            "hf_cache_lines": hf_lines,
-            "local_datasets_lines": local_lines,
-            "s3_folder_lines": s3_lines,
-            "s3_download_snippet": s3_download_snippet,
-            "s3_upload_snippet": s3_upload_snippet,
-        }
-    except (OSError, RuntimeError, ValueError):
-        logger.exception("Failed building datasets context for Codex input", exc_info=True)
-
-    # Key requirements (ported from legacy prompt guidelines) that Codex should obey.
-    context["implementation_requirements"] = {
-        "working_dir_relative": "working/",
-        "save_experiment_data_filename": "experiment_data.npy",
-        "do_not_prompt_user": True,
-    }
-
-    return context
-
-
 class NodeTask(TypedDict):
     node_data: dict[str, object] | None
     task_desc: str
-    evaluation_metric_spec: dict[str, object]
+    evaluation_metric_spec: EvaluationMetricSpec
     cfg: AppConfig
     memory_summary: str
     stage_identifier: StageIdentifier
     seed_eval: bool
     seed_value: int
-    seed_aggregation: dict[str, object] | None
-    stage2_hyperparam_idea: dict[str, object] | None
-    stage4_ablation_idea: dict[str, object] | None
+    seed_aggregation: SeedAggregationPayload | None
+    stage2_hyperparam_idea: StageIdea | None
+    stage4_ablation_idea: StageIdea | None
     event_callback: Callable[[BaseEvent], None]
     gpu_id: int | None
     execution_id: str
@@ -576,47 +211,6 @@ def _prepare_workspace(*, cfg: AppConfig, process_id: str) -> tuple[Path, Path]:
     return workspace_path, working_dir_path
 
 
-def _ensure_codex_venv(*, research_pipeline_root: Path) -> Path:
-    """
-    Ensure a shared Codex venv exists for the research_pipeline codebase.
-
-    We intentionally avoid creating per-workspace venvs (e.g. per process workspace) because that
-    leads to repeated installs across runs. Instead, Codex is run with env vars that point to this
-    shared venv so `python` / `pip` resolve consistently.
-    """
-    venv_dir = research_pipeline_root / ".venv"
-    venv_python = venv_dir / "bin" / "python"
-    if venv_python.exists():
-        return venv_dir
-    subprocess.run(
-        [sys.executable, "-m", "venv", str(venv_dir)],
-        check=True,
-        cwd=str(research_pipeline_root),
-        env=os.environ.copy(),
-        capture_output=True,
-        text=True,
-    )
-    return venv_dir
-
-
-def _build_codex_env(*, venv_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    bin_dir = venv_dir / "bin"
-    env["VIRTUAL_ENV"] = str(venv_dir)
-    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-    env["PIP_REQUIRE_VIRTUALENV"] = "1"
-    env["PYTHONNOUSERSITE"] = "1"
-    openai_api_key = env.get("OPENAI_API_KEY")
-    if openai_api_key:
-        env["CODEX_API_KEY"] = openai_api_key
-    # Encourage CLI tools to behave in non-interactive / CI mode.
-    env["CI"] = "1"
-    env["NO_UPDATE_NOTIFIER"] = "1"
-    env["DISABLE_UPDATE_NOTIFIER"] = "1"
-    env["npm_config_update_notifier"] = "false"
-    return env
-
-
 def _configure_gpu_for_worker(*, gpu_id: int | None) -> GPUSpec | None:
     if gpu_id is None:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -642,53 +236,6 @@ def _abort_if_skip_requested(*, execution_id: str) -> None:
         raise ExecutionTerminatedError(execution_id=execution_id, exec_time=0.0)
 
 
-def _write_codex_input_file(
-    *,
-    workspace_dir: Path,
-    execution_id: str,
-    task_desc: str,
-    evaluation_metric_spec: dict[str, object],
-    memory_summary: str,
-    stage_identifier: StageIdentifier,
-    parent_node: Node | None,
-    seed_eval: bool,
-    seed_value: int,
-    seed_aggregation: dict[str, object] | None,
-    stage2_hyperparam_idea: dict[str, object] | None,
-    stage4_ablation_idea: dict[str, object] | None,
-    gpu_id: int | None,
-    gpu_spec: GPUSpec | None,
-    cfg: AppConfig,
-    user_feedback_payload: str,
-) -> Path:
-    parent_node_dict = (
-        _parent_node_dict_for_codex_input(parent_node=parent_node)
-        if parent_node is not None
-        else None
-    )
-    payload: dict[str, object] = {
-        "execution_id": execution_id,
-        "research_idea": task_desc,
-        "evaluation_metric_spec": evaluation_metric_spec,
-        "memory_summary": memory_summary,
-        "stage_identifier": stage_identifier.name,
-        "seed_eval": seed_eval,
-        "seed_value": seed_value,
-        "seed_aggregation": seed_aggregation,
-        "stage2_hyperparam_idea": stage2_hyperparam_idea,
-        "stage4_ablation_idea": stage4_ablation_idea,
-        "gpu_id": gpu_id,
-        "agent_file_name": cfg.exec.agent_file_name,
-        "timeout_seconds": cfg.exec.timeout,
-        "parent_node": parent_node_dict,
-        "user_feedback_payload": user_feedback_payload,
-        "environment_context": _build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec),
-    }
-    path = workspace_dir / "codex_input.json"
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return path
-
-
 def _write_codex_task_file(
     *,
     workspace_dir: Path,
@@ -697,227 +244,36 @@ def _write_codex_task_file(
     stage_name: str,
     timeout_seconds: int,
     agent_file_name: str,
-    input_json_file: Path,
     output_json_file: Path,
     venv_dir: Path,
     cfg: AppConfig,
+    task_context: CodexTaskContext,
+    environment_context: dict[str, object],
+    parent_node: Node | None,
 ) -> Path:
     task_path = workspace_dir / "codex_task.md"
-    # Construct a prompt-like payload in the task file so Codex has all needed context.
-    # We embed the key sections as markdown; Codex reads task_file as plain text.
-    try:
-        input_obj = json.loads((workspace_dir / input_json_file.name).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        input_obj = {}
-    if not isinstance(input_obj, dict):
-        input_obj = {}
-    env_ctx = input_obj.get("environment_context")
-    env_ctx_dict = env_ctx if isinstance(env_ctx, dict) else {}
-    memory_summary = str(input_obj.get("memory_summary") or "").strip()
-    eval_metric_spec = input_obj.get("evaluation_metric_spec")
-    eval_metric_str = json.dumps(eval_metric_spec, indent=2) if eval_metric_spec is not None else ""
-    parent_node_obj = input_obj.get("parent_node")
+    env_ctx_dict = environment_context
+    memory_summary = str(task_context.memory_summary or "").strip()
     base_code = ""
     exec_time_feedback = ""
     parent_term_out = ""
     parent_analysis = ""
     parent_exc_type = ""
     parent_vlm_feedback_summary = ""
-    user_feedback_payload = str(input_obj.get("user_feedback_payload") or "").strip()
-    if isinstance(parent_node_obj, dict):
-        base_code = str(parent_node_obj.get("code") or "")
-        exec_time_feedback = str(parent_node_obj.get("exec_time_feedback") or "")
-        parent_analysis = str(parent_node_obj.get("analysis") or "").strip()
-        parent_exc_type = str(parent_node_obj.get("exc_type") or "").strip()
-        raw_term_out = parent_node_obj.get("_term_out")
+    user_feedback_payload = str(task_context.user_feedback_payload or "").strip()
+    if parent_node is not None:
+        base_code = str(parent_node.code or "")
+        exec_time_feedback = str(parent_node.exec_time_feedback or "")
+        parent_analysis = str(parent_node.analysis or "").strip()
+        parent_exc_type = str(parent_node.exc_type or "").strip()
+        raw_term_out = parent_node._term_out
         if isinstance(raw_term_out, list):
             parent_term_out = trim_long_string("".join([str(x) for x in raw_term_out]))
-        raw_vlm = parent_node_obj.get("vlm_feedback_summary")
+        raw_vlm = parent_node.vlm_feedback_summary
         if isinstance(raw_vlm, list):
             parent_vlm_feedback_summary = "\n".join([str(x) for x in raw_vlm]).strip()
 
-    context_sections: list[str] = []
-    context_sections.append("## Task context")
-    context_sections.append("")
-    context_sections.append("### Introduction")
-    context_sections.append(_legacy_stage_intro(stage_identifier=stage_identifier))
-    context_sections.append("")
-    context_sections.append("### Research idea")
-    context_sections.append(str(input_obj.get("research_idea") or "").strip())
-    context_sections.append("")
-    context_sections.append("### Memory")
-    context_sections.append(memory_summary if memory_summary else "(empty)")
-    context_sections.append("")
-    context_sections.append("### Installed Packages")
-    context_sections.append(
-        "A Python virtualenv is already set up and active at "
-        f"`{venv_dir}` (so `python` / `pip` resolve to that environment). "
-        "Reuse it; do not create a new venv. Install missing packages into this venv only if required."
-        + _legacy_gpu_text(environment_context=env_ctx_dict)
-        + _legacy_storage_text(environment_context=env_ctx_dict)
-    )
-    context_sections.append("")
-    context_sections.append("### Available Datasets")
-    context_sections.append(_legacy_available_datasets_text(environment_context=env_ctx_dict))
-    context_sections.append("")
-    context_sections.append("### Evaluation Metric(s)")
-    context_sections.append(eval_metric_str if eval_metric_str else "(none)")
-    context_sections.append("")
-    context_sections.append("### Implementation guideline")
-    context_sections.extend(
-        [
-            f"- {line}"
-            for line in _legacy_impl_guideline_lines(cfg=cfg, environment_context=env_ctx_dict)
-        ]
-    )
-
-    if stage_identifier is StageIdentifier.STAGE1:
-        context_sections.append("")
-        context_sections.append("### Experiment design sketch guideline (Stage 1 baseline)")
-        context_sections.extend(
-            [f"- {line}" for line in _legacy_stage1_design_sketch_guideline_lines()]
-        )
-
-    if stage_identifier is StageIdentifier.STAGE2:
-        context_sections.append("")
-        context_sections.append("### Stage 2 hyperparameter-tuning requirements")
-        context_sections.extend(
-            [
-                "- DO NOT change model architecture from the previous stage.",
-                "- Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.",
-                "- Save data in `working/experiment_data.npy` with a structure like:",
-                "- ```python",
-                "- experiment_data = {",
-                "-     'hyperparam_tuning_type_1': {",
-                "-         'dataset_name_1': {",
-                "-             'metrics': {'train': [], 'val': []},",
-                "-             'losses': {'train': [], 'val': []},",
-                "-             'predictions': [],",
-                "-             'ground_truth': [],",
-                "-         },",
-                "-     },",
-                "- }",
-                "- ```",
-            ]
-        )
-        idea_obj = input_obj.get("stage2_hyperparam_idea")
-        if isinstance(idea_obj, dict):
-            idea_name = str(idea_obj.get("name") or "").strip()
-            idea_desc = str(idea_obj.get("description") or "").strip()
-            tried_list = idea_obj.get("tried_hyperparams")
-            tried_hyperparam_lines: list[str] = []
-            if isinstance(tried_list, list):
-                tried_hyperparam_lines = [str(x) for x in tried_list if str(x).strip()]
-            if idea_name or idea_desc:
-                context_sections.append("")
-                context_sections.append("### Assigned hyperparameter-tuning idea (MUST follow)")
-                if idea_name:
-                    context_sections.append(f"- **Idea name**: {idea_name}")
-                    context_sections.append(
-                        f"- **Contract**: set `hyperparam_name` in `node_result.json` to exactly `{idea_name}`"
-                    )
-                if idea_desc:
-                    context_sections.append(f"- **Idea description**: {idea_desc}")
-                if tried_hyperparam_lines:
-                    context_sections.append(
-                        "- **Previously tried idea names**: "
-                        + ", ".join(tried_hyperparam_lines[:50])
-                    )
-
-    if stage_identifier is StageIdentifier.STAGE4:
-        context_sections.append("")
-        context_sections.append("### Stage 4 ablation requirements")
-        context_sections.extend(
-            [
-                "- Choose ONE ablation idea for this run and set `ablation_name` in node_result.json accordingly.",
-                "- Save data in `working/experiment_data.npy` with a structure like:",
-                "- ```python",
-                "- experiment_data = {",
-                "-     'ablation_type_1': {",
-                "-         'dataset_name_1': {",
-                "-             'metrics': {'train': [], 'val': []},",
-                "-             'losses': {'train': [], 'val': []},",
-                "-             'predictions': [],",
-                "-             'ground_truth': [],",
-                "-         },",
-                "-     },",
-                "- }",
-                "- ```",
-            ]
-        )
-        idea_obj = input_obj.get("stage4_ablation_idea")
-        if isinstance(idea_obj, dict):
-            idea_name = str(idea_obj.get("name") or "").strip()
-            idea_desc = str(idea_obj.get("description") or "").strip()
-            tried_list = idea_obj.get("tried_ablations")
-            tried_ablation_lines: list[str] = []
-            if isinstance(tried_list, list):
-                tried_ablation_lines = [str(x) for x in tried_list if str(x).strip()]
-            if idea_name or idea_desc:
-                context_sections.append("")
-                context_sections.append("### Assigned ablation idea (MUST follow)")
-                if idea_name:
-                    context_sections.append(f"- **Idea name**: {idea_name}")
-                    context_sections.append(
-                        f"- **Contract**: set `ablation_name` in `node_result.json` to exactly `{idea_name}`"
-                    )
-                if idea_desc:
-                    context_sections.append(f"- **Idea description**: {idea_desc}")
-                if tried_ablation_lines:
-                    context_sections.append(
-                        "- **Previously tried idea names**: " + ", ".join(tried_ablation_lines[:50])
-                    )
-
-    if base_code.strip():
-        context_sections.append("")
-        context_sections.append("### Base code you are working on (from parent node)")
-        context_sections.append("```python")
-        context_sections.append(base_code.rstrip())
-        context_sections.append("```")
-    if parent_term_out.strip():
-        context_sections.append("")
-        context_sections.append("### Previous execution output (from parent node)")
-        context_sections.append(parent_term_out.strip())
-    if parent_exc_type:
-        context_sections.append("")
-        context_sections.append("### Previous exception type (from parent node)")
-        context_sections.append(parent_exc_type)
-    if parent_analysis:
-        context_sections.append("")
-        context_sections.append("### Previous analysis / summary (from parent node)")
-        context_sections.append(parent_analysis)
-    if parent_vlm_feedback_summary:
-        context_sections.append("")
-        context_sections.append("### Feedback based on generated plots (from parent node)")
-        context_sections.append(parent_vlm_feedback_summary)
-    if exec_time_feedback.strip():
-        context_sections.append("")
-        context_sections.append("### Feedback about execution time")
-        context_sections.append(exec_time_feedback.strip())
-    if user_feedback_payload:
-        context_sections.append("")
-        context_sections.append("### User feedback")
-        context_sections.append(user_feedback_payload)
-
-    if stage_identifier in (StageIdentifier.STAGE3, StageIdentifier.STAGE4):
-        context_sections.append("")
-        context_sections.append("### Plotting code guideline")
-        experiment_code_hint = (
-            "Use the final experiment code you wrote in the agent file to infer what data exists in experiment_data.npy."
-            if not base_code
-            else base_code
-        )
-        context_sections.extend(
-            [
-                f"- {line}"
-                for line in _legacy_plotting_guideline_lines(
-                    experiment_code_hint=experiment_code_hint
-                )
-            ]
-        )
-    context_block = "\n".join(context_sections).strip() + "\n\n"
-
-    is_seed_aggregation = isinstance(input_obj.get("seed_aggregation"), dict)
+    is_seed_aggregation = task_context.seed_aggregation is not None
     if is_seed_aggregation:
         # Override stage contract for seed-aggregation runs: keep common contract + add explicit
         # aggregation requirements (including is_seed_agg_node=true).
@@ -932,54 +288,77 @@ def _write_codex_task_file(
         )
         seed_agg_block = ""
     contract_block = "\n".join(contract_lines).strip() + "\n\n"
+    assigned_hyperparam_name = ""
+    assigned_hyperparam_description = ""
+    assigned_hyperparam_tried_names = ""
+    if stage_identifier is StageIdentifier.STAGE2:
+        if task_context.stage2_hyperparam_idea is not None:
+            assigned_hyperparam_name = str(task_context.stage2_hyperparam_idea.name or "").strip()
+            assigned_hyperparam_description = str(
+                task_context.stage2_hyperparam_idea.description or ""
+            ).strip()
+            tried_names = [
+                str(x) for x in task_context.stage2_hyperparam_idea.tried_names if str(x).strip()
+            ]
+            assigned_hyperparam_tried_names = ", ".join(tried_names[:50])
 
-    task_text = (
-        "You are an autonomous coding agent running inside a sandboxed workspace.\n"
-        "You must not ask the user for input; proceed with reasonable defaults.\n"
-        "You have full permission to install packages, download data, edit files, and run commands.\n\n"
-        f"## Context\n- execution_id: `{execution_id}`\n"
-        f"- stage_identifier: `{stage_identifier.name}`\n"
-        f"- stage_name: `{stage_name}`\n"
-        f"- wall_clock_timeout_seconds: {timeout_seconds}\n\n"
-        "## Inputs\n"
-        f"- Read `{input_json_file.name}` for the full task context.\n"
-        "  - Use `environment_context.datasets` for available datasets and S3 download/upload snippets.\n"
-        "  - Use `environment_context.gpu` for GPU id/specs and `recommended_device`.\n\n"
-        f"{seed_agg_block}"
-        "## Required outputs (MUST)\n"
-        f"- Write a complete Node dict to `{output_json_file.name}` using the same schema as Node.to_dict.\n"
-        f"- Write your final experiment code to `{agent_file_name}`.\n"
-        "- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).\n"
-        "- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.\n\n"
-        f"{contract_block}"
-        "## Hard requirements\n"
-        "- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.\n"
-        "- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.\n"
-        "- Avoid re-downloading data if it's already present in the dataset caches described in `codex_input.json`.\n\n"
-        "## Metric requirement\n"
-        "- Read `evaluation_metric_spec` from `codex_input.json` and use it as the primary metric definition.\n"
-        "- Populate `metric` in `node_result.json` with:\n"
-        "  - `metric.name` exactly matching `evaluation_metric_spec.name`\n"
-        "  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`\n"
-        "  - `metric.description` matching `evaluation_metric_spec.description`\n"
-        "  - `metric.value` as a numeric value from your evaluation run\n\n"
-        "## Seed requirement\n"
-        "- Read `seed_eval` and `seed_value` from `codex_input.json`.\n"
-        "- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:\n"
-        "  - `random.seed(seed_value)`\n"
-        "  - `numpy.random.seed(seed_value)`\n"
-        "  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`\n"
-        "- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.\n"
-        '- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").\n\n'
-        "## GPU requirement\n"
-        "- If `environment_context.gpu.gpu_id` is not null, you MUST use the GPU when applicable (training/inference).\n"
-        "- Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.\n\n"
-        "## Execution contract\n"
-        "- Run any commands you need.\n"
-        f"- Run the final experiment with: `python {agent_file_name}`.\n"
-        "- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.\n"
+    assigned_ablation_name = ""
+    assigned_ablation_description = ""
+    assigned_ablation_tried_names = ""
+    if stage_identifier is StageIdentifier.STAGE4:
+        if task_context.stage4_ablation_idea is not None:
+            assigned_ablation_name = str(task_context.stage4_ablation_idea.name or "").strip()
+            assigned_ablation_description = str(
+                task_context.stage4_ablation_idea.description or ""
+            ).strip()
+            tried_names = [
+                str(x) for x in task_context.stage4_ablation_idea.tried_names if str(x).strip()
+            ]
+            assigned_ablation_tried_names = ", ".join(tried_names[:50])
+
+    show_plotting_guidelines = stage_identifier in (StageIdentifier.STAGE3, StageIdentifier.STAGE4)
+    experiment_code_hint = (
+        "Use the final experiment code you wrote in the agent file to infer what data exists in experiment_data.npy."
+        if not base_code
+        else base_code
     )
-    task_path.write_text(context_block + task_text, encoding="utf-8")
+
+    ctx = CodexTaskMarkdownRenderContext(
+        execution_id=execution_id,
+        stage_identifier_name=stage_identifier.name,
+        stage_name=stage_name,
+        timeout_seconds=timeout_seconds,
+        task_context_json=json.dumps(task_context.to_json_dict(), indent=2),
+        research_idea=str(task_context.research_idea or "").strip(),
+        memory_summary=memory_summary,
+        venv_dir=str(venv_dir),
+        environment_context=env_ctx_dict,
+        num_syn_datasets=int(cfg.experiment.num_syn_datasets),
+        evaluation_metric_json=json.dumps(
+            task_context.evaluation_metric_spec.to_json_dict(), indent=2
+        ),
+        assigned_hyperparam_name=assigned_hyperparam_name,
+        assigned_hyperparam_description=assigned_hyperparam_description,
+        assigned_hyperparam_tried_names=assigned_hyperparam_tried_names,
+        assigned_ablation_name=assigned_ablation_name,
+        assigned_ablation_description=assigned_ablation_description,
+        assigned_ablation_tried_names=assigned_ablation_tried_names,
+        base_code=base_code.rstrip(),
+        parent_term_out=parent_term_out.strip(),
+        parent_exc_type=parent_exc_type.strip(),
+        parent_analysis=parent_analysis.strip(),
+        parent_vlm_feedback_summary=parent_vlm_feedback_summary.strip(),
+        exec_time_feedback=exec_time_feedback.strip(),
+        user_feedback_payload=user_feedback_payload.strip(),
+        show_plotting_guidelines=show_plotting_guidelines,
+        experiment_code_hint=experiment_code_hint,
+        seed_agg_block=seed_agg_block,
+        contract_block=contract_block,
+        output_json_name=output_json_file.name,
+        agent_file_name=agent_file_name,
+    )
+    task_markdown = render_codex_task_markdown(ctx=ctx)
+    task_path.write_text(task_markdown, encoding="utf-8")
     return task_path
 
 
@@ -1025,7 +404,6 @@ def _move_experiment_artifacts(
 
     workspace_dir = working_dir.parent
     for fname in (
-        "codex_input.json",
         "codex_task.md",
         "codex_session.log",
         "codex_events.jsonl",
@@ -1114,15 +492,15 @@ def process_node(
     *,
     node_data: dict[str, object] | None,
     task_desc: str,
-    evaluation_metric_spec: dict[str, object],
+    evaluation_metric_spec: EvaluationMetricSpec,
     cfg: AppConfig,
     memory_summary: str,
     stage_identifier: StageIdentifier,
     seed_eval: bool,
     seed_value: int,
-    seed_aggregation: dict[str, object] | None,
-    stage2_hyperparam_idea: dict[str, object] | None,
-    stage4_ablation_idea: dict[str, object] | None,
+    seed_aggregation: SeedAggregationPayload | None,
+    stage2_hyperparam_idea: StageIdea | None,
+    stage4_ablation_idea: StageIdea | None,
     event_callback: Callable[[BaseEvent], None],
     gpu_id: int | None,
     execution_id: str,
@@ -1132,8 +510,8 @@ def process_node(
     process_id = multiprocessing.current_process().name
     workspace_dir, working_dir = _prepare_workspace(cfg=cfg, process_id=process_id)
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
-    venv_dir = _ensure_codex_venv(research_pipeline_root=RESEARCH_PIPELINE_ROOT)
-    codex_env = _build_codex_env(venv_dir=venv_dir)
+    venv_dir = ensure_codex_venv(research_pipeline_root=RESEARCH_PIPELINE_ROOT)
+    codex_env = build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)
     stage_name = stage_identifier.prefixed_name
@@ -1151,9 +529,9 @@ def process_node(
     )
     if seed_aggregation is not None:
         logger.debug(
-            "worker.seed_aggregation enabled execution_id=%s keys=%s",
+            "worker.seed_aggregation enabled execution_id=%s seed_nodes=%s",
             execution_id[:8],
-            sorted(list(seed_aggregation.keys()))[:30],
+            len(seed_aggregation.seed_nodes),
         )
     if user_feedback_payload.strip():
         logger.debug(
@@ -1165,50 +543,37 @@ def process_node(
     _abort_if_skip_requested(execution_id=execution_id)
 
     output_json_file = workspace_dir / "node_result.json"
-    input_json_file = _write_codex_input_file(
-        workspace_dir=workspace_dir,
+    env_ctx = build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec)
+    parent_node_summary = (
+        _parent_node_summary_for_task_context(parent_node=parent_node)
+        if parent_node is not None
+        else None
+    )
+    task_context = CodexTaskContext(
         execution_id=execution_id,
-        task_desc=task_desc,
-        evaluation_metric_spec=evaluation_metric_spec,
-        memory_summary=memory_summary,
-        stage_identifier=stage_identifier,
-        parent_node=parent_node,
+        stage_identifier=stage_identifier.name,
         seed_eval=seed_eval,
         seed_value=seed_value,
         seed_aggregation=seed_aggregation,
         stage2_hyperparam_idea=stage2_hyperparam_idea,
         stage4_ablation_idea=stage4_ablation_idea,
         gpu_id=gpu_id,
-        gpu_spec=gpu_spec,
-        cfg=cfg,
+        agent_file_name=cfg.exec.agent_file_name,
+        timeout_seconds=cfg.exec.timeout,
+        parent_node=parent_node_summary,
         user_feedback_payload=user_feedback_payload,
+        research_idea=task_desc,
+        evaluation_metric_spec=evaluation_metric_spec,
+        memory_summary=memory_summary,
     )
     logger.debug(
-        "codex.input.written execution_id=%s path=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
+        "codex.task_context_built execution_id=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
         execution_id[:8],
-        input_json_file,
         stage_name,
-        str(evaluation_metric_spec.get("name") or ""),
+        str(evaluation_metric_spec.name or ""),
         seed_eval,
         seed_value,
     )
-    try:
-        codex_input_text = input_json_file.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        logger.debug(
-            "codex.input.read_failed execution_id=%s path=%s",
-            execution_id[:8],
-            input_json_file,
-            exc_info=True,
-        )
-    else:
-        logger.debug(
-            "codex.input.contents execution_id=%s path=%s chars=%s\n%s",
-            execution_id[:8],
-            input_json_file,
-            len(codex_input_text),
-            codex_input_text,
-        )
     task_file = _write_codex_task_file(
         workspace_dir=workspace_dir,
         execution_id=execution_id,
@@ -1216,10 +581,12 @@ def process_node(
         stage_name=stage_name,
         timeout_seconds=cfg.exec.timeout,
         agent_file_name=cfg.exec.agent_file_name,
-        input_json_file=input_json_file,
         output_json_file=output_json_file,
         venv_dir=venv_dir,
         cfg=cfg,
+        task_context=task_context,
+        environment_context=env_ctx,
+        parent_node=parent_node,
     )
     logger.debug(
         "codex.task.written execution_id=%s path=%s chars=%s",
@@ -1367,23 +734,13 @@ def process_node(
         seed_value=seed_value,
         working_png_count=count_working_pngs(working_dir=working_dir),
         expected_hyperparam_name=(
-            str(stage2_hyperparam_idea.get("name"))
-            if (
-                stage_identifier is StageIdentifier.STAGE2
-                and stage2_hyperparam_idea is not None
-                and isinstance(stage2_hyperparam_idea.get("name"), str)
-                and str(stage2_hyperparam_idea.get("name")).strip()
-            )
+            stage2_hyperparam_idea.name
+            if stage_identifier is StageIdentifier.STAGE2 and stage2_hyperparam_idea is not None
             else None
         ),
         expected_ablation_name=(
-            str(stage4_ablation_idea.get("name"))
-            if (
-                stage_identifier is StageIdentifier.STAGE4
-                and stage4_ablation_idea is not None
-                and isinstance(stage4_ablation_idea.get("name"), str)
-                and str(stage4_ablation_idea.get("name")).strip()
-            )
+            stage4_ablation_idea.name
+            if stage_identifier is StageIdentifier.STAGE4 and stage4_ablation_idea is not None
             else None
         ),
     )
@@ -1510,23 +867,3 @@ def process_node(
     result_data = child_node.to_dict()
     pickle.dumps(result_data)
     return result_data
-
-
-def process_node_task(task: NodeTask) -> dict[str, object]:
-    return process_node(
-        node_data=task["node_data"],
-        task_desc=task["task_desc"],
-        evaluation_metric_spec=task["evaluation_metric_spec"],
-        cfg=task["cfg"],
-        memory_summary=task["memory_summary"],
-        stage_identifier=task["stage_identifier"],
-        seed_eval=task["seed_eval"],
-        seed_value=task["seed_value"],
-        seed_aggregation=task["seed_aggregation"],
-        stage2_hyperparam_idea=task["stage2_hyperparam_idea"],
-        stage4_ablation_idea=task["stage4_ablation_idea"],
-        event_callback=task["event_callback"],
-        gpu_id=task["gpu_id"],
-        execution_id=task["execution_id"],
-        user_feedback_payload=task["user_feedback_payload"],
-    )

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from typing import ClassVar, Tuple
 
@@ -7,10 +5,11 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
+from ..codex.node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..config import Config as AppConfig
 from ..journal import Journal
-from ..node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..prompts.render import render_lines, render_text
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -118,12 +117,10 @@ class Stage4Ablation(Stage):
             best_node.id[:8],
             metric_val,
         )
-        prompt = f"""
-        Evaluate if the ablation sub-stage is complete given the goals:
-        - {goals}
-
-        Consider whether the ablation variations produce consistent and interpretable differences.
-        """
+        prompt = render_text(
+            template_name="stage_completion/stage4_substage.txt.j2",
+            context={"goals": goals},
+        )
         evaluation = structured_query_with_schema(
             system_message=prompt,
             user_message=None,
@@ -179,15 +176,7 @@ class Stage4Ablation(Stage):
 
 
 def codex_node_result_contract_prompt_lines() -> list[str]:
-    return [
-        "- Stage-specific required fields:",
-        "  - Stage 4: `ablation_name` must be a non-empty string.",
-        "  - Stage 4: if an assigned ablation idea is provided, set `ablation_name` exactly to that idea name.",
-        "  - Stage 4 (plotting stage):",
-        "    - If `is_buggy_plots` is false, you MUST write at least 1 `.png` plot into `./working/`.",
-        "    - If `is_buggy_plots` is false, you MUST provide at least 1 `plot_analyses` entry with an `analysis` string.",
-        "    - If `is_buggy_plots` is false, you MUST provide a non-empty `vlm_feedback_summary` list.",
-    ]
+    return render_lines(template_name="contracts/stage4.txt.j2", context={})
 
 
 def validate_node_result_contract(

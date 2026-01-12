@@ -27,7 +27,6 @@ writeup:
   plot_model: gpt-5
   citation_model: gpt-5
   temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
-  writeup_type: normal
   writeup_retries: 3
   num_cite_rounds: 5
 

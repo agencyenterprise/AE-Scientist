@@ -60,7 +60,7 @@ def summarize_stage(*, journal: Journal) -> StageSummaryResponse:
 
 def _annotate_history_deterministic(*, journal: Journal) -> None:
     """
-    Deterministic replacement for legacy LLM-based overall_plan synthesis.
+    Deterministic replacement for LLM-based overall_plan synthesis.
 
     Keeps any existing overall_plan (e.g., produced by Codex). Otherwise constructs a
     simple parent→child concatenation so downstream consumers (e.g., writeup filters)
@@ -152,7 +152,7 @@ def overall_summarize(
     temperature: float,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """
-    Deterministic replacement for the legacy LLM summarizer.
+    Deterministic replacement for the LLM summarizer.
 
     Returns: (draft_summary, baseline_summary, research_summary, ablation_summary)
     """

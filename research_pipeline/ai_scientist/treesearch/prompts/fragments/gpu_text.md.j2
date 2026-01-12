@@ -1,0 +1,13 @@
+{% set gpu = environment_context["gpu"] %}
+{% set gpu_id = gpu.get("gpu_id") %}
+{% set gpu_spec = gpu.get("gpu_spec") %}
+{% if gpu_id is not none and gpu_spec is mapping %}
+{% set name = gpu_spec.get("name", "GPU") %}
+{% set mem = gpu_spec.get("memory_total_mib") %}
+{% set mem_str = mem if mem is not none else "unknown" %}
+
+**Available Hardware**: You have access to ONE {{ name }} GPU with {{ mem_str }}MiB VRAM.
+
+**GPU Selection**: Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `cuda:0` inside the process.
+{% endif %}
+

@@ -4,10 +4,10 @@ from typing import Callable, Dict, List, Tuple
 
 from pydantic import BaseModel
 
+from ..config import Config
 from ..events import BaseEvent
 from ..journal import Journal, Node
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config
 
 
 class StageCompletionEvaluation(BaseModel):

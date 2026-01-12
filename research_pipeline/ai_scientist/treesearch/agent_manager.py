@@ -13,10 +13,7 @@ High-level responsibilities:
 import copy
 import json
 import logging
-import os
 import pickle
-import shutil
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +31,9 @@ from ai_scientist.treesearch.events import (
 )
 
 from . import stage_control
+from .codex.codex_task_types import EvaluationMetricSpec
+from .config import Config, TaskDescription
+from .evaluation_metric import define_evaluation_metric_spec_via_llm
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .parallel_agent import ParallelAgent
@@ -46,7 +46,6 @@ from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
-from .utils.config import Config, TaskDescription
 
 logger = logging.getLogger(__name__)
 
@@ -117,106 +116,25 @@ class AgentManager:
         stage_control.reset_stage_state()
         self.evaluation_metric_spec = self._define_global_evaluation_metric_spec()
 
-    def _define_global_evaluation_metric_spec(self) -> dict[str, object]:
+    def _define_global_evaluation_metric_spec(self) -> EvaluationMetricSpec:
         """
         Define the run-wide evaluation metric spec before any experiment code is generated.
-
-        Historically this was done via an LLM call; in Codex-only mode we use `codex exec`
-        with an output schema to keep the result machine-readable.
         """
-        codex_path = shutil.which("codex")
-        if not codex_path:
-            raise RuntimeError("`codex` not found in PATH; cannot define evaluation metric spec.")
-
-        schema_path = (self.workspace_dir / "evaluation_metric_schema.json").resolve()
-        schema_path.write_text(
-            json.dumps(
-                {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "maximize": {"type": "boolean"},
-                        "description": {"type": "string"},
-                    },
-                    "required": ["name", "maximize", "description"],
-                    "additionalProperties": False,
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-
-        prompt = (
-            "You are defining the single primary evaluation metric for an automated research run.\n"
-            "Return JSON that matches the provided schema.\n\n"
-            "Guidelines:\n"
-            "- Pick ONE metric that best captures success for this research idea.\n"
-            "- It must be computable from experiment outputs.\n"
-            "- If unsure, prefer a standard validation-set metric.\n\n"
-            f"Research idea:\n{self.task_desc.title}\n\n{self.task_desc.abstract}\n\n"
-            f"Hypothesis:\n{self.task_desc.short_hypothesis}\n"
-        )
-
         try:
             self.event_callback(
                 RunLogEvent(
-                    message="Defining global evaluation metric spec via Codex...", level="info"
+                    message="Defining global evaluation metric spec via LLM...", level="info"
                 )
             )
         except (OSError, RuntimeError, ValueError, TypeError):
             logger.exception("Failed to emit run log event for metric definition.")
 
-        env = dict(**os.environ)
-        openai_api_key = env.get("OPENAI_API_KEY")
-        if openai_api_key:
-            env["CODEX_API_KEY"] = openai_api_key
-        env["CI"] = "1"
-        env["NO_UPDATE_NOTIFIER"] = "1"
-        env["DISABLE_UPDATE_NOTIFIER"] = "1"
-        env["npm_config_update_notifier"] = "false"
-
-        result = subprocess.run(
-            [
-                "codex",
-                "exec",
-                "--full-auto",
-                "--sandbox",
-                "danger-full-access",
-                "--skip-git-repo-check",
-                "--output-schema",
-                str(schema_path),
-                prompt,
-            ],
-            cwd=str(self.workspace_dir),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
+        stage_cfg = self.cfg.agent.feedback
+        return define_evaluation_metric_spec_via_llm(
+            task_desc=self.task_desc,
+            model=stage_cfg.model,
+            temperature=stage_cfg.temperature,
         )
-
-        if result.returncode != 0:
-            raise RuntimeError(
-                "Codex failed to define evaluation metric spec. "
-                f"returncode={result.returncode} stderr_tail={result.stderr[-500:]}"
-            )
-
-        try:
-            parsed = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"Codex metric spec output was not JSON: {result.stdout[:500]}"
-            ) from exc
-        if not isinstance(parsed, dict):
-            raise RuntimeError(f"Codex metric spec output was not an object: {parsed!r}")
-        # Basic validation
-        if not isinstance(parsed.get("name"), str) or not parsed.get("name"):
-            raise RuntimeError(f"Invalid metric spec name: {parsed!r}")
-        if not isinstance(parsed.get("maximize"), bool):
-            raise RuntimeError(f"Invalid metric spec maximize: {parsed!r}")
-        if not isinstance(parsed.get("description"), str) or not parsed.get("description"):
-            raise RuntimeError(f"Invalid metric spec description: {parsed!r}")
-        return parsed
 
     def get_max_iterations(self, *, stage_identifier: StageIdentifier) -> int:
         """Get max iterations for a stage from config."""
@@ -1085,99 +1003,3 @@ Your research idea:\n\n
         else:
             self._clear_all_stage_skip_states(reason="Experiment halted")
             stage_control.clear_stage_state()
-
-    def _gather_stage_metrics(self, journal: Journal) -> Dict[str, Any]:
-        """Gather detailed metrics and analysis from the stage's nodes"""
-        metrics: Dict[str, Any] = {
-            "total_nodes": len(journal.nodes),
-            "good_nodes": len(journal.good_nodes),
-            "buggy_nodes": len(journal.buggy_nodes),
-            "best_metric": None,
-            "node_summaries": [],
-            "vlm_feedback": [],
-        }
-
-        # Gather individual node summaries
-        for node in journal.nodes:
-            if node.agent is not None:
-                node_summary = node.agent.generate_node_summary(node)
-                metrics["node_summaries"].append(node_summary)
-
-        # Get VLM feedback from plot analysis
-        for node in journal.good_nodes:
-            if node.vlm_feedback is not None:
-                metrics["vlm_feedback"].append(node.vlm_feedback)
-
-        best_node = journal.get_best_node()
-        if best_node and best_node.metric is not None:
-            metrics["best_metric"] = {
-                "value": best_node.metric.value,
-                "name": best_node.metric.name or "validation_metric",
-                "maximize": bool(best_node.metric.maximize),
-                "analysis": best_node.analysis,
-            }
-
-        return metrics
-
-    def _identify_issues(self, journal: Journal) -> List[str]:
-        """Identify systemic issues and challenges from the current stage's results"""
-        issues = []
-
-        # Look for patterns in leaf nodes (endpoints of improvement attempts)
-        leaf_nodes = [n for n in journal.nodes if n.is_leaf]
-        buggy_leaves = [n for n in leaf_nodes if n.is_buggy]
-
-        # If we have buggy leaf nodes, it means we couldn't fix some issues
-        if buggy_leaves:
-            # Group similar issues
-            error_patterns: Dict[str, List[str]] = {}
-            for node in buggy_leaves:
-                key = node.analysis if node.analysis is not None else "Unknown error"
-                error_patterns.setdefault(key, []).append(node.id)
-
-            # Report persistent issues
-            for error_msg, node_ids in error_patterns.items():
-                if len(node_ids) >= 2:  # If same error occurs multiple times
-                    issues.append(f"Persistent issue in nodes {node_ids}: {error_msg}")
-
-        # Include VLM-identified systemic issues
-        vlm_issues = set()  # Use set to avoid duplicate issues
-        for node in journal.good_nodes:
-            vlm_feedback = node.vlm_feedback
-            if isinstance(vlm_feedback, dict):
-                # Look for systemic issues identified by VLM
-                if "systemic_issues" in vlm_feedback:
-                    vlm_issues.update(vlm_feedback["systemic_issues"])
-                # Look for recurring patterns in plot analysis
-                if "plot_analyses" in vlm_feedback:
-                    for analysis in vlm_feedback["plot_analyses"]:
-                        if "limitation" in analysis.get("type", "").lower():
-                            vlm_issues.add(f"VLM (Node {node.id}): {analysis['analysis']}")
-
-        issues.extend(list(vlm_issues))
-
-        return issues
-
-    def _analyze_progress(self, journal: Journal) -> Dict[str, Any]:
-        """Analyze progress and convergence in the current stage"""
-        progress: Dict[str, Any] = {
-            "iterations_completed": len(journal.nodes),
-            "improvements_found": 0,
-            "convergence_status": "not_converged",
-            "improvement_trend": [],
-            "recent_changes": [],
-        }
-
-        # Analyze recent changes
-        recent_nodes = journal.nodes[-3:] if len(journal.nodes) >= 3 else journal.nodes
-        for node in recent_nodes:
-            if not node.is_buggy:
-                change = {
-                    "node_id": node.id,
-                    "metric": (node.metric.value if node.metric is not None else None),
-                    "parent_id": node.parent.id if node.parent else None,
-                    "analysis": node.analysis,
-                }
-                progress["recent_changes"].append(change)
-
-        return progress

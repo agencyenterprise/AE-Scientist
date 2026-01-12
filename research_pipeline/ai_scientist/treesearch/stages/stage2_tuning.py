@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from typing import ClassVar, Tuple
 
@@ -7,10 +5,11 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
+from ..codex.node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..config import Config as AppConfig
 from ..journal import Journal
-from ..node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..prompts.render import render_lines, render_text
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -113,16 +112,16 @@ class Stage2Tuning(Stage):
             best_node.id[:8],
             metric_val,
         )
-        eval_prompt = f"""
-        Evaluate if Stage 2 (baseline tuning) sub-stage is complete.
-
-        Evidence:
-        - Datasets tested: {best_node.datasets_successfully_tested}
-        - Best metric: {best_node.metric.value if best_node.metric is not None else 'N/A'}
-
-        Requirements for completion:
-        - {goals}
-        """
+        eval_prompt = render_text(
+            template_name="stage_completion/stage2_substage.txt.j2",
+            context={
+                "datasets_successfully_tested": best_node.datasets_successfully_tested,
+                "best_metric_value": (
+                    best_node.metric.value if best_node.metric is not None else "N/A"
+                ),
+                "goals": goals,
+            },
+        )
         evaluation = structured_query_with_schema(
             system_message=eval_prompt,
             user_message=None,
@@ -173,18 +172,10 @@ class Stage2Tuning(Stage):
             best_node.id[:8],
             metric_val,
         )
-        eval_prompt = f"""
-        Evaluate if Stage 2 (baseline tuning) is complete based on the following evidence:
-
-        1. Datasets Tested: {best_node.datasets_successfully_tested}
-
-        Requirements for completion:
-        1. Training dynamics (metrics/loss curves) should show stable convergence
-        2. Results should be tested on at least two datasets
-        3. There should be no clear signs of training instabilities or divergence in the reported metrics
-
-        Provide a detailed evaluation of completion status.
-        """
+        eval_prompt = render_text(
+            template_name="stage_completion/stage2_stage.txt.j2",
+            context={"datasets_successfully_tested": best_node.datasets_successfully_tested},
+        )
         evaluation = structured_query_with_schema(
             system_message=eval_prompt,
             user_message=None,
@@ -245,10 +236,7 @@ class Stage2Tuning(Stage):
 
 
 def codex_node_result_contract_prompt_lines() -> list[str]:
-    return [
-        "- Stage-specific required fields:",
-        "  - Stage 2: `hyperparam_name` must be a non-empty string.",
-    ]
+    return render_lines(template_name="contracts/stage2.txt.j2", context={})
 
 
 def validate_node_result_contract(

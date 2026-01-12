@@ -172,7 +172,7 @@ class Node(DataClassJsonMixin):
 
     def absorb_exec_result(self, exec_result: object) -> None:
         """Absorb the result of executing the code from this node."""
-        # Best-effort attribute extraction to support legacy callers.
+        # Best-effort attribute extraction to support older callers.
         self._term_out = getattr(exec_result, "term_out", None)
         self.exec_time = getattr(exec_result, "exec_time", None)
         self.exc_type = getattr(exec_result, "exc_type", None)
@@ -310,7 +310,7 @@ class Node(DataClassJsonMixin):
                     description=metric_data.get("description"),
                 )
             else:
-                # Handle legacy format or None
+                # Handle older format or None
                 data["metric"] = (
                     WorstMetricValue() if data.get("is_buggy") else MetricValue(metric_data)
                 )

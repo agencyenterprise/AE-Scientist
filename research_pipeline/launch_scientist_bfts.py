@@ -29,8 +29,7 @@ from omegaconf import OmegaConf
 
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
-from ai_scientist.perform_icbinb_writeup import gather_citations
-from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
+from ai_scientist.perform_citations import gather_citations
 from ai_scientist.perform_llm_review import ReviewResponseModel, load_paper, perform_review
 from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
@@ -47,6 +46,16 @@ from ai_scientist.telemetry import (
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
+from ai_scientist.treesearch.config import (
+    Config,
+    ReviewConfig,
+    TelemetryConfig,
+    WriteupConfig,
+    apply_log_level,
+    load_task_desc,
+    prep_cfg,
+    save_run,
+)
 from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
@@ -58,16 +67,6 @@ from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
 from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
 from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
-from ai_scientist.treesearch.utils.config import (
-    Config,
-    ReviewConfig,
-    TelemetryConfig,
-    WriteupConfig,
-    apply_log_level,
-    load_task_desc,
-    prep_cfg,
-    save_run,
-)
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 from management_server import (
     initialize_execution_registry,
@@ -666,7 +665,6 @@ def run_writeup_stage(
         logger.info("Plot aggregation failed; skipping writeup stage.")
         return
 
-    writeup_type = writeup_cfg.writeup_type.lower()
     writeup_retries = writeup_cfg.writeup_retries
     num_cite_rounds = writeup_cfg.num_cite_rounds
     writeup_model = writeup_cfg.model
@@ -688,26 +686,16 @@ def run_writeup_stage(
     for attempt in range(writeup_retries):
         logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
         try:
-            if writeup_type == "normal":
-                writeup_success = perform_writeup(
-                    base_folder=reports_base,
-                    model=writeup_model,
-                    page_limit=8,
-                    citations_text=citations_text,
-                    run_dir_name=run_dir_path.name if run_dir_path is not None else None,
-                    temperature=writeup_cfg.temperature,
-                    event_callback=event_callback,
-                    run_id=run_id,
-                )
-            else:
-                writeup_success = perform_icbinb_writeup(
-                    base_folder=reports_base,
-                    model=writeup_model,
-                    page_limit=4,
-                    citations_text=citations_text,
-                    run_dir_name=run_dir_path.name if run_dir_path is not None else None,
-                    temperature=writeup_cfg.temperature,
-                )
+            writeup_success = perform_writeup(
+                base_folder=reports_base,
+                model=writeup_model,
+                page_limit=8,
+                citations_text=citations_text,
+                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
+                temperature=writeup_cfg.temperature,
+                event_callback=event_callback,
+                run_id=run_id,
+            )
         except Exception as exc:
             last_error = exc
             logger.exception("Writeup attempt %s failed.", attempt + 1)
