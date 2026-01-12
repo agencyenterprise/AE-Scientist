@@ -7,7 +7,5 @@
 {% set mem_str = mem if mem is not none else "unknown" %}
 
 **Available Hardware**: You have access to ONE {{ name }} GPU with {{ mem_str }}MiB VRAM.
-
-**GPU Selection**: Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `cuda:0` inside the process.
 {% endif %}
 

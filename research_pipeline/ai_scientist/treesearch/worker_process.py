@@ -328,7 +328,6 @@ def _write_codex_task_file(
         stage_identifier_name=stage_identifier.name,
         stage_name=stage_name,
         timeout_seconds=timeout_seconds,
-        task_context_json=json.dumps(task_context.to_json_dict(), indent=2),
         research_idea=str(task_context.research_idea or "").strip(),
         memory_summary=memory_summary,
         venv_dir=str(venv_dir),

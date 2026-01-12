@@ -9,7 +9,6 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     stage_name: str
     timeout_seconds: int
 
-    task_context_json: str
     research_idea: str
     memory_summary: str
 
@@ -48,7 +47,6 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "stage_identifier_name": self.stage_identifier_name,
             "stage_name": self.stage_name,
             "timeout_seconds": self.timeout_seconds,
-            "task_context_json": self.task_context_json,
             "research_idea": self.research_idea,
             "memory_summary": self.memory_summary,
             "venv_dir": self.venv_dir,

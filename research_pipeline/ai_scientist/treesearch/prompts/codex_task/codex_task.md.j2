@@ -1,8 +1,3 @@
-## Machine-readable context (JSON)
-```json
-{{ task_context_json }}
-```
-
 ## Task context
 
 ### Introduction
@@ -13,6 +8,7 @@
 
 ### Memory
 {% if memory_summary %}{{ memory_summary }}{% else %}(empty){% endif %}
+
 
 ### Installed Packages
 A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python` / `pip` resolve to that environment). Reuse it; do not create a new venv. Install missing packages into this venv only if required.{% include "fragments/gpu_text.md.j2" %}{% include "fragments/storage_text.md.j2" %}
