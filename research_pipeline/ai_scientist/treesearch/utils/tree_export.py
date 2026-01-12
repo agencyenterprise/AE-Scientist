@@ -178,8 +178,16 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         logger.exception(f"Error in normalize_layout: {e}")
         raise
 
-    # Avoid unnecessary LLM calls during visualization; rely on metric-only selection among good nodes
-    best_node = jou.get_best_node(only_good=True, use_val_metric_only=True)
+    # Match origin/main behavior: prefer the full best-node selector (LLM w/ metric fallback),
+    # because Codex runs may sometimes omit/shape metrics in a way that prevents metric-only selection.
+    # This also ensures the UI gets a stable `is_best_node` marker to connect stages.
+    best_node = jou.get_best_node(only_good=True, use_val_metric_only=False)
+    if best_node is None:
+        best_node = jou.get_best_node(only_good=True, use_val_metric_only=True)
+    if best_node is None:
+        best_node = jou.get_best_node(only_good=False, use_val_metric_only=False)
+    if best_node is None:
+        best_node = jou.get_best_node(only_good=False, use_val_metric_only=True)
     if best_node is not None:
         _emit_tree_viz_best_node_event(journal=jou, node=best_node)
     metrics: list[dict[str, object] | None] = []

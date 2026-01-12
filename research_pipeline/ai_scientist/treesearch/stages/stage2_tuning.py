@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import ClassVar, Tuple
 
+from pydantic import BaseModel, Field
+
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal
@@ -12,6 +14,68 @@ from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
+
+
+class HyperparamTuningIdea(BaseModel):
+    name: str = Field(
+        description=(
+            "A short, descriptive name for the proposed hyperparameter tuning idea. "
+            "It should clearly identify which hyperparameter is being tuned."
+        ),
+    )
+    description: str = Field(
+        description=(
+            "A brief description (3-5 sentences) of which hyperparameter is being tuned, "
+            "how it will be changed, and why it is expected to help."
+        ),
+    )
+
+
+def propose_next_hyperparam_idea(
+    *, base_code: str, tried: list[str], model: str, temperature: float
+) -> HyperparamTuningIdea:
+    """
+    Stage 2 (baseline tuning): propose ONE new hyperparameter tuning idea, avoiding repeats.
+    This is harness-owned (not Codex-owned) so we can enforce diversity deterministically.
+    """
+    prompt: dict[str, object] = {
+        "Introduction": (
+            "You are an AI researcher conducting hyperparameter tuning for baseline experiments. "
+            "Based on the current implementation and previous hyperparameter tuning attempts (if any), "
+            "propose ONE new hyperparameter tuning idea to try next."
+            "Start with common knobs (epochs, learning rate, batch size) before proposing exotic changes."
+        ),
+        "Base code you are working on": base_code,
+        "Previous Hyperparam Tuning Attempts": {
+            "Has been tried": tried if tried else "Nothing has been tried yet.",
+        },
+        "Instructions": {
+            "Requirements": [
+                "1. Identify ONE specific hyperparameter to tune.",
+                "2. Ensure the hyperparameter is different from previous attempts.",
+                "3. Keep the model architecture unchanged.",
+            ]
+        },
+    }
+
+    retry_limit = 5
+    for _ in range(retry_limit):
+        try:
+            result = structured_query_with_schema(
+                system_message=prompt,
+                user_message=None,
+                model=model,
+                temperature=temperature,
+                schema_class=HyperparamTuningIdea,
+            )
+        except Exception:
+            continue
+        name = result.name.strip()
+        description = result.description.strip()
+        if name and description:
+            return HyperparamTuningIdea(name=name, description=description)
+
+    return HyperparamTuningIdea(name="increase epochs", description="increase epochs")
 
 
 class Stage2Tuning(Stage):
@@ -191,7 +255,13 @@ def validate_node_result_contract(
     *, node_result: dict[str, object], ctx: NodeResultContractContext
 ) -> list[str]:
     errors: list[str] = []
-    del ctx
     if not is_non_empty_string(value=node_result.get("hyperparam_name")):
         errors.append("Stage2 requires hyperparam_name to be a non-empty string")
+    expected = ctx.expected_hyperparam_name
+    if expected is not None:
+        actual = node_result.get("hyperparam_name")
+        if actual != expected:
+            errors.append(
+                f"Stage2 requires hyperparam_name={expected!r} (got {actual!r}); set it exactly to the assigned idea name"
+            )
     return errors

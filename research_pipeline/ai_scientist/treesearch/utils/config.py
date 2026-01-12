@@ -336,11 +336,15 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
         raise
     # save the best found solution
     try:
-        # Prefer good nodes first; only fall back to all nodes if no good nodes exist
-        # Use metric-only selection to avoid unnecessary LLM calls for saving
-        best_node = journal.get_best_node(only_good=True, use_val_metric_only=True)
+        # Match origin/main behavior: prefer full best-node selection (LLM w/ metric fallback),
+        # then fall back to metric-only, then fall back to including buggy nodes.
+        best_node = journal.get_best_node(only_good=True, use_val_metric_only=False)
+        if best_node is None:
+            best_node = journal.get_best_node(only_good=True, use_val_metric_only=True)
         if best_node is None:
             # Fall back to all nodes (including buggy) only if no good nodes exist
+            best_node = journal.get_best_node(only_good=False, use_val_metric_only=False)
+        if best_node is None:
             best_node = journal.get_best_node(only_good=False, use_val_metric_only=True)
         if best_node is not None:
             for existing_file in save_dir.glob("best_solution_*.py"):

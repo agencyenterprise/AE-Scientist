@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import ClassVar, Tuple
 
+from pydantic import BaseModel, Field
+
 from ai_scientist.llm import structured_query_with_schema
 
 from ..journal import Journal
@@ -12,6 +14,68 @@ from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
+
+
+class AblationIdea(BaseModel):
+    name: str = Field(
+        description=(
+            "A short, descriptive name for the proposed ablation study. "
+            "It should clearly identify which component/feature is being ablated."
+        ),
+    )
+    description: str = Field(
+        description=(
+            "A brief description (3-5 sentences) of what component/feature is being ablated and why. "
+            "Explain the motivation and what the ablation is expected to reveal about the model."
+        ),
+    )
+
+
+def propose_next_ablation_idea(
+    *, base_code: str, tried: list[str], model: str, temperature: float
+) -> AblationIdea:
+    """
+    Stage 4 (ablation): propose ONE new ablation idea, avoiding repeats.
+    This is harness-owned so we can enforce diversity deterministically.
+    """
+    prompt: dict[str, object] = {
+        "Introduction": (
+            "You are an AI researcher conducting ablation studies. "
+            "Based on the current implementation and previous ablations (if any), "
+            "propose ONE new ablation study that tests a different aspect of the model."
+        ),
+        "Base code you are working on": base_code,
+        "Previous Ablations": {
+            "Has been tried": tried if tried else "Nothing has been tried yet.",
+        },
+        "Instructions": {
+            "Requirements": [
+                "1. Identify ONE specific component/feature to ablate.",
+                "2. Ensure the ablation is different from previous completed or running attempts.",
+                "3. The ablation should be a new idea, not a trivial variation of a previous idea.",
+                "4. Keep the core model architecture unchanged unless the ablation explicitly targets it.",
+            ]
+        },
+    }
+
+    retry_limit = 5
+    for _ in range(retry_limit):
+        try:
+            result = structured_query_with_schema(
+                system_message=prompt,
+                user_message=None,
+                model=model,
+                temperature=temperature,
+                schema_class=AblationIdea,
+            )
+        except Exception:
+            continue
+        name = result.name.strip()
+        description = result.description.strip()
+        if name and description:
+            return AblationIdea(name=name, description=description)
+
+    return AblationIdea(name="ablate dropout", description="ablate dropout")
 
 
 class Stage4Ablation(Stage):
@@ -118,6 +182,7 @@ def codex_node_result_contract_prompt_lines() -> list[str]:
     return [
         "- Stage-specific required fields:",
         "  - Stage 4: `ablation_name` must be a non-empty string.",
+        "  - Stage 4: if an assigned ablation idea is provided, set `ablation_name` exactly to that idea name.",
         "  - Stage 4 (plotting stage):",
         "    - If `is_buggy_plots` is false, you MUST write at least 1 `.png` plot into `./working/`.",
         "    - If `is_buggy_plots` is false, you MUST provide at least 1 `plot_analyses` entry with an `analysis` string.",
@@ -131,6 +196,13 @@ def validate_node_result_contract(
     errors: list[str] = []
     if not is_non_empty_string(value=node_result.get("ablation_name")):
         errors.append("Stage4 requires ablation_name to be a non-empty string")
+    expected = ctx.expected_ablation_name
+    if expected is not None:
+        actual = node_result.get("ablation_name")
+        if actual != expected:
+            errors.append(
+                f"Stage4 requires ablation_name={expected!r} (got {actual!r}); set it exactly to the assigned idea name"
+            )
 
     is_buggy_plots = node_result.get("is_buggy_plots")
     if is_buggy_plots is False:

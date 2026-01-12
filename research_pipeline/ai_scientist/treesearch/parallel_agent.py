@@ -31,6 +31,8 @@ from .journal import Journal, Node
 from .process_utils import send_signal_to_process_group
 from .stage_identifiers import StageIdentifier
 from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
+from .stages.stage2_tuning import propose_next_hyperparam_idea
+from .stages.stage4_ablation import propose_next_ablation_idea
 from .utils.config import Config
 from .utils.metric import WorstMetricValue
 from .worker_process import (
@@ -246,6 +248,8 @@ class ParallelAgent:
                 "seed_eval": seed_eval,
                 "seed_value": seed,
                 "seed_aggregation": None,
+                "stage2_hyperparam_idea": None,
+                "stage4_ablation_idea": None,
                 "event_callback": self.event_callback,
                 "execution_id": execution_id,
                 "user_feedback_payload": "",
@@ -341,6 +345,8 @@ class ParallelAgent:
                     "seed_eval": False,
                     "seed_value": 0,
                     "seed_aggregation": seed_aggregation,
+                    "stage2_hyperparam_idea": None,
+                    "stage4_ablation_idea": None,
                     "event_callback": self.event_callback,
                     "execution_id": aggregation_execution_id,
                     "user_feedback_payload": "",
@@ -678,6 +684,8 @@ class ParallelAgent:
 
         executor = self._ensure_executor()
         futures: list[Future] = []
+        scheduled_stage2_names: set[str] = set()
+        scheduled_stage4_names: set[str] = set()
         try:
             for node, node_data in zip(nodes_to_process, node_data_list):
                 self.stage_skip.ensure_no_skip_pending()
@@ -709,6 +717,51 @@ class ParallelAgent:
                 user_feedback_payload = ""
                 if node is not None:
                     user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
+                stage2_hyperparam_idea: dict[str, object] | None = None
+                if self.stage_identifier is StageIdentifier.STAGE2 and node is not None:
+                    base_code = node.code or ""
+                    tried_hyperparam_set: set[str] = set()
+                    for prev in self.journal.nodes:
+                        name = prev.hyperparam_name
+                        if isinstance(name, str) and name.strip():
+                            tried_hyperparam_set.add(name.strip())
+                    tried_hyperparam_set |= scheduled_stage2_names
+                    tried_hyperparams = sorted(tried_hyperparam_set)[:50]
+                    hyperparam_idea = propose_next_hyperparam_idea(
+                        base_code=base_code,
+                        tried=tried_hyperparams,
+                        model=self.cfg.agent.feedback.model,
+                        temperature=self.cfg.agent.feedback.temperature,
+                    )
+                    scheduled_stage2_names.add(hyperparam_idea.name)
+                    stage2_hyperparam_idea = {
+                        "name": hyperparam_idea.name,
+                        "description": hyperparam_idea.description,
+                        "tried_hyperparams": tried_hyperparams,
+                    }
+                stage4_ablation_idea: dict[str, object] | None = None
+                if self.stage_identifier is StageIdentifier.STAGE4 and node is not None:
+                    base_code = node.code or ""
+                    tried_ablation_set: set[str] = set()
+                    for prev in self.journal.nodes:
+                        name = prev.ablation_name
+                        if isinstance(name, str) and name.strip():
+                            tried_ablation_set.add(name.strip())
+                    tried_ablation_set |= scheduled_stage4_names
+                    tried_ablations = sorted(tried_ablation_set)[:50]
+                    ablation_idea = propose_next_ablation_idea(
+                        base_code=base_code,
+                        tried=tried_ablations,
+                        model=self.cfg.agent.feedback.model,
+                        temperature=self.cfg.agent.feedback.temperature,
+                    )
+                    scheduled_stage4_names.add(ablation_idea.name)
+                    stage4_ablation_idea = {
+                        "name": ablation_idea.name,
+                        "description": ablation_idea.description,
+                        "tried_ablations": tried_ablations,
+                    }
+                # TODO: is node_data ever not None?
                 task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
@@ -720,6 +773,8 @@ class ParallelAgent:
                     "seed_eval": seed_eval,
                     "seed_value": seed_value,
                     "seed_aggregation": None,
+                    "stage2_hyperparam_idea": stage2_hyperparam_idea,
+                    "stage4_ablation_idea": stage4_ablation_idea,
                     "event_callback": self.event_callback,
                     "execution_id": execution_id,
                     "user_feedback_payload": user_feedback_payload,

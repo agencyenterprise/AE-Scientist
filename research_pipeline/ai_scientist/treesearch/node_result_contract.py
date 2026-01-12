@@ -15,6 +15,8 @@ class NodeResultContractContext:
     seed_eval: bool
     seed_value: int
     working_png_count: int
+    expected_hyperparam_name: str | None
+    expected_ablation_name: str | None
 
 
 def count_working_pngs(*, working_dir: Path) -> int:

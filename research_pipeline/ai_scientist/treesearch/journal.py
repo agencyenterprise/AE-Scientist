@@ -10,7 +10,9 @@ from typing import Any, Callable, List, Literal, Optional, cast
 
 from pydantic import BaseModel
 
-from .events import BaseEvent, BestNodeSelectedEvent
+from ai_scientist.llm import structured_query_with_schema
+
+from .events import BaseEvent, BestNodeSelectedEvent, RunLogEvent
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import trim_long_string
 
@@ -25,6 +27,9 @@ class NodeSelectionResponse(BaseModel):
     # Retained for backward compatibility with stored journals; not used in codex-only mode.
     selected_id: str
     reasoning: str
+
+
+NODE_SELECTION_SCHEMA = NodeSelectionResponse
 
 
 @dataclass(eq=False)
@@ -579,26 +584,131 @@ class Journal:
             )
             return selected_single
 
-        nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
-        if not nodes_with_metric:
-            self._best_cache[sig] = None
+        # Create evaluation prompt for LLM (ported from origin/main)
+        prompt = {
+            "Introduction": (
+                "You are an experienced AI researcher evaluating different implementations "
+                "of an experiment to select the best one. You should consider all aspects "
+                "including performance metrics, training dynamics, generated plots quality."
+            ),
+            "Task": (
+                "Select the best implementation from the candidates below, considering all available evidence."
+                "Avoid relying too heavily on the validation loss alone, because "
+                "it may not be directly comparable across different objective functions "
+                "or training details. If there are multiple validation losses "
+                "(e.g., when evaluating multiple datasets), consider all of them and "
+                "select the implementation that performs best overall."
+            ),
+            "Candidates": "",
+        }
+        logger.debug(
+            "Building prompt with %s candidate nodes: %s",
+            len(candidate_nodes),
+            [n.id[:8] for n in candidate_nodes],
+        )
+        for node in candidate_nodes:
+            candidate_info = f"ID: {node.id}\n"
+            if node.metric:
+                candidate_info += f"Metric: {str(node.metric)}\n"
+            elif node.analysis:
+                candidate_info += f"Training Analysis: {node.analysis}\n"
+            elif node.vlm_feedback_summary:
+                candidate_info += f"VLM Feedback: {node.vlm_feedback_summary}\n"
+            else:
+                candidate_info += "N/A\n"
+            logger.debug(
+                "Adding candidate to prompt: %s (has_metric=%s is_seed=%s)",
+                node.id[:8],
+                node.metric is not None,
+                node.is_seed_node,
+            )
+            prompt["Candidates"] += candidate_info
+
+        try:
+            logger.info(
+                "Invoking LLM for best-node selection with %s candidates: %s",
+                len(candidate_ids),
+                [cid[:8] for cid in candidate_ids],
+            )
+            selection = structured_query_with_schema(
+                system_message=prompt,
+                user_message=None,
+                model=self.node_selection_model,
+                temperature=self.node_selection_temperature,
+                schema_class=NODE_SELECTION_SCHEMA,
+            )
+            selected_id = str(selection.selected_id)
+            selected_node = next(
+                (node for node in candidate_nodes if str(node.id) == selected_id), None
+            )
+            if selected_node is not None:
+                reasoning_text = str(selection.reasoning or "")
+                self.event_callback(
+                    RunLogEvent(
+                        message=f"🎯 Selected best implementation: {selected_node.id[:8]}...",
+                        level="info",
+                    )
+                )
+                preview = (
+                    reasoning_text[:500] + "..." if len(reasoning_text) > 500 else reasoning_text
+                )
+                if preview.strip():
+                    self.event_callback(
+                        RunLogEvent(message=f"💡 Reasoning: {preview}", level="info")
+                    )
+                self._emit_best_node_reasoning(node=selected_node, reasoning=reasoning_text)
+
+                self._best_cache[sig] = selected_node
+                self._best_cache_time_map[sig] = time.time()
+                self._best_cache_candidate_ids_map[sig] = candidate_ids
+                self._best_cache_total_nodes_count_map[sig] = total_nodes_count
+                return selected_node
+
+            # LLM returned an unknown ID; fall back to metric-based best (if available)
+            logger.warning(
+                "LLM returned unknown selected_id=%s; falling back to metric-based selection",
+                selected_id,
+            )
+            nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
+            selected_fallback = (
+                max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
+                if nodes_with_metric
+                else None
+            )
+            if selected_fallback is not None:
+                self._emit_best_node_reasoning(
+                    node=selected_fallback,
+                    reasoning=(
+                        f"LLM selected unknown node id {selected_id}; "
+                        "stored best metric candidate instead."
+                    ),
+                )
+            self._best_cache[sig] = selected_fallback
             self._best_cache_time_map[sig] = time.time()
             self._best_cache_candidate_ids_map[sig] = candidate_ids
             self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-            logger.info("best-node (codex-only): no candidates with metric. Caching None.")
-            return None
+            return selected_fallback
 
-        selected_metric_node = max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
-        self._best_cache[sig] = selected_metric_node
-        self._best_cache_time_map[sig] = time.time()
-        self._best_cache_candidate_ids_map[sig] = candidate_ids
-        self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-        sel_metric_val = selected_metric_node.metric.value if selected_metric_node.metric else None
-        self._emit_best_node_reasoning(
-            node=selected_metric_node,
-            reasoning=f"Metric-only selection (codex-only). Metric value: {sel_metric_val}",
-        )
-        return selected_metric_node
+        except Exception as exc:
+            logger.warning(
+                "Error in LLM best-node selection; falling back to metric-based selection (%s)", exc
+            )
+            nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
+            selected_on_error = (
+                max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
+                if nodes_with_metric
+                else None
+            )
+            if selected_on_error is not None:
+                self._emit_best_node_reasoning(
+                    node=selected_on_error,
+                    reasoning=f"LLM selection error: {exc}. Falling back to best metric.",
+                )
+            self._best_cache[sig] = selected_on_error
+            self._best_cache_time_map[sig] = time.time()
+            self._best_cache_candidate_ids_map[sig] = candidate_ids
+            self._best_cache_total_nodes_count_map[sig] = total_nodes_count
+            return selected_on_error
 
     def generate_summary(self, include_code: bool = False) -> str:
         """Generate a deterministic summary of progress (codex-only mode)."""

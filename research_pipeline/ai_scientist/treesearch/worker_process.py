@@ -535,6 +535,8 @@ class NodeTask(TypedDict):
     seed_eval: bool
     seed_value: int
     seed_aggregation: dict[str, object] | None
+    stage2_hyperparam_idea: dict[str, object] | None
+    stage4_ablation_idea: dict[str, object] | None
     event_callback: Callable[[BaseEvent], None]
     gpu_id: int | None
     execution_id: str
@@ -652,6 +654,8 @@ def _write_codex_input_file(
     seed_eval: bool,
     seed_value: int,
     seed_aggregation: dict[str, object] | None,
+    stage2_hyperparam_idea: dict[str, object] | None,
+    stage4_ablation_idea: dict[str, object] | None,
     gpu_id: int | None,
     gpu_spec: GPUSpec | None,
     cfg: AppConfig,
@@ -671,6 +675,8 @@ def _write_codex_input_file(
         "seed_eval": seed_eval,
         "seed_value": seed_value,
         "seed_aggregation": seed_aggregation,
+        "stage2_hyperparam_idea": stage2_hyperparam_idea,
+        "stage4_ablation_idea": stage4_ablation_idea,
         "gpu_id": gpu_id,
         "agent_file_name": cfg.exec.agent_file_name,
         "timeout_seconds": cfg.exec.timeout,
@@ -794,6 +800,29 @@ def _write_codex_task_file(
                 "- ```",
             ]
         )
+        idea_obj = input_obj.get("stage2_hyperparam_idea")
+        if isinstance(idea_obj, dict):
+            idea_name = str(idea_obj.get("name") or "").strip()
+            idea_desc = str(idea_obj.get("description") or "").strip()
+            tried_list = idea_obj.get("tried_hyperparams")
+            tried_hyperparam_lines: list[str] = []
+            if isinstance(tried_list, list):
+                tried_hyperparam_lines = [str(x) for x in tried_list if str(x).strip()]
+            if idea_name or idea_desc:
+                context_sections.append("")
+                context_sections.append("### Assigned hyperparameter-tuning idea (MUST follow)")
+                if idea_name:
+                    context_sections.append(f"- **Idea name**: {idea_name}")
+                    context_sections.append(
+                        f"- **Contract**: set `hyperparam_name` in `node_result.json` to exactly `{idea_name}`"
+                    )
+                if idea_desc:
+                    context_sections.append(f"- **Idea description**: {idea_desc}")
+                if tried_hyperparam_lines:
+                    context_sections.append(
+                        "- **Previously tried idea names**: "
+                        + ", ".join(tried_hyperparam_lines[:50])
+                    )
 
     if stage_identifier is StageIdentifier.STAGE4:
         context_sections.append("")
@@ -816,6 +845,28 @@ def _write_codex_task_file(
                 "- ```",
             ]
         )
+        idea_obj = input_obj.get("stage4_ablation_idea")
+        if isinstance(idea_obj, dict):
+            idea_name = str(idea_obj.get("name") or "").strip()
+            idea_desc = str(idea_obj.get("description") or "").strip()
+            tried_list = idea_obj.get("tried_ablations")
+            tried_ablation_lines: list[str] = []
+            if isinstance(tried_list, list):
+                tried_ablation_lines = [str(x) for x in tried_list if str(x).strip()]
+            if idea_name or idea_desc:
+                context_sections.append("")
+                context_sections.append("### Assigned ablation idea (MUST follow)")
+                if idea_name:
+                    context_sections.append(f"- **Idea name**: {idea_name}")
+                    context_sections.append(
+                        f"- **Contract**: set `ablation_name` in `node_result.json` to exactly `{idea_name}`"
+                    )
+                if idea_desc:
+                    context_sections.append(f"- **Idea description**: {idea_desc}")
+                if tried_ablation_lines:
+                    context_sections.append(
+                        "- **Previously tried idea names**: " + ", ".join(tried_ablation_lines[:50])
+                    )
 
     if base_code.strip():
         context_sections.append("")
@@ -883,50 +934,50 @@ def _write_codex_task_file(
     contract_block = "\n".join(contract_lines).strip() + "\n\n"
 
     task_text = (
-        "You are an autonomous coding agent running inside a sandboxed workspace.\\n"
-        "You must not ask the user for input; proceed with reasonable defaults.\\n"
-        "You have full permission to install packages, download data, edit files, and run commands.\\n\\n"
-        f"## Context\\n- execution_id: `{execution_id}`\\n"
-        f"- stage_identifier: `{stage_identifier.name}`\\n"
-        f"- stage_name: `{stage_name}`\\n"
-        f"- wall_clock_timeout_seconds: {timeout_seconds}\\n\\n"
-        "## Inputs\\n"
-        f"- Read `{input_json_file.name}` for the full task context.\\n"
-        "  - Use `environment_context.datasets` for available datasets and S3 download/upload snippets.\\n"
-        "  - Use `environment_context.gpu` for GPU id/specs and `recommended_device`.\\n\\n"
+        "You are an autonomous coding agent running inside a sandboxed workspace.\n"
+        "You must not ask the user for input; proceed with reasonable defaults.\n"
+        "You have full permission to install packages, download data, edit files, and run commands.\n\n"
+        f"## Context\n- execution_id: `{execution_id}`\n"
+        f"- stage_identifier: `{stage_identifier.name}`\n"
+        f"- stage_name: `{stage_name}`\n"
+        f"- wall_clock_timeout_seconds: {timeout_seconds}\n\n"
+        "## Inputs\n"
+        f"- Read `{input_json_file.name}` for the full task context.\n"
+        "  - Use `environment_context.datasets` for available datasets and S3 download/upload snippets.\n"
+        "  - Use `environment_context.gpu` for GPU id/specs and `recommended_device`.\n\n"
         f"{seed_agg_block}"
-        "## Required outputs (MUST)\\n"
-        f"- Write a complete Node dict to `{output_json_file.name}` using the same schema as Node.to_dict.\\n"
-        f"- Write your final experiment code to `{agent_file_name}`.\\n"
-        "- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).\\n"
-        "- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.\\n\\n"
+        "## Required outputs (MUST)\n"
+        f"- Write a complete Node dict to `{output_json_file.name}` using the same schema as Node.to_dict.\n"
+        f"- Write your final experiment code to `{agent_file_name}`.\n"
+        "- Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).\n"
+        "- For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.\n\n"
         f"{contract_block}"
-        "## Hard requirements\\n"
-        "- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.\\n"
-        "- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.\\n"
-        "- Avoid re-downloading data if it's already present in the dataset caches described in `codex_input.json`.\\n\\n"
-        "## Metric requirement\\n"
-        "- Read `evaluation_metric_spec` from `codex_input.json` and use it as the primary metric definition.\\n"
-        "- Populate `metric` in `node_result.json` with:\\n"
-        "  - `metric.name` exactly matching `evaluation_metric_spec.name`\\n"
-        "  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`\\n"
-        "  - `metric.description` matching `evaluation_metric_spec.description`\\n"
-        "  - `metric.value` as a numeric value from your evaluation run\\n\\n"
-        "## Seed requirement\\n"
-        "- Read `seed_eval` and `seed_value` from `codex_input.json`.\\n"
-        "- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:\\n"
-        "  - `random.seed(seed_value)`\\n"
-        "  - `numpy.random.seed(seed_value)`\\n"
-        "  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`\\n"
-        "- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.\\n"
-        '- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").\\n\\n'
-        "## GPU requirement\\n"
-        "- If `environment_context.gpu.gpu_id` is not null, you MUST use the GPU when applicable (training/inference).\\n"
-        "- Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.\\n\\n"
-        "## Execution contract\\n"
-        "- Run any commands you need.\\n"
-        f"- Run the final experiment with: `python {agent_file_name}`.\\n"
-        "- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.\\n"
+        "## Hard requirements\n"
+        "- Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.\n"
+        "- Save plottable data to `working/experiment_data.npy` via `np.save(...)`.\n"
+        "- Avoid re-downloading data if it's already present in the dataset caches described in `codex_input.json`.\n\n"
+        "## Metric requirement\n"
+        "- Read `evaluation_metric_spec` from `codex_input.json` and use it as the primary metric definition.\n"
+        "- Populate `metric` in `node_result.json` with:\n"
+        "  - `metric.name` exactly matching `evaluation_metric_spec.name`\n"
+        "  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`\n"
+        "  - `metric.description` matching `evaluation_metric_spec.description`\n"
+        "  - `metric.value` as a numeric value from your evaluation run\n\n"
+        "## Seed requirement\n"
+        "- Read `seed_eval` and `seed_value` from `codex_input.json`.\n"
+        "- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:\n"
+        "  - `random.seed(seed_value)`\n"
+        "  - `numpy.random.seed(seed_value)`\n"
+        "  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`\n"
+        "- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.\n"
+        '- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").\n\n'
+        "## GPU requirement\n"
+        "- If `environment_context.gpu.gpu_id` is not null, you MUST use the GPU when applicable (training/inference).\n"
+        "- Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.\n\n"
+        "## Execution contract\n"
+        "- Run any commands you need.\n"
+        f"- Run the final experiment with: `python {agent_file_name}`.\n"
+        "- If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.\n"
     )
     task_path.write_text(context_block + task_text, encoding="utf-8")
     return task_path
@@ -1070,6 +1121,8 @@ def process_node(
     seed_eval: bool,
     seed_value: int,
     seed_aggregation: dict[str, object] | None,
+    stage2_hyperparam_idea: dict[str, object] | None,
+    stage4_ablation_idea: dict[str, object] | None,
     event_callback: Callable[[BaseEvent], None],
     gpu_id: int | None,
     execution_id: str,
@@ -1123,6 +1176,8 @@ def process_node(
         seed_eval=seed_eval,
         seed_value=seed_value,
         seed_aggregation=seed_aggregation,
+        stage2_hyperparam_idea=stage2_hyperparam_idea,
+        stage4_ablation_idea=stage4_ablation_idea,
         gpu_id=gpu_id,
         gpu_spec=gpu_spec,
         cfg=cfg,
@@ -1311,6 +1366,26 @@ def process_node(
         seed_eval=seed_eval,
         seed_value=seed_value,
         working_png_count=count_working_pngs(working_dir=working_dir),
+        expected_hyperparam_name=(
+            str(stage2_hyperparam_idea.get("name"))
+            if (
+                stage_identifier is StageIdentifier.STAGE2
+                and stage2_hyperparam_idea is not None
+                and isinstance(stage2_hyperparam_idea.get("name"), str)
+                and str(stage2_hyperparam_idea.get("name")).strip()
+            )
+            else None
+        ),
+        expected_ablation_name=(
+            str(stage4_ablation_idea.get("name"))
+            if (
+                stage_identifier is StageIdentifier.STAGE4
+                and stage4_ablation_idea is not None
+                and isinstance(stage4_ablation_idea.get("name"), str)
+                and str(stage4_ablation_idea.get("name")).strip()
+            )
+            else None
+        ),
     )
     contract_errors = validate_node_result_contract_for_stage(
         node_result=node_result,
@@ -1448,6 +1523,8 @@ def process_node_task(task: NodeTask) -> dict[str, object]:
         seed_eval=task["seed_eval"],
         seed_value=task["seed_value"],
         seed_aggregation=task["seed_aggregation"],
+        stage2_hyperparam_idea=task["stage2_hyperparam_idea"],
+        stage4_ablation_idea=task["stage4_ablation_idea"],
         event_callback=task["event_callback"],
         gpu_id=task["gpu_id"],
         execution_id=task["execution_id"],
