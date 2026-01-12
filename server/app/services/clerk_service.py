@@ -41,18 +41,12 @@ class ClerkService:
                     # Decode base64 to get the domain, strip any null bytes or special chars
                     domain = base64.b64decode(encoded_domain + "==").decode("utf-8").rstrip("\x00$")
                     self.jwks_url = f"https://{domain}/.well-known/jwks.json"
-                else:
-                    # Fallback to a generic URL (won't work but will log the issue)
-                    logger.error("Could not parse Clerk publishable key format")
-                    self.jwks_url = "https://clerk.dev/.well-known/jwks.json"
             except Exception as e:
-                logger.error(f"Error parsing Clerk publishable key: {e}")
-                self.jwks_url = "https://clerk.dev/.well-known/jwks.json"
-        else:
-            logger.error("CLERK_PUBLISHABLE_KEY not configured")
-            self.jwks_url = "https://clerk.dev/.well-known/jwks.json"
+                raise ValueError(f"Error parsing Clerk publishable key: {e}") from e
 
-        logger.info(f"Using Clerk JWKS URL: {self.jwks_url}")
+        if not self.jwks_url:
+            raise ValueError("CLERK_PUBLISHABLE_KEY not configured")
+
         self.jwks_client = PyJWKClient(self.jwks_url)
 
     def verify_session_token(self, jwt_token: str) -> Optional[dict]:
