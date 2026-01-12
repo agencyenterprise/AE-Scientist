@@ -189,18 +189,16 @@ You must not ask the user for input; proceed with reasonable defaults.
 You have full permission to install packages, download data, edit files, and run commands.
 
 ## Context
-- execution_id: `{{ execution_id }}`
-- stage_identifier: `{{ stage_identifier_name }}`
-- stage_name: `{{ stage_name }}`
 - wall_clock_timeout_seconds: {{ timeout_seconds }}
 
 {{ seed_agg_block }}
 ## Required outputs (MUST)
-- Write a complete Node dict to `{{ output_json_name }}` using the same schema as Node.to_dict.
+- Write a JSON object to `{{ output_json_name }}` that conforms to the **Output JSON contract** section below.
 - Write your final experiment code to `{{ agent_file_name }}`.
 - Ensure any experiment artifacts are placed in `./working/` (e.g., `experiment_data.npy`, plots, etc.).
 - For plots: write `.png` files into `./working/`. You MAY leave `plots`/`plot_paths` empty in `node_result.json`; the runner collects paths automatically.
 
+## Output JSON contract (MUST follow)
 {{ contract_block }}
 ## Hard requirements
 - Create and use `working_dir = os.path.join(os.getcwd(), 'working')` and save artifacts there.
