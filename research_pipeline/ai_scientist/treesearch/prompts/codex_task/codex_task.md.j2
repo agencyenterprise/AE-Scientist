@@ -151,10 +151,6 @@ You have full permission to install packages, download data, edit files, and run
 - stage_name: `{{ stage_name }}`
 - wall_clock_timeout_seconds: {{ timeout_seconds }}
 
-## Inputs
-- Read the JSON object in this file under **Machine-readable context (JSON)**.
-- Read the rest of this markdown file for the human-readable task context.
-
 {{ seed_agg_block }}
 ## Required outputs (MUST)
 - Write a complete Node dict to `{{ output_json_name }}` using the same schema as Node.to_dict.
