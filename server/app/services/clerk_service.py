@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 class ClerkService:
     """Service for handling Clerk authentication."""
+    jwks_url: str
+    client: Clerk
+    jwks_client: PyJWKClient
 
     def __init__(self) -> None:
         """Initialize the Clerk service."""
