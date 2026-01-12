@@ -133,6 +133,9 @@ def compile_prompt_to_md(
         if isinstance(prompt, str):
             return prompt.strip() + "\n"
 
+        if isinstance(prompt, (int, float, bool)):
+            return str(prompt).strip() + "\n"
+
         if isinstance(prompt, list):
             if not prompt:
                 return ""
@@ -158,7 +161,19 @@ def compile_prompt_to_md(
                 header_prefix = "#" * _header_depth
                 for k, v in prompt.items():
                     out.append(f"{header_prefix} {k}\n")
-                    compiled_v = compile_prompt_to_md(prompt=v, _header_depth=_header_depth + 1)
+                    try:
+                        compiled_v = compile_prompt_to_md(
+                            prompt=v,
+                            _header_depth=_header_depth + 1,
+                        )
+                    except Exception:
+                        logger.error(
+                            "Error compiling prompt dict key: %s (type=%s, value=%s)",
+                            k,
+                            type(v),
+                            v,
+                        )
+                        raise
                     if isinstance(compiled_v, str):
                         out.append(compiled_v)
                     else:
