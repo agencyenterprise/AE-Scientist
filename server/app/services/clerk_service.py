@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class ClerkService:
     """Service for handling Clerk authentication."""
+
     jwks_url: Optional[str]
     client: Optional[Clerk]
     jwks_client: Optional[PyJWKClient]
@@ -36,7 +37,9 @@ class ClerkService:
             return
 
         if not settings.CLERK_PUBLISHABLE_KEY:
-            logger.warning("CLERK_PUBLISHABLE_KEY not configured - Clerk authentication will not work")
+            logger.warning(
+                "CLERK_PUBLISHABLE_KEY not configured - Clerk authentication will not work"
+            )
             return
 
         try:
@@ -74,7 +77,7 @@ class ClerkService:
         Returns:
             Dict with user info if valid, None otherwise
         """
-        if not self._is_configured:
+        if not self._is_configured or not self.jwks_client or not self.client:
             logger.error("Clerk service is not properly configured")
             return None
 
