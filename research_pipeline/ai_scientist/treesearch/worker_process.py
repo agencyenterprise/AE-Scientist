@@ -3,6 +3,8 @@ import logging
 import multiprocessing
 import os
 import pickle
+import subprocess
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,7 +65,11 @@ class TrainingReview(BaseModel):
     )
     summary: str = Field(
         ...,
-        description="If is_bug=True, summarize the failure and propose a fix. Otherwise leave empty.",
+        description=(
+            "Summary of what happened. If is_bug=True, summarize the failure and propose a fix direction. "
+            "If is_bug=False, summarize the findings."
+        ),
+        min_length=1,
     )
 
 
@@ -134,12 +140,14 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
     )
 
 
-def _summarize_execution_with_llm(
+def _review_execution_with_llm(
     *,
     cfg: AppConfig,
     task_desc: TaskDescription,
     stage_goals: str,
     stage_identifier: StageIdentifier,
+    code: str,
+    plan: str,
     term_out: str,
     exc_type: str | None,
     exec_time: float,
@@ -152,6 +160,8 @@ def _summarize_execution_with_llm(
         "Research idea": task_desc.model_dump(by_alias=True),
         "Stage": stage_identifier.name,
         "Stage goals": stage_goals,
+        "Experiment plan": plan,
+        "Experiment code": wrap_code(code, lang="python"),
         "Execution output": wrap_code(term_out, lang=""),
         "Exception type": str(exc_type or ""),
         "Execution time (seconds)": exec_time,
@@ -168,6 +178,207 @@ def _summarize_execution_with_llm(
         logger.exception("Failed to summarize execution output via LLM.")
         return None
     return response
+
+
+def _run_python_file(
+    *,
+    python_executable: Path,
+    script_path: Path,
+    cwd: Path,
+    env: dict[str, str],
+    timeout_seconds: int,
+) -> tuple[list[str], float, str | None, dict[str, object] | None]:
+    started_at = time.time()
+    try:
+        proc = subprocess.run(
+            args=[str(python_executable), str(script_path)],
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=float(timeout_seconds),
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        exec_time = time.time() - started_at
+        return (
+            [f"Timed out running {script_path.name}\n"],
+            exec_time,
+            "ExecutionTimeout",
+            {"reason": "timeout", "timeout_seconds": timeout_seconds},
+        )
+    except OSError as exc:
+        exec_time = time.time() - started_at
+        return (
+            [f"Failed to execute {script_path.name}: {exc}\n"],
+            exec_time,
+            "ExecutionRunnerError",
+            {"reason": str(exc)},
+        )
+
+    exec_time = time.time() - started_at
+    combined = (
+        (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
+    )
+    term_out = [line + "\n" for line in combined.splitlines()]
+    if proc.returncode == 0:
+        return term_out, exec_time, None, {"returncode": 0}
+    return term_out, exec_time, "ExecutionError", {"returncode": proc.returncode}
+
+
+def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
+    return "\n".join(
+        [
+            "from __future__ import annotations",
+            "",
+            "import random",
+            "from pathlib import Path",
+            "",
+            "import numpy as np",
+            "",
+            "try:",
+            "    import torch",
+            "except Exception:  # noqa: BLE001",
+            "    torch = None",
+            "",
+            f"seed_value = {seed_value}",
+            "random.seed(seed_value)",
+            "np.random.seed(seed_value)",
+            "if torch is not None:",
+            "    torch.manual_seed(seed_value)",
+            "    torch.cuda.manual_seed_all(seed_value)",
+            "",
+            "# Ensure working/ exists (the experiment code is expected to use it).",
+            "working_dir = Path.cwd() / 'working'",
+            "working_dir.mkdir(parents=True, exist_ok=True)",
+            "",
+            parent_code,
+            "",
+        ]
+    )
+
+
+def _process_seed_eval_reuse(
+    *,
+    cfg: AppConfig,
+    task_desc: TaskDescription,
+    stage_goals: str,
+    stage_identifier: StageIdentifier,
+    evaluation_metric_spec: EvaluationMetricSpec,
+    workspace_dir: Path,
+    working_dir: Path,
+    venv_dir: Path,
+    codex_env: dict[str, str],
+    codex_argv: list[str],
+    execution_id: str,
+    seed_eval: bool,
+    seed_value: int,
+    parent_node: Node,
+    event_callback: Callable[[BaseEvent], None],
+) -> dict[str, object]:
+    # Seed-eval reuse: execute the parent's experiment code with a different seed.
+    parent_code = str(parent_node.code or "")
+    agent_file = workspace_dir / str(cfg.exec.agent_file_name)
+    agent_file.write_text(parent_code, encoding="utf-8")
+
+    seed_eval_script = workspace_dir / "seed_eval_run.py"
+    seed_eval_script.write_text(
+        _build_seed_eval_script_text(seed_value=seed_value, parent_code=parent_code),
+        encoding="utf-8",
+    )
+
+    python_executable = venv_dir / "bin" / "python"
+    term_out, exec_time, exc_type, exc_info = _run_python_file(
+        python_executable=python_executable,
+        script_path=seed_eval_script,
+        cwd=workspace_dir,
+        env=codex_env,
+        timeout_seconds=int(cfg.exec.timeout),
+    )
+
+    child_node = Node(
+        id=execution_id,
+        plan=f"Seed evaluation run. Seed: {seed_value}",
+        code=parent_code,
+        is_seed_node=True,
+        is_seed_agg_node=False,
+        is_buggy_plots=False,
+        plot_code=parent_node.plot_code,
+        plot_plan=parent_node.plot_plan,
+        parse_metrics_plan=str(parent_node.parse_metrics_plan or ""),
+        parse_metrics_code=str(parent_node.parse_metrics_code or ""),
+    )
+    _attach_parent(child_node=child_node, parent_node=parent_node)
+    child_node.absorb_exec_result(
+        SimpleNamespace(
+            term_out=term_out,
+            exec_time=exec_time,
+            exc_type=exc_type,
+            exc_info=exc_info,
+            exc_stack=None,
+        )
+    )
+    child_node.exec_time = exec_time
+    child_node.exc_type = exc_type
+    child_node.exc_info = exc_info or {}
+
+    llm_review = _review_execution_with_llm(
+        cfg=cfg,
+        task_desc=task_desc,
+        stage_goals=stage_goals,
+        stage_identifier=stage_identifier,
+        code=child_node.code,
+        plan=child_node.plan,
+        term_out="".join(term_out),
+        exc_type=exc_type,
+        exec_time=float(exec_time),
+    )
+    if llm_review is None:
+        child_node.analysis = "LLM execution review failed; see execution output."
+        child_node.is_buggy = True
+    else:
+        child_node.analysis = str(llm_review.summary or "").strip()
+        child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
+
+    metrics_artifacts = generate_and_assign_metrics(
+        cfg=cfg,
+        codex_env=codex_env,
+        codex_argv=list(codex_argv),
+        codex_timeout_seconds=int(cfg.exec.timeout),
+        venv_dir=venv_dir,
+        workspace_dir=workspace_dir,
+        working_dir=working_dir,
+        node=child_node,
+        parent_node=parent_node,
+        stage_identifier=stage_identifier,
+        evaluation_metric_spec=evaluation_metric_spec,
+        seed_eval=seed_eval,
+        event_callback=event_callback,
+    )
+
+    _move_experiment_artifacts(
+        cfg=cfg,
+        child_node=child_node,
+        working_dir=working_dir,
+        event_callback=event_callback,
+    )
+    if metrics_artifacts is not None:
+        persist_metrics_pass_artifacts(node=child_node, artifacts=metrics_artifacts)
+
+    if child_node.is_buggy is False and stage_identifier in (
+        StageIdentifier.STAGE3,
+        StageIdentifier.STAGE4,
+    ):
+        generate_vlm_feedback(
+            cfg=cfg,
+            node=child_node,
+            stage_identifier=stage_identifier,
+            event_callback=event_callback,
+        )
+
+    result_data = child_node.to_dict()
+    pickle.dumps(result_data)
+    return result_data
 
 
 def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
@@ -571,6 +782,13 @@ def process_node(
         research_pipeline_root=RESEARCH_PIPELINE_ROOT,
     )
     codex_env = build_codex_env(venv_dir=venv_dir)
+    codex_argv = [
+        "codex",
+        "exec",
+        "--yolo",
+        "--skip-git-repo-check",
+        "--json",
+    ]
 
     parent_node = _load_parent_node(node_data=node_data)
     logger.debug(
@@ -599,6 +817,25 @@ def process_node(
         )
 
     _abort_if_skip_requested(execution_id=execution_id)
+
+    if seed_eval and seed_aggregation is None and parent_node is not None:
+        return _process_seed_eval_reuse(
+            cfg=cfg,
+            task_desc=task_desc,
+            stage_goals=stage_goals,
+            stage_identifier=stage_identifier,
+            evaluation_metric_spec=evaluation_metric_spec,
+            workspace_dir=workspace_dir,
+            working_dir=working_dir,
+            venv_dir=venv_dir,
+            codex_env=codex_env,
+            codex_argv=codex_argv,
+            execution_id=execution_id,
+            seed_eval=seed_eval,
+            seed_value=seed_value,
+            parent_node=parent_node,
+            event_callback=event_callback,
+        )
 
     output_json_file = workspace_dir / "node_result.json"
     env_ctx = build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec)
@@ -671,13 +908,6 @@ def process_node(
             codex_task_text,
         )
 
-    codex_argv = [
-        "codex",
-        "exec",
-        "--yolo",
-        "--skip-git-repo-check",
-        "--json",
-    ]
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
         timeout_seconds=cfg.exec.timeout,
@@ -848,7 +1078,6 @@ def process_node(
         pickle.dumps(result_data)
         return result_data
 
-    metrics_artifacts = None
     try:
         child_node = Node.from_dict(dict(node_result), journal=None)
     except Exception as exc:  # noqa: BLE001
@@ -875,6 +1104,38 @@ def process_node(
     if parent_node is not None and child_node.parent is None:
         _attach_parent(child_node=child_node, parent_node=parent_node)
 
+    child_node.absorb_exec_result(
+        SimpleNamespace(
+            term_out=term_out,
+            exec_time=exec_time,
+            exc_type=exc_type,
+            exc_info=exc_info,
+            exc_stack=None,
+        )
+    )
+    child_node.exec_time = exec_time
+    child_node.exc_type = exc_type
+    child_node.exc_info = exc_info or {}
+
+    if child_node.exc_type != "NodeParseError":
+        llm_review = _review_execution_with_llm(
+            cfg=cfg,
+            task_desc=task_desc,
+            stage_goals=stage_goals,
+            stage_identifier=stage_identifier,
+            code=str(child_node.code or ""),
+            plan=str(child_node.plan or ""),
+            term_out="".join(term_out),
+            exc_type=exc_type,
+            exec_time=float(exec_time),
+        )
+        if llm_review is None:
+            child_node.analysis = "LLM execution review failed; see execution output."
+            child_node.is_buggy = True
+        else:
+            child_node.analysis = str(llm_review.summary or "").strip()
+            child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
+
     metrics_artifacts = generate_and_assign_metrics(
         cfg=cfg,
         codex_env=codex_env,
@@ -891,49 +1152,11 @@ def process_node(
         event_callback=event_callback,
     )
 
-    logger.debug(
-        "worker.node_parsed execution_id=%s is_buggy=%s is_buggy_plots=%s metric=%s plan_preview=%s analysis_preview=%s plot_analyses=%s vlm_feedback_summary=%s datasets_successfully_tested=%s",
-        execution_id[:8],
-        child_node.is_buggy,
-        child_node.is_buggy_plots,
-        None if child_node.metric is None else str(child_node.metric),
-        (child_node.plan or "")[:160].replace("\n", " "),
-        (str(child_node.analysis or ""))[:160].replace("\n", " "),
-        len(child_node.plot_analyses),
-        len(str(child_node.vlm_feedback_summary or "")),
-        len(child_node.datasets_successfully_tested),
-    )
-    child_node.absorb_exec_result(
-        SimpleNamespace(
-            term_out=term_out,
-            exec_time=exec_time,
-            exc_type=exc_type,
-            exc_info=exc_info,
-            exc_stack=None,
-        )
-    )
-    child_node.exec_time = exec_time
-    child_node.exc_type = exc_type
-    child_node.exc_info = exc_info or {}
     if child_node.metric is None:
         child_node.metric = WorstMetricValue()
-        child_node.is_buggy = True if child_node.is_buggy is None else child_node.is_buggy
-    if child_node.analysis is None or not str(child_node.analysis).strip():
-        llm_review = _summarize_execution_with_llm(
-            cfg=cfg,
-            task_desc=task_desc,
-            stage_goals=stage_goals,
-            stage_identifier=stage_identifier,
-            term_out="".join(term_out),
-            exc_type=exc_type,
-            exec_time=float(exec_time),
-        )
-        if llm_review is not None:
-            summary = str(llm_review.summary or "").strip()
-            if summary:
-                child_node.analysis = summary
-            if llm_review.is_bug:
-                child_node.is_buggy = True
+        child_node.is_buggy = True
+    if child_node.is_buggy is None:
+        child_node.is_buggy = True
 
     _move_experiment_artifacts(
         cfg=cfg,
@@ -954,6 +1177,19 @@ def process_node(
             stage_identifier=stage_identifier,
             event_callback=event_callback,
         )
+
+    logger.debug(
+        "worker.node_parsed execution_id=%s is_buggy=%s is_buggy_plots=%s metric=%s plan_preview=%s analysis_preview=%s plot_analyses=%s vlm_feedback_summary=%s datasets_successfully_tested=%s",
+        execution_id[:8],
+        child_node.is_buggy,
+        child_node.is_buggy_plots,
+        None if child_node.metric is None else str(child_node.metric),
+        (child_node.plan or "")[:160].replace("\n", " "),
+        (str(child_node.analysis or ""))[:160].replace("\n", " "),
+        len(child_node.plot_analyses),
+        len(str(child_node.vlm_feedback_summary or "")),
+        len(child_node.datasets_successfully_tested),
+    )
 
     result_data = child_node.to_dict()
     pickle.dumps(result_data)
