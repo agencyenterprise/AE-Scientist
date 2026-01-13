@@ -28,7 +28,6 @@ class UserData(NamedTuple):
     """User data from database."""
 
     id: int
-    google_id: Optional[str]
     clerk_user_id: Optional[str]
     email: str
     name: str
@@ -58,7 +57,6 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
         self,
         email: str,
         name: str,
-        google_id: Optional[str] = None,
         clerk_user_id: Optional[str] = None,
     ) -> Optional[UserData]:
         """
@@ -67,8 +65,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
         Args:
             email: User email address
             name: User display name
-            google_id: Google OAuth user ID (optional, for legacy)
-            clerk_user_id: Clerk user ID (optional, for Clerk auth)
+            clerk_user_id: Clerk user ID (required for Clerk auth)
 
         Returns:
             User data if successful, None otherwise
@@ -78,11 +75,11 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        INSERT INTO users (google_id, clerk_user_id, email, name)
-                        VALUES (%s, %s, %s, %s)
-                        RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        INSERT INTO users (clerk_user_id, email, name)
+                        VALUES (%s, %s, %s)
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
                         """,
-                        (google_id, clerk_user_id, email, name),
+                        (clerk_user_id, email, name),
                     )
                     has_free_credits = should_give_free_credits(email)
                     result = await cursor.fetchone()
@@ -106,41 +103,6 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
             logger.exception(f"Error creating user: {e}")
             return None
 
-    async def get_user_by_google_id(self, google_id: str) -> Optional[UserData]:
-        """
-        Get user by Google ID.
-
-        Args:
-            google_id: Google OAuth user ID
-
-        Returns:
-            User data dict if found, None otherwise
-        """
-        try:
-            async with self.aget_connection() as conn:
-                async with conn.cursor(row_factory=dict_row) as cursor:
-                    await cursor.execute(
-                        """
-                        SELECT id,
-                               google_id,
-                               clerk_user_id,
-                               email,
-                               name,
-                               is_active,
-                               created_at,
-                               updated_at
-                        FROM users
-                        WHERE google_id = %s
-                          AND is_active = TRUE
-                        """,
-                        (google_id,),
-                    )
-                    result = await cursor.fetchone()
-                    return UserData(**result) if result else None
-        except Exception as e:
-            logger.exception(f"Error getting user by Google ID: {e}")
-            return None
-
     async def get_user_by_clerk_id(self, clerk_user_id: str) -> Optional[UserData]:
         """
         Get user by Clerk user ID.
@@ -157,7 +119,6 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     await cursor.execute(
                         """
                         SELECT id,
-                               google_id,
                                clerk_user_id,
                                email,
                                name,
@@ -192,7 +153,6 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     await cursor.execute(
                         """
                         SELECT id,
-                               google_id,
                                clerk_user_id,
                                email,
                                name,
@@ -227,7 +187,6 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     await cursor.execute(
                         """
                         SELECT id,
-                               google_id,
                                clerk_user_id,
                                email,
                                name,
@@ -276,7 +235,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                             updated_at    = NOW()
                         WHERE id = %s
                           AND is_active = TRUE
-                        RETURNING id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
                         """,
                         (email, name, clerk_user_id, user_id),
                     )
@@ -330,7 +289,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT u.id, u.google_id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
+                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
                         FROM users u
                                  JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
@@ -396,7 +355,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT id, google_id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at
                         FROM users
                         WHERE is_active = TRUE
                         ORDER BY name ASC

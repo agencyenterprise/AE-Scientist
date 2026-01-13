@@ -113,9 +113,6 @@ jobs:
           OPENAI_API_KEY: dummy
           ANTHROPIC_API_KEY: dummy
           XAI_API_KEY: dummy
-          GOOGLE_CLIENT_ID: dummy
-          GOOGLE_CLIENT_SECRET: dummy
-          GOOGLE_REDIRECT_URI: http://localhost:8000/api/auth/callback
           FRONTEND_URL: http://localhost:3000
           TELEMETRY_WEBHOOK_TOKEN: dummy
           HF_TOKEN: dummy
