@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, List
 
 from .journal import Journal, Node
+from .stage_identifiers import StageIdentifier
 
 logger = logging.getLogger(__name__)
 
@@ -121,12 +122,22 @@ def _summarize_best_node_block(*, journal: Journal) -> dict[str, Any]:
     if best_node is None:
         return {"best node": {}}
     # Include seed child nodes when present
-    seed_nodes = [
+    seed_nodes: list[Node] = [
         child for child in best_node.children if child.is_seed_node and not child.is_seed_agg_node
     ]
+    agg_node = next(
+        (child for child in best_node.children if child.is_seed_node and child.is_seed_agg_node),
+        None,
+    )
+    if agg_node is None:
+        return {
+            "best node": _get_node_log(node=best_node),
+            "best node with different seeds": [_get_node_log(node=n) for n in seed_nodes],
+        }
     return {
         "best node": _get_node_log(node=best_node),
         "best node with different seeds": [_get_node_log(node=n) for n in seed_nodes],
+        "aggregated results of nodes with different seeds": _get_node_log(node=agg_node),
     }
 
 
@@ -138,11 +149,20 @@ def _summarize_ablations(*, journal: Journal) -> list[dict[str, Any]]:
     for root in ablation_roots:
         if root.is_buggy:
             continue
-        node_log = _get_node_log(node=root)
+        agg_node = next(
+            (child for child in root.children if child.is_seed_node and child.is_seed_agg_node),
+            None,
+        )
+        source_node = agg_node if agg_node is not None else root
+        node_log = _get_node_log(node=source_node)
         if "ablation_name" not in node_log and root.ablation_name is not None:
             node_log["ablation_name"] = root.ablation_name
         summaries.append(node_log)
     return summaries
+
+
+def _stage_identifier_from_name(*, stage_name: str) -> StageIdentifier | None:
+    return StageIdentifier.from_prefixed_name(prefixed_name=stage_name)
 
 
 def overall_summarize(
@@ -165,16 +185,26 @@ def overall_summarize(
 
     for stage_name, journal in journals:
         _annotate_history_deterministic(journal=journal)
-        if "draft" in stage_name:
+        identifier = _stage_identifier_from_name(stage_name=stage_name)
+        if identifier is None:
+            raise ValueError(
+                f"Unknown stage name (expected StageIdentifier.prefixed_name): {stage_name}"
+            )
+
+        if identifier is StageIdentifier.STAGE1:
+            # Match the original behavior: stage index 0 => "draft_summary"
             draft = summarize_stage(journal=journal).model_dump(by_alias=True)
             continue
-        if "stage_4" in stage_name:
-            ablation = _summarize_ablations(journal=journal)
-            continue
-        if "stage_1" in stage_name:
+        if identifier is StageIdentifier.STAGE2:
+            # Match the original behavior: stage index 1 => "baseline_summary"
             baseline = _summarize_best_node_block(journal=journal)
             continue
-        # Stage 2/3 and anything else are treated as "research" for reporting.
-        research = _summarize_best_node_block(journal=journal)
+        if identifier is StageIdentifier.STAGE3:
+            # Match the original behavior: stage index 2 => "research_summary"
+            research = _summarize_best_node_block(journal=journal)
+            continue
+        if identifier is StageIdentifier.STAGE4:
+            ablation = _summarize_ablations(journal=journal)
+            continue
 
     return draft, baseline, research, ablation
