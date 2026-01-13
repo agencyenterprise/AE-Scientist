@@ -212,11 +212,7 @@ You have full permission to install packages, download data, edit files, and run
 
 ## Metric requirement
 - Read `evaluation_metric_spec` from the JSON context and use it as the primary metric definition.
-- Populate `metric` in `node_result.json` with:
-  - `metric.name` exactly matching `evaluation_metric_spec.name`
-  - `metric.maximize` exactly matching `evaluation_metric_spec.maximize`
-  - `metric.description` matching `evaluation_metric_spec.description`
-  - `metric.value` as a numeric value from your evaluation run
+- Save enough information into `working/experiment_data.npy` so that a separate metrics-parsing pass can compute the final/best metric values per dataset.
 
 ## Seed requirement
 - Read `seed_eval` and `seed_value` from the JSON context.

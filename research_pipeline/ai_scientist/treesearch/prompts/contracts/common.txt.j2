@@ -1,10 +1,5 @@
 ## Node result contract (STRICT; enforced by the harness)
 - You MUST include the following keys in `node_result.json` with the exact types:
-  - `metric`: object/dict (never null)
-    - `metric.name`: string
-    - `metric.maximize`: boolean (true/false)
-    - `metric.description`: string
-    - `metric.value`: number (int/float) or null if evaluation did not run / is not available
   - `is_buggy_plots`: boolean (true/false; never null)
   - `datasets_successfully_tested`: list of strings (can be empty)
   - `is_seed_agg_node`: boolean (false for normal runs; true only for seed aggregation runs)

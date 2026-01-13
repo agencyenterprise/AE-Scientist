@@ -93,12 +93,9 @@ def validate_common_node_result_contract(
 
     errors.extend(_unexpected_node_result_keys(node_result=node_result))
 
-    metric_val = node_result.get("metric")
-    if metric_val is None:
-        errors.append("metric is required (use an object/dict; not null)")
-    else:
-        errors.extend(_validate_metric(value=metric_val))
-
+    # Harness-owned fields: Codex must not provide these in node_result.json.
+    if "metric" in node_result:
+        errors.append("Do NOT include metric in node_result.json")
     if not isinstance(node_result.get("is_buggy_plots"), bool):
         errors.append("is_buggy_plots must be a boolean (true/false)")
     if not isinstance(node_result.get("is_seed_agg_node", False), bool):

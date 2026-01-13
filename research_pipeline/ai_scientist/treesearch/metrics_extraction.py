@@ -9,6 +9,7 @@ Responsibilities:
 from typing import Dict, List
 
 from .journal import Journal
+from .node_summary import generate_node_summary
 
 
 def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
@@ -17,12 +18,15 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
     vlm_feedback_list: list[object] = []
 
     for node in journal.nodes:
-        if node.agent is not None:
-            try:
-                node_summary = node.agent.generate_node_summary(node)
-                node_summaries.append(node_summary)
-            except Exception:
-                continue
+        try:
+            node_summary = generate_node_summary(
+                model=journal.summary_model,
+                temperature=journal.summary_temperature,
+                node=node,
+            )
+            node_summaries.append(node_summary)
+        except Exception:
+            continue
 
     for node in journal.good_nodes:
         if node.vlm_feedback is not None:

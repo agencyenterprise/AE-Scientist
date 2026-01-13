@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Literal, TypedDict
 
+from pydantic import BaseModel, Field
+
 from ai_scientist.llm import structured_query_with_schema
 
 from . import execution_registry
@@ -35,6 +37,7 @@ from .config import TaskDescription, apply_log_level
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
+from .metrics_parsing import generate_and_assign_metrics, persist_metrics_pass_artifacts
 from .prompts.codex_task.codex_task_template import (
     CodexTaskMarkdownRenderContext,
     render_codex_task_markdown,
@@ -48,10 +51,20 @@ from .stages.node_result_contracts import (
 from .utils.metric import WorstMetricValue
 from .utils.response import trim_long_string, wrap_code
 from .vlm_feedback import generate_vlm_feedback
-from .vlm_function_specs import REVIEW_RESPONSE_SCHEMA, TrainingReview
 
 logger = logging.getLogger("ai-scientist")
 RESEARCH_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+
+
+class TrainingReview(BaseModel):
+    is_bug: bool = Field(
+        ...,
+        description="True if the output log shows a failure or bug; False when execution succeeded.",
+    )
+    summary: str = Field(
+        ...,
+        description="If is_bug=True, summarize the failure and propose a fix. Otherwise leave empty.",
+    )
 
 
 def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSummary:
@@ -149,7 +162,7 @@ def _summarize_execution_with_llm(
             user_message=None,
             model=cfg.agent.feedback.model,
             temperature=cfg.agent.feedback.temperature,
-            schema_class=REVIEW_RESPONSE_SCHEMA,
+            schema_class=TrainingReview,
         )
     except Exception:  # noqa: BLE001
         logger.exception("Failed to summarize execution output via LLM.")
@@ -658,16 +671,17 @@ def process_node(
             codex_task_text,
         )
 
+    codex_argv = [
+        "codex",
+        "exec",
+        "--yolo",
+        "--skip-git-repo-check",
+        "--json",
+    ]
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
         timeout_seconds=cfg.exec.timeout,
-        argv=[
-            "codex",
-            "exec",
-            "--yolo",
-            "--skip-git-repo-check",
-            "--json",
-        ],
+        argv=codex_argv,
         env=codex_env,
     )
 
@@ -834,6 +848,7 @@ def process_node(
         pickle.dumps(result_data)
         return result_data
 
+    metrics_artifacts = None
     try:
         child_node = Node.from_dict(dict(node_result), journal=None)
     except Exception as exc:  # noqa: BLE001
@@ -856,6 +871,26 @@ def process_node(
         child_node.metric = WorstMetricValue()
         if parent_node is not None:
             _attach_parent(child_node=child_node, parent_node=parent_node)
+
+    if parent_node is not None and child_node.parent is None:
+        _attach_parent(child_node=child_node, parent_node=parent_node)
+
+    metrics_artifacts = generate_and_assign_metrics(
+        cfg=cfg,
+        codex_env=codex_env,
+        codex_argv=list(codex_argv),
+        codex_timeout_seconds=int(cfg.exec.timeout),
+        venv_dir=venv_dir,
+        workspace_dir=workspace_dir,
+        working_dir=working_dir,
+        node=child_node,
+        parent_node=parent_node,
+        stage_identifier=stage_identifier,
+        evaluation_metric_spec=evaluation_metric_spec,
+        seed_eval=seed_eval,
+        event_callback=event_callback,
+    )
+
     logger.debug(
         "worker.node_parsed execution_id=%s is_buggy=%s is_buggy_plots=%s metric=%s plan_preview=%s analysis_preview=%s plot_analyses=%s vlm_feedback_summary=%s datasets_successfully_tested=%s",
         execution_id[:8],
@@ -880,8 +915,6 @@ def process_node(
     child_node.exec_time = exec_time
     child_node.exc_type = exc_type
     child_node.exc_info = exc_info or {}
-    if parent_node is not None and child_node.parent is None:
-        _attach_parent(child_node=child_node, parent_node=parent_node)
     if child_node.metric is None:
         child_node.metric = WorstMetricValue()
         child_node.is_buggy = True if child_node.is_buggy is None else child_node.is_buggy
@@ -908,6 +941,8 @@ def process_node(
         working_dir=working_dir,
         event_callback=event_callback,
     )
+    if metrics_artifacts is not None:
+        persist_metrics_pass_artifacts(node=child_node, artifacts=metrics_artifacts)
     # only run VLM for later stages, and only for non-buggy nodes.
     if child_node.is_buggy is False and stage_identifier in (
         StageIdentifier.STAGE3,

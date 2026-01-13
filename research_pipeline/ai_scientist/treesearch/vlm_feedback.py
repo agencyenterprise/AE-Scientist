@@ -1,7 +1,9 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, List
+
+from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 from ai_scientist.llm.vlm import get_structured_response_from_vlm
@@ -10,7 +12,39 @@ from .config import Config as AppConfig
 from .events import BaseEvent, RunLogEvent
 from .journal import Node
 from .stage_identifiers import StageIdentifier
-from .vlm_function_specs import PLOT_SELECTION_SCHEMA, VLM_FEEDBACK_SCHEMA
+
+
+class PlotAnalysisEntry(BaseModel):
+    analysis: str = Field(
+        ...,
+        description="Detailed analysis of the plot's implications and scientific insight.",
+    )
+
+
+class PlotFeedback(BaseModel):
+    plot_analyses: List[PlotAnalysisEntry] = Field(
+        ...,
+        description="Per-plot analyses to surface in the write-up. Include at most the plots worth discussing.",
+    )
+    valid_plots_received: bool = Field(
+        ...,
+        description=(
+            "True if the provided plots were meaningful. "
+            "Set False when plots are empty/corrupted/non-diagnostic."
+        ),
+    )
+    vlm_feedback_summary: str = Field(
+        ...,
+        description="High-level summary of the vision-language model feedback (focus on generated samples when relevant).",
+    )
+
+
+class PlotSelectionResponse(BaseModel):
+    selected_plots: List[str] = Field(
+        ...,
+        description="Full paths of up to 10 plots that best capture results (ordered by importance).",
+    )
+
 
 logger = logging.getLogger("ai-scientist")
 
@@ -77,7 +111,7 @@ def generate_vlm_feedback(
                 user_message=None,
                 model=cfg.agent.feedback.model,
                 temperature=cfg.agent.feedback.temperature,
-                schema_class=PLOT_SELECTION_SCHEMA,
+                schema_class=PlotSelectionResponse,
             )
             candidates = [Path(p) for p in response_select_plots.selected_plots if str(p).strip()]
             valid: list[Path] = []
@@ -118,7 +152,7 @@ def generate_vlm_feedback(
             model=cfg.agent.vlm_feedback.model,
             system_message="",
             temperature=float(cfg.agent.vlm_feedback.temperature),
-            schema_class=VLM_FEEDBACK_SCHEMA,
+            schema_class=PlotFeedback,
             max_images=25,
         )
     except Exception:  # noqa: BLE001

@@ -22,6 +22,7 @@ from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .journal import Journal
 from .log_summarization import overall_summarize
+from .node_summary import generate_node_summary
 from .stages.base import StageMeta
 
 logger = logging.getLogger("ai-scientist")
@@ -142,9 +143,21 @@ def perform_experiments_bfts(
             latest_node = None
             if journal.nodes:
                 latest_node = journal.nodes[-1]
-                if latest_node.agent is not None:
-                    summary = latest_node.agent.generate_node_summary(latest_node)
-                    with open(notes_dir / f"node_{latest_node.id}_summary.json", "w") as f:
+                try:
+                    summary = generate_node_summary(
+                        model=journal.summary_model,
+                        temperature=journal.summary_temperature,
+                        task_desc=task_desc,
+                        node=latest_node,
+                    )
+                except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                    summary = None
+                if summary is not None:
+                    with open(
+                        notes_dir / f"node_{latest_node.id}_summary.json",
+                        mode="w",
+                        encoding="utf-8",
+                    ) as f:
                         json.dump(summary, f, indent=2)
 
             # Generate and save stage progress summary
