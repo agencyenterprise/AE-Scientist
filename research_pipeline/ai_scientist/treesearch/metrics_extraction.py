@@ -22,6 +22,7 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
             node_summary = generate_node_summary(
                 model=journal.summary_model,
                 temperature=journal.summary_temperature,
+                stage_name=journal.stage_name,
                 node=node,
             )
             node_summaries.append(node_summary)

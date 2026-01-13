@@ -34,6 +34,7 @@ def generate_node_summary(
     *,
     model: str,
     temperature: float,
+    stage_name: str,
     node: Node,
     task_desc: TaskDescription | None = None,
 ) -> dict[str, Any]:
@@ -42,6 +43,14 @@ def generate_node_summary(
             "You are an AI researcher analyzing experimental results. "
             "Please summarize the findings from this experiment iteration."
         ),
+        "Stage": stage_name,
+        "Hyperparameter": node.hyperparam_name,
+        "Parent comparison": {
+            "parent_id": node.parent.id if node.parent is not None else None,
+            "parent_metric": (
+                str(node.parent.metric) if node.parent and node.parent.metric else None
+            ),
+        },
         "Implementation": wrap_code(node.code),
         "Plan": node.plan,
         "Execution output": wrap_code(node.term_out, lang=""),

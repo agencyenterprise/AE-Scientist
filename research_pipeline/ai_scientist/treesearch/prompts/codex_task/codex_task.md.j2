@@ -86,6 +86,7 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 ### Stage 2 hyperparameter-tuning requirements
 - DO NOT change model architecture from the previous stage.
 - Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.
+- Preserve the parent `experiment_data` schema. Only add new fields/keys; do NOT rename or remove existing keys.
 - Save data in `working/experiment_data.npy` with a structure like:
 - ```python
 - experiment_data = {
@@ -221,7 +222,6 @@ You MUST make the experiment deterministic by setting seeds in the final experim
   - `numpy.random.seed({{ seed_value }})`
   - If torch is used: `torch.manual_seed({{ seed_value }})` and if CUDA is available `torch.cuda.manual_seed_all({{ seed_value }})`
 - If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.
-- If `seed_eval` is true, set `is_seed_node=true` in `node_result.json` and include the seed in your `plan` text.
 {% endif %}
 
 ## GPU requirement
@@ -236,6 +236,6 @@ You MUST make the experiment deterministic by setting seeds in the final experim
 
 ## Execution contract
 - Run any commands you need.
-- Run the final experiment with: `python {{ agent_file_name }}`.
+- Run the final experiment with: `{{ venv_dir }}/bin/python {{ agent_file_name }}`.
 - If the run fails, iterate (edit/install/rerun) until it succeeds or time runs out.
 

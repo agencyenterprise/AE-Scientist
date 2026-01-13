@@ -147,6 +147,7 @@ def perform_experiments_bfts(
                     summary = generate_node_summary(
                         model=journal.summary_model,
                         temperature=journal.summary_temperature,
+                        stage_name=stage.name,
                         task_desc=task_desc,
                         node=latest_node,
                     )

@@ -2,7 +2,7 @@
 {% set gpu_id = gpu.get("gpu_id") %}
 CRITICAL GPU REQUIREMENTS - Your code MUST include ALL of these:
 
-- At the start of your code, add these lines to handle GPU/CPU:
+- Near the top of your code (after imports), define the device like this:
 {% if gpu_id is not none %}
 ```python
 # CUDA_VISIBLE_DEVICES is already set; prefer cuda:0 inside the process
@@ -47,7 +47,7 @@ Important code structure requirements:
 - Do NOT put any execution code inside `if __name__ == "__main__":` block
 - All code should be at the global scope or in functions that are called from the global scope
 - The script should execute immediately when run, without requiring any special entry point
-- The code should start with:
+- Near the top of the file (after imports), ensure you have:
   - `import os`
   - `working_dir = os.path.join(os.getcwd(), 'working')`
   - `os.makedirs(working_dir, exist_ok=True)`
