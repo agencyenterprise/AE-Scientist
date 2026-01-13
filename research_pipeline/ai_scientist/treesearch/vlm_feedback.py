@@ -106,6 +106,14 @@ def generate_vlm_feedback(
             "Plot paths": [str(p) for p in all_plot_paths],
         }
         try:
+            logger.debug(
+                "llm.plot_selection.request node=%s model=%s temperature=%s schema=%s payload=%s",
+                node.id[:8],
+                cfg.agent.feedback.model,
+                cfg.agent.feedback.temperature,
+                PlotSelectionResponse.__name__,
+                prompt_select_plots,
+            )
             response_select_plots = structured_query_with_schema(
                 system_message=prompt_select_plots,
                 user_message=None,
@@ -113,6 +121,21 @@ def generate_vlm_feedback(
                 temperature=cfg.agent.feedback.temperature,
                 schema_class=PlotSelectionResponse,
             )
+            try:
+                logger.debug(
+                    "llm.plot_selection.response node=%s model=%s schema=%s payload=%s",
+                    node.id[:8],
+                    cfg.agent.feedback.model,
+                    PlotSelectionResponse.__name__,
+                    response_select_plots.model_dump(by_alias=True),
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "llm.plot_selection.response node=%s model=%s schema=%s payload=<unprintable>",
+                    node.id[:8],
+                    cfg.agent.feedback.model,
+                    PlotSelectionResponse.__name__,
+                )
             candidates = [Path(p) for p in response_select_plots.selected_plots if str(p).strip()]
             valid: list[Path] = []
             for p in candidates:
@@ -145,6 +168,14 @@ def generate_vlm_feedback(
             "If you don't receive any plots, say 'No plots received'. "
             "Never make up plot analysis. "
             "Please return the analyses in strict order of the uploaded images."
+        )
+        logger.debug(
+            "vlm.feedback.request node=%s model=%s temperature=%s msg=%s image_paths=%s",
+            node.id[:8],
+            cfg.agent.vlm_feedback.model,
+            cfg.agent.vlm_feedback.temperature,
+            msg,
+            [str(p) for p in selected_plot_paths],
         )
         feedback, _ = get_structured_response_from_vlm(
             msg=msg,

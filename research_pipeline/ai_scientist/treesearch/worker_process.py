@@ -3,8 +3,6 @@ import logging
 import multiprocessing
 import os
 import pickle
-import subprocess
-import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +35,7 @@ from .codex.seed_aggregation import codex_seed_aggregation_instructions_lines
 from .config import Config as AppConfig
 from .config import TaskDescription, apply_log_level
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
+from .executor import run_python_script
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
 from .metrics_parsing import generate_and_assign_metrics, persist_metrics_pass_artifacts
@@ -101,7 +100,7 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
             exp_results_dir = str(
                 Path(parent_node.exp_results_dir).resolve().relative_to(Path.cwd())
             )
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             exp_results_dir = str(Path(parent_node.exp_results_dir).resolve())
 
     plot_analyses: list[dict[str, Any]] = []
@@ -110,7 +109,7 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
         if isinstance(plot_path, str) and plot_path.strip():
             try:
                 rel_plot_path = str(Path(plot_path).resolve().relative_to(Path.cwd()))
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 rel_plot_path = str(Path(plot_path).resolve())
             plot_analyses.append({**analysis, "plot_path": rel_plot_path})
         else:
@@ -166,6 +165,13 @@ def _review_execution_with_llm(
         "Exception type": str(exc_type or ""),
         "Execution time (seconds)": exec_time,
     }
+    logger.debug(
+        "llm.review.request model=%s temperature=%s schema=%s payload=%s",
+        cfg.agent.feedback.model,
+        cfg.agent.feedback.temperature,
+        TrainingReview.__name__,
+        prompt,
+    )
     try:
         response = structured_query_with_schema(
             system_message=prompt,
@@ -174,56 +180,23 @@ def _review_execution_with_llm(
             temperature=cfg.agent.feedback.temperature,
             schema_class=TrainingReview,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         logger.exception("Failed to summarize execution output via LLM.")
         return None
-    return response
-
-
-def _run_python_file(
-    *,
-    python_executable: Path,
-    script_path: Path,
-    cwd: Path,
-    env: dict[str, str],
-    timeout_seconds: int,
-) -> tuple[list[str], float, str | None, dict[str, object] | None]:
-    started_at = time.time()
     try:
-        proc = subprocess.run(
-            args=[str(python_executable), str(script_path)],
-            cwd=str(cwd),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=float(timeout_seconds),
-            check=False,
+        logger.debug(
+            "llm.review.response model=%s schema=%s payload=%s",
+            cfg.agent.feedback.model,
+            TrainingReview.__name__,
+            response.model_dump(by_alias=True),
         )
-    except subprocess.TimeoutExpired:
-        exec_time = time.time() - started_at
-        return (
-            [f"Timed out running {script_path.name}\n"],
-            exec_time,
-            "ExecutionTimeout",
-            {"reason": "timeout", "timeout_seconds": timeout_seconds},
+    except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+        logger.debug(
+            "llm.review.response model=%s schema=%s payload=<unprintable>",
+            cfg.agent.feedback.model,
+            TrainingReview.__name__,
         )
-    except OSError as exc:
-        exec_time = time.time() - started_at
-        return (
-            [f"Failed to execute {script_path.name}: {exc}\n"],
-            exec_time,
-            "ExecutionRunnerError",
-            {"reason": str(exc)},
-        )
-
-    exec_time = time.time() - started_at
-    combined = (
-        (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
-    )
-    term_out = [line + "\n" for line in combined.splitlines()]
-    if proc.returncode == 0:
-        return term_out, exec_time, None, {"returncode": 0}
-    return term_out, exec_time, "ExecutionError", {"returncode": proc.returncode}
+    return response
 
 
 def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
@@ -288,13 +261,18 @@ def _process_seed_eval_reuse(
     )
 
     python_executable = venv_dir / "bin" / "python"
-    term_out, exec_time, exc_type, exc_info = _run_python_file(
+    exec_result = run_python_script(
+        purpose="seed_eval",
         python_executable=python_executable,
         script_path=seed_eval_script,
         cwd=workspace_dir,
         env=codex_env,
         timeout_seconds=int(cfg.exec.timeout),
     )
+    term_out = exec_result.term_out
+    exec_time = exec_result.exec_time_s
+    exc_type = exec_result.exc_type
+    exc_info = exec_result.exc_info
 
     child_node = Node(
         id=execution_id,
@@ -529,7 +507,7 @@ def _write_codex_task_file(
         exec_time_feedback = str(parent_node.exec_time_feedback or "")
         parent_analysis = str(parent_node.analysis or "").strip()
         parent_exc_type = str(parent_node.exc_type or "").strip()
-        raw_term_out = parent_node._term_out
+        raw_term_out = parent_node._term_out  # pylint: disable=protected-access
         if isinstance(raw_term_out, list):
             parent_term_out = trim_long_string("".join([str(x) for x in raw_term_out]))
         parent_vlm_feedback_summary = str(parent_node.vlm_feedback_summary or "").strip()
@@ -1080,7 +1058,7 @@ def process_node(
 
     try:
         child_node = Node.from_dict(dict(node_result), journal=None)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         # Never crash the worker on schema drift: mark the node buggy and return a valid Node dict.
         tb = traceback.format_exc()
         child_node = Node(

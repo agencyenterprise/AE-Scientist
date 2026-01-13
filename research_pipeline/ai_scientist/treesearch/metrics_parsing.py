@@ -1,6 +1,5 @@
 import json
 import logging
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List
@@ -13,6 +12,7 @@ from .codex.codex_cli_runner import CodexCliRunner
 from .codex.codex_task_types import EvaluationMetricSpec
 from .config import Config as AppConfig
 from .events import BaseEvent, RunLogEvent
+from .executor import run_python_script
 from .journal import Node
 from .prompts.render import render_text
 from .stage_identifiers import StageIdentifier
@@ -94,50 +94,6 @@ def _build_metrics_task_markdown(
             "agent_file_name": agent_file_name,
             "evaluation_metric_json": json.dumps(evaluation_metric_spec.to_json_dict(), indent=2),
         },
-    )
-
-
-def _run_python_script(
-    *,
-    python_executable: Path,
-    script_path: Path,
-    cwd: Path,
-    env: dict[str, str],
-    timeout_seconds: int,
-) -> tuple[list[str], str | None, dict[str, object] | None]:
-    try:
-        proc = subprocess.run(
-            args=[str(python_executable), str(script_path)],
-            cwd=str(cwd),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=float(timeout_seconds),
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return (
-            [f"Timed out running {script_path.name}\n"],
-            "MetricsParseTimeout",
-            {"reason": "timeout", "timeout_seconds": timeout_seconds},
-        )
-    except OSError as exc:
-        return (
-            [f"Failed to execute {script_path.name}: {exc}\n"],
-            "MetricsParseRunnerError",
-            {"reason": str(exc)},
-        )
-
-    combined = (
-        (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
-    )
-    term_out = [line + "\n" for line in combined.splitlines()]
-    if proc.returncode == 0:
-        return term_out, None, {"returncode": 0}
-    return (
-        term_out,
-        "MetricsParseExecutionError",
-        {"returncode": proc.returncode},
     )
 
 
@@ -275,16 +231,20 @@ def generate_and_assign_metrics(
         node.parse_metrics_code = parse_metrics_path.read_text(encoding="utf-8", errors="replace")
 
     python_executable = venv_dir / "bin" / "python"
-    parse_term_out, parse_exc_type, parse_exc_info = _run_python_script(
+    parse_result = run_python_script(
+        purpose="metrics_parse",
         python_executable=python_executable,
         script_path=parse_metrics_path,
         cwd=metrics_workspace_dir,
         env=codex_env,
         timeout_seconds=int(cfg.exec.timeout),
     )
+    parse_term_out = parse_result.term_out
+    parse_exc_type = parse_result.exc_type
+    parse_exc_info = parse_result.exc_info
     node.parse_term_out = parse_term_out
     node.parse_exc_type = parse_exc_type
-    node.parse_exc_info = parse_exc_info or {}
+    node.parse_exc_info = parse_exc_info
     node.parse_exc_stack = []
 
     if parse_exc_type is not None:
@@ -302,6 +262,14 @@ def generate_and_assign_metrics(
         ),
         "Execution Output": parse_term_out,
     }
+    logger.debug(
+        "llm.metrics_parse.request node=%s model=%s temperature=%s schema=%s payload=%s",
+        node.id[:8],
+        cfg.agent.feedback.model,
+        cfg.agent.feedback.temperature,
+        METRIC_PARSE_SCHEMA.__name__,
+        metrics_prompt,
+    )
     try:
         metrics_model = structured_query_with_schema(
             system_message=metrics_prompt,
@@ -320,6 +288,13 @@ def generate_and_assign_metrics(
         )
 
     metrics_response = metrics_model.model_dump(by_alias=True)
+    logger.debug(
+        "llm.metrics_parse.response node=%s model=%s schema=%s payload=%s",
+        node.id[:8],
+        cfg.agent.feedback.model,
+        METRIC_PARSE_SCHEMA.__name__,
+        metrics_response,
+    )
     if metrics_model.valid_metrics_received:
         metric_names = metrics_response.get("metric_names", [])
         node.metric = MetricValue(value={"metric_names": metric_names})

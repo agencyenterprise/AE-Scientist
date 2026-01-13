@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -7,6 +8,8 @@ from ai_scientist.llm import structured_query_with_schema
 from .config import TaskDescription
 from .journal import Node
 from .utils.response import wrap_code
+
+logger = logging.getLogger("ai-scientist")
 
 
 class ExperimentSummary(BaseModel):
@@ -49,10 +52,27 @@ def generate_node_summary(
     }
     if task_desc is not None:
         summary_prompt["Research idea"] = task_desc.model_dump(by_alias=True)
-    return structured_query_with_schema(
+    logger.debug(
+        "llm.node_summary.request node=%s model=%s temperature=%s schema=%s payload=%s",
+        node.id[:8],
+        model,
+        temperature,
+        ExperimentSummary.__name__,
+        summary_prompt,
+    )
+    response = structured_query_with_schema(
         system_message=summary_prompt,
         user_message=None,
         model=model,
         temperature=temperature,
         schema_class=ExperimentSummary,
-    ).model_dump(by_alias=True)
+    )
+    payload = response.model_dump(by_alias=True)
+    logger.debug(
+        "llm.node_summary.response node=%s model=%s schema=%s payload=%s",
+        node.id[:8],
+        model,
+        ExperimentSummary.__name__,
+        payload,
+    )
+    return payload
