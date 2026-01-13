@@ -4,58 +4,6 @@
  */
 
 export interface paths {
-    "/api/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Login
-         * @description Initiate Google OAuth login flow.
-         *
-         *     Returns:
-         *         Redirect response to Google OAuth authorization URL
-         */
-        get: operations["login_api_auth_login_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/auth/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Auth Callback
-         * @description Handle Google OAuth callback.
-         *
-         *     Args:
-         *         response: FastAPI response object
-         *         code: Authorization code from Google
-         *         state: State parameter for verification
-         *         error: Error parameter if OAuth failed
-         *
-         *     Returns:
-         *         Redirect response to frontend dashboard or login page
-         */
-        get: operations["auth_callback_api_auth_callback_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -4195,62 +4143,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login_api_auth_login_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    auth_callback_api_auth_callback_get: {
-        parameters: {
-            query?: {
-                /** @description Authorization code from Google */
-                code?: string;
-                /** @description State parameter for security */
-                state?: string;
-                /** @description Error from OAuth provider */
-                error?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_current_user_info_api_auth_me_get: {
         parameters: {
             query?: never;

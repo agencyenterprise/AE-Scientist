@@ -1,19 +1,15 @@
 """
 Authentication API endpoints.
 
-Handles user authentication via Google OAuth 2.0.
+Handles user authentication via Clerk.
 """
 
 import logging
-import secrets
 from typing import Any, Dict
-from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.auth.tokens import extract_bearer_token
-from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models.auth import AuthStatus, AuthUser
 from app.services.auth_service import AuthService
@@ -24,82 +20,6 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # Initialize auth service
 auth_service = AuthService()
-
-
-@router.get("/login")
-async def login(_request: Request) -> RedirectResponse:
-    """
-    Initiate Google OAuth login flow.
-
-    Returns:
-        Redirect response to Google OAuth authorization URL
-    """
-    try:
-        # Generate state parameter for security
-        state = secrets.token_urlsafe(32)
-
-        # Store state in session/cache if needed (for now we'll trust Google's flow)
-        auth_url = auth_service.get_google_auth_url(state=state)
-
-        logger.info("Redirecting user to Google OAuth")
-        return RedirectResponse(url=auth_url, status_code=302)
-
-    except Exception as e:
-        logger.exception(f"Error initiating login: {e}")
-        raise HTTPException(status_code=500, detail="Failed to initiate login") from e
-
-
-@router.get("/callback")
-async def auth_callback(
-    code: str = Query(None, description="Authorization code from Google"),
-    state: str = Query(None, description="State parameter for security"),
-    error: str = Query(None, description="Error from OAuth provider"),
-) -> RedirectResponse:
-    """
-    Handle Google OAuth callback.
-
-    Args:
-        response: FastAPI response object
-        code: Authorization code from Google
-        state: State parameter for verification
-        error: Error parameter if OAuth failed
-
-    Returns:
-        Redirect response to frontend dashboard or login page
-    """
-    try:
-        # Check for OAuth errors
-        if error:
-            logger.warning(f"OAuth error: {error}")
-            error_url = f"{settings.FRONTEND_URL}/login?error=oauth_cancelled"
-            return RedirectResponse(url=error_url, status_code=302)
-
-        # Check if code is missing
-        if not code:
-            logger.warning("OAuth callback missing authorization code")
-            error_url = f"{settings.FRONTEND_URL}/login?error=auth_failed"
-            return RedirectResponse(url=error_url, status_code=302)
-
-        # Authenticate with Google
-        auth_result = await auth_service.authenticate_with_google(code, state)
-        if not auth_result:
-            logger.warning("Failed to authenticate with Google")
-            error_url = f"{settings.FRONTEND_URL}/login?error=auth_failed"
-            return RedirectResponse(url=error_url, status_code=302)
-
-        user = auth_result["user"]
-        session_token = auth_result["session_token"]
-
-        # Redirect back to the SPA with the bearer token encoded in the hash fragment
-        encoded_token = quote(session_token, safe="")
-        success_url = f"{settings.FRONTEND_URL}/login#token={encoded_token}"
-        logger.info("User authenticated successfully: %s", user.email)
-        return RedirectResponse(url=success_url, status_code=302)
-
-    except Exception as e:
-        logger.exception(f"Error handling auth callback: {e}")
-        error_url = f"{settings.FRONTEND_URL}/login?error=server_error"
-        return RedirectResponse(url=error_url, status_code=302)
 
 
 @router.get("/me", response_model=AuthUser)

@@ -9,13 +9,6 @@ import { getSessionToken, withAuthHeaders } from "./session-token";
 import type { AuthStatus, User } from "@/types/auth";
 
 /**
- * Redirect to Google OAuth login.
- */
-export function login(): void {
-  window.location.href = `${config.apiUrl}/auth/login`;
-}
-
-/**
  * Log out the current user.
  */
 export async function logout(): Promise<boolean> {

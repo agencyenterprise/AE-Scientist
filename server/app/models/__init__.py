@@ -5,14 +5,7 @@ This module exports all Pydantic models for data validation and API contracts.
 """
 
 # Auth models
-from app.models.auth import (
-    AuthStatus,
-    AuthUser,
-    GoogleOAuthCallbackRequest,
-    ServiceKey,
-    User,
-    UserSession,
-)
+from app.models.auth import AuthStatus, AuthUser, ServiceKey, User, UserSession
 
 # Chat models
 from app.models.billing import (
@@ -163,7 +156,6 @@ __all__ = [
     "ServiceKey",
     "AuthUser",
     "AuthStatus",
-    "GoogleOAuthCallbackRequest",
     # Imported conversation summary models
     "ImportedConversationSummaryUpdate",
     # LLM token usage models

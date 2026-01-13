@@ -4,7 +4,6 @@ Authentication service.
 Handles user authentication, session management, and service key validation.
 """
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -12,7 +11,6 @@ from app.config import settings
 from app.services.clerk_service import ClerkService
 from app.services.database import get_database
 from app.services.database.users import UserData
-from app.services.google_oauth_service import GoogleOAuthService
 
 logger = logging.getLogger(__name__)
 
@@ -23,68 +21,7 @@ class AuthService:
     def __init__(self) -> None:
         """Initialize the authentication service."""
         self.db = get_database()
-        self.google_oauth = GoogleOAuthService()
         self.clerk = ClerkService()
-
-    async def authenticate_with_google(
-        self, authorization_code: str, state: Optional[str] = None
-    ) -> Optional[dict]:
-        """
-        Authenticate user with Google OAuth code.
-
-        Args:
-            authorization_code: OAuth authorization code from Google
-            state: State parameter for verification
-
-        Returns:
-            Dict with user and session_token if successful, None otherwise
-        """
-        try:
-            # Exchange code for user info
-            user_info = await asyncio.to_thread(
-                self.google_oauth.exchange_code_for_tokens, authorization_code, state
-            )
-            if not user_info:
-                logger.warning("Failed to exchange authorization code")
-                return None
-
-            # Check if user already exists
-            user = await self.db.get_user_by_google_id(user_info["google_id"])
-
-            if user:
-                # Update existing user info
-                updated_user = await self.db.update_user(
-                    user_id=user.id, email=user_info["email"], name=user_info["name"]
-                )
-                if not updated_user:
-                    logger.error("Failed to update existing user")
-                    return None
-                user = updated_user
-            else:
-                # Create new user
-                user = await self.db.create_user(
-                    google_id=user_info["google_id"],
-                    email=user_info["email"],
-                    name=user_info["name"],
-                )
-                if not user:
-                    logger.error("Failed to create new user")
-                    return None
-
-            # Create session
-            session_token = await self.db.create_user_session(
-                user_id=user.id, expires_in_hours=settings.SESSION_EXPIRE_HOURS
-            )
-            if not session_token:
-                logger.error("Failed to create user session")
-                return None
-
-            logger.info(f"Successfully authenticated user: {user.email}")
-            return {"user": user, "session_token": session_token}
-
-        except Exception as e:
-            logger.exception(f"Error authenticating with Google: {e}")
-            return None
 
     async def authenticate_with_clerk(self, session_token: str) -> Optional[dict]:
         """
@@ -213,15 +150,3 @@ class AuthService:
         except Exception as e:
             logger.exception(f"Error cleaning up expired sessions: {e}")
             return 0
-
-    def get_google_auth_url(self, state: Optional[str] = None) -> str:
-        """
-        Get Google OAuth authorization URL.
-
-        Args:
-            state: Optional state parameter
-
-        Returns:
-            Google OAuth authorization URL
-        """
-        return self.google_oauth.get_authorization_url(state)

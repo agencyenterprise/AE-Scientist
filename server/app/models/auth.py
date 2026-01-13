@@ -14,7 +14,7 @@ class User(BaseModel):
     """Represents a user in the system."""
 
     id: int = Field(..., description="Database user ID")
-    google_id: str = Field(..., description="Google OAuth user ID")
+    clerk_user_id: str = Field(..., description="Clerk user ID")
     email: str = Field(..., description="User email address")
     name: str = Field(..., description="User display name")
     is_active: bool = Field(..., description="Whether the user account is active")
@@ -55,13 +55,6 @@ class AuthStatus(BaseModel):
 
     authenticated: bool = Field(..., description="Whether the user is authenticated")
     user: Optional[AuthUser] = Field(None, description="User information if authenticated")
-
-
-class GoogleOAuthCallbackRequest(BaseModel):
-    """Request model for Google OAuth callback."""
-
-    code: str = Field(..., description="Authorization code from Google")
-    state: Optional[str] = Field(None, description="State parameter for security")
 
 
 class UserListItem(BaseModel):

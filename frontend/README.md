@@ -133,7 +133,6 @@ type ConversationsResponse =
 
 ### Authentication
 
-- The Google OAuth callback now redirects to `/login#token=<session_token>`; the token is stored in `localStorage` and removed from the URL immediately.
 - All API requests must include a bearer token via the shared `withAuthHeaders` helper. Avoid raw `fetch` calls unless you add these headers manually.
 - File downloads (attachments, research artifacts) first request a presigned URL via `Accept: application/json` and then load the S3 URL returned by the API.
 
