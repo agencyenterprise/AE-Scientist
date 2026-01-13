@@ -16,19 +16,18 @@ A collaborative platform that transforms LLM conversations into structured resea
 
 ### Setup
 
-1. **Set up Google OAuth (REQUIRED)**
+1. **Set up Clerk Authentication (REQUIRED)**
    
-   Create a Google OAuth application for user authentication:
+   Create a Clerk application for user authentication:
    
-   a. Go to [Google Cloud Console](https://console.cloud.google.com/)
-   b. Create/select a project
-   c. Enable Google+ API (APIs & Services → Library)
-   d. Create OAuth 2.0 credentials (APIs & Services → Credentials)
-      - Application type: Web application
-      - Authorized redirect URIs: `http://localhost:8000/api/auth/callback`
-      - Authorized JavaScript origins: `http://localhost:3000`
-   e. Configure domain restrictions for your organization (OAuth consent screen)
-   f. Copy your Client ID and Client Secret
+   a. Go to [Clerk Dashboard](https://dashboard.clerk.com/)
+   b. Create a new application (or select an existing one)
+   c. In your application settings:
+      - Navigate to **API Keys** section
+      - Copy your **Publishable Key** (starts with `pk_test_` or `pk_live_`)
+      - Copy your **Secret Key** (starts with `sk_test_` or `sk_live_`)
+   d. Configure allowed domains and redirect URLs as needed
+   e. (Optional) Configure social login providers, email/password settings, etc.
 
 2. **Environment Configuration**
    ```bash
@@ -36,7 +35,14 @@ A collaborative platform that transforms LLM conversations into structured resea
    cp server/env.example server/.env
    cp frontend/env.local.example frontend/.env.local
    
-   # IMPORTANT: Edit server/.env with your Google OAuth credentials
+   # IMPORTANT: Edit both .env files with your Clerk credentials
+   # In server/.env:
+   CLERK_SECRET_KEY="sk_test_your_clerk_secret_key"
+   CLERK_PUBLISHABLE_KEY="pk_test_your_clerk_publishable_key"
+   
+   # In frontend/.env.local:
+   CLERK_SECRET_KEY="sk_test_your_clerk_secret_key"
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_your_clerk_publishable_key"
    ```
 
 3. **Setup using Makefile (Recommended)**

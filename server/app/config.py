@@ -136,6 +136,10 @@ class Settings:
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
 
+    # Clerk Configuration
+    CLERK_SECRET_KEY: str = os.getenv("CLERK_SECRET_KEY", "")
+    CLERK_PUBLISHABLE_KEY: str = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+
     # Authentication settings
     SESSION_EXPIRE_HOURS: int = int(os.getenv("SESSION_EXPIRE_HOURS", "24"))
     MIN_USER_CREDITS_FOR_CONVERSATION: int = int(

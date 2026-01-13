@@ -46,6 +46,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/callback",
             "/api/auth/status",
             "/api/public-config",
+            "/api/auth/clerk-session",
             "/api/research-pipeline/events",
             "/api/billing/stripe-webhook",
         ]
