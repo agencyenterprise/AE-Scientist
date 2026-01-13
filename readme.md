@@ -17,7 +17,7 @@ AE-Scientist consists of three main components that work together to facilitate 
 
 ### 🚀 Server
 **FastAPI backend for authentication, data management, and AI orchestration**
-- Google OAuth 2.0 authentication
+- Clerk-baked authentication
 - PostgreSQL database for data persistence
 - REST API for frontend integration
 - LLM integration for idea generation and refinement
@@ -43,7 +43,7 @@ AE-Scientist consists of three main components that work together to facilitate 
 - **Node.js 20+** (for frontend)
 - **PostgreSQL** (for server database)
 - **uv** (Python package manager) - [Installation guide](https://github.com/astral-sh/uv)
-- **Google OAuth credentials** (for authentication)
+- **Clerk credentials** (for authentication)
 
 ### Installation
 
@@ -100,7 +100,7 @@ make dev-server              # Start FastAPI server (http://localhost:8000)
 make dev-frontend            # Start Next.js server (http://localhost:3000)
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) and sign in with Google to get started.
+Visit [http://localhost:3000](http://localhost:3000) and sign in with preferred method to get started.
 
 ## Available Make Commands
 
@@ -183,12 +183,13 @@ AE-Scientist/
 - Next.js 15 with React 19
 - TypeScript 5
 - Tailwind CSS 4
+- Clerk auth components (UI)
 
 **Server:**
 - FastAPI
 - PostgreSQL with Alembic migrations
 - SQLAlchemy ORM
-- Google OAuth 2.0
+- Clerk authentication
 
 **Research Pipeline:**
 - PyTorch for ML experiments
@@ -237,14 +238,14 @@ make lint-frontend     # Lint frontend
 
 ## Authentication
 
-The application uses Google OAuth 2.0 for authentication:
+The application uses Clerk authentication:
 
-1. Users sign in with Google account
-2. Server validates OAuth token
+1. Users sign in with Clerk account
+2. Server validates Clerk token
 3. Session cookie stores authentication state
 4. All API routes (except auth endpoints) are protected
 
-See [Server Documentation](./server/README.md) for OAuth setup instructions.
+See [Server Documentation](./server/README.md) for Clerk setup instructions.
 
 ## Deployment
 
