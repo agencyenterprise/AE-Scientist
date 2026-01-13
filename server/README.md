@@ -55,7 +55,7 @@ A collaborative platform that transforms LLM conversations into structured resea
    make dev-frontend   # Starts Next.js server
    ```
 
-   **🔒 First Run**: Visit `http://localhost:3000` → You'll be redirected to login page → Sign in with Google!
+   **🔒 First Run**: Visit `http://localhost:3000` → You'll be redirected to login page → Sign in with preferred method!
 
 4. **Manual Setup (Alternative)**
    
@@ -304,11 +304,6 @@ DATABASE_URL="postgresql://ae_scientist_user:your_password@localhost:5432/ae_sci
 POSTGRES_USER="ae_scientist_user"
 POSTGRES_PASSWORD="your_password"
 
-# Google OAuth Configuration (REQUIRED for authentication)
-GOOGLE_CLIENT_ID="your-google-oauth-client-id-here"
-GOOGLE_CLIENT_SECRET="your-google-oauth-client-secret-here"
-GOOGLE_REDIRECT_URI="http://localhost:8000/api/auth/callback"
-
 # Authentication Configuration
 SESSION_EXPIRE_HOURS="24"
 FRONTEND_URL="http://localhost:3000"
@@ -352,17 +347,16 @@ NEXT_PUBLIC_ENVIRONMENT="development"
 
 ## Authentication
 
-This application now requires **Google OAuth 2.0 authentication** for all users.
+This application now requires **Clerk authentication** for all users.
 
 ### User Authentication Flow
 1. Users visit the application and are redirected to `/login`
-2. Click "Sign in with Google" to authenticate via OAuth 2.0
-3. Google validates the user and redirects back to the application
-4. Users can access all features and their session persists for 24 hours
+2. Clerk sign in page is displayed
+3. Clerk validates the user and redirects back to the application
+4. Users can access all features and their session persists for 24 hours in local storage
 5. Users can sign out at any time from the dashboard header
 
 ### Security Features
-- Organization-only access (configured in Google OAuth console)
 - HTTP-only secure session cookies
 - Automatic session expiration and cleanup
 - Protected API endpoints (all routes except `/health`, `/docs`, `/auth/*`)
@@ -370,7 +364,7 @@ This application now requires **Google OAuth 2.0 authentication** for all users.
 **Important:**
 - `.env` and `.env.local` files are ignored by git for security
 - `env.example` files provide templates with default values
-- **Google OAuth credentials are required** - the app won't start without them
+- **Clerk credentials are required** - the app won't start without them
 - Frontend environment variables must be prefixed with `NEXT_PUBLIC_` to be accessible in the browser
 
 ## Available Scripts

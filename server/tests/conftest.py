@@ -46,7 +46,7 @@ def authed_client(app_client: TestClient) -> TestClient:
 def mock_user_data() -> UserData:
     return UserData(
         id=123,
-        google_id="gid",
+        clerk_user_id="clerk_test_user_123",
         email="unit@test.com",
         name="Unit Tester",
         is_active=True,

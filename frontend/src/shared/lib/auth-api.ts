@@ -9,10 +9,11 @@ import { getSessionToken, withAuthHeaders } from "./session-token";
 import type { AuthStatus, User } from "@/types/auth";
 
 /**
- * Redirect to Google OAuth login.
+ * Redirect to login page (handled by Clerk).
+ * This function is kept for backward compatibility but login is now handled by Clerk UI.
  */
 export function login(): void {
-  window.location.href = `${config.apiUrl}/auth/login`;
+  window.location.href = "/login";
 }
 
 /**
