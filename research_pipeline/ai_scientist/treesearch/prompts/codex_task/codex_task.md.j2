@@ -211,21 +211,28 @@ You have full permission to install packages, download data, edit files, and run
 - Avoid re-downloading data if it's already present in the dataset caches described above.
 
 ## Metric requirement
-- Read `evaluation_metric_spec` from the JSON context and use it as the primary metric definition.
+- Use the metric spec provided above in the **Evaluation Metric(s)** section as the primary metric definition.
 - Save enough information into `working/experiment_data.npy` so that a separate metrics-parsing pass can compute the final/best metric values per dataset.
 
-## Seed requirement
-- Read `seed_eval` and `seed_value` from the JSON context.
-- If `seed_eval` is true, you MUST make the experiment deterministic by setting seeds in the final experiment code:
-  - `random.seed(seed_value)`
-  - `numpy.random.seed(seed_value)`
-  - If torch is used: `torch.manual_seed(seed_value)` and if CUDA is available `torch.cuda.manual_seed_all(seed_value)`
+{% if seed_eval %}
+## Seed evaluation run (determinism requirement)
+You MUST make the experiment deterministic by setting seeds in the final experiment code:
+  - `random.seed({{ seed_value }})`
+  - `numpy.random.seed({{ seed_value }})`
+  - If torch is used: `torch.manual_seed({{ seed_value }})` and if CUDA is available `torch.cuda.manual_seed_all({{ seed_value }})`
 - If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.
-- If `seed_eval` is true, set `is_seed_node=true` in node_result.json and include the seed in your `plan` text (e.g. "Seed: 3").
+- If `seed_eval` is true, set `is_seed_node=true` in `node_result.json` and include the seed in your `plan` text.
+{% endif %}
 
 ## GPU requirement
-- If `gpu_id` is not null in the JSON context, you MUST use the GPU when applicable (training/inference).
+{% set gpu = environment_context.get("gpu", {}) %}
+{% set gpu_id = gpu.get("gpu_id") %}
+{% if gpu_id is not none %}
+- This run has **gpu_id={{ gpu_id }}** assigned. You MUST use the GPU when applicable (training/inference).
 - Respect `CUDA_VISIBLE_DEVICES` (already set). Typically you should use `torch.device('cuda:0')`.
+{% else %}
+- This run has **no GPU assigned**. You MUST run on CPU.
+{% endif %}
 
 ## Execution contract
 - Run any commands you need.

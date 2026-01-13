@@ -17,8 +17,6 @@ def validate_node_result_contract(
     *, node_result: dict[str, object], ctx: NodeResultContractContext
 ) -> list[str]:
     errors: list[str] = []
-    if node_result.get("is_seed_node") is not True:
-        errors.append("seed aggregation requires is_seed_node=true")
     if node_result.get("is_seed_agg_node") is not True:
         errors.append("seed aggregation requires is_seed_agg_node=true")
 

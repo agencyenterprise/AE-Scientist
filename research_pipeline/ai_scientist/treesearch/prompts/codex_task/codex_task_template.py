@@ -18,6 +18,8 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     environment_context: dict[str, object]
     num_syn_datasets: int
     evaluation_metric_json: str
+    seed_eval: bool
+    seed_value: int
 
     assigned_hyperparam_name: str
     assigned_hyperparam_description: str
@@ -56,6 +58,8 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "environment_context": dict(self.environment_context),
             "num_syn_datasets": self.num_syn_datasets,
             "evaluation_metric_json": self.evaluation_metric_json,
+            "seed_eval": self.seed_eval,
+            "seed_value": self.seed_value,
             "assigned_hyperparam_name": self.assigned_hyperparam_name,
             "assigned_hyperparam_description": self.assigned_hyperparam_description,
             "assigned_hyperparam_tried_names": self.assigned_hyperparam_tried_names,

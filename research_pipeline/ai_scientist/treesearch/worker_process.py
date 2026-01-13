@@ -576,6 +576,8 @@ def _write_codex_task_file(
         evaluation_metric_json=json.dumps(
             task_context.evaluation_metric_spec.to_json_dict(), indent=2
         ),
+        seed_eval=bool(task_context.seed_eval),
+        seed_value=int(task_context.seed_value),
         assigned_hyperparam_name=assigned_hyperparam_name,
         assigned_hyperparam_description=assigned_hyperparam_description,
         assigned_hyperparam_tried_names=assigned_hyperparam_tried_names,
@@ -983,6 +985,103 @@ def process_node(
         result_data = child_node.to_dict()
         pickle.dumps(result_data)
         return result_data
+
+    # Harness-owned seed flags: do not rely on Codex to set these correctly.
+    if seed_eval:
+        node_result["is_seed_node"] = True
+    if seed_aggregation is not None:
+        node_result["is_seed_agg_node"] = True
+        # Determine plot health from artifacts: if no plots were written, mark plots buggy.
+        node_result["is_buggy_plots"] = count_working_pngs(working_dir=working_dir) <= 0
+
+    # Always treat the agent file as the source of truth for the executed code.
+    # If Codex fails to write this file (or writes it empty), treat it as a contract failure.
+    agent_file_name = str(cfg.exec.agent_file_name)
+    agent_file_path = workspace_dir / agent_file_name
+    if not agent_file_path.exists():
+        logger.debug(
+            "codex.output.missing_agent_code execution_id=%s expected_path=%s",
+            execution_id[:8],
+            agent_file_path,
+        )
+        child_node = Node(
+            id=execution_id,
+            plan=str(node_result.get("plan") or ""),
+            code="",
+            is_buggy=True,
+            is_buggy_plots=True,
+            analysis=f"Codex did not write the required agent code file: {agent_file_name}",
+            exc_type=exc_type or "CodexContractError",
+            exec_time=exec_time,
+        )
+        child_node.metric = WorstMetricValue()
+        if parent_node is not None:
+            _attach_parent(child_node=child_node, parent_node=parent_node)
+        child_node.absorb_exec_result(
+            SimpleNamespace(
+                term_out=term_out,
+                exec_time=exec_time,
+                exc_type=exc_type,
+                exc_info=exc_info,
+                exc_stack=None,
+            )
+        )
+        child_node.exc_info = exc_info or {}
+        _move_experiment_artifacts(
+            cfg=cfg,
+            child_node=child_node,
+            working_dir=working_dir,
+            event_callback=event_callback,
+        )
+        result_data = child_node.to_dict()
+        pickle.dumps(result_data)
+        return result_data
+
+    try:
+        code_text = agent_file_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug(
+            "codex.output.agent_code_read_failed execution_id=%s path=%s",
+            execution_id[:8],
+            agent_file_path,
+            exc_info=True,
+        )
+        code_text = ""
+    if not code_text.strip():
+        child_node = Node(
+            id=execution_id,
+            plan=str(node_result.get("plan") or ""),
+            code="",
+            is_buggy=True,
+            is_buggy_plots=True,
+            analysis=f"Codex wrote an empty agent code file: {agent_file_name}",
+            exc_type=exc_type or "CodexContractError",
+            exec_time=exec_time,
+        )
+        child_node.metric = WorstMetricValue()
+        if parent_node is not None:
+            _attach_parent(child_node=child_node, parent_node=parent_node)
+        child_node.absorb_exec_result(
+            SimpleNamespace(
+                term_out=term_out,
+                exec_time=exec_time,
+                exc_type=exc_type,
+                exc_info=exc_info,
+                exc_stack=None,
+            )
+        )
+        child_node.exc_info = exc_info or {}
+        _move_experiment_artifacts(
+            cfg=cfg,
+            child_node=child_node,
+            working_dir=working_dir,
+            event_callback=event_callback,
+        )
+        result_data = child_node.to_dict()
+        pickle.dumps(result_data)
+        return result_data
+
+    node_result["code"] = code_text
 
     node_result["id"] = execution_id
     node_result["parent_id"] = None if parent_node is None else parent_node.id

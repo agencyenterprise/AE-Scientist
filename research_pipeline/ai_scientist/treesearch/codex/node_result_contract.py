@@ -96,6 +96,9 @@ def validate_common_node_result_contract(
     # Harness-owned fields: Codex must not provide these in node_result.json.
     if "metric" in node_result:
         errors.append("Do NOT include metric in node_result.json")
+    plan_val = node_result.get("plan")
+    if not is_non_empty_string(value=plan_val):
+        errors.append("plan must be a non-empty string")
     if not isinstance(node_result.get("is_buggy_plots"), bool):
         errors.append("is_buggy_plots must be a boolean (true/false)")
     if not isinstance(node_result.get("is_seed_agg_node", False), bool):
@@ -113,18 +116,5 @@ def validate_common_node_result_contract(
         errors.append("datasets_successfully_tested is required (use [] if none)")
     elif not is_list_of_strings(value=datasets_val):
         errors.append("datasets_successfully_tested must be a list of strings")
-
-    if ctx.seed_eval:
-        if node_result.get("is_seed_node") is not True:
-            errors.append("seed_eval=true requires is_seed_node=true")
-        plan_text = node_result.get("plan")
-        if isinstance(plan_text, str):
-            seed_text = str(ctx.seed_value)
-            if ("seed" not in plan_text.lower()) or (seed_text not in plan_text):
-                errors.append(
-                    f"seed_eval=true requires the plan to mention the seed value (expected {ctx.seed_value})"
-                )
-        else:
-            errors.append("plan must be a string (and must mention the seed when seed_eval=true)")
 
     return errors

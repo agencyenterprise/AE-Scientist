@@ -5,6 +5,5 @@
 - Compute mean ± std/sem across seeds where applicable and produce summary plots (error bars, aggregated curves).
 - Save aggregated results into `./working/experiment_data.npy` so a separate metrics-parsing pass can compute final/best metric values.
 - Write plots as `.png` files into `./working/`.
-- Set `is_seed_node=true` and `is_seed_agg_node=true` in `node_result.json`.
-- Set `is_buggy=false` and `is_buggy_plots=false` if aggregation succeeded and plots were produced.
+- Ensure the aggregation succeeds and produces plots; the runner determines plot success from the artifacts in `./working/`.
 
