@@ -1,22 +1,12 @@
 {% set gpu = environment_context.get("gpu", {}) %}
 {% set gpu_id = gpu.get("gpu_id") %}
 {% set gpu_spec = gpu.get("gpu_spec") %}
-{% set storage = environment_context.get("storage") %}
 
-{% set has_gpu = (gpu_id is not none and gpu_spec is mapping) %}
-{% set has_storage = (storage is mapping and storage.get("workspace_disk_capacity_bytes") is not none and storage.get("workspace_disk_free_bytes") is not none) %}
-
-{% if has_gpu or has_storage %}
+{% if gpu_id is not none and gpu_spec is mapping %}
 **Available Hardware**:
-{% if has_gpu %}
 {% set name = gpu_spec.get("name", "GPU") %}
 {% set mem = gpu_spec.get("memory_total_mib") %}
 {% set mem_str = mem if mem is not none else "unknown" %}
 - GPU: ONE {{ name }} with {{ mem_str }}MiB VRAM (assigned gpu_id={{ gpu_id }}).
 - GPU selection: `CUDA_VISIBLE_DEVICES` is already set for this run; inside your process prefer `torch.device('cuda:0')`.
 {% endif %}
-{% if has_storage %}
-- Workspace disk: ~{{ storage.get("workspace_disk_capacity_bytes") | naturalsize }} total; {{ storage.get("workspace_disk_free_bytes") | naturalsize }} free right now.
-{% endif %}
-{% endif %}
-

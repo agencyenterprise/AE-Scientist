@@ -532,9 +532,7 @@ def _write_codex_task_file(
 
     is_seed_aggregation = task_context.seed_aggregation is not None
     is_improvement_scenario = (
-        (parent_node is not None)
-        and (parent_node.is_buggy is False)
-        and (not is_seed_aggregation)
+        (parent_node is not None) and (parent_node.is_buggy is False) and (not is_seed_aggregation)
     )
     if is_seed_aggregation:
         # Override stage contract for seed-aggregation runs: keep common contract + add explicit
