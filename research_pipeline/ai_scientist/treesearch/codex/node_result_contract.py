@@ -11,8 +11,6 @@ from ..stage_identifiers import StageIdentifier
 class NodeResultContractContext:
     stage_identifier: StageIdentifier
     is_seed_aggregation: bool
-    seed_eval: bool
-    seed_value: int
     working_png_count: int
     expected_hyperparam_name: str | None
     expected_ablation_name: str | None

@@ -20,10 +20,12 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
     for node in journal.nodes:
         try:
             node_summary = generate_node_summary(
+                purpose="metrics_extraction.gather_stage_metrics",
                 model=journal.summary_model,
                 temperature=journal.summary_temperature,
                 stage_name=journal.stage_name,
                 node=node,
+                task_desc=None,
             )
             node_summaries.append(node_summary)
         except Exception:

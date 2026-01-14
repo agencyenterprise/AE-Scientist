@@ -144,12 +144,19 @@ def perform_experiments_bfts(
             if journal.nodes:
                 latest_node = journal.nodes[-1]
                 try:
+                    logger.debug(
+                        "node_summary.callsite purpose=%s node=%s stage=%s",
+                        "step_callback.latest_node_summary",
+                        latest_node.id[:8],
+                        stage.name,
+                    )
                     summary = generate_node_summary(
+                        purpose="step_callback.latest_node_summary",
                         model=journal.summary_model,
                         temperature=journal.summary_temperature,
                         stage_name=stage.name,
-                        task_desc=task_desc,
                         node=latest_node,
+                        task_desc=task_desc,
                     )
                 except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
                     summary = None

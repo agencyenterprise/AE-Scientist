@@ -202,8 +202,16 @@ class ParallelAgent:
         raise RuntimeError(message)
 
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
-        """Run multiple seeds of the same node to get statistical metrics.
-        Returns a list of nodes with different random seeds."""
+        """
+        Run multiple seeds of the same *already-generated* experiment to assess stability.
+
+        Important behavior:
+        - These seed runs **do not use Codex** to generate code.
+        - Each seed run re-executes the *parent node's experiment code* under a different RNG seed
+          (see `worker_process._process_seed_eval_reuse`).
+
+        Returns a list of nodes corresponding to the individual seed executions.
+        """
         # Convert node to dict for parallel processing
         node_data = node.to_dict()
 

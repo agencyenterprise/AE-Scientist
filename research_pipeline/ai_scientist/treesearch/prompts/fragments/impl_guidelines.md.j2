@@ -53,7 +53,6 @@ Important code structure requirements:
   - `os.makedirs(working_dir, exist_ok=True)`
 - The code should be a single-file python program that is self-contained and can be executed as-is.
 - No parts of the code should be skipped; don't terminate execution before finishing the script.
-- Your response should only contain a single code block.
 - Be aware of the running time of the code; it should complete within {{ timeout_seconds | naturaldelta }}.
 - You can also use the `./working` directory to store any temporary files that your code needs to create.
 
@@ -61,4 +60,13 @@ Data saving requirements:
 
 - Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using `np.save()`
 - Use filename `experiment_data.npy` to save the data (do not use a different filename).
+
+{% if is_improvement_scenario %}
+IMPORTANT: You are improving an existing working implementation:
+
+- Start from the provided base code; do not throw it away.
+- Make focused, incremental changes aligned with the Stage goals and the Evaluation Metric(s).
+- Preserve existing outputs and artifact formats (especially `working/experiment_data.npy` structure) unless a stage requirement explicitly says to change them.
+- After changes, run the final experiment and confirm it still executes successfully within the time budget.
+{% endif %}
 

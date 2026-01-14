@@ -16,11 +16,15 @@ class CodexCliRunner:
         self,
         *,
         workspace_dir: Path,
+        session_log_name: str,
+        events_log_name: str,
         timeout_seconds: int,
         argv: Sequence[str],
         env: dict[str, str],
     ) -> None:
         self._workspace_dir = workspace_dir
+        self._session_log_name = session_log_name
+        self._events_log_name = events_log_name
         self._timeout_seconds = timeout_seconds
         self._argv = list(argv)
         self._env = dict(env)
@@ -40,8 +44,8 @@ class CodexCliRunner:
         waiting for user input, it will consume the wall-clock timeout and be killed.
         """
         started_at = time.monotonic()
-        log_path = self._workspace_dir / "codex_session.log"
-        events_path = self._workspace_dir / "codex_events.jsonl"
+        log_path = self._workspace_dir / self._session_log_name
+        events_path = self._workspace_dir / self._events_log_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Use non-interactive automation mode via `codex exec`.

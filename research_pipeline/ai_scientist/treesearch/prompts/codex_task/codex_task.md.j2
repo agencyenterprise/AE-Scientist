@@ -58,7 +58,6 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 - `import torch` can take ~1 minute; do not assume the process is hung during interpreter startup.
 - This run is fully non-interactive. You will NOT be able to ask questions or wait for user input. Proceed autonomously exactly as if `--full-auto` were set.
 {% include "fragments/gpu_text.md.j2" %}
-{% include "fragments/storage_text.md.j2" %}
 
 
 ### Available Datasets
@@ -86,8 +85,9 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 ### Stage 2 hyperparameter-tuning requirements
 - DO NOT change model architecture from the previous stage.
 - Choose ONE hyperparameter tuning idea for this run and set `hyperparam_name` in node_result.json accordingly.
-- Preserve the parent `experiment_data` schema. Only add new fields/keys; do NOT rename or remove existing keys.
-- Save data in `working/experiment_data.npy` with a structure like:
+- Preserve the parent `experiment_data` schema exactly. Only add new fields/keys; do NOT rename, remove, or restructure existing keys.
+- For this run, keep the parent node's structure and add tuning results under a new key (e.g. `experiment_data["tuning"] = {...}`) rather than rewriting the whole object.
+- Example additive structure (illustrative only; keep all existing parent keys unchanged):
 - ```python
 - experiment_data = {
 -     'hyperparam_tuning_type_1': {
@@ -100,6 +100,7 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 -     },
 - }
 - ```
+- Save data to `working/experiment_data.npy` using `np.save(...)` (the metrics pass loads and interprets this artifact).
 
 {% if assigned_hyperparam_name or assigned_hyperparam_description %}
 ### Assigned hyperparameter-tuning idea (MUST follow)
@@ -119,7 +120,9 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 {% if stage_identifier_name == "STAGE4" %}
 ### Stage 4 ablation requirements
 - Choose ONE ablation idea for this run and set `ablation_name` in node_result.json accordingly.
-- Save data in `working/experiment_data.npy` with a structure like:
+- Preserve the parent `experiment_data` schema exactly. Only add new fields/keys; do NOT rename, remove, or restructure existing keys.
+- Keep the parent node's structure and add ablation results under a new key (e.g. `experiment_data["ablation"] = {...}`) rather than rewriting the whole object.
+- Example additive structure (illustrative only; keep all existing parent keys unchanged):
 - ```python
 - experiment_data = {
 -     'ablation_type_1': {
@@ -132,6 +135,7 @@ A Python virtualenv is already set up and active at `{{ venv_dir }}` (so `python
 -     },
 - }
 - ```
+- Save data to `working/experiment_data.npy` using `np.save(...)` (the metrics pass loads and interprets this artifact).
 
 {% if assigned_ablation_name or assigned_ablation_description %}
 ### Assigned ablation idea (MUST follow)
@@ -214,15 +218,6 @@ You have full permission to install packages, download data, edit files, and run
 ## Metric requirement
 - Use the metric spec provided above in the **Evaluation Metric(s)** section as the primary metric definition.
 - Save enough information into `working/experiment_data.npy` so that a separate metrics-parsing pass can compute the final/best metric values per dataset.
-
-{% if seed_eval %}
-## Seed evaluation run (determinism requirement)
-You MUST make the experiment deterministic by setting seeds in the final experiment code:
-  - `random.seed({{ seed_value }})`
-  - `numpy.random.seed({{ seed_value }})`
-  - If torch is used: `torch.manual_seed({{ seed_value }})` and if CUDA is available `torch.cuda.manual_seed_all({{ seed_value }})`
-- If torch is used, also set `torch.backends.cudnn.deterministic = True` and `torch.backends.cudnn.benchmark = False`.
-{% endif %}
 
 ## GPU requirement
 {% set gpu = environment_context.get("gpu", {}) %}

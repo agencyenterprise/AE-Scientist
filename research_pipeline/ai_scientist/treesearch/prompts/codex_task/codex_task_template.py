@@ -18,8 +18,6 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     environment_context: dict[str, object]
     num_syn_datasets: int
     evaluation_metric_json: str
-    seed_eval: bool
-    seed_value: int
 
     assigned_hyperparam_name: str
     assigned_hyperparam_description: str
@@ -36,6 +34,7 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     parent_vlm_feedback_summary: str
     exec_time_feedback: str
     user_feedback_payload: str
+    is_improvement_scenario: bool
     show_plotting_guidelines: bool
     experiment_code_hint: str
 
@@ -58,8 +57,6 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "environment_context": dict(self.environment_context),
             "num_syn_datasets": self.num_syn_datasets,
             "evaluation_metric_json": self.evaluation_metric_json,
-            "seed_eval": self.seed_eval,
-            "seed_value": self.seed_value,
             "assigned_hyperparam_name": self.assigned_hyperparam_name,
             "assigned_hyperparam_description": self.assigned_hyperparam_description,
             "assigned_hyperparam_tried_names": self.assigned_hyperparam_tried_names,
@@ -73,6 +70,7 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "parent_vlm_feedback_summary": self.parent_vlm_feedback_summary,
             "exec_time_feedback": self.exec_time_feedback,
             "user_feedback_payload": self.user_feedback_payload,
+            "is_improvement_scenario": bool(self.is_improvement_scenario),
             "show_plotting_guidelines": self.show_plotting_guidelines,
             "experiment_code_hint": self.experiment_code_hint,
             "seed_agg_block": self.seed_agg_block,

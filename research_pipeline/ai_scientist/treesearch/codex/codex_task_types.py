@@ -128,8 +128,6 @@ class ParentNodeSummary(NamedTuple):
 class CodexTaskContext(NamedTuple):
     execution_id: str
     stage_identifier: str
-    seed_eval: bool
-    seed_value: int
     seed_aggregation: SeedAggregationPayload | None
     stage2_hyperparam_idea: StageIdea | None
     stage4_ablation_idea: StageIdea | None

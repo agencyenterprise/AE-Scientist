@@ -3,6 +3,7 @@ import logging
 import multiprocessing
 import os
 import pickle
+import shutil
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -200,6 +201,12 @@ def _review_execution_with_llm(
 
 
 def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
+    """
+    Build a standalone Python script that enforces deterministic seeding, then runs `parent_code`.
+
+    This is used for `seed_eval` runs, which intentionally bypass Codex and re-execute an existing
+    experiment implementation under different RNG seeds.
+    """
     return "\n".join(
         [
             "from __future__ import annotations",
@@ -249,6 +256,17 @@ def _process_seed_eval_reuse(
     parent_node: Node,
     event_callback: Callable[[BaseEvent], None],
 ) -> dict[str, object]:
+    """
+    Execute the parent node's experiment code under a different seed (no Codex involved).
+
+    Purpose:
+    - After a main stage completes, the system re-runs the best implementation across multiple
+      RNG seeds to check that the metric is not a one-off due to randomness.
+
+    Key point:
+    - The seed-eval run **does not** ask Codex to generate/modify code. It writes a small wrapper
+      (`seed_eval_run.py`) that sets seeds and then executes the parent's experiment code verbatim.
+    """
     # Seed-eval reuse: execute the parent's experiment code with a different seed.
     parent_code = str(parent_node.code or "")
     agent_file = workspace_dir / str(cfg.exec.agent_file_name)
@@ -318,7 +336,7 @@ def _process_seed_eval_reuse(
         child_node.analysis = str(llm_review.summary or "").strip()
         child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
 
-    metrics_artifacts = generate_and_assign_metrics(
+    metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
         codex_env=codex_env,
         codex_argv=list(codex_argv),
@@ -340,8 +358,8 @@ def _process_seed_eval_reuse(
         working_dir=working_dir,
         event_callback=event_callback,
     )
-    if metrics_artifacts is not None:
-        persist_metrics_pass_artifacts(node=child_node, artifacts=metrics_artifacts)
+    if metrics_workspace_dir is not None:
+        persist_metrics_pass_artifacts(node=child_node, metrics_workspace_dir=metrics_workspace_dir)
 
     if child_node.is_buggy is False and stage_identifier in (
         StageIdentifier.STAGE3,
@@ -513,6 +531,11 @@ def _write_codex_task_file(
         parent_vlm_feedback_summary = str(parent_node.vlm_feedback_summary or "").strip()
 
     is_seed_aggregation = task_context.seed_aggregation is not None
+    is_improvement_scenario = (
+        (parent_node is not None)
+        and (parent_node.is_buggy is False)
+        and (not is_seed_aggregation)
+    )
     if is_seed_aggregation:
         # Override stage contract for seed-aggregation runs: keep common contract + add explicit
         # aggregation requirements (including is_seed_agg_node=true).
@@ -576,8 +599,6 @@ def _write_codex_task_file(
         evaluation_metric_json=json.dumps(
             task_context.evaluation_metric_spec.to_json_dict(), indent=2
         ),
-        seed_eval=bool(task_context.seed_eval),
-        seed_value=int(task_context.seed_value),
         assigned_hyperparam_name=assigned_hyperparam_name,
         assigned_hyperparam_description=assigned_hyperparam_description,
         assigned_hyperparam_tried_names=assigned_hyperparam_tried_names,
@@ -591,6 +612,7 @@ def _write_codex_task_file(
         parent_vlm_feedback_summary=parent_vlm_feedback_summary.strip(),
         exec_time_feedback=exec_time_feedback.strip(),
         user_feedback_payload=user_feedback_payload.strip(),
+        is_improvement_scenario=is_improvement_scenario,
         show_plotting_guidelines=show_plotting_guidelines,
         experiment_code_hint=experiment_code_hint,
         seed_agg_block=seed_agg_block,
@@ -614,6 +636,30 @@ def _load_node_result(*, output_json_file: Path) -> dict[str, object] | None:
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+def _copy_workspace_artifacts(
+    *,
+    workspace_dir: Path,
+    exp_results_dir: Path,
+) -> None:
+    venv_dir = workspace_dir / ".ai_scientist_venv"
+    for src in workspace_dir.iterdir():
+        if src == venv_dir:
+            continue
+        dst = exp_results_dir / src.name
+        try:
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dst)
+        except OSError:
+            logger.debug(
+                "artifacts.copy_failed src=%s dst=%s",
+                src,
+                dst,
+                exc_info=True,
+            )
 
 
 def _move_experiment_artifacts(
@@ -644,22 +690,6 @@ def _move_experiment_artifacts(
     )
 
     workspace_dir = working_dir.parent
-    for fname in (
-        "codex_task.md",
-        "codex_session.log",
-        "codex_events.jsonl",
-        "node_result.json",
-    ):
-        src = workspace_dir / fname
-        if not src.exists():
-            continue
-        dst = exp_results_dir / fname
-        try:
-            dst.write_bytes(src.read_bytes())
-        except OSError:
-            logger.debug("artifacts.copy_failed src=%s dst=%s", src, dst, exc_info=True)
-        else:
-            logger.debug("artifacts.copied src=%s dst=%s bytes=%s", src, dst, dst.stat().st_size)
 
     summary_path = working_dir / "summary.json"
     if summary_path.exists():
@@ -720,6 +750,8 @@ def _move_experiment_artifacts(
         )
         child_node.plots.append(web_path)
         child_node.plot_paths.append(str(final_path.absolute()))
+
+    _copy_workspace_artifacts(workspace_dir=workspace_dir, exp_results_dir=exp_results_dir)
     logger.debug(
         "artifacts.done node=%s exp_results_dir=%s plots=%s npy_files=%s",
         child_node.id[:8],
@@ -823,8 +855,6 @@ def _prepare_codex_task_file(
     evaluation_metric_spec: EvaluationMetricSpec,
     memory_summary: str,
     parent_node: Node | None,
-    seed_eval: bool,
-    seed_value: int,
     seed_aggregation: SeedAggregationPayload | None,
     stage2_hyperparam_idea: StageIdea | None,
     stage4_ablation_idea: StageIdea | None,
@@ -842,8 +872,6 @@ def _prepare_codex_task_file(
     task_context = CodexTaskContext(
         execution_id=execution_id,
         stage_identifier=stage_identifier.name,
-        seed_eval=seed_eval,
-        seed_value=seed_value,
         seed_aggregation=seed_aggregation,
         stage2_hyperparam_idea=stage2_hyperparam_idea,
         stage4_ablation_idea=stage4_ablation_idea,
@@ -858,12 +886,10 @@ def _prepare_codex_task_file(
         memory_summary=memory_summary,
     )
     logger.debug(
-        "codex.task_context_built execution_id=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
+        "codex.task_context_built execution_id=%s stage=%s metric_name=%s",
         execution_id[:8],
         stage_name,
         str(evaluation_metric_spec.name or ""),
-        seed_eval,
-        seed_value,
     )
     task_file = _write_codex_task_file(
         workspace_dir=workspace_dir,
@@ -911,6 +937,8 @@ def _run_codex_cli(
 ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
+        session_log_name="codex_session.log",
+        events_log_name="codex_events.jsonl",
         timeout_seconds=cfg.exec.timeout,
         argv=codex_argv,
         env=codex_env,
@@ -989,6 +1017,15 @@ def process_node(
     execution_id: str,
     user_feedback_payload: str,
 ) -> dict[str, object]:
+    """
+    Worker entrypoint for producing a single `Node`.
+
+    `seed_eval` semantics:
+    - When `seed_eval=True` (and a parent node is provided), the worker **does not use Codex**.
+      Instead it re-executes the parent node's experiment code under `seed_value` to measure
+      robustness across RNG seeds.
+    - When `seed_eval=False`, the worker uses Codex to draft/debug/improve code as usual.
+    """
     _ensure_worker_log_level(cfg=cfg)
     process_id = multiprocessing.current_process().name
     stage_name = stage_identifier.prefixed_name
@@ -1070,8 +1107,6 @@ def process_node(
         evaluation_metric_spec=evaluation_metric_spec,
         memory_summary=memory_summary,
         parent_node=parent_node,
-        seed_eval=seed_eval,
-        seed_value=seed_value,
         seed_aggregation=seed_aggregation,
         stage2_hyperparam_idea=stage2_hyperparam_idea,
         stage4_ablation_idea=stage4_ablation_idea,
@@ -1113,9 +1148,6 @@ def process_node(
             event_callback=event_callback,
         )
 
-    # Harness-owned seed flags: do not rely on Codex to set these correctly.
-    if seed_eval:
-        node_result["is_seed_node"] = True
     if seed_aggregation is not None:
         node_result["is_seed_agg_node"] = True
         # Determine plot health from artifacts: if no plots were written, mark plots buggy.
@@ -1184,8 +1216,6 @@ def process_node(
     contract_ctx = NodeResultContractContext(
         stage_identifier=stage_identifier,
         is_seed_aggregation=seed_aggregation is not None,
-        seed_eval=seed_eval,
-        seed_value=seed_value,
         working_png_count=count_working_pngs(working_dir=working_dir),
         expected_hyperparam_name=(
             stage2_hyperparam_idea.name
@@ -1284,7 +1314,7 @@ def process_node(
                 child_node.analysis = str(llm_review.summary or "").strip()
                 child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
 
-    metrics_artifacts = generate_and_assign_metrics(
+    metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
         codex_env=codex_env,
         codex_argv=list(codex_argv),
@@ -1312,8 +1342,8 @@ def process_node(
         working_dir=working_dir,
         event_callback=event_callback,
     )
-    if metrics_artifacts is not None:
-        persist_metrics_pass_artifacts(node=child_node, artifacts=metrics_artifacts)
+    if metrics_workspace_dir is not None:
+        persist_metrics_pass_artifacts(node=child_node, metrics_workspace_dir=metrics_workspace_dir)
     # only run VLM for later stages, and only for non-buggy nodes.
     if child_node.is_buggy is False and stage_identifier in (
         StageIdentifier.STAGE3,

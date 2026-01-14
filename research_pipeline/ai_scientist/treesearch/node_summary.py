@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -10,6 +11,8 @@ from .journal import Node
 from .utils.response import wrap_code
 
 logger = logging.getLogger("ai-scientist")
+_node_summary_call_counts: dict[tuple[str, str], int] = {}
+_node_summary_seq: int = 0
 
 
 class ExperimentSummary(BaseModel):
@@ -32,12 +35,38 @@ class ExperimentSummary(BaseModel):
 
 def generate_node_summary(
     *,
+    purpose: str,
     model: str,
     temperature: float,
     stage_name: str,
     node: Node,
-    task_desc: TaskDescription | None = None,
+    task_desc: TaskDescription | None,
 ) -> dict[str, Any]:
+    global _node_summary_seq  # noqa: PLW0603
+    _node_summary_seq += 1
+    seq = _node_summary_seq
+    node_key = (stage_name, str(node.id))
+    prev_count = _node_summary_call_counts.get(node_key, 0)
+    call_count = prev_count + 1
+    _node_summary_call_counts[node_key] = call_count
+    logger.debug(
+        "node_summary.invoke seq=%s purpose=%s node=%s stage=%s call_count_for_node_stage=%s",
+        seq,
+        purpose,
+        str(node.id)[:8],
+        stage_name,
+        call_count,
+    )
+    if call_count > 1:
+        logger.debug(
+            "node_summary.duplicate_call seq=%s purpose=%s node=%s stage=%s stack=\n%s",
+            seq,
+            purpose,
+            str(node.id)[:8],
+            stage_name,
+            "".join(traceback.format_stack(limit=25)),
+        )
+
     summary_prompt: dict[str, Any] = {
         "Introduction": (
             "You are an AI researcher analyzing experimental results. "
@@ -62,8 +91,11 @@ def generate_node_summary(
     if task_desc is not None:
         summary_prompt["Research idea"] = task_desc.model_dump(by_alias=True)
     logger.debug(
-        "llm.node_summary.request node=%s model=%s temperature=%s schema=%s payload=%s",
+        "llm.node_summary.request seq=%s purpose=%s node=%s stage=%s model=%s temperature=%s schema=%s payload=%s",
+        seq,
+        purpose,
         node.id[:8],
+        stage_name,
         model,
         temperature,
         ExperimentSummary.__name__,
@@ -78,8 +110,11 @@ def generate_node_summary(
     )
     payload = response.model_dump(by_alias=True)
     logger.debug(
-        "llm.node_summary.response node=%s model=%s schema=%s payload=%s",
+        "llm.node_summary.response seq=%s purpose=%s node=%s stage=%s model=%s schema=%s payload=%s",
+        seq,
+        purpose,
         node.id[:8],
+        stage_name,
         model,
         ExperimentSummary.__name__,
         payload,

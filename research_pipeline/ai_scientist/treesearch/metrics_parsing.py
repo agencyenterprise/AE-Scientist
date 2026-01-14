@@ -1,6 +1,5 @@
 import json
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List
 
@@ -75,12 +74,6 @@ class MetricParseResponse(BaseModel):
 METRIC_PARSE_SCHEMA = MetricParseResponse
 
 
-@dataclass(frozen=True)
-class MetricsPassArtifacts:
-    metrics_workspace_dir: Path
-    metrics_task_file: Path
-
-
 def _build_metrics_task_markdown(
     *,
     stage_identifier: StageIdentifier,
@@ -132,10 +125,11 @@ def generate_and_assign_metrics(
     evaluation_metric_spec: EvaluationMetricSpec,
     seed_eval: bool,
     event_callback: Callable[[BaseEvent], None],
-) -> MetricsPassArtifacts | None:
+) -> Path | None:
     """
     Two-step metrics pipeline:
-    1) Codex generates parse_metrics.py (optionally reusing parent parse code for seed_eval)
+    1) For normal runs: Codex generates parse_metrics.py.
+       For seed-eval runs: reuse the parent node's parse_metrics.py (do NOT call Codex).
     2) Harness runs parse_metrics.py and uses an LLM schema to extract/validate metrics
     """
     if node.is_buggy is True:
@@ -159,30 +153,30 @@ def generate_and_assign_metrics(
         node.is_buggy = True
         return None
 
-    metrics_workspace_dir = workspace_dir / "metrics_pass"
-    metrics_working_dir = metrics_workspace_dir / "working"
-    metrics_working_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        (metrics_working_dir / experiment_data.name).write_bytes(experiment_data.read_bytes())
-    except OSError:
-        logger.exception("Failed copying experiment_data.npy to metrics workspace")
-        node.metric = WorstMetricValue()
-        node.is_buggy = True
-        return None
+    metrics_workspace_dir = workspace_dir
 
     agent_file_name = str(cfg.exec.agent_file_name)
     src_agent_file = workspace_dir / agent_file_name
-    dst_agent_file = metrics_workspace_dir / agent_file_name
-    if src_agent_file.exists():
-        try:
-            dst_agent_file.write_bytes(src_agent_file.read_bytes())
-        except OSError:
-            logger.debug("Failed copying %s into metrics workspace", agent_file_name, exc_info=True)
+    if not src_agent_file.exists():
+        logger.debug("Agent file missing during metrics pass: %s", src_agent_file, exc_info=False)
 
     parse_metrics_path = metrics_workspace_dir / "parse_metrics.py"
-    if seed_eval and parent_node is not None and str(parent_node.parse_metrics_code or "").strip():
-        parse_metrics_path.write_text(str(parent_node.parse_metrics_code), encoding="utf-8")
+    if seed_eval:
+        parent_code = "" if parent_node is None else str(parent_node.parse_metrics_code or "")
+        if parent_node is None or not parent_code.strip():
+            event_callback(
+                RunLogEvent(
+                    message=(
+                        "Seed evaluation requires reusing the parent's parse_metrics.py, but it was missing. "
+                        "Cannot compute metrics for seed-eval run."
+                    ),
+                    level="warn",
+                )
+            )
+            node.metric = WorstMetricValue()
+            node.is_buggy = True
+            return None
+        parse_metrics_path.write_text(parent_code, encoding="utf-8")
         node.parse_metrics_plan = str(parent_node.parse_metrics_plan or "")
         node.parse_metrics_code = str(parent_node.parse_metrics_code or "")
     else:
@@ -196,6 +190,8 @@ def generate_and_assign_metrics(
 
         metrics_runner = CodexCliRunner(
             workspace_dir=metrics_workspace_dir,
+            session_log_name="codex_session__metrics.log",
+            events_log_name="codex_events__metrics.jsonl",
             timeout_seconds=codex_timeout_seconds,
             argv=codex_argv,
             env=codex_env,
@@ -222,9 +218,7 @@ def generate_and_assign_metrics(
         if not parse_metrics_path.exists():
             node.metric = WorstMetricValue()
             node.is_buggy = True
-            return MetricsPassArtifacts(
-                metrics_workspace_dir=metrics_workspace_dir, metrics_task_file=metrics_task_file
-            )
+            return metrics_workspace_dir
 
         node.parse_metrics_code = parse_metrics_path.read_text(encoding="utf-8", errors="replace")
 
@@ -248,10 +242,7 @@ def generate_and_assign_metrics(
     if parse_exc_type is not None:
         node.metric = WorstMetricValue()
         node.is_buggy = True
-        return MetricsPassArtifacts(
-            metrics_workspace_dir=metrics_workspace_dir,
-            metrics_task_file=(metrics_workspace_dir / "codex_metrics_task.md"),
-        )
+        return metrics_workspace_dir
 
     metrics_prompt = {
         "Introduction": (
@@ -280,10 +271,7 @@ def generate_and_assign_metrics(
         logger.exception("Failed to parse metrics via LLM for node=%s", node.id[:8])
         node.metric = WorstMetricValue()
         node.is_buggy = True
-        return MetricsPassArtifacts(
-            metrics_workspace_dir=metrics_workspace_dir,
-            metrics_task_file=(metrics_workspace_dir / "codex_metrics_task.md"),
-        )
+        return metrics_workspace_dir
 
     metrics_response = metrics_model.model_dump(by_alias=True)
     logger.debug(
@@ -305,16 +293,13 @@ def generate_and_assign_metrics(
         node.metric = WorstMetricValue()
         node.is_buggy = True
 
-    return MetricsPassArtifacts(
-        metrics_workspace_dir=metrics_workspace_dir,
-        metrics_task_file=(metrics_workspace_dir / "codex_metrics_task.md"),
-    )
+    return metrics_workspace_dir
 
 
 def persist_metrics_pass_artifacts(
     *,
     node: Node,
-    artifacts: MetricsPassArtifacts,
+    metrics_workspace_dir: Path,
 ) -> None:
     if not node.exp_results_dir:
         return
@@ -325,10 +310,10 @@ def persist_metrics_pass_artifacts(
         "codex_metrics_task.md",
         "metrics_task_result.json",
         "parse_metrics.py",
-        "codex_session.log",
-        "codex_events.jsonl",
+        "codex_session__metrics.log",
+        "codex_events__metrics.jsonl",
     ):
-        src = artifacts.metrics_workspace_dir / rel_path
+        src = metrics_workspace_dir / rel_path
         if not src.exists():
             continue
         dst = exp_dir / f"metrics_pass__{rel_path}"
