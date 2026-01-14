@@ -127,7 +127,7 @@ class WebhookClient:
             url,
             headers=headers,
             json=payload,
-            timeout=5,
+            timeout=1200, # 20 minutes
         )
         response.raise_for_status()
 
