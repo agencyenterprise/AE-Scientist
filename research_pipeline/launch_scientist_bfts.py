@@ -629,6 +629,29 @@ def should_generate_reports(run_dir_path: Path | None) -> bool:
     return False
 
 
+def has_aggregated_plots(*, reports_base: str, run_dir_path: Path) -> bool:
+    figures_dir = Path(reports_base) / "figures" / run_dir_path.name
+    if not figures_dir.exists():
+        return False
+    return any(p.is_file() for p in figures_dir.glob("*.png"))
+
+
+def has_writeup_pdf(*, reports_base: str, run_dir_path: Path) -> bool:
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    if not run_out_dir.exists():
+        return False
+    return any(p.is_file() for p in run_out_dir.glob("*.pdf"))
+
+
+def has_review_outputs(*, reports_base: str, run_dir_path: Path) -> bool:
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    if not run_out_dir.exists():
+        return False
+    review_text = run_out_dir / "review_text.json"
+    review_imgs = run_out_dir / "review_img_cap_ref.json"
+    return review_text.exists() and review_imgs.exists()
+
+
 def run_plot_aggregation(
     writeup_cfg: WriteupConfig,
     reports_base: str,
@@ -973,15 +996,28 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
         if writeup_cfg is not None and run_dir_path is not None:
-            agg_ok = run_plot_aggregation(
-                writeup_cfg=writeup_cfg,
-                reports_base=reports_base,
-                run_dir_path=run_dir_path,
-                artifact_callback=artifact_callback,
-                event_callback=event_callback,
-                run_id=run_id,
-            )
-            if agg_ok:
+            agg_ok = True
+            if has_aggregated_plots(reports_base=reports_base, run_dir_path=run_dir_path):
+                logger.info(
+                    "Existing aggregated plots detected for %s; skipping plot aggregation.",
+                    run_dir_path.name,
+                )
+            else:
+                agg_ok = run_plot_aggregation(
+                    writeup_cfg=writeup_cfg,
+                    reports_base=reports_base,
+                    run_dir_path=run_dir_path,
+                    artifact_callback=artifact_callback,
+                    event_callback=event_callback,
+                    run_id=run_id,
+                )
+
+            if has_writeup_pdf(reports_base=reports_base, run_dir_path=run_dir_path):
+                logger.info(
+                    "Existing writeup PDF detected for %s; skipping writeup stage.",
+                    run_dir_path.name,
+                )
+            elif agg_ok:
                 run_writeup_stage(
                     writeup_cfg=writeup_cfg,
                     reports_base=reports_base,
@@ -991,7 +1027,13 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     run_id=run_id,
                 )
 
-                if review_enabled and review_cfg is not None:
+            if review_enabled and review_cfg is not None:
+                if has_review_outputs(reports_base=reports_base, run_dir_path=run_dir_path):
+                    logger.info(
+                        "Existing review outputs detected for %s; skipping review stage.",
+                        run_dir_path.name,
+                    )
+                else:
                     run_review_stage(
                         review_cfg=review_cfg,
                         reports_base=reports_base,
