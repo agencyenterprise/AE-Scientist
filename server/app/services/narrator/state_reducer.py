@@ -6,7 +6,7 @@ Pattern: Dispatcher (event_type → handler_fn), handlers return partial changes
 """
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, cast
 
 from app.models.narrator_state import ActiveNode, ResearchRunState, StateUpdateResult
 from app.models.timeline_events import (
@@ -21,9 +21,7 @@ from app.models.timeline_events import (
 )
 
 
-def handle_stage_started(
-    state: ResearchRunState, event: StageStartedEvent
-) -> StateUpdateResult:
+def handle_stage_started(state: ResearchRunState, event: StageStartedEvent) -> StateUpdateResult:
     """Handle stage_started event."""
     changes: Dict[str, Any] = {
         "current_stage": event.stage,
@@ -31,7 +29,7 @@ def handle_stage_started(
         "updated_at": datetime.now(timezone.utc),
         "timeline": state.timeline + [event],
     }
-    
+
     updated_stages = [s.model_copy() for s in state.stages]
     for stage in updated_stages:
         if stage.stage == event.stage:
@@ -40,7 +38,7 @@ def handle_stage_started(
             changes["current_stage_goal"] = stage
             break
     changes["stages"] = updated_stages
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -50,11 +48,11 @@ def handle_node_result(state: ResearchRunState, event: NodeResultEvent) -> State
         "timeline": state.timeline + [event],
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     if event.outcome == "success" and event.metrics and state.best_metrics is None:
         changes["best_metrics"] = event.metrics
         changes["best_node_id"] = event.node_id
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -69,10 +67,10 @@ def handle_stage_completed(
             stage.completed_at = event.timestamp
             stage.progress = 1.0
             break
-    
+
     completed_count = sum(1 for s in updated_stages if s.status == "completed")
     total_count = len(updated_stages)
-    
+
     changes: Dict[str, Any] = {
         "stages": updated_stages,
         "timeline": state.timeline + [event],
@@ -80,11 +78,11 @@ def handle_stage_completed(
         "current_focus": None,
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     if event.best_metrics:
         changes["best_metrics"] = event.best_metrics
         changes["best_node_id"] = event.best_node_id
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -98,22 +96,24 @@ def handle_progress_update(
         if stage.stage == event.stage:
             stage.current_iteration = event.iteration
             stage.max_iterations = event.max_iterations
-            stage.progress = event.iteration / event.max_iterations if event.max_iterations > 0 else 0.0
+            stage.progress = (
+                event.iteration / event.max_iterations if event.max_iterations > 0 else 0.0
+            )
             stage_progress = stage.progress
             break
-    
+
     changes: Dict[str, Any] = {
         "stages": updated_stages,
         "timeline": state.timeline + [event],
         "current_stage_progress": stage_progress,
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     if event.current_focus:
         changes["current_focus"] = event.current_focus
     if event.current_best:
         changes["best_metrics"] = event.current_best
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -127,16 +127,18 @@ def handle_node_execution_started(
         status="running",
         started_at=event.timestamp,
         run_type=event.run_type,
+        completed_at=None,  # TODO: fill in
+        exec_time=None,  # TODO: fill in
     )
-    
+
     updated_active_nodes = state.active_nodes + [new_active_node]
-    
+
     changes: Dict[str, Any] = {
         "active_nodes": updated_active_nodes,
         "timeline": state.timeline + [event],
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -150,13 +152,13 @@ def handle_node_execution_completed(
             # remove completed nodes from active list
             continue
         updated_active_nodes.append(node)
-    
+
     changes: Dict[str, Any] = {
         "active_nodes": updated_active_nodes,
         "timeline": state.timeline + [event],
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     return StateUpdateResult(changes=changes)
 
 
@@ -167,32 +169,64 @@ def handle_paper_generation_step(
     focus_text = f"Paper generation: {event.step}"
     if event.substep:
         focus_text += f" - {event.substep}"
-    
+
     changes: Dict[str, Any] = {
         "current_focus": focus_text,
         "overall_progress": 0.8 + (0.2 * event.progress),
         "timeline": state.timeline + [event],
         "updated_at": datetime.now(timezone.utc),
     }
-    
+
     return StateUpdateResult(changes=changes)
 
 
+# ============================================================================
+# DISPATCH TABLE
+# ============================================================================
+
+# Type alias for the handler function signature
+# We use the base TimelineEvent type here to satisfy mypy's contravariance rules
 HandlerFn = Callable[[ResearchRunState, TimelineEvent], StateUpdateResult]
 
-HANDLERS: Dict[str, HandlerFn] = {
-    "stage_started": handle_stage_started,
-    "node_result": handle_node_result,
-    "stage_completed": handle_stage_completed,
-    "progress_update": handle_progress_update,
-    "paper_generation_step": handle_paper_generation_step,
-    "node_execution_started": handle_node_execution_started,
-    "node_execution_completed": handle_node_execution_completed,
-}
+# The actual dispatch table
+# We use a controlled cast here to bridge the gap between:
+# - What we know: each handler receives the correct specific event type
+# - What mypy needs: a consistent signature for all handlers in the dict
+#
+# This is a standard pattern in typed Python for event dispatch systems.
+# The invariant we're asserting: "The event_type key guarantees the correct
+# event subtype will be passed to each handler at runtime."
+HANDLERS: Dict[str, HandlerFn] = cast(
+    Dict[str, HandlerFn],
+    {
+        "stage_started": handle_stage_started,
+        "node_result": handle_node_result,
+        "stage_completed": handle_stage_completed,
+        "progress_update": handle_progress_update,
+        "paper_generation_step": handle_paper_generation_step,
+        "node_execution_started": handle_node_execution_started,
+        "node_execution_completed": handle_node_execution_completed,
+    },
+)
+
+
+# ============================================================================
+# REDUCER FUNCTIONS
+# ============================================================================
 
 
 def reduce(state: ResearchRunState, event: TimelineEvent) -> StateUpdateResult:
-    """Pure reducer: (state, event) → state changes. Deterministic."""
+    """
+    Pure reducer: (state, event) → state changes. Deterministic.
+
+    This is the main entry point for state reduction. It dispatches to the
+    appropriate handler based on the event type.
+
+    The type safety here is guaranteed by:
+    1. The discriminated union (TimelineEvent with type field)
+    2. The HANDLERS dict mapping event.type → correct handler
+    3. Runtime dispatch ensures the right handler gets the right event
+    """
     handler = HANDLERS.get(event.type)
     if handler is None:
         return StateUpdateResult(changes={}, should_update=False)
@@ -204,9 +238,7 @@ def apply_changes(state: ResearchRunState, changes: Dict[str, Any]) -> ResearchR
     return state.model_copy(update=changes)
 
 
-def replay_events(
-    initial_state: ResearchRunState, events: list[TimelineEvent]
-) -> ResearchRunState:
+def replay_events(initial_state: ResearchRunState, events: list[TimelineEvent]) -> ResearchRunState:
     """Replay timeline events to reconstruct state."""
     state = initial_state
     for event in events:

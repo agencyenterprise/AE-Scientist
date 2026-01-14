@@ -6,11 +6,11 @@ Handles persistence of:
 - Research run state (computed state snapshot)
 """
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -38,21 +38,21 @@ class NarratorMixin(ConnectionProvider):
     ) -> None:
         """
         Insert a timeline event into the database.
-        
+
         Strips fields that are stored in dedicated columns to avoid duplication.
         On retrieval, these fields are hydrated from the columns.
         """
         event_data = event.model_dump(mode="json")
-        
+
         # Extract fields that have dedicated columns
         event_id = event_data.pop("id")
         event_type = event_data.pop("type")
         timestamp = event_data.pop("timestamp")
         stage = event_data.pop("stage")
         node_id = event_data.pop("node_id", None)
-        
+
         # Now event_data only contains event-specific fields
-        
+
         query = """
             INSERT INTO rp_timeline_events (
                 run_id, event_id, event_type, event_data, 
@@ -61,7 +61,7 @@ class NarratorMixin(ConnectionProvider):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (event_id) DO NOTHING
         """
-        
+
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
@@ -78,7 +78,7 @@ class NarratorMixin(ConnectionProvider):
                     ),
                 )
                 await conn.commit()
-        
+
         logger.info(
             "Inserted timeline event: run=%s type=%s stage=%s",
             run_id,
@@ -95,34 +95,34 @@ class NarratorMixin(ConnectionProvider):
     ) -> List[Dict[str, Any]]:
         """
         Get timeline events for a run.
-        
+
         Hydrates stripped fields from columns back into event_data.
         """
         conditions = ["run_id = %s"]
         params: List[Any] = [run_id]
-        
+
         if event_type:
             conditions.append("event_type = %s")
             params.append(event_type)
-        
+
         if stage:
             conditions.append("stage = %s")
             params.append(stage)
-        
+
         where_clause = " AND ".join(conditions)
-        query = f"""
+        query: str = f"""
             SELECT id, run_id, event_id, event_type, event_data, 
                    timestamp, stage, node_id, created_at
             FROM rp_timeline_events
             WHERE {where_clause}
             ORDER BY timestamp ASC, id ASC
         """
-        
+
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, params)
+                await cursor.execute(query, params)  # pyright: ignore[reportArgumentType]
                 rows = await cursor.fetchall() or []
-        
+
         # Hydrate stripped fields back into event_data
         events = []
         for row in rows:
@@ -133,12 +133,14 @@ class NarratorMixin(ConnectionProvider):
             event_data["timestamp"] = row["timestamp"].isoformat()
             event_data["stage"] = row["stage"]
             event_data["node_id"] = row["node_id"]
-            
-            events.append({
-                **dict(row),
-                "event_data": event_data,
-            })
-        
+
+            events.append(
+                {
+                    **dict(row),
+                    "event_data": event_data,
+                }
+            )
+
         return events
 
     # ============================================================================
@@ -151,31 +153,31 @@ class NarratorMixin(ConnectionProvider):
         run_id: str,
         state: ResearchRunState,
         expected_version: Optional[int] = None,
-        conn: Optional[Any] = None,
+        conn: Optional[AsyncConnection[Any]] = None,
     ) -> bool:
         """
         Insert or update research run state.
-        
+
         Uses optimistic locking via version field.
         If expected_version is provided and doesn't match, update fails.
-        
+
         Args:
             run_id: Research run ID
             state: Complete research run state
             expected_version: Expected current version (for optimistic locking)
             conn: Optional database connection (if within transaction)
-            
+
         Returns:
             True if update succeeded, False if version conflict
         """
         # Convert state to dict for JSONB storage
         state_data = state.model_dump(mode="json")
-        
+
         # Remove timeline from storage (hydrate from rp_timeline_events on fetch)
         # This prevents column bloat as timeline can grow large
         last_event_id = state.timeline[-1].id if state.timeline else None
         state_data["timeline"] = []
-        
+
         if expected_version is None:
             # Insert or update without version check
             query = """
@@ -189,7 +191,7 @@ class NarratorMixin(ConnectionProvider):
                     last_event_id = EXCLUDED.last_event_id,
                     updated_at = EXCLUDED.updated_at
             """
-            params = (
+            params: tuple[Any, ...] = (
                 run_id,
                 Jsonb(state_data),
                 state.version,
@@ -214,7 +216,7 @@ class NarratorMixin(ConnectionProvider):
                 run_id,
                 expected_version,
             )
-        
+
         if conn is not None:
             # Use provided connection (within transaction)
             async with conn.cursor() as cursor:
@@ -227,7 +229,7 @@ class NarratorMixin(ConnectionProvider):
                     await cursor.execute(query, params)
                     rows_affected = cursor.rowcount
                     await new_conn.commit()
-        
+
         if expected_version is not None and rows_affected == 0:
             logger.warning(
                 "State update failed due to version conflict: run=%s expected_version=%s",
@@ -235,7 +237,7 @@ class NarratorMixin(ConnectionProvider):
                 expected_version,
             )
             return False
-        
+
         logger.info(
             "Upserted research run state: run=%s version=%s",
             run_id,
@@ -246,12 +248,12 @@ class NarratorMixin(ConnectionProvider):
     async def get_research_run_state(self, run_id: str) -> Optional[ResearchRunState]:
         """
         Get current research run state.
-        
+
         Hydrates timeline from rp_timeline_events table.
-        
+
         Args:
             run_id: Research run ID
-            
+
         Returns:
             ResearchRunState or None if not found
         """
@@ -260,37 +262,37 @@ class NarratorMixin(ConnectionProvider):
             FROM rp_research_run_state
             WHERE run_id = %s
         """
-        
+
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(query, (run_id,))
                 row = await cursor.fetchone()
-        
+
         if not row:
             return None
-        
+
         state_dict = dict(row["state_data"])
         state_dict["version"] = row["version"]
-        
+
         # Hydrate timeline from rp_timeline_events
         timeline_events = await self.get_timeline_events(run_id)
         state_dict["timeline"] = [event["event_data"] for event in timeline_events]
-        
+
         return ResearchRunState(**state_dict)
 
     async def get_research_run_state_locked(
-        self, run_id: str, conn: Any
+        self, run_id: str, conn: AsyncConnection[Any]
     ) -> Optional[ResearchRunState]:
         """
         Get current research run state with row-level lock (SELECT FOR UPDATE).
-        
+
         This should be called within a transaction to hold the lock.
         Hydrates timeline from rp_timeline_events table.
-        
+
         Args:
             run_id: Research run ID
             conn: Database connection (within transaction)
-            
+
         Returns:
             ResearchRunState or None if not found
         """
@@ -300,36 +302,35 @@ class NarratorMixin(ConnectionProvider):
             WHERE run_id = %s
             FOR UPDATE
         """
-        
+
         async with conn.cursor(row_factory=dict_row) as cursor:
             await cursor.execute(query, (run_id,))
             row = await cursor.fetchone()
-        
+
         if not row:
             return None
-        
+
         state_dict = dict(row["state_data"])
         state_dict["version"] = row["version"]
-        
+
         # Hydrate timeline from rp_timeline_events
         timeline_events = await self.get_timeline_events(run_id)
         state_dict["timeline"] = [event["event_data"] for event in timeline_events]
-        
+
         return ResearchRunState(**state_dict)
 
     async def delete_research_run_state(self, run_id: str) -> None:
         """
         Delete research run state (for cleanup/testing).
-        
+
         Args:
             run_id: Research run ID
         """
         query = "DELETE FROM rp_research_run_state WHERE run_id = %s"
-        
+
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(query, (run_id,))
                 await conn.commit()
-        
-        logger.info("Deleted research run state: run=%s", run_id)
 
+        logger.info("Deleted research run state: run=%s", run_id)

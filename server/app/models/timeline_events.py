@@ -10,7 +10,6 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # PRIMITIVES
 # ============================================================================
@@ -19,7 +18,7 @@ from pydantic import BaseModel, Field
 class MetricInterpretation(BaseModel):
     """
     Interpreted metric with human-readable context.
-    
+
     Transforms raw metric (0.8234567) into meaningful information:
     - Formatted: "82.3%"
     - Interpretation: "5.2% above baseline"
@@ -27,9 +26,7 @@ class MetricInterpretation(BaseModel):
 
     name: str = Field(..., description="Metric name", examples=["accuracy", "f1_score"])
     value: float = Field(..., description="Raw metric value")
-    formatted: str = Field(
-        ..., description="Formatted for display", examples=["82.3%", "0.823"]
-    )
+    formatted: str = Field(..., description="Formatted for display", examples=["82.3%", "0.823"])
     interpretation: Optional[str] = Field(
         None,
         description="What this value means",
@@ -85,12 +82,12 @@ class TimelineEventBase(BaseModel):
 class StageStartedEvent(TimelineEventBase):
     """
     Emitted when a stage begins.
-    
+
     Emission Criteria:
     - Triggered when stage_progress event arrives with iteration = 0
     - OR when first substage_event arrives for a new stage
     - Emitted once per stage (5 times per run)
-    
+
     Frequency: 5 per run (one per stage)
     """
 
@@ -104,21 +101,19 @@ class StageStartedEvent(TimelineEventBase):
 class NodeResultEvent(TimelineEventBase):
     """
     Emitted when a node completes execution.
-    
+
     Emission Criteria:
     - Triggered when substage_event arrives with node completion
     - Includes metrics from corresponding stage_progress event
     - Emitted for each node that completes (success or failure)
-    
+
     Frequency: 10-50 per stage (varies by stage complexity)
     """
 
     type: Literal["node_result"] = "node_result"
 
     headline: str = Field(..., description="Short headline")
-    outcome: Literal["success", "failure", "partial"] = Field(
-        ..., description="Execution outcome"
-    )
+    outcome: Literal["success", "failure", "partial"] = Field(..., description="Execution outcome")
     summary: Optional[str] = Field(None, description="Brief description of what occurred")
 
     metrics: Optional[MetricCollection] = Field(None, description="Interpreted metrics")
@@ -132,12 +127,12 @@ class NodeResultEvent(TimelineEventBase):
 class StageCompletedEvent(TimelineEventBase):
     """
     Emitted when a stage completes.
-    
+
     Emission Criteria:
     - Triggered when substage_completed event arrives
     - Enriched with data from substage_summary event (already LLM-generated)
     - Emitted once per stage completion
-    
+
     Frequency: 5 per run (one per stage)
     """
 
@@ -163,12 +158,12 @@ class StageCompletedEvent(TimelineEventBase):
 class ProgressUpdateEvent(TimelineEventBase):
     """
     Emitted periodically to show current focus.
-    
+
     Emission Criteria:
     - Triggered by stage_progress events (every iteration)
     - Shows current iteration, focus, and progress metrics
     - Throttled to avoid overwhelming the timeline
-    
+
     Frequency: ~10 per stage (one per iteration)
     """
 
@@ -179,7 +174,7 @@ class ProgressUpdateEvent(TimelineEventBase):
 
     iteration: int = Field(..., description="Current iteration within the stage (1-based index)")
     max_iterations: int = Field(..., description="Total iterations planned")
-    
+
     current_best: Optional[MetricCollection] = Field(
         None, description="Current best metrics if available"
     )
@@ -188,12 +183,12 @@ class ProgressUpdateEvent(TimelineEventBase):
 class PaperGenerationStepEvent(TimelineEventBase):
     """
     Emitted during Stage 5 (paper generation).
-    
+
     Emission Criteria:
     - Triggered by paper_generation_progress events
     - Shows current step and progress within paper generation
     - Emitted for each major paper generation step
-    
+
     Frequency: 4-6 per paper generation stage
     """
 
@@ -215,12 +210,12 @@ class PaperGenerationStepEvent(TimelineEventBase):
 class NodeExecutionStartedEvent(TimelineEventBase):
     """
     Emitted when a node starts executing code.
-    
+
     Emission Criteria:
     - Triggered by running_code events from research pipeline
     - Tracks individual node execution lifecycle
     - Helps show concurrent node execution
-    
+
     Frequency: 10-50 per stage (one per node execution)
     """
 
@@ -235,12 +230,12 @@ class NodeExecutionStartedEvent(TimelineEventBase):
 class NodeExecutionCompletedEvent(TimelineEventBase):
     """
     Emitted when a node completes execution.
-    
+
     Emission Criteria:
     - Triggered by run_completed events from research pipeline
     - Tracks node completion with timing and status
     - Pairs with NodeExecutionStartedEvent
-    
+
     Frequency: 10-50 per stage (one per node execution)
     """
 

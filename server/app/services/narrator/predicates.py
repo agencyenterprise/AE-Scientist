@@ -29,7 +29,7 @@ def get_current_stage(state: ResearchRunState) -> Optional[StageGoal]:
     """Get the currently active stage (in_progress)."""
     return next((s for s in state.stages if s.status == "in_progress"), None)
 
+
 def get_completed_stages(state: ResearchRunState) -> list[StageGoal]:
     """Get all completed stages."""
     return [s for s in state.stages if s.status == "completed"]
-

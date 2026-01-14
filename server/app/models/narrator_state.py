@@ -48,11 +48,14 @@ class StageGoal(BaseModel):
     good_nodes: int = Field(default=0, description="Number of good nodes")
 
 
+ResearchRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
+
+
 class ResearchRunState(BaseModel):
     """Complete state of a research run. Single source of truth for frontend."""
 
     run_id: str = Field(..., description="Unique run identifier")
-    status: Literal["pending", "running", "completed", "failed", "cancelled"]
+    status: ResearchRunStatus
     conversation_id: int
     overall_goal: Optional[str] = None
     hypothesis: Optional[str] = None
@@ -99,15 +102,75 @@ def create_initial_state(
 ) -> ResearchRunState:
     """Create initial state for a new research run."""
     now = datetime.now(timezone.utc)
-    
+
     standard_stages = [
-        StageGoal(stage="1_initial_implementation", title="Initial Implementation", status="pending"),
-        StageGoal(stage="2_baseline_tuning", title="Baseline Tuning", status="pending"),
-        StageGoal(stage="3_creative_research", title="Creative Research", status="pending"),
-        StageGoal(stage="4_ablation_studies", title="Ablation Studies", status="pending"),
-        StageGoal(stage="5_paper_generation", title="Paper Generation", status="pending"),
+        StageGoal(
+            stage="1_initial_implementation",
+            title="Initial Implementation",
+            status="pending",
+            goal=None,  # TODO: fill in
+            approach=None,  # TODO: fill in
+            success_criteria=None,  # TODO: fill in
+            started_at=None,  # TODO: fill in
+            completed_at=None,  # TODO: fill in
+            current_iteration=None,  # TODO: fill in
+            max_iterations=None,  # TODO: fill in
+            progress=None,  # TODO: fill in
+        ),
+        StageGoal(
+            stage="2_baseline_tuning",
+            title="Baseline Tuning",
+            status="pending",
+            goal=None,
+            approach=None,
+            success_criteria=None,
+            started_at=None,
+            completed_at=None,
+            current_iteration=None,
+            max_iterations=None,
+            progress=None,
+        ),
+        StageGoal(
+            stage="3_creative_research",
+            title="Creative Research",
+            status="pending",
+            goal=None,
+            approach=None,
+            success_criteria=None,
+            started_at=None,
+            completed_at=None,
+            current_iteration=None,
+            max_iterations=None,
+            progress=None,
+        ),
+        StageGoal(
+            stage="4_ablation_studies",
+            title="Ablation Studies",
+            status="pending",
+            goal=None,
+            approach=None,
+            success_criteria=None,
+            started_at=None,
+            completed_at=None,
+            current_iteration=None,
+            max_iterations=None,
+            progress=None,
+        ),
+        StageGoal(
+            stage="5_paper_generation",
+            title="Paper Generation",
+            status="pending",
+            goal=None,
+            approach=None,
+            success_criteria=None,
+            started_at=None,
+            completed_at=None,
+            current_iteration=None,
+            max_iterations=None,
+            progress=None,
+        ),
     ]
-    
+
     return ResearchRunState(
         run_id=run_id,
         status=status,
@@ -118,4 +181,3 @@ def create_initial_state(
         created_at=now,
         updated_at=now,
     )
-

@@ -439,7 +439,7 @@ async def ingest_stage_progress(
             data=progress,
         ),
     )
-    
+
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
@@ -483,7 +483,7 @@ async def ingest_substage_completed(
             ),
         ),
     )
-    
+
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
@@ -526,7 +526,7 @@ async def ingest_paper_generation_progress(
             data=paper_event,
         ),
     )
-    
+
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
@@ -676,7 +676,7 @@ async def ingest_best_node_selection(
             data=best_node,
         ),
     )
-    
+
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
@@ -816,10 +816,10 @@ async def ingest_running_code(
             ),
         ),
     )
-    
+
     # Ingest into narrator
     await ingest_narration_event(
-        db,
+        cast(DatabaseManager, db),
         run_id=payload.run_id,
         event_type="running_code",
         event_data=event.model_dump(),
@@ -854,10 +854,10 @@ async def ingest_run_completed(
             ),
         ),
     )
-    
+
     # Ingest into narrator
     await ingest_narration_event(
-        db,
+        cast(DatabaseManager, db),
         run_id=payload.run_id,
         event_type="run_completed",
         event_data=event.model_dump(),
@@ -972,16 +972,16 @@ async def ingest_run_finished(
         SSECompleteEvent(
             type="complete",
             data=ResearchRunCompleteData(
-                status=new_status,  # type: ignore[arg-type]
+                status=new_status,
                 success=payload.success,
                 message=payload.message,
             ),
         ),
     )
-    
+
     # Ingest into narrator for timeline and queue cleanup
     await ingest_narration_event(
-        db,
+        cast(DatabaseManager, db),
         run_id=payload.run_id,
         event_type="run_finished",
         event_data={

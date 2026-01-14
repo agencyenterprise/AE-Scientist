@@ -6,4 +6,3 @@ This package contains the narrator architecture implementation:
 - State reducer: Compute state from timeline events
 - Database persistence: Store timeline events and state
 """
-
