@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from .agent_manager import AgentManager
+from .agent_manager import AgentManager, RunOutcome
 from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .journal import Journal
@@ -30,7 +30,7 @@ logger = logging.getLogger("ai-scientist")
 
 def perform_experiments_bfts(
     config_path: Path, event_callback: Callable[[BaseEvent], None]
-) -> None:
+) -> RunOutcome:
     # Load configuration for this run
     cfg = load_cfg(config_path)
     logger.info(f'Starting run "{cfg.exp_name}"')
@@ -220,6 +220,7 @@ def perform_experiments_bfts(
         step_callback=step_callback,
         iteration_started_callback=iteration_started_callback,
     )
+    outcome = manager.get_run_outcome()
 
     if cfg.generate_report:
         logger.info("Generating final report from all stages...")
@@ -255,6 +256,7 @@ def perform_experiments_bfts(
         logger.info(f"- Baseline summary: {baseline_summary_path}")
         logger.info(f"- Research summary: {research_summary_path}")
         logger.info(f"- Ablation summary: {ablation_summary_path}")
+    return outcome
 
 
 if __name__ == "__main__":

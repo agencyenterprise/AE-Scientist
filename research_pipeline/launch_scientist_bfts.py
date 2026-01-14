@@ -88,6 +88,13 @@ class ArtifactCallback(Protocol):
     def __call__(self, spec: ArtifactSpec) -> None: ...
 
 
+@dataclass(frozen=True)
+class RunExecutionOutcome:
+    run_dir: Path
+    success: bool
+    message: str
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run AI scientist experiments")
     parser.add_argument(
@@ -377,7 +384,7 @@ def resume_run(
     idea_json_path: str,
     resume_arg: str,
     event_callback: Callable[[BaseEvent], None],
-) -> Path:
+) -> RunExecutionOutcome:
     try:
         logs_root = base_cfg.log_dir
         raw_exp_name = base_cfg.exp_name
@@ -393,7 +400,7 @@ def resume_run(
             logger.info(
                 "All summary files found; skipping stage execution and proceeding to reports."
             )
-            return run_dir
+            return RunExecutionOutcome(run_dir=run_dir, success=True, message="")
 
         s1 = stage_exists(run_dir=run_dir, prefix="stage_1_")
         s2 = stage_exists(run_dir=run_dir, prefix="stage_2_")
@@ -409,7 +416,7 @@ def resume_run(
             next_stage = 4
 
         if next_stage is None:
-            return run_dir
+            return RunExecutionOutcome(run_dir=run_dir, success=True, message="")
 
         fake_config = copy.deepcopy(cfg_obj)
         fake_config.desc_file = Path(idea_json_path)
@@ -538,7 +545,10 @@ def resume_run(
             step_callback=step_callback,
             iteration_started_callback=iteration_started_callback,
         )
-        return run_dir
+        outcome = manager.get_run_outcome()
+        return RunExecutionOutcome(
+            run_dir=run_dir, success=outcome.success, message=outcome.message
+        )
     except Exception:
         logger.exception("Resume failed; exiting.")
         sys.exit(1)
@@ -930,29 +940,33 @@ def execute_launcher(args: argparse.Namespace) -> None:
             )
             hw_stats_reporter.start()
 
-    run_success = False
-    failure_message: str | None = None
+    run_success = True
+    failure_message = ""
     try:
         idea_json_path = str(base_cfg.desc_file)
         with open(idea_json_path, "r") as f:
             idea = json.load(f)
             logger.info(f"Loaded idea from {idea_json_path}")
 
-        resume_run_dir: Path | None = None
+        resume_outcome: RunExecutionOutcome | None = None
         if args.resume is not None:
-            resume_run_dir = resume_run(
+            resume_outcome = resume_run(
                 base_cfg=base_cfg,
                 idea_json_path=idea_json_path,
                 resume_arg=args.resume,
                 event_callback=event_callback,
             )
+            run_success = resume_outcome.success
+            failure_message = resume_outcome.message
         else:
-            perform_experiments_bfts(base_config_path, event_callback)
+            outcome = perform_experiments_bfts(base_config_path, event_callback)
+            run_success = outcome.success
+            failure_message = outcome.message
 
         run_dir_path = determine_run_directory(
             top_log_dir=top_log_dir,
             existing_runs_before=existing_runs_before,
-            resume_run_dir=resume_run_dir,
+            resume_run_dir=resume_outcome.run_dir if resume_outcome is not None else None,
         )
         write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
 
@@ -1016,17 +1030,18 @@ def execute_launcher(args: argparse.Namespace) -> None:
             )
 
         logger.info("Finished running the experiment.")
-        run_success = True
     except Exception as exc:
+        run_success = False
         failure_message = str(exc)
         raise
     finally:
         try:
             if webhook_client is not None:
                 try:
+                    message = failure_message.strip() or None
                     run_finished_future = webhook_client.publish_run_finished(
                         success=run_success,
-                        message=failure_message,
+                        message=message,
                     )
                     run_finished_future.result(timeout=None)
                 except Exception:

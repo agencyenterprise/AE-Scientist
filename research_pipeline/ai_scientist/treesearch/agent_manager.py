@@ -50,6 +50,12 @@ from .stages.stage4_ablation import Stage4Ablation
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class RunOutcome:
+    success: bool
+    message: str
+
+
 class SubstageGoalResponse(BaseModel):
     goals: str
 
@@ -113,8 +119,17 @@ class AgentManager:
         self._attempt_iteration_by_stage: Dict[str, int] = {}
         self._forced_stage_completion_reasons: Dict[str, str] = {}
         self._stage_skip_states: Dict[str, bool] = {}
+        self._run_outcome = RunOutcome(success=True, message="")
         stage_control.reset_stage_state()
         self.evaluation_metric_spec = self._define_global_evaluation_metric_spec()
+
+    def get_run_outcome(self) -> RunOutcome:
+        return self._run_outcome
+
+    def _mark_run_failed(self, *, message: str) -> None:
+        if not self._run_outcome.success:
+            return
+        self._run_outcome = RunOutcome(success=False, message=message)
 
     def _define_global_evaluation_metric_spec(self) -> EvaluationMetricSpec:
         """
@@ -524,9 +539,12 @@ class AgentManager:
             if prev_best:
                 self.journals[current_substage.name].append(prev_best)
                 return True
-            logger.error(
-                f"No previous best implementation found for {current_substage.name}. Something went wrong so finishing the experiment..."
+            message = (
+                "No previous best implementation found for "
+                f"{current_substage.name}. Something went wrong so finishing the experiment..."
             )
+            logger.error(message)
+            self._mark_run_failed(message=message)
             return False
         return True
 
@@ -542,9 +560,12 @@ class AgentManager:
         """
         best_node = self._get_best_implementation(current_substage.name)
         if not best_node:
-            logger.error(
-                f"No best node found for {current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
+            message = (
+                "No best node found for "
+                f"{current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
             )
+            logger.error(message)
+            self._mark_run_failed(message=message)
             return False
 
         agent._run_multi_seed_evaluation(best_node)
