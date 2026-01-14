@@ -883,12 +883,6 @@ def _prepare_codex_task_file(
         evaluation_metric_spec=evaluation_metric_spec,
         memory_summary=memory_summary,
     )
-    logger.debug(
-        "codex.task_context_built execution_id=%s stage=%s metric_name=%s",
-        execution_id[:8],
-        stage_name,
-        str(evaluation_metric_spec.name or ""),
-    )
     task_file = _write_codex_task_file(
         workspace_dir=workspace_dir,
         execution_id=execution_id,
@@ -903,22 +897,6 @@ def _prepare_codex_task_file(
         environment_context=env_ctx,
         parent_node=parent_node,
     )
-    logger.debug(
-        "codex.task.written execution_id=%s path=%s chars=%s",
-        execution_id[:8],
-        task_file,
-        len(task_file.read_text(encoding="utf-8", errors="replace")),
-    )
-    codex_task_text = _read_text_or_empty(path=task_file)
-    if codex_task_text:
-        logger.debug(
-            "codex.task.contents execution_id=%s path=%s chars=%s\n%s",
-            execution_id[:8],
-            task_file,
-            len(codex_task_text),
-            codex_task_text,
-        )
-
     return output_json_file, task_file, env_ctx
 
 

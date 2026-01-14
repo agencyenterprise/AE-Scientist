@@ -19,6 +19,7 @@ from typing import Callable, Optional
 
 from .agent_manager import AgentManager, RunOutcome
 from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
+from .evaluation_metric import define_evaluation_metric_spec_via_llm
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .journal import Journal
 from .log_summarization import overall_summarize
@@ -44,12 +45,27 @@ def perform_experiments_bfts(
     logger.info("Preparing agent workspace (copying and extracting files) ...")
     prep_agent_workspace(cfg=cfg)
 
+    # Define the global evaluation metric spec once for this run.
+    try:
+        event_callback(
+            RunLogEvent(message="Defining global evaluation metric spec via LLM...", level="info")
+        )
+    except (OSError, RuntimeError, ValueError, TypeError):
+        logger.exception("Failed to emit run log event for metric definition.")
+    stage_cfg = cfg.agent.feedback
+    evaluation_metric_spec = define_evaluation_metric_spec_via_llm(
+        task_desc=task_desc,
+        model=stage_cfg.model,
+        temperature=stage_cfg.temperature,
+    )
+
     # Initialize the AgentManager (orchestrates stages and substages)
     manager = AgentManager(
         task_desc=task_desc,
         cfg=cfg,
         workspace_dir=Path(cfg.workspace_dir),
         event_callback=event_callback,
+        evaluation_metric_spec=evaluation_metric_spec,
     )
 
     # Track iteration timing for smart ETA calculation
@@ -58,6 +74,7 @@ def perform_experiments_bfts(
     # Track per-stage iteration state to avoid duplicate progress events and
     # to ensure iteration counts start from 1 for each main stage.
     last_reported_iteration_by_stage: dict[str, int] = {}
+    stage_best_node_summary_written: set[str] = set()
 
     def iteration_started_callback(stage: StageMeta, journal: Journal) -> None:
         nonlocal iteration_start_time
@@ -139,35 +156,6 @@ def perform_experiments_bfts(
             notes_dir = cfg.log_dir / f"stage_{stage.name}" / "notes"
             notes_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save latest node summary
-            latest_node = None
-            if journal.nodes:
-                latest_node = journal.nodes[-1]
-                try:
-                    logger.debug(
-                        "node_summary.callsite purpose=%s node=%s stage=%s",
-                        "step_callback.latest_node_summary",
-                        latest_node.id[:8],
-                        stage.name,
-                    )
-                    summary = generate_node_summary(
-                        purpose="step_callback.latest_node_summary",
-                        model=journal.summary_model,
-                        temperature=journal.summary_temperature,
-                        stage_name=stage.name,
-                        node=latest_node,
-                        task_desc=task_desc,
-                    )
-                except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
-                    summary = None
-                if summary is not None:
-                    with open(
-                        notes_dir / f"node_{latest_node.id}_summary.json",
-                        mode="w",
-                        encoding="utf-8",
-                    ) as f:
-                        json.dump(summary, f, indent=2)
-
             # Generate and save stage progress summary
             best_node = journal.get_best_node()
             # Compute good_nodes once to avoid repeated property calls (which also log)
@@ -184,6 +172,51 @@ def perform_experiments_bfts(
 
             with open(notes_dir / "stage_progress.json", "w") as f:
                 json.dump(stage_summary, f, indent=2)
+
+            # Generate a single LLM summary at the end of the stage (not per node).
+            if (
+                manager.has_stage_completed(stage.name)
+                and stage.name not in stage_best_node_summary_written
+            ):
+                best_node_for_summary = journal.get_best_node(
+                    only_good=True, use_val_metric_only=True
+                )
+                node_for_summary = (
+                    best_node_for_summary if best_node_for_summary is not None else None
+                )
+                if node_for_summary is None and journal.nodes:
+                    node_for_summary = journal.nodes[-1]
+                if node_for_summary is not None:
+                    try:
+                        logger.debug(
+                            "node_summary.callsite purpose=%s node=%s stage=%s",
+                            "step_callback.stage_completed_best_node_summary",
+                            node_for_summary.id[:8],
+                            stage.name,
+                        )
+                        summary = generate_node_summary(
+                            purpose="step_callback.stage_completed_best_node_summary",
+                            model=journal.summary_model,
+                            temperature=journal.summary_temperature,
+                            stage_name=stage.name,
+                            node=node_for_summary,
+                            task_desc=task_desc,
+                        )
+                    except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                        summary = None
+                    if summary is not None:
+                        payload = {
+                            "stage": stage.name,
+                            "node_id": node_for_summary.id,
+                            "summary": summary,
+                        }
+                        with open(
+                            notes_dir / "best_node_summary.json",
+                            mode="w",
+                            encoding="utf-8",
+                        ) as f:
+                            json.dump(payload, f, indent=2)
+                        stage_best_node_summary_written.add(stage.name)
 
             # Save the run as before
             save_run(cfg, journal, stage_name=f"stage_{stage.name}")

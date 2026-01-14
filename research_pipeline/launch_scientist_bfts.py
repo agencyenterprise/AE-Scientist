@@ -16,8 +16,8 @@ import json
 import logging
 import os
 import os.path as osp
+import pickle
 import re
-import shutil
 import sys
 import threading
 import traceback
@@ -46,6 +46,7 @@ from ai_scientist.telemetry import (
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
+from ai_scientist.treesearch.codex.codex_task_types import EvaluationMetricSpec
 from ai_scientist.treesearch.config import (
     Config,
     ReviewConfig,
@@ -422,11 +423,13 @@ def resume_run(
         fake_config.desc_file = Path(idea_json_path)
         task_desc = load_task_desc(cfg=fake_config)
 
+        evaluation_metric_spec = load_evaluation_metric_spec_from_checkpoint(run_dir=run_dir)
         manager = AgentManager(
             task_desc=task_desc,
             cfg=cfg_obj,
             workspace_dir=Path(cfg_obj.workspace_dir),
             event_callback=event_callback,
+            evaluation_metric_spec=evaluation_metric_spec,
         )
 
         if s1:
@@ -554,6 +557,27 @@ def resume_run(
         sys.exit(1)
 
 
+def load_evaluation_metric_spec_from_checkpoint(*, run_dir: Path) -> EvaluationMetricSpec:
+    stage_dirs = sorted(
+        [p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("stage_")],
+        key=lambda p: p.name,
+        reverse=True,
+    )
+    for stage_dir in stage_dirs:
+        checkpoint_path = stage_dir / "checkpoint.pkl"
+        if not checkpoint_path.exists():
+            continue
+        with open(checkpoint_path, "rb") as f:
+            checkpoint = pickle.load(f)
+        if not isinstance(checkpoint, dict):
+            raise ValueError(f"Invalid checkpoint format at {checkpoint_path}")
+        spec = checkpoint.get("evaluation_metric_spec")
+        if not isinstance(spec, EvaluationMetricSpec):
+            raise ValueError(f"Missing evaluation_metric_spec in {checkpoint_path}")
+        return spec
+    raise FileNotFoundError(f"No checkpoint.pkl found under {run_dir}")
+
+
 def determine_run_directory(
     top_log_dir: Path, existing_runs_before: set[str], resume_run_dir: Path | None
 ) -> Path | None:
@@ -606,16 +630,13 @@ def should_generate_reports(run_dir_path: Path | None) -> bool:
 
 
 def run_plot_aggregation(
-    writeup_cfg: WriteupConfig | None,
+    writeup_cfg: WriteupConfig,
     reports_base: str,
     run_dir_path: Path | None,
-    should_run_reports: bool,
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> bool:
-    if writeup_cfg is None or not should_run_reports:
-        return False
     try:
         aggregate_plots(
             base_folder=reports_base,
@@ -651,29 +672,14 @@ def run_plot_aggregation(
         return False
 
 
-def cleanup_aggregated_results(reports_base: str) -> None:
-    shutil.rmtree(osp.join(reports_base, "experiment_results"), ignore_errors=True)
-
-
 def run_writeup_stage(
-    writeup_cfg: WriteupConfig | None,
+    writeup_cfg: WriteupConfig,
     reports_base: str,
     run_dir_path: Path | None,
-    should_run_reports: bool,
-    agg_ok: bool,
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> None:
-    if writeup_cfg is None:
-        logger.info("Writeup configuration missing; skipping writeup stage.")
-        return
-    if not should_run_reports:
-        logger.info("Reports generation disabled; skipping writeup stage.")
-        return
-    if not agg_ok:
-        logger.info("Plot aggregation failed; skipping writeup stage.")
-        return
 
     writeup_retries = writeup_cfg.writeup_retries
     num_cite_rounds = writeup_cfg.num_cite_rounds
@@ -752,20 +758,15 @@ def run_writeup_stage(
 
 
 def run_review_stage(
-    review_cfg: ReviewConfig | None,
+    review_cfg: ReviewConfig,
     reports_base: str,
-    run_dir_path: Path | None,
-    should_run_reports: bool,
-    agg_ok: bool,
+    run_dir_path: Path,
     artifact_callback: ArtifactCallback,
     telemetry_cfg: TelemetryConfig | None,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
     webhook_client: WebhookClient | None = None,
 ) -> None:
-    if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
-        return
-
     pdf_path = find_pdf_path_for_review(
         idea_dir=reports_base,
         run_dir_name=run_dir_path.name if run_dir_path is not None else None,
@@ -970,44 +971,37 @@ def execute_launcher(args: argparse.Namespace) -> None:
         )
         write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
 
-        should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
+        if writeup_cfg is not None and run_dir_path is not None:
+            agg_ok = run_plot_aggregation(
+                writeup_cfg=writeup_cfg,
+                reports_base=reports_base,
+                run_dir_path=run_dir_path,
+                artifact_callback=artifact_callback,
+                event_callback=event_callback,
+                run_id=run_id,
+            )
+            if agg_ok:
+                run_writeup_stage(
+                    writeup_cfg=writeup_cfg,
+                    reports_base=reports_base,
+                    run_dir_path=run_dir_path,
+                    artifact_callback=artifact_callback,
+                    event_callback=event_callback,
+                    run_id=run_id,
+                )
 
-        agg_ok = run_plot_aggregation(
-            writeup_cfg=writeup_cfg,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            artifact_callback=artifact_callback,
-            event_callback=event_callback,
-            run_id=run_id,
-        )
-
-        cleanup_aggregated_results(reports_base=reports_base)
-
-        run_writeup_stage(
-            writeup_cfg=writeup_cfg,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            agg_ok=agg_ok,
-            artifact_callback=artifact_callback,
-            event_callback=event_callback,
-            run_id=run_id,
-        )
-
-        run_review_stage(
-            review_cfg=review_cfg if review_enabled else None,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            agg_ok=agg_ok,
-            artifact_callback=artifact_callback,
-            telemetry_cfg=base_cfg.telemetry,
-            event_callback=event_callback,
-            run_id=run_id,
-            webhook_client=webhook_client,
-        )
+                if review_enabled and review_cfg is not None:
+                    run_review_stage(
+                        review_cfg=review_cfg,
+                        reports_base=reports_base,
+                        run_dir_path=run_dir_path,
+                        artifact_callback=artifact_callback,
+                        telemetry_cfg=base_cfg.telemetry,
+                        event_callback=event_callback,
+                        run_id=run_id,
+                        webhook_client=webhook_client,
+                    )
 
         if artifact_callback is not None and run_dir_path is not None:
             # This call is also performed by the server before terminating the pod.

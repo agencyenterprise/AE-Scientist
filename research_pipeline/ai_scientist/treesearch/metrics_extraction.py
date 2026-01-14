@@ -9,7 +9,6 @@ Responsibilities:
 from typing import Dict, List
 
 from .journal import Journal
-from .node_summary import generate_node_summary
 
 
 def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
@@ -17,19 +16,19 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
     node_summaries: list[object] = []
     vlm_feedback_list: list[object] = []
 
-    for node in journal.nodes:
-        try:
-            node_summary = generate_node_summary(
-                purpose="metrics_extraction.gather_stage_metrics",
-                model=journal.summary_model,
-                temperature=journal.summary_temperature,
-                stage_name=journal.stage_name,
-                node=node,
-                task_desc=None,
-            )
-            node_summaries.append(node_summary)
-        except Exception:
-            continue
+    # Deterministic summaries only (no LLM calls). Keep small and recent to avoid
+    # bloating downstream prompts/logs.
+    recent_nodes = journal.nodes[-6:] if len(journal.nodes) > 6 else journal.nodes
+    for node in recent_nodes:
+        node_summaries.append(
+            {
+                "node_id": node.id,
+                "is_buggy": bool(node.is_buggy),
+                "metric": str(node.metric) if node.metric is not None else None,
+                "analysis": (node.analysis or "") if node.analysis else None,
+                "plan": (node.plan or "") if node.plan else None,
+            }
+        )
 
     for node in journal.good_nodes:
         if node.vlm_feedback is not None:

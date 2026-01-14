@@ -33,7 +33,6 @@ from ai_scientist.treesearch.events import (
 from . import stage_control
 from .codex.codex_task_types import EvaluationMetricSpec
 from .config import Config, TaskDescription
-from .evaluation_metric import define_evaluation_metric_spec_via_llm
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .parallel_agent import ParallelAgent
@@ -90,6 +89,7 @@ class AgentManager:
         cfg: Config,
         workspace_dir: Path,
         event_callback: Callable[[BaseEvent], None],
+        evaluation_metric_spec: EvaluationMetricSpec,
     ) -> None:
         # Ingest and validate task description (idea)
 
@@ -121,7 +121,7 @@ class AgentManager:
         self._stage_skip_states: Dict[str, bool] = {}
         self._run_outcome = RunOutcome(success=True, message="")
         stage_control.reset_stage_state()
-        self.evaluation_metric_spec = self._define_global_evaluation_metric_spec()
+        self.evaluation_metric_spec = evaluation_metric_spec
 
     def get_run_outcome(self) -> RunOutcome:
         return self._run_outcome
@@ -130,26 +130,6 @@ class AgentManager:
         if not self._run_outcome.success:
             return
         self._run_outcome = RunOutcome(success=False, message=message)
-
-    def _define_global_evaluation_metric_spec(self) -> EvaluationMetricSpec:
-        """
-        Define the run-wide evaluation metric spec before any experiment code is generated.
-        """
-        try:
-            self.event_callback(
-                RunLogEvent(
-                    message="Defining global evaluation metric spec via LLM...", level="info"
-                )
-            )
-        except (OSError, RuntimeError, ValueError, TypeError):
-            logger.exception("Failed to emit run log event for metric definition.")
-
-        stage_cfg = self.cfg.agent.feedback
-        return define_evaluation_metric_spec_via_llm(
-            task_desc=self.task_desc,
-            model=stage_cfg.model,
-            temperature=stage_cfg.temperature,
-        )
 
     def get_max_iterations(self, *, stage_identifier: StageIdentifier) -> int:
         """Get max iterations for a stage from config."""
