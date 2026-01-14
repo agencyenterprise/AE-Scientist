@@ -155,6 +155,9 @@ class Settings:
         os.getenv("PIPELINE_MONITOR_MAX_RUNTIME_HOURS", "12")
     )
 
+    # Narrator architecture feature flag
+    ENABLE_NARRATOR: bool = os.getenv("ENABLE_NARRATOR", "false").lower() in ("true", "1", "yes")
+
     # Stripe / billing configuration
     STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
     STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")

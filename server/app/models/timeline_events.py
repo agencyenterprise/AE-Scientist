@@ -177,7 +177,7 @@ class ProgressUpdateEvent(TimelineEventBase):
     headline: str = Field(..., description="Short headline")
     current_focus: Optional[str] = Field(None, description="What's happening right now")
 
-    iteration: int = Field(..., description="Current iteration within the stage")
+    iteration: int = Field(..., description="Current iteration within the stage (1-based index)")
     max_iterations: int = Field(..., description="Total iterations planned")
     
     current_best: Optional[MetricCollection] = Field(
@@ -212,6 +212,47 @@ class PaperGenerationStepEvent(TimelineEventBase):
     )
 
 
+class NodeExecutionStartedEvent(TimelineEventBase):
+    """
+    Emitted when a node starts executing code.
+    
+    Emission Criteria:
+    - Triggered by running_code events from research pipeline
+    - Tracks individual node execution lifecycle
+    - Helps show concurrent node execution
+    
+    Frequency: 10-50 per stage (one per node execution)
+    """
+
+    type: Literal["node_execution_started"] = "node_execution_started"
+
+    headline: str = Field(..., description="Short headline")
+    execution_id: str = Field(..., description="Unique execution ID")
+    run_type: str = Field(default="main_execution", description="Type of run")
+    code_preview: Optional[str] = Field(None, description="Preview of code being executed")
+
+
+class NodeExecutionCompletedEvent(TimelineEventBase):
+    """
+    Emitted when a node completes execution.
+    
+    Emission Criteria:
+    - Triggered by run_completed events from research pipeline
+    - Tracks node completion with timing and status
+    - Pairs with NodeExecutionStartedEvent
+    
+    Frequency: 10-50 per stage (one per node execution)
+    """
+
+    type: Literal["node_execution_completed"] = "node_execution_completed"
+
+    headline: str = Field(..., description="Short headline")
+    execution_id: str = Field(..., description="Unique execution ID")
+    status: Literal["success", "failed"] = Field(..., description="Execution status")
+    exec_time: float = Field(..., description="Execution time in seconds")
+    run_type: str = Field(default="main_execution", description="Type of run")
+
+
 # ============================================================================
 # TIMELINE EVENT UNION
 # ============================================================================
@@ -223,6 +264,8 @@ TimelineEvent = Annotated[
         StageCompletedEvent,
         ProgressUpdateEvent,
         PaperGenerationStepEvent,
+        NodeExecutionStartedEvent,
+        NodeExecutionCompletedEvent,
     ],
     Field(discriminator="type"),
 ]
