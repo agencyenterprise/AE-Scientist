@@ -7,6 +7,7 @@ This is the orchestrator that:
 3. Transforms them into timeline events (via event_handlers)
 4. Updates state via reducer (via state_reducer)
 5. Persists timeline events and state to database
+6. Publishes events to SSE subscribers
 
 Pattern:
 - Feature-flagged (can be disabled)
@@ -23,6 +24,7 @@ from typing import Any, Dict, Optional
 
 from psycopg import AsyncConnection
 
+from app.api.narrator_stream import publish_narrator_event
 from app.config import settings
 from app.models.narrator_state import ResearchRunState, create_initial_state
 from app.services.database import DatabaseManager
@@ -278,20 +280,56 @@ async def _process_single_event(
             [e.type for e in timeline_events],
         )
 
-        # Step 3: Persist timeline events
+        # Step 3: Persist timeline events and publish to SSE subscribers
         for timeline_event in timeline_events:
             await db.insert_timeline_event(run_id=run_id, event=timeline_event)
+            
+            # Publish timeline event to SSE subscribers immediately after persistence
+            publish_narrator_event(
+                run_id=run_id,
+                event_type="timeline_event",
+                data=timeline_event.model_dump(mode="json"),
+            )
 
         # Step 4: Apply events through reducer to compute new state
+        # Accumulate all state changes to publish as a single delta
         new_state = current_state
+        accumulated_changes: Dict[str, Any] = {}
+        
         for timeline_event in timeline_events:
             update_result = reduce(new_state, timeline_event)
 
             if update_result.should_update:
                 new_state = apply_changes(new_state, update_result.changes)
+                # Merge changes into accumulated dict
+                accumulated_changes.update(update_result.changes)
 
         # Step 5: Persist updated state (no version check needed - we have lock)
         await db.upsert_research_run_state(run_id=run_id, state=new_state, conn=conn)
+
+        # Step 6: Publish state delta to SSE subscribers (only changed fields)
+        if accumulated_changes:
+            # Serialize the changes for JSON transmission
+            serialized_changes: Dict[str, Any] = {}
+            for key, value in accumulated_changes.items():
+                if hasattr(value, "model_dump"):
+                    # Pydantic model - serialize it
+                    serialized_changes[key] = value.model_dump(mode="json")
+                elif isinstance(value, list):
+                    # List - serialize each item if it's a Pydantic model
+                    serialized_changes[key] = [
+                        item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                        for item in value
+                    ]
+                else:
+                    # Primitive type - use as is
+                    serialized_changes[key] = value
+            
+            publish_narrator_event(
+                run_id=run_id,
+                event_type="state_delta",
+                data=serialized_changes,
+            )
 
         logger.info(
             "Narrator: Events processed successfully run=%s count=%d",

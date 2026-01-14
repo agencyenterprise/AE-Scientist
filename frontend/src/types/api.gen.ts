@@ -1284,6 +1284,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-runs/{run_id}/narrative-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Narrative State
+         * @description Get the current narrator state for a research run.
+         *
+         *     This endpoint exists primarily to ensure ResearchRunState and TimelineEvent
+         *     types are properly exported to the OpenAPI schema and generated in frontend types.
+         *
+         *     Returns the complete state including timeline events.
+         *
+         *     Args:
+         *         run_id: Research run ID
+         *         request: FastAPI request object (for auth)
+         *         db: Database manager
+         *
+         *     Returns:
+         *         ResearchRunState with full timeline
+         */
+        get: operations["get_narrative_state_api_research_runs__run_id__narrative_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-runs/{run_id}/narrative-stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Narrative Stream
+         * @description SSE endpoint that streams narrator timeline events and state updates.
+         *
+         *     Event Types:
+         *     - "state_snapshot": Complete state snapshot (sent on connect)
+         *     - "timeline_event": Individual timeline event (sent on connect + live)
+         *     - "state_delta": Partial state update with only changed fields (live)
+         *     - "ping": Keepalive ping (every 30s)
+         *
+         *     Args:
+         *         run_id: Research run ID
+         *         request: FastAPI request object (for auth)
+         *         db: Database manager
+         *
+         *     Returns:
+         *         StreamingResponse streaming narrator events
+         */
+        get: operations["narrative_stream_api_research_runs__run_id__narrative_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/": {
         parameters: {
             query?: never;
@@ -1350,6 +1417,51 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActiveNode
+         * @description Represents a node currently executing in the research pipeline.
+         */
+        ActiveNode: {
+            /**
+             * Execution Id
+             * @description Unique execution ID
+             */
+            execution_id: string;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Status
+             * @description Current execution status
+             * @default running
+             * @enum {string}
+             */
+            status: "running" | "completed" | "failed";
+            /**
+             * Started At
+             * Format: date-time
+             * @description When execution started
+             */
+            started_at: string;
+            /**
+             * Completed At
+             * @description When execution completed
+             */
+            completed_at?: string | null;
+            /**
+             * Exec Time
+             * @description Execution time in seconds
+             */
+            exec_time?: number | null;
+            /**
+             * Run Type
+             * @description Type of run
+             * @default main_execution
+             */
+            run_type: string;
+        };
         /**
          * ArtifactPresignedUrlResponse
          * @description Response containing presigned S3 download URL.
@@ -2700,12 +2812,277 @@ export interface components {
              */
             message: string;
         };
+        /**
+         * MetricCollection
+         * @description Group of related metrics for a node or stage.
+         */
+        MetricCollection: {
+            /** @description Primary metric being optimized */
+            primary: components["schemas"]["MetricInterpretation"];
+            /**
+             * Secondary
+             * @description Additional metrics tracked
+             */
+            secondary?: components["schemas"]["MetricInterpretation"][];
+        };
+        /**
+         * MetricInterpretation
+         * @description Interpreted metric with human-readable context.
+         *
+         *     Transforms raw metric (0.8234567) into meaningful information:
+         *     - Formatted: "82.3%"
+         *     - Interpretation: "5.2% above baseline"
+         */
+        MetricInterpretation: {
+            /**
+             * Name
+             * @description Metric name
+             * @example accuracy
+             * @example f1_score
+             */
+            name: string;
+            /**
+             * Value
+             * @description Raw metric value
+             */
+            value: number;
+            /**
+             * Formatted
+             * @description Formatted for display
+             * @example 82.3%
+             * @example 0.823
+             */
+            formatted: string;
+            /**
+             * Interpretation
+             * @description What this value means
+             * @example 5.2% above baseline
+             * @example Best result so far
+             */
+            interpretation?: string | null;
+            /**
+             * Context
+             * @description Evaluation context
+             * @example Validation set
+             * @example Test dataset
+             */
+            context?: string | null;
+            /**
+             * Comparison
+             * @description Comparison with baseline/previous best
+             * @example {
+             *       "baseline": 0.77,
+             *       "delta_vs_baseline": 0.053,
+             *       "delta_vs_previous": 0.013,
+             *       "previous_best": 0.81
+             *     }
+             */
+            comparison?: Record<string, never> | null;
+        };
         /** ModelCost */
         ModelCost: {
             /** Model */
             model: string;
             /** Cost */
             cost: number;
+        };
+        /**
+         * NodeExecutionCompletedEvent
+         * @description Emitted when a node completes execution.
+         *
+         *     Emission Criteria:
+         *     - Triggered by run_completed events from research pipeline
+         *     - Tracks node completion with timing and status
+         *     - Pairs with NodeExecutionStartedEvent
+         *
+         *     Frequency: 10-50 per stage (one per node execution)
+         */
+        NodeExecutionCompletedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "node_execution_completed";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Execution Id
+             * @description Unique execution ID
+             */
+            execution_id: string;
+            /**
+             * Status
+             * @description Execution status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /**
+             * Exec Time
+             * @description Execution time in seconds
+             */
+            exec_time: number;
+            /**
+             * Run Type
+             * @description Type of run
+             * @default main_execution
+             */
+            run_type: string;
+        };
+        /**
+         * NodeExecutionStartedEvent
+         * @description Emitted when a node starts executing code.
+         *
+         *     Emission Criteria:
+         *     - Triggered by running_code events from research pipeline
+         *     - Tracks individual node execution lifecycle
+         *     - Helps show concurrent node execution
+         *
+         *     Frequency: 10-50 per stage (one per node execution)
+         */
+        NodeExecutionStartedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "node_execution_started";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Execution Id
+             * @description Unique execution ID
+             */
+            execution_id: string;
+            /**
+             * Run Type
+             * @description Type of run
+             * @default main_execution
+             */
+            run_type: string;
+            /**
+             * Code Preview
+             * @description Preview of code being executed
+             */
+            code_preview?: string | null;
+        };
+        /**
+         * NodeResultEvent
+         * @description Emitted when a node completes execution.
+         *
+         *     Emission Criteria:
+         *     - Triggered when substage_event arrives with node completion
+         *     - Includes metrics from corresponding stage_progress event
+         *     - Emitted for each node that completes (success or failure)
+         *
+         *     Frequency: 10-50 per stage (varies by stage complexity)
+         */
+        NodeResultEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "node_result";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Outcome
+             * @description Execution outcome
+             * @enum {string}
+             */
+            outcome: "success" | "failure" | "partial";
+            /**
+             * Summary
+             * @description Brief description of what occurred
+             */
+            summary?: string | null;
+            /** @description Interpreted metrics */
+            metrics?: components["schemas"]["MetricCollection"] | null;
+            /**
+             * Error Type
+             * @description Error type if failed
+             */
+            error_type?: string | null;
+            /**
+             * Error Summary
+             * @description Error explanation if failed
+             */
+            error_summary?: string | null;
+            /**
+             * Exec Time
+             * @description Execution time in seconds
+             */
+            exec_time?: number | null;
         };
         /** PaperGenerationProgressEvent */
         PaperGenerationProgressEvent: {
@@ -2725,6 +3102,142 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["PaperGenerationProgressEvent"];
+        };
+        /**
+         * PaperGenerationStepEvent
+         * @description Emitted during Stage 5 (paper generation).
+         *
+         *     Emission Criteria:
+         *     - Triggered by paper_generation_progress events
+         *     - Shows current step and progress within paper generation
+         *     - Emitted for each major paper generation step
+         *
+         *     Frequency: 4-6 per paper generation stage
+         */
+        PaperGenerationStepEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paper_generation_step";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Step
+             * @description Current step
+             * @enum {string}
+             */
+            step: "plot_aggregation" | "citation_gathering" | "paper_writeup" | "paper_review";
+            /**
+             * Substep
+             * @description Substep if applicable
+             */
+            substep?: string | null;
+            /**
+             * Description
+             * @description What's happening in this step
+             */
+            description?: string | null;
+            /**
+             * Progress
+             * @description Overall progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Step Progress
+             * @description Progress within this step (0.0-1.0)
+             */
+            step_progress: number;
+            /**
+             * Details
+             * @description Step-specific details (figures selected, citations found, etc.)
+             */
+            details?: Record<string, never> | null;
+        };
+        /**
+         * ProgressUpdateEvent
+         * @description Emitted periodically to show current focus.
+         *
+         *     Emission Criteria:
+         *     - Triggered by stage_progress events (every iteration)
+         *     - Shows current iteration, focus, and progress metrics
+         *     - Throttled to avoid overwhelming the timeline
+         *
+         *     Frequency: ~10 per stage (one per iteration)
+         */
+        ProgressUpdateEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "progress_update";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Current Focus
+             * @description What's happening right now
+             */
+            current_focus?: string | null;
+            /**
+             * Iteration
+             * @description Current iteration within the stage (1-based index)
+             */
+            iteration: number;
+            /**
+             * Max Iterations
+             * @description Total iterations planned
+             */
+            max_iterations: number;
+            /** @description Current best metrics if available */
+            current_best?: components["schemas"]["MetricCollection"] | null;
         };
         /** ResearchCost */
         ResearchCost: {
@@ -3574,6 +4087,87 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /**
+         * ResearchRunState
+         * @description Complete state of a research run. Single source of truth for frontend.
+         */
+        ResearchRunState: {
+            /**
+             * Run Id
+             * @description Unique run identifier
+             */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** Conversation Id */
+            conversation_id: number;
+            /** Overall Goal */
+            overall_goal?: string | null;
+            /** Hypothesis */
+            hypothesis?: string | null;
+            /** Stages */
+            stages?: components["schemas"]["StageGoal"][];
+            /** Current Stage */
+            current_stage?: string | null;
+            current_stage_goal?: components["schemas"]["StageGoal"] | null;
+            /** Timeline */
+            timeline?: (components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"])[];
+            /** Current Focus */
+            current_focus?: string | null;
+            /** Active Nodes */
+            active_nodes?: components["schemas"]["ActiveNode"][];
+            /**
+             * Overall Progress
+             * @default 0
+             */
+            overall_progress: number;
+            /**
+             * Current Stage Progress
+             * @default 0
+             */
+            current_stage_progress: number;
+            /** Best Node Id */
+            best_node_id?: string | null;
+            best_metrics?: components["schemas"]["MetricCollection"] | null;
+            /** Best Node Reasoning */
+            best_node_reasoning?: string | null;
+            /** Artifact Ids */
+            artifact_ids?: number[];
+            /** Tree Viz */
+            tree_viz?: Record<string, never>;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Started Running At */
+            started_running_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Gpu Type */
+            gpu_type?: string | null;
+            /** Estimated Cost Cents */
+            estimated_cost_cents?: number | null;
+            /** Actual Cost Cents */
+            actual_cost_cents?: number | null;
+            /** Cost Per Hour Cents */
+            cost_per_hour_cents?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
         /** ResearchRunStopResponse */
         ResearchRunStopResponse: {
             /** Run Id */
@@ -3897,6 +4491,166 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * StageCompletedEvent
+         * @description Emitted when a stage completes.
+         *
+         *     Emission Criteria:
+         *     - Triggered when substage_completed event arrives
+         *     - Enriched with data from substage_summary event (already LLM-generated)
+         *     - Emitted once per stage completion
+         *
+         *     Frequency: 5 per run (one per stage)
+         */
+        StageCompletedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_completed";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Summary
+             * @description What was accomplished (from substage_summary)
+             */
+            summary?: string | null;
+            /**
+             * Best Node Id
+             * @description ID of best node from this stage
+             */
+            best_node_id?: string | null;
+            /** @description Best metrics achieved */
+            best_metrics?: components["schemas"]["MetricCollection"] | null;
+            /**
+             * Total Attempts
+             * @description Total nodes explored
+             * @default 0
+             */
+            total_attempts: number;
+            /**
+             * Successful Attempts
+             * @description Nodes that completed successfully
+             * @default 0
+             */
+            successful_attempts: number;
+            /**
+             * Failed Attempts
+             * @description Nodes that failed
+             * @default 0
+             */
+            failed_attempts: number;
+            /**
+             * Confidence
+             * @description Confidence in results (from substage_summary)
+             */
+            confidence?: ("high" | "medium" | "low") | null;
+        };
+        /**
+         * StageGoal
+         * @description Goal and metadata for a pipeline stage.
+         */
+        StageGoal: {
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Title
+             * @description Display title
+             */
+            title: string;
+            /**
+             * Goal
+             * @description What we're trying to achieve
+             */
+            goal?: string | null;
+            /**
+             * Approach
+             * @description How we're approaching it
+             */
+            approach?: string | null;
+            /**
+             * Success Criteria
+             * @description How we know we're done
+             */
+            success_criteria?: string | null;
+            /**
+             * Status
+             * @description Current status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "completed" | "skipped";
+            /**
+             * Started At
+             * @description When stage started
+             */
+            started_at?: string | null;
+            /**
+             * Completed At
+             * @description When stage completed
+             */
+            completed_at?: string | null;
+            /**
+             * Current Iteration
+             * @description Current iteration
+             */
+            current_iteration?: number | null;
+            /**
+             * Max Iterations
+             * @description Maximum iterations
+             */
+            max_iterations?: number | null;
+            /**
+             * Progress
+             * @description Progress 0.0-1.0
+             */
+            progress?: number | null;
+            /**
+             * Total Nodes
+             * @description Total nodes in this stage
+             * @default 0
+             */
+            total_nodes: number;
+            /**
+             * Buggy Nodes
+             * @description Number of buggy nodes
+             * @default 0
+             */
+            buggy_nodes: number;
+            /**
+             * Good Nodes
+             * @description Number of good nodes
+             * @default 0
+             */
+            good_nodes: number;
+        };
         /** StageProgressEvent */
         StageProgressEvent: {
             /** Stage */
@@ -3945,6 +4699,60 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["StageSkipWindowEventModel"];
+        };
+        /**
+         * StageStartedEvent
+         * @description Emitted when a stage begins.
+         *
+         *     Emission Criteria:
+         *     - Triggered when stage_progress event arrives with iteration = 0
+         *     - OR when first substage_event arrives for a new stage
+         *     - Emitted once per stage (5 times per run)
+         *
+         *     Frequency: 5 per run (one per stage)
+         */
+        StageStartedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_started";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Stage Name
+             * @description Human-readable stage name
+             */
+            stage_name: string;
+            /**
+             * Goal
+             * @description What we're trying to achieve
+             */
+            goal?: string | null;
         };
         /** SubstageCompletedEvent */
         SubstageCompletedEvent: {
@@ -6266,6 +7074,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResearchRunCostResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_narrative_state_api_research_runs__run_id__narrative_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    narrative_stream_api_research_runs__run_id__narrative_stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
