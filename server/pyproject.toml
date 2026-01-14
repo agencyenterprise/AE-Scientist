@@ -90,14 +90,25 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-plugin]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [tool.pyright]
 pythonVersion = "3.12"
-typeCheckingMode = "standard"
+typeCheckingMode = "basic"
 exclude = [
     ".venv",
     "playground",
 ]
+# Pyright has built-in Pydantic support, but it's more strict than mypy
+# We use mypy as the primary type checker with the Pydantic plugin
+reportCallIssue = "warning"
+reportIncompatibleMethodOverride = false
+reportIncompatibleVariableOverride = false
 
 [tool.ruff]
 target-version = "py312"

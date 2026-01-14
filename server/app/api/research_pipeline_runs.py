@@ -32,6 +32,7 @@ from app.models import (
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.narrator_state import ResearchRunStatus
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
@@ -950,7 +951,10 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
             SSECompleteEvent(
                 type="complete",
                 data=ResearchRunCompleteData(
-                    status=run.status,  # type: ignore[arg-type]
+                    status=cast(
+                        ResearchRunStatus,
+                        run.status,
+                    ),
                     success=run.status == "completed",
                     message=message,
                 ),
