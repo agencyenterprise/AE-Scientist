@@ -729,6 +729,247 @@ def _move_experiment_artifacts(
     )
 
 
+def _absorb_exec_result(
+    *,
+    child_node: Node,
+    term_out: list[str],
+    exec_time: float,
+    exc_type: str | None,
+    exc_info: dict[str, object] | None,
+) -> None:
+    child_node.absorb_exec_result(
+        SimpleNamespace(
+            term_out=term_out,
+            exec_time=exec_time,
+            exc_type=exc_type,
+            exc_info=exc_info,
+            exc_stack=None,
+        )
+    )
+    child_node.exec_time = exec_time
+    child_node.exc_type = exc_type
+    child_node.exc_info = exc_info or {}
+
+
+def _return_buggy_node_dict(
+    *,
+    cfg: AppConfig,
+    execution_id: str,
+    plan: str,
+    code: str,
+    analysis: str,
+    exc_type: str,
+    exec_time: float,
+    term_out: list[str],
+    exc_info: dict[str, object] | None,
+    parent_node: Node | None,
+    working_dir: Path,
+    event_callback: Callable[[BaseEvent], None],
+) -> dict[str, object]:
+    child_node = Node(
+        id=execution_id,
+        plan=plan,
+        code=code,
+        is_buggy=True,
+        is_buggy_plots=True,
+        analysis=analysis,
+        exc_type=exc_type,
+        exec_time=exec_time,
+    )
+    termination_payload = execution_registry.get_termination_payload(execution_id) or ""
+    if termination_payload.strip():
+        child_node.is_user_feedback = True
+        child_node.user_feedback_payload = termination_payload
+        child_node.user_feedback_pending = True
+    child_node.metric = WorstMetricValue()
+    if parent_node is not None:
+        _attach_parent(child_node=child_node, parent_node=parent_node)
+    _absorb_exec_result(
+        child_node=child_node,
+        term_out=term_out,
+        exec_time=exec_time,
+        exc_type=exc_type,
+        exc_info=exc_info,
+    )
+    _move_experiment_artifacts(
+        cfg=cfg,
+        child_node=child_node,
+        working_dir=working_dir,
+        event_callback=event_callback,
+    )
+    result_data = child_node.to_dict()
+    pickle.dumps(result_data)
+    return result_data
+
+
+def _read_text_or_empty(*, path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug("Failed reading text file at %s", path, exc_info=True)
+        return ""
+
+
+def _prepare_codex_task_file(
+    *,
+    workspace_dir: Path,
+    execution_id: str,
+    stage_identifier: StageIdentifier,
+    stage_name: str,
+    cfg: AppConfig,
+    venv_dir: Path,
+    task_desc: TaskDescription,
+    stage_goals: str,
+    evaluation_metric_spec: EvaluationMetricSpec,
+    memory_summary: str,
+    parent_node: Node | None,
+    seed_eval: bool,
+    seed_value: int,
+    seed_aggregation: SeedAggregationPayload | None,
+    stage2_hyperparam_idea: StageIdea | None,
+    stage4_ablation_idea: StageIdea | None,
+    gpu_id: int | None,
+    gpu_spec: GPUSpec | None,
+    user_feedback_payload: str,
+) -> tuple[Path, Path, dict[str, object]]:
+    output_json_file = workspace_dir / "node_result.json"
+    env_ctx = build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec)
+    parent_node_summary = (
+        _parent_node_summary_for_task_context(parent_node=parent_node)
+        if parent_node is not None
+        else None
+    )
+    task_context = CodexTaskContext(
+        execution_id=execution_id,
+        stage_identifier=stage_identifier.name,
+        seed_eval=seed_eval,
+        seed_value=seed_value,
+        seed_aggregation=seed_aggregation,
+        stage2_hyperparam_idea=stage2_hyperparam_idea,
+        stage4_ablation_idea=stage4_ablation_idea,
+        gpu_id=gpu_id,
+        agent_file_name=cfg.exec.agent_file_name,
+        timeout_seconds=cfg.exec.timeout,
+        parent_node=parent_node_summary,
+        user_feedback_payload=user_feedback_payload,
+        task_desc=task_desc,
+        stage_goals=stage_goals,
+        evaluation_metric_spec=evaluation_metric_spec,
+        memory_summary=memory_summary,
+    )
+    logger.debug(
+        "codex.task_context_built execution_id=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
+        execution_id[:8],
+        stage_name,
+        str(evaluation_metric_spec.name or ""),
+        seed_eval,
+        seed_value,
+    )
+    task_file = _write_codex_task_file(
+        workspace_dir=workspace_dir,
+        execution_id=execution_id,
+        stage_identifier=stage_identifier,
+        stage_name=stage_name,
+        timeout_seconds=cfg.exec.timeout,
+        agent_file_name=cfg.exec.agent_file_name,
+        output_json_file=output_json_file,
+        venv_dir=venv_dir,
+        cfg=cfg,
+        task_context=task_context,
+        environment_context=env_ctx,
+        parent_node=parent_node,
+    )
+    logger.debug(
+        "codex.task.written execution_id=%s path=%s chars=%s",
+        execution_id[:8],
+        task_file,
+        len(task_file.read_text(encoding="utf-8", errors="replace")),
+    )
+    codex_task_text = _read_text_or_empty(path=task_file)
+    if codex_task_text:
+        logger.debug(
+            "codex.task.contents execution_id=%s path=%s chars=%s\n%s",
+            execution_id[:8],
+            task_file,
+            len(codex_task_text),
+            codex_task_text,
+        )
+
+    return output_json_file, task_file, env_ctx
+
+
+def _run_codex_cli(
+    *,
+    workspace_dir: Path,
+    execution_id: str,
+    stage_name: str,
+    cfg: AppConfig,
+    codex_argv: list[str],
+    codex_env: dict[str, str],
+    task_file: Path,
+    event_callback: Callable[[BaseEvent], None],
+) -> tuple[list[str], float, str | None, dict[str, object] | None]:
+    runner = CodexCliRunner(
+        workspace_dir=workspace_dir,
+        timeout_seconds=cfg.exec.timeout,
+        argv=codex_argv,
+        env=codex_env,
+    )
+
+    started_at = datetime.now(timezone.utc)
+    event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
+    event_callback(
+        RunningCodeEvent(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            code="(Codex-managed)",
+            started_at=started_at,
+        )
+    )
+
+    def _pid_tracker(*, pid: int) -> None:
+        execution_registry.update_pid(execution_id=execution_id, pid=pid)
+
+    def _termination_checker() -> bool:
+        return execution_registry.is_terminated(execution_id=execution_id)
+
+    term_out, exec_time, exc_type, exc_info = runner.run(
+        task_file=task_file,
+        pid_callback=lambda pid: _pid_tracker(pid=pid),
+        termination_checker=_termination_checker,
+        stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
+    )
+    logger.debug(
+        "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
+        execution_id[:8],
+        "success" if exc_type is None else "failed",
+        exec_time,
+        exc_type,
+        exc_info,
+        workspace_dir,
+        workspace_dir / "codex_session.log",
+        workspace_dir / "codex_events.jsonl",
+    )
+
+    completed_at = datetime.now(timezone.utc)
+    status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
+    event_callback(
+        RunCompletedEvent(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            status=status,
+            exec_time=exec_time,
+            completed_at=completed_at,
+        )
+    )
+    if exc_type is None:
+        execution_registry.mark_completed(execution_id=execution_id)
+    else:
+        execution_registry.clear_pid(execution_id=execution_id)
+
+    return term_out, exec_time, exc_type, exc_info
+
+
 def process_node(
     *,
     node_data: dict[str, object] | None,
@@ -817,135 +1058,38 @@ def process_node(
             event_callback=event_callback,
         )
 
-    output_json_file = workspace_dir / "node_result.json"
-    env_ctx = build_environment_context(gpu_id=gpu_id, gpu_spec=gpu_spec)
-    parent_node_summary = (
-        _parent_node_summary_for_task_context(parent_node=parent_node)
-        if parent_node is not None
-        else None
-    )
-    task_context = CodexTaskContext(
+    output_json_file, task_file, _env_ctx = _prepare_codex_task_file(
+        workspace_dir=workspace_dir,
         execution_id=execution_id,
-        stage_identifier=stage_identifier.name,
+        stage_identifier=stage_identifier,
+        stage_name=stage_name,
+        cfg=cfg,
+        venv_dir=venv_dir,
+        task_desc=task_desc,
+        stage_goals=stage_goals,
+        evaluation_metric_spec=evaluation_metric_spec,
+        memory_summary=memory_summary,
+        parent_node=parent_node,
         seed_eval=seed_eval,
         seed_value=seed_value,
         seed_aggregation=seed_aggregation,
         stage2_hyperparam_idea=stage2_hyperparam_idea,
         stage4_ablation_idea=stage4_ablation_idea,
         gpu_id=gpu_id,
-        agent_file_name=cfg.exec.agent_file_name,
-        timeout_seconds=cfg.exec.timeout,
-        parent_node=parent_node_summary,
+        gpu_spec=gpu_spec,
         user_feedback_payload=user_feedback_payload,
-        task_desc=task_desc,
-        stage_goals=stage_goals,
-        evaluation_metric_spec=evaluation_metric_spec,
-        memory_summary=memory_summary,
     )
-    logger.debug(
-        "codex.task_context_built execution_id=%s stage=%s metric_name=%s seed_eval=%s seed_value=%s",
-        execution_id[:8],
-        stage_name,
-        str(evaluation_metric_spec.name or ""),
-        seed_eval,
-        seed_value,
-    )
-    task_file = _write_codex_task_file(
+
+    term_out, exec_time, exc_type, exc_info = _run_codex_cli(
         workspace_dir=workspace_dir,
         execution_id=execution_id,
-        stage_identifier=stage_identifier,
         stage_name=stage_name,
-        timeout_seconds=cfg.exec.timeout,
-        agent_file_name=cfg.exec.agent_file_name,
-        output_json_file=output_json_file,
-        venv_dir=venv_dir,
         cfg=cfg,
-        task_context=task_context,
-        environment_context=env_ctx,
-        parent_node=parent_node,
-    )
-    logger.debug(
-        "codex.task.written execution_id=%s path=%s chars=%s",
-        execution_id[:8],
-        task_file,
-        len(task_file.read_text(encoding="utf-8", errors="replace")),
-    )
-    try:
-        codex_task_text = task_file.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        logger.debug(
-            "codex.task.read_failed execution_id=%s path=%s",
-            execution_id[:8],
-            task_file,
-            exc_info=True,
-        )
-    else:
-        logger.debug(
-            "codex.task.contents execution_id=%s path=%s chars=%s\n%s",
-            execution_id[:8],
-            task_file,
-            len(codex_task_text),
-            codex_task_text,
-        )
-
-    runner = CodexCliRunner(
-        workspace_dir=workspace_dir,
-        timeout_seconds=cfg.exec.timeout,
-        argv=codex_argv,
-        env=codex_env,
-    )
-
-    started_at = datetime.now(timezone.utc)
-    event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
-    event_callback(
-        RunningCodeEvent(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            code="(Codex-managed)",
-            started_at=started_at,
-        )
-    )
-
-    def _pid_tracker(pid: int) -> None:
-        execution_registry.update_pid(execution_id=execution_id, pid=pid)
-
-    def _termination_checker() -> bool:
-        return execution_registry.is_terminated(execution_id=execution_id)
-
-    term_out, exec_time, exc_type, exc_info = runner.run(
+        codex_argv=codex_argv,
+        codex_env=codex_env,
         task_file=task_file,
-        pid_callback=_pid_tracker,
-        termination_checker=_termination_checker,
-        success_file=output_json_file,
-        stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
+        event_callback=event_callback,
     )
-    logger.debug(
-        "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
-        execution_id[:8],
-        "success" if exc_type is None else "failed",
-        exec_time,
-        exc_type,
-        exc_info,
-        workspace_dir,
-        workspace_dir / "codex_session.log",
-        workspace_dir / "codex_events.jsonl",
-    )
-
-    completed_at = datetime.now(timezone.utc)
-    status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
-    event_callback(
-        RunCompletedEvent(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            status=status,
-            exec_time=exec_time,
-            completed_at=completed_at,
-        )
-    )
-    if exc_type is None:
-        execution_registry.mark_completed(execution_id=execution_id)
-    else:
-        execution_registry.clear_pid(execution_id=execution_id)
 
     node_result = _load_node_result(output_json_file=output_json_file)
     if node_result is None:
@@ -954,37 +1098,20 @@ def process_node(
             execution_id[:8],
             output_json_file,
         )
-        child_node = Node(
-            id=execution_id,
+        return _return_buggy_node_dict(
+            cfg=cfg,
+            execution_id=execution_id,
             plan="",
             code="",
-            is_buggy=True,
             analysis="Codex did not produce a valid node_result.json.",
-            exc_type=exc_type or "CodexError",
+            exc_type=str(exc_type or "CodexError"),
             exec_time=exec_time,
-        )
-        child_node.absorb_exec_result(
-            SimpleNamespace(
-                term_out=term_out,
-                exec_time=exec_time,
-                exc_type=exc_type,
-                exc_info=exc_info,
-                exc_stack=None,
-            )
-        )
-        child_node.exc_info = exc_info or {}
-        child_node.metric = WorstMetricValue()
-        if parent_node is not None:
-            _attach_parent(child_node=child_node, parent_node=parent_node)
-        _move_experiment_artifacts(
-            cfg=cfg,
-            child_node=child_node,
+            term_out=term_out,
+            exc_info=exc_info,
+            parent_node=parent_node,
             working_dir=working_dir,
             event_callback=event_callback,
         )
-        result_data = child_node.to_dict()
-        pickle.dumps(result_data)
-        return result_data
 
     # Harness-owned seed flags: do not rely on Codex to set these correctly.
     if seed_eval:
@@ -1004,82 +1131,44 @@ def process_node(
             execution_id[:8],
             agent_file_path,
         )
-        child_node = Node(
-            id=execution_id,
+        return _return_buggy_node_dict(
+            cfg=cfg,
+            execution_id=execution_id,
             plan=str(node_result.get("plan") or ""),
             code="",
-            is_buggy=True,
-            is_buggy_plots=True,
             analysis=f"Codex did not write the required agent code file: {agent_file_name}",
-            exc_type=exc_type or "CodexContractError",
+            exc_type=str(exc_type or "CodexContractError"),
             exec_time=exec_time,
-        )
-        child_node.metric = WorstMetricValue()
-        if parent_node is not None:
-            _attach_parent(child_node=child_node, parent_node=parent_node)
-        child_node.absorb_exec_result(
-            SimpleNamespace(
-                term_out=term_out,
-                exec_time=exec_time,
-                exc_type=exc_type,
-                exc_info=exc_info,
-                exc_stack=None,
-            )
-        )
-        child_node.exc_info = exc_info or {}
-        _move_experiment_artifacts(
-            cfg=cfg,
-            child_node=child_node,
+            term_out=term_out,
+            exc_info=exc_info,
+            parent_node=parent_node,
             working_dir=working_dir,
             event_callback=event_callback,
         )
-        result_data = child_node.to_dict()
-        pickle.dumps(result_data)
-        return result_data
 
-    try:
-        code_text = agent_file_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    code_text = _read_text_or_empty(path=agent_file_path)
+    if not code_text:
         logger.debug(
             "codex.output.agent_code_read_failed execution_id=%s path=%s",
             execution_id[:8],
             agent_file_path,
             exc_info=True,
         )
-        code_text = ""
     if not code_text.strip():
-        child_node = Node(
-            id=execution_id,
+        return _return_buggy_node_dict(
+            cfg=cfg,
+            execution_id=execution_id,
             plan=str(node_result.get("plan") or ""),
             code="",
-            is_buggy=True,
-            is_buggy_plots=True,
             analysis=f"Codex wrote an empty agent code file: {agent_file_name}",
-            exc_type=exc_type or "CodexContractError",
+            exc_type=str(exc_type or "CodexContractError"),
             exec_time=exec_time,
-        )
-        child_node.metric = WorstMetricValue()
-        if parent_node is not None:
-            _attach_parent(child_node=child_node, parent_node=parent_node)
-        child_node.absorb_exec_result(
-            SimpleNamespace(
-                term_out=term_out,
-                exec_time=exec_time,
-                exc_type=exc_type,
-                exc_info=exc_info,
-                exc_stack=None,
-            )
-        )
-        child_node.exc_info = exc_info or {}
-        _move_experiment_artifacts(
-            cfg=cfg,
-            child_node=child_node,
+            term_out=term_out,
+            exc_info=exc_info,
+            parent_node=parent_node,
             working_dir=working_dir,
             event_callback=event_callback,
         )
-        result_data = child_node.to_dict()
-        pickle.dumps(result_data)
-        return result_data
 
     node_result["code"] = code_text
 
@@ -1088,8 +1177,8 @@ def process_node(
     logger.debug(
         "codex.output.node_result_loaded execution_id=%s keys=%s plan_preview=%s",
         execution_id[:8],
-        sorted(list(node_result.keys()))[:40],
-        str(node_result.get("plan") or "")[:200].replace("\n", " "),
+        sorted(list(node_result.keys())),
+        str(node_result.get("plan") or ""),
     )
 
     contract_ctx = NodeResultContractContext(
@@ -1120,45 +1209,27 @@ def process_node(
             len(contract_errors),
             contract_errors,
         )
-        child_node = Node(
-            id=execution_id,
+        return _return_buggy_node_dict(
+            cfg=cfg,
+            execution_id=execution_id,
             plan=str(node_result.get("plan") or ""),
             code=str(node_result.get("code") or ""),
-            is_buggy=True,
-            is_buggy_plots=True,
-            analysis=(
-                "Codex node_result contract violation(s):\n- " + "\n- ".join(contract_errors)
-            ),
-            exc_type=exc_type or "CodexContractError",
+            analysis="Codex node_result contract violation(s):\n- " + "\n- ".join(contract_errors),
+            exc_type=str(exc_type or "CodexContractError"),
             exec_time=exec_time,
-        )
-        child_node.metric = WorstMetricValue()
-        if parent_node is not None:
-            _attach_parent(child_node=child_node, parent_node=parent_node)
-        child_node.absorb_exec_result(
-            SimpleNamespace(
-                term_out=term_out,
-                exec_time=exec_time,
-                exc_type=exc_type,
-                exc_info=exc_info,
-                exc_stack=None,
-            )
-        )
-        child_node.exc_info = exc_info or {}
-        _move_experiment_artifacts(
-            cfg=cfg,
-            child_node=child_node,
+            term_out=term_out,
+            exc_info=exc_info,
+            parent_node=parent_node,
             working_dir=working_dir,
             event_callback=event_callback,
         )
-        result_data = child_node.to_dict()
-        pickle.dumps(result_data)
-        return result_data
 
+    parse_failed = False
     try:
         child_node = Node.from_dict(dict(node_result), journal=None)
     except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         # Never crash the worker on schema drift: mark the node buggy and return a valid Node dict.
+        parse_failed = True
         tb = traceback.format_exc()
         child_node = Node(
             id=execution_id,
@@ -1181,37 +1252,37 @@ def process_node(
     if parent_node is not None and child_node.parent is None:
         _attach_parent(child_node=child_node, parent_node=parent_node)
 
-    child_node.absorb_exec_result(
-        SimpleNamespace(
-            term_out=term_out,
-            exec_time=exec_time,
-            exc_type=exc_type,
-            exc_info=exc_info,
-            exc_stack=None,
-        )
+    effective_exc_type = child_node.exc_type if parse_failed else exc_type
+    _absorb_exec_result(
+        child_node=child_node,
+        term_out=term_out,
+        exec_time=exec_time,
+        exc_type=effective_exc_type,
+        exc_info=exc_info,
     )
-    child_node.exec_time = exec_time
-    child_node.exc_type = exc_type
-    child_node.exc_info = exc_info or {}
 
-    if child_node.exc_type != "NodeParseError":
-        llm_review = _review_execution_with_llm(
-            cfg=cfg,
-            task_desc=task_desc,
-            stage_goals=stage_goals,
-            stage_identifier=stage_identifier,
-            code=str(child_node.code or ""),
-            plan=str(child_node.plan or ""),
-            term_out="".join(term_out),
-            exc_type=exc_type,
-            exec_time=float(exec_time),
-        )
-        if llm_review is None:
-            child_node.analysis = "LLM execution review failed; see execution output."
-            child_node.is_buggy = True
-        else:
-            child_node.analysis = str(llm_review.summary or "").strip()
-            child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
+    if not parse_failed:
+        # Avoid extra LLM calls when Codex already provided analysis/bugginess.
+        has_analysis = bool(str(child_node.analysis or "").strip())
+        has_bug_flag = child_node.is_buggy is not None
+        if not (has_analysis and has_bug_flag):
+            llm_review = _review_execution_with_llm(
+                cfg=cfg,
+                task_desc=task_desc,
+                stage_goals=stage_goals,
+                stage_identifier=stage_identifier,
+                code=str(child_node.code or ""),
+                plan=str(child_node.plan or ""),
+                term_out="".join(term_out),
+                exc_type=exc_type,
+                exec_time=float(exec_time),
+            )
+            if llm_review is None:
+                child_node.analysis = "LLM execution review failed; see execution output."
+                child_node.is_buggy = True
+            else:
+                child_node.analysis = str(llm_review.summary or "").strip()
+                child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
 
     metrics_artifacts = generate_and_assign_metrics(
         cfg=cfg,

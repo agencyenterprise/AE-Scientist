@@ -193,7 +193,6 @@ def generate_and_assign_metrics(
         )
         metrics_task_file = metrics_workspace_dir / "codex_metrics_task.md"
         metrics_task_file.write_text(task_text, encoding="utf-8")
-        success_file = metrics_workspace_dir / "metrics_task_result.json"
 
         metrics_runner = CodexCliRunner(
             workspace_dir=metrics_workspace_dir,
@@ -212,7 +211,6 @@ def generate_and_assign_metrics(
             task_file=metrics_task_file,
             pid_callback=None,
             termination_checker=None,
-            success_file=success_file,
             stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
         )
         node.parse_metrics_plan = task_text

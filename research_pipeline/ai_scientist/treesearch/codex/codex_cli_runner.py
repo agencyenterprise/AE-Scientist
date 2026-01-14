@@ -31,7 +31,6 @@ class CodexCliRunner:
         task_file: Path,
         pid_callback: Callable[[int], None] | None,
         termination_checker: Callable[[], bool] | None,
-        success_file: Path | None = None,
         stream_callback: Callable[[str], None] | None = None,
     ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
         """
@@ -121,46 +120,15 @@ class CodexCliRunner:
                             _emit(f"[codex:cmd:{status}] {cmd_one_line[:400]}")
                         return
 
-                def _success_file_ready(path: Path) -> bool:
-                    """
-                    Avoid racing Codex: it may create the success file before finishing writing it.
-                    Only treat the file as success when it parses as a JSON object.
-                    """
-                    try:
-                        raw = path.read_text(encoding="utf-8")
-                    except OSError:
-                        return False
-                    if not raw.strip():
-                        return False
-                    try:
-                        parsed = json.loads(raw)
-                    except json.JSONDecodeError:
-                        return False
-                    return isinstance(parsed, dict)
-
                 while True:
                     if termination_checker is not None and termination_checker():
                         logger.info("Codex run terminated by external request (pid=%s)", proc.pid)
                         terminate_process_group(pid=proc.pid, grace_seconds=1.0)
                         return self._build_result_from_log(
-                            log_path=log_path,
+                            events_path=events_path,
                             started_at=started_at,
                             exc_type="Terminated",
                             exc_info={"reason": "terminated"},
-                        )
-
-                    # Success fast-path: stop once the output file is present.
-                    if (
-                        success_file is not None
-                        and success_file.exists()
-                        and _success_file_ready(success_file)
-                    ):
-                        terminate_process_group(pid=proc.pid, grace_seconds=1.0)
-                        return self._build_result_from_log(
-                            log_path=log_path,
-                            started_at=started_at,
-                            exc_type=None,
-                            exc_info={"reason": "success_file_present"},
                         )
 
                     # Drain any available output without blocking indefinitely.
@@ -204,7 +172,7 @@ class CodexCliRunner:
                         )
                         terminate_process_group(pid=proc.pid, grace_seconds=1.0)
                         return self._build_result_from_log(
-                            log_path=log_path,
+                            events_path=events_path,
                             started_at=started_at,
                             exc_type="TimeoutError",
                             exc_info={
@@ -217,7 +185,7 @@ class CodexCliRunner:
                 terminate_process_group(pid=proc.pid, grace_seconds=1.0)
             logger.warning("Codex CLI run crashed: %s", exc, exc_info=True)
             return self._build_result_from_log(
-                log_path=log_path,
+                events_path=events_path,
                 started_at=started_at,
                 exc_type="CodexRunnerError",
                 exc_info={"reason": str(exc)},
@@ -227,13 +195,13 @@ class CodexCliRunner:
         returncode = proc.returncode
         if returncode == 0:
             return self._build_result_from_log(
-                log_path=log_path,
+                events_path=events_path,
                 started_at=started_at,
                 exc_type=None,
                 exc_info={"returncode": returncode},
             )
         return self._build_result_from_log(
-            log_path=log_path,
+            events_path=events_path,
             started_at=started_at,
             exc_type="CodexError",
             exc_info={"returncode": returncode},
@@ -242,7 +210,7 @@ class CodexCliRunner:
     def _build_result_from_log(
         self,
         *,
-        log_path: Path,
+        events_path: Path,
         started_at: float,
         exc_type: str | None,
         exc_info: dict[str, object] | None,
@@ -250,10 +218,10 @@ class CodexCliRunner:
         exec_time = time.monotonic() - started_at
         term_out: list[str] = []
         try:
-            if log_path.exists():
-                text = log_path.read_text(encoding="utf-8", errors="replace")
-                # Keep segmentation similar to Interpreter (list[str]); we use line-based segments.
+            if events_path.exists():
+                text = events_path.read_text(encoding="utf-8", errors="replace")
+                # `events_path` is JSONL; keep line-based segments (list[str]) for downstream.
                 term_out = [line + "\n" for line in text.splitlines()]
         except OSError:
-            logger.debug("Failed reading Codex log at %s", log_path, exc_info=True)
+            logger.debug("Failed reading Codex events at %s", events_path, exc_info=True)
         return term_out, exec_time, exc_type, exc_info
