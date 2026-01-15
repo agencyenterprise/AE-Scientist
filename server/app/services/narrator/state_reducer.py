@@ -177,6 +177,15 @@ def handle_paper_generation_step(
         "updated_at": datetime.now(timezone.utc),
     }
 
+    # update stage progress
+    updated_stages = [s.model_copy() for s in state.stages]
+    for stage in updated_stages:
+        if stage.stage == event.stage:
+            stage.progress = event.progress
+            break
+    changes["stages"] = updated_stages
+
+
     return StateUpdateResult(changes=changes)
 
 

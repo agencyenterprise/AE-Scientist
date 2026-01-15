@@ -8,7 +8,7 @@ import {
   getEventTypeIcon,
   getEventTypeColor,
   formatTimestamp,
-} from "@/features/research/lib/eventGrouping";
+} from "@/features/narrator/lib/eventGrouping";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
 import { ExternalLink } from "lucide-react";
@@ -20,16 +20,27 @@ interface EventCardProps {
   event: TimelineEvent;
   compact?: boolean;
   onViewNode?: (nodeId: string) => void;
+  onEventFocus?: (eventId: string | null) => void;
 }
 
-export function EventCard({ event, compact = false, onViewNode }: EventCardProps) {
+export function EventCard({ event, compact = false, onViewNode, onEventFocus }: EventCardProps) {
   const typeLabel = getEventTypeLabel(event.type);
   const typeIcon = getEventTypeIcon(event.type);
   const typeColor = getEventTypeColor(event.type);
   const timestamp = formatTimestamp(event.timestamp);
 
+  const handleClick = () => {
+    if (onEventFocus && event.id) {
+      onEventFocus(event.id);
+    }
+  };
+
   return (
-    <Card className={`border ${typeColor} ${compact ? "py-3" : ""}`}>
+    <Card
+      className={`border ${typeColor} ${compact ? "py-3" : ""} cursor-pointer transition-all hover:border-opacity-60`}
+      onClick={handleClick}
+      data-event-id={event.id}
+    >
       <CardContent className={compact ? "py-0" : ""}>
         {/* Header: Type badge + Timestamp */}
         <div className="flex items-start justify-between gap-4 mb-2">
@@ -152,9 +163,9 @@ function EventContent({ event, compact }: { event: TimelineEvent; compact: boole
     case "paper_generation_step":
       return (
         <div className={`${textClass} text-slate-300`}>
-          {"step_name" in event && event.step_name && (
-            <p className="font-medium">{event.step_name}</p>
-          )}
+          {"step" in event && typeof event.step === "string" ? (
+            <p className="font-medium">{event.step}</p>
+          ) : null}
           {"progress" in event && event.progress !== undefined && event.progress !== null && (
             <p className="text-slate-400">Progress: {Math.round(event.progress * 100)}%</p>
           )}

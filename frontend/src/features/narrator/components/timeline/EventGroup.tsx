@@ -25,9 +25,10 @@ interface EventGroupProps {
   events: TimelineEvent[];
   count: number;
   onViewNode?: (nodeId: string) => void;
+  onEventFocus?: (eventId: string | null) => void;
 }
 
-export function EventGroup({ events, count, onViewNode }: EventGroupProps) {
+export function EventGroup({ events, count, onViewNode, onEventFocus }: EventGroupProps) {
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const [isAtEnd, setIsAtEnd] = useState(true);
@@ -86,7 +87,12 @@ export function EventGroup({ events, count, onViewNode }: EventGroupProps) {
                 {events.map((event, idx) => (
                   <CarouselItem key={event.id || idx}>
                     <div className="px-8 select-none">
-                      <EventCard event={event} compact onViewNode={onViewNode} />
+                      <EventCard
+                        event={event}
+                        compact
+                        onViewNode={onViewNode}
+                        onEventFocus={onEventFocus}
+                      />
                     </div>
                   </CarouselItem>
                 ))}

@@ -1,108 +1,23 @@
+import { parseNarratorSseFrame, readSseFrames, SseFrame } from "@/features/narrator/lib/sse";
+import { config, isDevelopment } from "@/shared/lib/config";
+import { withAuthHeaders } from "@/shared/lib/session-token";
+import { createSubscription, SubscriptionCallback } from "@/shared/lib/subscription";
+import { Debouncer } from "@tanstack/react-pacer";
 import { defineResource, StartedResource } from "braided";
+import { useEffect } from "react";
 import {
   connectionStatusKeywords,
   NarratorStoreResource,
   ResearchRunState,
   TimelineEvent,
 } from "./narratorStore";
-import { config, isDevelopment } from "@/shared/lib/config";
-import { withAuthHeaders } from "@/shared/lib/session-token";
-import { createSubscription, SubscriptionCallback } from "@/shared/lib/subscription";
-import { useEffect } from "react";
-
-interface SseFrame {
-  event: string;
-  data: string;
-}
-
-/**
- * Generator that reads SSE frames from a byte stream.
- *
- * Responsibilities:
- * - Buffer management
- * - Text decoding
- * - Frame boundary detection (\n\n)
- * - Cleanup on exit
- *
- * Does NOT know about:
- * - JSON parsing
- * - Event types
- * - Domain logic
- */
-async function* readSseFrames(
-  stream: ReadableStream<Uint8Array>,
-  signal?: AbortSignal
-): AsyncGenerator<string> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      // Check for cancellation
-      if (signal?.aborted) {
-        return;
-      }
-
-      const { value, done } = await reader.read();
-      if (done) {
-        return;
-      }
-
-      // Accumulate decoded text
-      buffer += decoder.decode(value, { stream: true });
-
-      // Yield complete frames
-      let boundary;
-      while ((boundary = buffer.indexOf("\n\n")) !== -1) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-
-        if (frame.trim()) {
-          yield frame;
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-/**
- * Parses a raw SSE frame string into structured event data.
- *
- * SSE format:
- *   event: event_type
- *   data: payload
- *
- * Returns null for invalid frames.
- */
-function parseSseFrame(frame: string): SseFrame | null {
-  const lines = frame.split("\n");
-  let eventType = "message"; // SSE default
-  let eventData = "";
-
-  for (const line of lines) {
-    if (line.startsWith("event: ")) {
-      eventType = line.slice(7).trim();
-    } else if (line.startsWith("data: ")) {
-      eventData = line.slice(6);
-    }
-  }
-
-  if (!eventData) {
-    return null;
-  }
-
-  return { event: eventType, data: eventData };
-}
 
 type EventHandlers = {
   state_snapshot: (data: ResearchRunState) => void;
   timeline_event: (data: TimelineEvent) => void;
   state_delta: (data: Partial<ResearchRunState>) => void;
   ping: () => void;
-  unknown: (eventType: string) => void;
+  unknown: (frame: SseFrame) => void;
 };
 
 /**
@@ -118,7 +33,7 @@ function dispatchEvent(frame: SseFrame, handlers: EventHandlers): void {
     if (handler) {
       handler(parsed);
     } else {
-      handlers.unknown(event);
+      handlers.unknown(frame);
     }
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -138,16 +53,45 @@ function dispatchEvent(frame: SseFrame, handlers: EventHandlers): void {
  */
 export const sseStreamResource = defineResource({
   dependencies: ["narratorStore"],
-  start: ({ narratorStore }: { narratorStore: NarratorStoreResource }) => {
+  start: async ({ narratorStore }: { narratorStore: NarratorStoreResource }) => {
     const maxReconnectAttempts = 5;
     const state = {
       currentAbortController: null as AbortController | null,
       currentRunId: null as string | null,
       reconnectAttempts: 0,
       reconnectTimeoutId: null as ReturnType<typeof setTimeout> | null,
+      accumulatedEvents: [] as TimelineEvent[],
     };
 
     const eventSubscription = createSubscription<TimelineEvent>();
+
+    // Commit accumulated events to store and notify subscribers
+    const commitEvents = () => {
+      if (state.accumulatedEvents.length === 0) return;
+
+      const eventsToCommit = [...state.accumulatedEvents];
+      state.accumulatedEvents = [];
+
+      // Add all events to store
+      narratorStore.addEvents(eventsToCommit);
+
+      // Notify subscribers for each event
+      for (const event of eventsToCommit) {
+        eventSubscription.notify(event);
+      }
+
+      if (isDevelopment) {
+        // eslint-disable-next-line no-console
+        console.log(`[Narrator SSE] Committed ${eventsToCommit.length} events`);
+      }
+    };
+
+    // Debounced commit - waits 200ms after last event before committing
+    // This helps reduce UI reflow when multiple events are received in quick succession.
+    const debouncedCommit = new Debouncer(commitEvents, {
+      wait: 200,
+      enabled: true,
+    });
 
     // Domain-specific event handlers
     const handlers: EventHandlers = {
@@ -155,8 +99,9 @@ export const sseStreamResource = defineResource({
         narratorStore.setResearchState(stateData);
       },
       timeline_event: (event: TimelineEvent) => {
-        narratorStore.addEvent(event);
-        eventSubscription.notify(event);
+        // Accumulate event and trigger debounced commit
+        state.accumulatedEvents.push(event);
+        debouncedCommit.maybeExecute();
       },
       state_delta: (delta: Partial<ResearchRunState>) => {
         narratorStore.patchResearchState(delta);
@@ -164,11 +109,11 @@ export const sseStreamResource = defineResource({
       ping: () => {
         // no-op
       },
-      unknown: (_eventType: string) => {
+      unknown: (frame: SseFrame) => {
         // no-op
         if (isDevelopment) {
           // eslint-disable-next-line no-console
-          console.log("[Narrator] Unknown event type:", _eventType);
+          console.log("[Narrator] Unknown event:", frame);
         }
       },
     };
@@ -209,7 +154,9 @@ export const sseStreamResource = defineResource({
           }
 
           state.reconnectAttempts = 0;
-          narratorStore.setConnectionStatus(connectionStatusKeywords.connected);
+          if (!narratorStore.isConnected()) {
+            narratorStore.setConnectionStatus(connectionStatusKeywords.connected);
+          }
 
           if (isDevelopment) {
             // eslint-disable-next-line no-console
@@ -220,7 +167,7 @@ export const sseStreamResource = defineResource({
             response.body,
             state.currentAbortController?.signal
           )) {
-            const frame = parseSseFrame(rawFrame);
+            const frame = parseNarratorSseFrame(rawFrame);
             if (!frame) continue;
 
             dispatchEvent(frame, handlers);
@@ -230,6 +177,9 @@ export const sseStreamResource = defineResource({
             // eslint-disable-next-line no-console
             console.log("[Narrator SSE] Stream ended gracefully");
           }
+          // Flush any pending events before disconnecting
+          debouncedCommit.cancel();
+          commitEvents();
           narratorStore.setConnectionStatus(connectionStatusKeywords.disconnected);
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") {
@@ -263,8 +213,8 @@ export const sseStreamResource = defineResource({
             console.error(
               "[Narrator SSE] Max reconnection attempts reached. Connection permanently lost."
             );
-            narratorStore.setConnectionStatus(connectionStatusKeywords.error);
             narratorStore.setError("Max reconnection attempts reached. Please refresh the page.");
+            narratorStore.setConnectionStatus(connectionStatusKeywords.error);
           }
         }
       },
@@ -282,14 +232,10 @@ export const sseStreamResource = defineResource({
       },
 
       stopCurrentStream: () => {
-        if (state.reconnectTimeoutId) {
-          clearTimeout(state.reconnectTimeoutId);
-          state.reconnectTimeoutId = null;
-        }
         if (state.currentAbortController) {
           state.currentAbortController.abort();
-          api.cleanup();
         }
+        api.cleanup();
       },
 
       cleanup: () => {
@@ -297,6 +243,9 @@ export const sseStreamResource = defineResource({
           clearTimeout(state.reconnectTimeoutId);
           state.reconnectTimeoutId = null;
         }
+        // Flush any pending events before cleanup
+        debouncedCommit.cancel();
+        commitEvents();
         state.currentAbortController = null;
         state.currentRunId = null;
         narratorStore.setConnectionStatus(connectionStatusKeywords.disconnected);

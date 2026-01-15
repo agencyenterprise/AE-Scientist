@@ -21,6 +21,8 @@ export type ConnectionStatus =
 type UIState = {
   expandedStages: string[];
   timelineFocused: boolean; // whether the user is focused/hovered on the timeline
+  focusedEventId: string | null; // ID of event user has explicitly focused on
+  shouldAutoScroll: boolean; // whether to auto-scroll to latest events
 };
 
 type NarratorStore = {
@@ -38,6 +40,7 @@ type NarratorStore = {
   patchUiState: (updates: Partial<UIState>) => void;
   setRunId: (runId: string) => void;
   addEvent: (event: TimelineEvent) => void;
+  addEvents: (events: TimelineEvent[]) => void;
   setError: (error: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   reset: () => void;
@@ -52,6 +55,8 @@ export const createStore = () =>
       uiState: {
         expandedStages: [],
         timelineFocused: false,
+        focusedEventId: null,
+        shouldAutoScroll: true, // Start with auto-scroll enabled
       },
       connectionStatus: connectionStatusKeywords.connecting,
       error: null,
@@ -79,6 +84,23 @@ export const createStore = () =>
           }
 
           const updatedTimeline = [...timeline, event];
+          return {
+            researchState: {
+              ...prevState.researchState,
+              timeline: updatedTimeline,
+            },
+          };
+        });
+      },
+
+      addEvents: events => {
+        set(prevState => {
+          if (!prevState.researchState) return prevState;
+
+          const timeline = prevState.researchState.timeline || [];
+          const timelineEventIds = new Set(timeline.map(event => event.id));
+          const newEvents = events.filter(event => !timelineEventIds.has(event.id));
+          const updatedTimeline = [...timeline, ...newEvents];
           return {
             researchState: {
               ...prevState.researchState,
@@ -157,6 +179,7 @@ export const narratorStoreResource = defineResource({
       patchResearchState: state.patchResearchState,
       patchUiState: state.patchUiState,
       addEvent: state.addEvent,
+      addEvents: state.addEvents,
       setError: state.setError,
       setConnectionStatus: state.setConnectionStatus,
       reset: state.reset,

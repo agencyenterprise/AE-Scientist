@@ -2,8 +2,8 @@
  * StageHeader - Sticky header for a stage section with metadata and controls.
  */
 
-import type { StageGroup } from "@/features/research/lib/narratorSelectors";
-import { formatTimeRange } from "@/features/research/lib/eventGrouping";
+import type { StageGroup } from "@/features/narrator/lib/narratorSelectors";
+import { formatTimeRange } from "@/features/narrator/lib/eventGrouping";
 import { ChevronDown, ChevronRight, Activity } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -14,7 +14,7 @@ interface StageHeaderProps {
   onToggle: () => void;
 }
 
-export function StageHeader({ stage, stageIndex, isExpanded, onToggle }: StageHeaderProps) {
+export function StageHeader({ stage, isExpanded, onToggle }: StageHeaderProps) {
   const { stageGoal, status, progress, activeNodeCount, timeRange, events } = stage;
 
   // Status styling
@@ -64,7 +64,11 @@ export function StageHeader({ stage, stageIndex, isExpanded, onToggle }: StageHe
     timeRange.start && timeRange.end ? formatTimeRange(timeRange.start, timeRange.end) : null;
 
   return (
-    <div className={cn("bg-slate-900/70 backdrop-blur-sm border-y border-slate-700/80")}>
+    <div
+      className={cn("bg-slate-900/70 backdrop-blur-sm border-y border-slate-700/80")}
+      data-sticky-header
+      data-stage-id={stage.stageId}
+    >
       <button
         onClick={onToggle}
         className="w-full text-left px-4 py-3 hover:bg-slate-800/50 transition-colors"
@@ -131,11 +135,7 @@ export function StageHeader({ stage, stageIndex, isExpanded, onToggle }: StageHe
               <div className="h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-500 ${
-                    status === "completed"
-                      ? "bg-green-500"
-                      : status === "failed"
-                        ? "bg-red-500"
-                        : "bg-blue-500"
+                    status === "completed" ? "bg-green-500" : "bg-blue-500"
                   }`}
                   style={{ width: `${Math.round(progress * 100)}%` }}
                 />
