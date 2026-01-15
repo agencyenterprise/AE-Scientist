@@ -23,7 +23,7 @@ def codex_node_result_contract_prompt_lines_for_stage(
         return common + stage3_plotting.codex_node_result_contract_prompt_lines()
     if stage_identifier is StageIdentifier.STAGE4:
         return common + stage4_ablation.codex_node_result_contract_prompt_lines()
-    return common
+    return common  # type: ignore[unreachable]
 
 
 def validate_node_result_contract_for_stage(
@@ -53,5 +53,4 @@ def validate_node_result_contract_for_stage(
             stage4_ablation.validate_node_result_contract(node_result=node_result, ctx=ctx)
         )
         return errors
-
-    return errors
+    return errors  # type: ignore[unreachable]

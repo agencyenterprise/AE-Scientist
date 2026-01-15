@@ -32,7 +32,9 @@ from .codex.node_result_contract import (
 from .codex.seed_aggregation import (
     codex_node_result_contract_prompt_lines as codex_seed_agg_contract_lines,
 )
-from .codex.seed_aggregation import codex_seed_aggregation_instructions_lines
+from .codex.seed_aggregation import (
+    codex_seed_aggregation_instructions_lines,
+)
 from .config import Config as AppConfig
 from .config import TaskDescription, apply_log_level
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
