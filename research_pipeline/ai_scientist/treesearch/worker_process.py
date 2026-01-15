@@ -158,6 +158,9 @@ def _review_execution_with_llm(
         "Introduction": (
             "Analyze the execution output, determine if there were any bugs, and provide a summary of the findings. "
             "If there is a bug, summarize the failure and propose a concrete fix direction."
+            "I am giving you the execution output of what the agent did, the agent iterates on the code trying to fix"
+            "the problems it might find. If the agent found and fixed a bug you should not say that there is a bug."
+            "A bug is a problem that the agent wasn't able to fix or if the agent didn't manage to make it work."
         ),
         "Research idea": task_desc.model_dump(by_alias=True),
         "Stage": stage_identifier.name,
