@@ -1,44 +1,34 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
-import { useNarrativeStream } from "@/features/research/hooks/useNarrativeStream";
-import { useNarratorStore } from "@/features/research/stores/narratorStore";
 import {
-  getCurrentStage,
-  getCurrentFocus,
-  getOverallProgress,
-  getStatus,
-  getRunId,
   formatProgress,
+  getCurrentFocus,
+  getCurrentStage,
+  getOverallProgress,
+  getRunId,
+  getStatus,
 } from "@/features/research/lib/narratorSelectors";
+import { useResource } from "@/features/research/systems/narrative";
+import { TimelineView } from "@/features/research/components/timeline/TimelineView";
+import { useParams } from "next/navigation";
+import { useCallback } from "react";
+import { TimelineEvent } from "@/features/research/systems/resources/narratorStore";
 
 export default function NarrativePage() {
   const params = useParams();
   const runId = params?.runId as string;
 
-  const { state, events, connectionStatus, error, reset } = useNarratorStore();
+  // Get store resource to access Zustand store
+  const narratorStore = useResource("narratorStore");
+  narratorStore.useRunId(runId); // setup store with runId
 
-  // Connect to SSE stream
-  const callbacks = useMemo(
-    () => ({
-      onStateSnapshot: useNarratorStore.getState().setState,
-      onTimelineEvent: useNarratorStore.getState().addEvent,
-      onStateDelta: useNarratorStore.getState().updatePartialState,
-      onConnectionStatusChange: useNarratorStore.getState().setConnectionStatus,
-      onError: useNarratorStore.getState().setError,
-    }),
-    []
-  );
+  const sseStream = useResource("sseStream");
 
-  useNarrativeStream(runId, callbacks);
-
-  // Reset store on unmount
-  useEffect(() => {
-    return () => {
-      reset();
-    };
-  }, [reset]);
+  // Use the store hook to get reactive state
+  const state = narratorStore.useStore(s => s.researchState);
+  const connectionStatus = narratorStore.useStore(s => s.connectionStatus);
+  const error = narratorStore.useStore(s => s.error);
+  const expandedStages = narratorStore.useStore(s => s.uiState.expandedStages);
 
   // Compute derived values using selectors
   const currentStage = getCurrentStage(state);
@@ -46,6 +36,44 @@ export default function NarrativePage() {
   const progress = getOverallProgress(state);
   const status = getStatus(state);
   const stateRunId = getRunId(state);
+
+  const toggleExpanded = useCallback(
+    (stageId: string) => {
+      const currentState = narratorStore.getUiState();
+      narratorStore.patchUiState({
+        expandedStages: currentState.expandedStages.includes(stageId)
+          ? currentState.expandedStages.filter(id => id !== stageId)
+          : [...currentState.expandedStages, stageId],
+      });
+    },
+    [narratorStore]
+  );
+
+  sseStream.useEventSubscription(
+    useCallback(
+      (event: TimelineEvent) => {
+        switch (event.type) {
+          case "stage_started":
+            const currentState = narratorStore.getUiState();
+            if (!currentState.expandedStages.includes(event.stage)) {
+              toggleExpanded(event.stage);
+            }
+            break;
+          default:
+            // no-op
+            break;
+        }
+      },
+      [narratorStore, toggleExpanded]
+    )
+  );
+
+  // Handle node selection (for future tree view integration)
+  const handleViewNode = (nodeId: string) => {
+    // TODO: When tree view is integrated, scroll to and highlight this node
+    // For now, we just prepare the handler for future use
+    void nodeId;
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -111,45 +139,15 @@ export default function NarrativePage() {
         </div>
       )}
 
-      <div className="bg-slate-900/50 border border-slate-700/80 rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-white mb-4">
-          Timeline Events ({events.length})
-        </h2>
-        <div className="space-y-3 max-h-[600px] overflow-y-auto">
-          {events.length === 0 ? (
-            <p className="text-slate-400 text-center py-8">
-              {connectionStatus === "connected"
-                ? "No events yet. Waiting for timeline events..."
-                : "Connecting to event stream..."}
-            </p>
-          ) : (
-            events.map((event, idx) => (
-              <div
-                key={event.id || idx}
-                className="border-l-4 border-emerald-500 pl-4 py-2"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-white">{event.type}</span>
-                      {event.stage && (
-                        <span className="text-xs bg-slate-700/50 text-slate-300 px-2 py-1 rounded">
-                          {event.stage}
-                        </span>
-                      )}
-                    </div>
-                    {event.headline && (
-                      <p className="text-slate-300 mt-1">{event.headline}</p>
-                    )}
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+      <div className="bg-slate-900/50 py-2">
+        <h2 className="text-xl font-semibold text-white mb-6">Research Timeline</h2>
+        <TimelineView
+          state={state}
+          isLoading={connectionStatus === "connecting" && !state}
+          onViewNode={handleViewNode}
+          expandedStages={expandedStages}
+          toggleExpanded={toggleExpanded}
+        />
       </div>
 
       <details className="bg-slate-900/50 border border-slate-700/80 rounded-lg p-4">
@@ -163,4 +161,3 @@ export default function NarrativePage() {
     </div>
   );
 }
-
