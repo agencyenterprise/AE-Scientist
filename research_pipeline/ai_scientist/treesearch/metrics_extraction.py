@@ -18,8 +18,7 @@ def gather_stage_metrics(*, journal: Journal) -> Dict[str, object]:
 
     # Deterministic summaries only (no LLM calls). Keep small and recent to avoid
     # bloating downstream prompts/logs.
-    recent_nodes = journal.nodes[-6:] if len(journal.nodes) > 6 else journal.nodes
-    for node in recent_nodes:
+    for node in journal.nodes:
         node_summaries.append(
             {
                 "node_id": node.id,

@@ -584,7 +584,7 @@ class Journal:
             )
             return selected_single
 
-        # Create evaluation prompt for LLM (ported from origin/main)
+        # Create evaluation prompt for LLM
         prompt = {
             "Introduction": (
                 "You are an experienced AI researcher evaluating different implementations "
