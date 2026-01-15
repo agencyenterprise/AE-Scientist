@@ -11,7 +11,6 @@ High-level responsibilities:
 
 import logging
 import multiprocessing
-import os
 import pickle
 import random
 import signal
@@ -25,26 +24,24 @@ from typing import List, Optional
 
 import sentry_sdk
 
-from ai_scientist.llm import query
-
 from . import execution_registry
-from .codegen_agent import MinimalAgent
+from .codex.codex_task_types import (
+    EvaluationMetricSpec,
+    SeedAggregationPayload,
+    SeedNodeSummary,
+    StageIdea,
+)
+from .config import Config, TaskDescription
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
+from .process_utils import send_signal_to_process_group
 from .stage_identifiers import StageIdentifier
 from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
-from .stages.stage2_tuning import Stage2Tuning
-from .stages.stage4_ablation import Stage4Ablation
-from .types import PromptType
-from .utils.config import Config
+from .stages.stage2_tuning import propose_next_hyperparam_idea
+from .stages.stage4_ablation import propose_next_ablation_idea
 from .utils.metric import WorstMetricValue
-from .worker_process import (
-    ExecutionCrashedError,
-    ExecutionTerminatedError,
-    NodeTask,
-    process_node_task,
-)
+from .worker_process import ExecutionCrashedError, ExecutionTerminatedError, NodeTask, process_node
 
 logger = logging.getLogger("ai-scientist")
 
@@ -70,7 +67,9 @@ def _safe_pickle_test(obj: object, name: str = "object") -> bool:
 class ParallelAgent:
     def __init__(
         self,
-        task_desc: str,
+        task_desc: TaskDescription,
+        stage_goals: str,
+        evaluation_metric_spec: EvaluationMetricSpec,
         cfg: Config,
         journal: Journal,
         stage_identifier: StageIdentifier,
@@ -78,9 +77,11 @@ class ParallelAgent:
         best_stage2_node: Node | None,
         best_stage1_node: Node | None,
         event_callback: Callable[[BaseEvent], None],
-    ):
+    ) -> None:
         # Store run context (idea, configuration, journal, stage)
         self.task_desc = task_desc
+        self.stage_goals = stage_goals
+        self.evaluation_metric_spec = evaluation_metric_spec
         self.cfg = cfg
         self.journal = journal
         self.stage_identifier = stage_identifier
@@ -116,24 +117,6 @@ class ParallelAgent:
         self._mp_context = multiprocessing.get_context("spawn")
         self.executor: ProcessPoolExecutor | None = self._create_executor()
         self._is_shutdown = False
-        # Define the evaluation metric once at initialization
-        self.evaluation_metrics = self._define_global_metrics()
-        self._local_agent = MinimalAgent(
-            task_desc=self.task_desc,
-            cfg=self.cfg,
-            gpu_id=None,
-            gpu_spec=None,
-            memory_summary="",
-            evaluation_metrics=self.evaluation_metrics,
-            stage_identifier=self.stage_identifier,
-            skip_checker=lambda: None,
-        )
-        self._ablation_state: dict[str, set[str]] = {  # store ablation names
-            "completed_ablations": set(),
-        }
-        self._hyperparam_tuning_state: dict[str, set[str]] = {  # store hyperparam tuning ideas
-            "tried_hyperparams": set(),
-        }
         self._shared_pid_state = execution_registry.get_shared_pid_state()
         self._future_execution_ids: dict[Future, str] = {}
         self._future_process_ids: dict[Future, str] = {}
@@ -161,22 +144,7 @@ class ParallelAgent:
             return
         self.stage_skip.flag_executions_for_skip(pending_ids, reason=reason)
 
-    def plan_and_code_query(
-        self,
-        *,
-        prompt: PromptType,
-        retries: int = 3,
-        enforce_gpu: bool = False,
-    ) -> tuple[str, str]:
-        """
-        Proxy plan/code generation to a local MinimalAgent so ParallelAgent can act
-        as a SupportsSeedAgent for aggregation routines.
-        """
-        return self._local_agent.plan_and_code_query(
-            prompt=prompt,
-            retries=retries,
-            enforce_gpu=enforce_gpu,
-        )
+    # Codex-only pipeline: plan/code generation is handled inside the worker by Codex CLI.
 
     def _cancel_pending_futures(self, futures: list[Future]) -> None:
         if not futures:
@@ -233,43 +201,19 @@ class ParallelAgent:
             logger.exception("Failed to emit GPU shortage event.")
         raise RuntimeError(message)
 
-    def _define_global_metrics(self) -> str:
-        """Define the run-wide evaluation metric specification via LLM."""
-        prompt = {
-            "Introduction": (
-                "You are an AI researcher setting up experiments. "
-                "Please propose meaningful evaluation metrics that will help analyze "
-                "the performance and characteristics of solutions for this research task."
-            ),
-            "Research idea": self.task_desc,
-            "Instructions": [
-                "Propose a single evaluation metric that would be useful for analyzing the performance of solutions for this research task.",
-                "Note: Validation loss will be tracked separately so you don't need to include it in your response.",
-                "Format your response as a list containing:",
-                "- name: The name of the metric",
-                "- maximize: Whether higher values are better (true/false)",
-                "- description: A brief explanation of what the metric measures"
-                "Your list should contain only one metric.",
-            ],
-        }
-
-        response = query(
-            system_message=prompt,
-            user_message=None,
-            model=self.cfg.agent.code.model,
-            temperature=self.cfg.agent.code.temperature,
-        )
-
-        logger.debug(f"Defined eval metrics: {response}")
-        response_text: str = response if isinstance(response, str) else str(response)
-        return response_text
-
     def _run_multi_seed_evaluation(self, node: Node) -> List[Node]:
-        """Run multiple seeds of the same node to get statistical metrics.
-        Returns a list of nodes with different random seeds."""
+        """
+        Run multiple seeds of the same *already-generated* experiment to assess stability.
+
+        Important behavior:
+        - These seed runs **do not use Codex** to generate code.
+        - Each seed run re-executes the *parent node's experiment code* under a different RNG seed
+          (see `worker_process._process_seed_eval_reuse`).
+
+        Returns a list of nodes corresponding to the individual seed executions.
+        """
         # Convert node to dict for parallel processing
         node_data = node.to_dict()
-        node_code = node.code
 
         # Submit parallel jobs for different seeds
         seed_nodes: List[Node] = []
@@ -289,15 +233,6 @@ class ParallelAgent:
                     logger.warning(f"Could not acquire GPU for seed {seed}: {e}. Running on CPU")
                     seed_process_ids.append(None)
 
-            # Add seed to node code
-            node_data["code"] = (
-                f"# Set random seed\nimport random\nimport numpy as np\nimport torch\n\nseed = {seed}\nrandom.seed(seed)\nnp.random.seed(seed)\ntorch.manual_seed(seed)\nif torch.cuda.is_available():\n    torch.cuda.manual_seed(seed)\n\n"
-                + node_code
-            )
-
-            new_ablation_idea = None
-            new_hyperparam_idea = None
-            best_stage3_plot_code = None
             seed_eval = True
             memory_summary = ""
             logger.info("Starting multi-seed eval...")
@@ -316,20 +251,22 @@ class ParallelAgent:
             task: NodeTask = {
                 "node_data": node_data,
                 "task_desc": self.task_desc,
+                "stage_goals": self.stage_goals,
+                "evaluation_metric_spec": self.evaluation_metric_spec,
                 "cfg": self.cfg,
                 "gpu_id": gpu_id,
                 "memory_summary": memory_summary,
-                "evaluation_metrics": self.evaluation_metrics,
                 "stage_identifier": self.stage_identifier,
-                "new_ablation_idea": new_ablation_idea,
-                "new_hyperparam_idea": new_hyperparam_idea,
-                "best_stage3_plot_code": best_stage3_plot_code,
                 "seed_eval": seed_eval,
+                "seed_value": seed,
+                "seed_aggregation": None,
+                "stage2_hyperparam_idea": None,
+                "stage4_ablation_idea": None,
                 "event_callback": self.event_callback,
                 "execution_id": execution_id,
                 "user_feedback_payload": "",
             }
-            future = executor.submit(process_node_task, task)
+            future = executor.submit(process_node, **task)
             futures.append(future)
             execution_ids.append(execution_id)
 
@@ -363,8 +300,8 @@ class ParallelAgent:
                     execution_id,
                     exc,
                 )
-            except Exception as e:
-                logger.error(f"Error in multi-seed evaluation: {str(e)}")
+            except Exception:
+                logger.exception("Error in multi-seed evaluation")
             finally:
                 logger.info(
                     "ParallelAgent clearing execution %s after multi-seed run for node %s",
@@ -378,6 +315,80 @@ class ParallelAgent:
                     if proc_id is not None:
                         self.gpu_manager.release_gpu(proc_id)
                         logger.info(f"Released GPU for {proc_id}")
+
+        # Run a Codex seed-aggregation task to produce a single rolled-up node with aggregate plots/metric.
+        aggregation_execution_id: str | None = None
+        if len(seed_nodes) >= 2:
+            try:
+                aggregation_execution_id = uuid.uuid4().hex
+                execution_registry.register_execution(
+                    execution_id=aggregation_execution_id,
+                    node=node,
+                    stage_name=f"{self.stage_name}_seed_aggregation",
+                )
+                seed_payload: list[SeedNodeSummary] = []
+                for seed_node in seed_nodes:
+                    seed_payload.append(
+                        SeedNodeSummary(
+                            id=seed_node.id,
+                            exp_results_dir=seed_node.exp_results_dir,
+                            metric=(
+                                seed_node.metric.to_dict() if seed_node.metric is not None else None
+                            ),
+                            plots=list(seed_node.plots),
+                            plot_paths=list(seed_node.plot_paths),
+                            is_buggy=bool(seed_node.is_buggy is True),
+                            is_buggy_plots=bool(seed_node.is_buggy_plots is True),
+                        )
+                    )
+                seed_aggregation = SeedAggregationPayload(
+                    parent_node_id=node.id,
+                    stage_name=self.stage_name,
+                    seed_nodes=seed_payload,
+                )
+                agg_task: NodeTask = {
+                    "node_data": node_data,
+                    "task_desc": self.task_desc,
+                    "stage_goals": self.stage_goals,
+                    "evaluation_metric_spec": self.evaluation_metric_spec,
+                    "cfg": self.cfg,
+                    "gpu_id": None,
+                    "memory_summary": "",
+                    "stage_identifier": self.stage_identifier,
+                    "seed_eval": False,
+                    "seed_value": 0,
+                    "seed_aggregation": seed_aggregation,
+                    "stage2_hyperparam_idea": None,
+                    "stage4_ablation_idea": None,
+                    "event_callback": self.event_callback,
+                    "execution_id": aggregation_execution_id,
+                    "user_feedback_payload": "",
+                }
+                agg_future = executor.submit(process_node, **agg_task)
+                agg_data = agg_future.result(timeout=self.timeout)
+                agg_node = Node.from_dict(agg_data, self.journal)
+                execution_registry.attach_node(
+                    execution_id=aggregation_execution_id,
+                    node=agg_node,
+                )
+                self.journal.append(agg_node)
+                logger.info(
+                    "Seed aggregation node appended (execution_id=%s node_id=%s)",
+                    aggregation_execution_id,
+                    agg_node.id,
+                )
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Seed aggregation was terminated intentionally; skipping aggregation node."
+                )
+            except Exception:
+                logger.exception("Seed aggregation failed; proceeding without aggregation node.")
+            finally:
+                if aggregation_execution_id is not None:
+                    try:
+                        execution_registry.clear_execution(aggregation_execution_id)
+                    except Exception:
+                        pass
 
         return seed_nodes
 
@@ -401,14 +412,28 @@ class ParallelAgent:
             )
         )
         stage_identifier = self.stage_identifier
-        # For Stage 2/4 we generate ideas on main process to avoid duplicates;
-        # for Stage 1/3 generation happens in workers.
+        # Codex-only pipeline: all idea generation (baseline/tuning/plotting/ablation) happens inside
+        # the worker via Codex, using stage goals + context embedded in codex_task.md (JSON + markdown).
         nodes_to_process: list[Optional[Node]] = []
         processed_trees: set[int] = set()
         search_cfg = self.cfg.agent.search
-        logger.debug(f"self.num_workers: {self.num_workers}, ")
+        logger.debug(
+            "node_selection.begin stage=%s num_workers=%s total_nodes=%s good_nodes=%s buggy_nodes=%s draft_roots=%s",
+            self.stage_name,
+            self.num_workers,
+            len(self.journal.nodes),
+            len(self.journal.good_nodes),
+            len(self.journal.buggy_nodes),
+            len(self.journal.draft_nodes),
+        )
 
         feedback_nodes = [node for node in self.journal.nodes if node.user_feedback_pending]
+        if feedback_nodes:
+            logger.debug(
+                "node_selection.user_feedback_pending count=%s ids=%s",
+                len(feedback_nodes),
+                [n.id[:8] for n in feedback_nodes[:5]],
+            )
         for node in feedback_nodes:
             if len(nodes_to_process) >= self.num_workers:
                 break
@@ -449,6 +474,11 @@ class ParallelAgent:
                 f"Checking draft nodes... num of journal.draft_nodes: {len(self.journal.draft_nodes)}, search_cfg.num_drafts: {search_cfg.num_drafts}"
             )
             if len(self.journal.draft_nodes) < search_cfg.num_drafts:
+                logger.debug(
+                    "node_selection.decision decision=draft reason=insufficient_draft_roots current=%s target=%s",
+                    len(self.journal.draft_nodes),
+                    search_cfg.num_drafts,
+                )
                 nodes_to_process.append(None)
                 continue
 
@@ -458,9 +488,20 @@ class ParallelAgent:
                 for root in self.journal.draft_nodes
                 if not all(leaf.is_buggy for leaf in self._get_leaves(root))
             ]
+            logger.debug(
+                "node_selection.viable_trees count=%s total_draft_roots=%s",
+                len(viable_trees),
+                len(self.journal.draft_nodes),
+            )
 
             # Debugging phase (probabilistic)
-            if random.random() < search_cfg.debug_prob:
+            debug_roll = random.random()
+            if debug_roll < search_cfg.debug_prob:
+                logger.debug(
+                    "node_selection.debug_roll roll=%s threshold=%s decision=debug",
+                    debug_roll,
+                    search_cfg.debug_prob,
+                )
                 logger.debug("Checking debuggable nodes")
                 debuggable_nodes: list[Node] = []
                 try:
@@ -483,6 +524,13 @@ class ParallelAgent:
                 if debuggable_nodes:
                     logger.debug("Found debuggable nodes")
                     node = random.choice(debuggable_nodes)
+                    logger.debug(
+                        "node_selection.debug_choice node=%s debug_depth=%s max_debug_depth=%s exc_type=%s",
+                        node.id[:8],
+                        node.debug_depth,
+                        search_cfg.max_debug_depth,
+                        node.exc_type,
+                    )
                     tree_root = node
                     while tree_root.parent:
                         tree_root = tree_root.parent
@@ -492,6 +540,12 @@ class ParallelAgent:
                         nodes_to_process.append(node)
                         processed_trees.add(tree_id)
                         continue
+            else:
+                logger.debug(
+                    "node_selection.debug_roll roll=%s threshold=%s decision=skip_debug",
+                    debug_roll,
+                    search_cfg.debug_prob,
+                )
 
             # Stage-specific selection: Ablation Studies
             logger.debug(f"self.stage_name: {self.stage_name}")
@@ -502,10 +556,18 @@ class ParallelAgent:
                         level="info",
                     )
                 )
+                logger.debug(
+                    "node_selection.decision decision=ablation parent=%s",
+                    None if self.best_stage3_node is None else self.best_stage3_node.id[:8],
+                )
                 nodes_to_process.append(self.best_stage3_node)
                 continue
             # Stage-specific selection: Hyperparameter Tuning
             elif stage_identifier is StageIdentifier.STAGE2:
+                logger.debug(
+                    "node_selection.decision decision=tuning parent=%s",
+                    None if self.best_stage1_node is None else self.best_stage1_node.id[:8],
+                )
                 nodes_to_process.append(self.best_stage1_node)
                 continue
             else:  # Stage 1, 3: normal best-first search
@@ -513,12 +575,19 @@ class ParallelAgent:
                 logger.debug("Checking good nodes..")
                 good_nodes = self.journal.good_nodes
                 if not good_nodes:
+                    logger.debug(
+                        "node_selection.decision decision=draft reason=no_good_nodes good_nodes=0",
+                    )
                     nodes_to_process.append(None)  # Back to drafting
                     continue
 
                 # Get best node from unprocessed tree if possible
                 best_node = self.journal.get_best_node()
                 if best_node is None:
+                    logger.debug(
+                        "node_selection.decision decision=draft reason=no_best_node total_good_nodes=%s",
+                        len(good_nodes),
+                    )
                     nodes_to_process.append(None)
                     continue
                 tree_root = best_node
@@ -527,6 +596,13 @@ class ParallelAgent:
 
                 tree_id = id(tree_root)
                 if tree_id not in processed_trees or len(processed_trees) >= len(viable_trees):
+                    logger.debug(
+                        "node_selection.decision decision=improve node=%s tree_root=%s processed_trees=%s viable_trees=%s",
+                        best_node.id[:8],
+                        tree_root.id[:8],
+                        len(processed_trees),
+                        len(viable_trees),
+                    )
                     nodes_to_process.append(best_node)
                     processed_trees.add(tree_id)
                     continue
@@ -542,6 +618,13 @@ class ParallelAgent:
                         tree_root = tree_root.parent
                     tree_id = id(tree_root)
                     if tree_id not in processed_trees or len(processed_trees) >= len(viable_trees):
+                        logger.debug(
+                            "node_selection.decision decision=improve_fallback node=%s tree_root=%s processed_trees=%s viable_trees=%s",
+                            node.id[:8],
+                            tree_root.id[:8],
+                            len(processed_trees),
+                            len(viable_trees),
+                        )
                         nodes_to_process.append(node)
                         processed_trees.add(tree_id)
                         break
@@ -551,7 +634,6 @@ class ParallelAgent:
     def step(self) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
         self.stage_skip.ensure_no_skip_pending()
-        stage_identifier = self.stage_identifier
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
         logger.debug(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")
@@ -615,6 +697,8 @@ class ParallelAgent:
 
         executor = self._ensure_executor()
         futures: list[Future] = []
+        scheduled_stage2_names: set[str] = set()
+        scheduled_stage4_names: set[str] = set()
         try:
             for node, node_data in zip(nodes_to_process, node_data_list):
                 self.stage_skip.ensure_no_skip_pending()
@@ -627,41 +711,8 @@ class ParallelAgent:
                     except RuntimeError as e:
                         logger.warning(f"Could not acquire GPU: {e}. Running on CPU")
 
-                is_not_buggy = (
-                    node_data is not None
-                    and isinstance(node_data, dict)
-                    and node_data.get("is_buggy") is False
-                )
-                if stage_identifier is StageIdentifier.STAGE2 and is_not_buggy:
-                    base_stage1_code = self.best_stage1_node.code if self.best_stage1_node else ""
-                    tried_list = list(self._hyperparam_tuning_state["tried_hyperparams"])
-                    new_hyperparam_idea = Stage2Tuning.propose_next_hyperparam_idea(
-                        base_stage1_code=base_stage1_code,
-                        tried=tried_list,
-                        model=self.cfg.agent.code.model,
-                        temperature=self.cfg.agent.code.temperature,
-                    )
-                    self._hyperparam_tuning_state["tried_hyperparams"].add(new_hyperparam_idea.name)
-                    new_ablation_idea = None
-                elif stage_identifier is StageIdentifier.STAGE4 and is_not_buggy:
-                    base_stage3_code = self.best_stage3_node.code if self.best_stage3_node else ""
-                    completed_list = list(self._ablation_state["completed_ablations"])
-                    new_ablation_idea = Stage4Ablation.propose_next_ablation_idea(
-                        base_stage3_code=base_stage3_code,
-                        completed=completed_list,
-                        model=self.cfg.agent.code.model,
-                        temperature=self.cfg.agent.code.temperature,
-                    )
-                    self._ablation_state["completed_ablations"].add(new_ablation_idea.name)
-                    new_hyperparam_idea = None
-                else:
-                    new_ablation_idea = None
-                    new_hyperparam_idea = None
-
-                best_stage3_plot_code = (
-                    self.best_stage3_node.plot_code if self.best_stage3_node else None
-                )
                 seed_eval = False
+                seed_value = 0
                 execution_id = uuid.uuid4().hex
                 node_label = node.id if node else "draft"
                 logger.info(
@@ -679,23 +730,82 @@ class ParallelAgent:
                 user_feedback_payload = ""
                 if node is not None:
                     user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
+                is_not_buggy = (
+                    node_data is not None
+                    and isinstance(node_data, dict)
+                    and node_data.get("is_buggy") is False
+                )
+                stage2_hyperparam_idea: StageIdea | None = None
+                if (
+                    self.stage_identifier is StageIdentifier.STAGE2
+                    and node is not None
+                    and is_not_buggy
+                ):
+                    base_code = node.code or ""
+                    tried_hyperparam_set: set[str] = set()
+                    for prev in self.journal.nodes:
+                        name = prev.hyperparam_name
+                        if isinstance(name, str) and name.strip():
+                            tried_hyperparam_set.add(name.strip())
+                    tried_hyperparam_set |= scheduled_stage2_names
+                    tried_hyperparams = sorted(tried_hyperparam_set)[:50]
+                    hyperparam_idea = propose_next_hyperparam_idea(
+                        base_code=base_code,
+                        tried=tried_hyperparams,
+                        model=self.cfg.agent.feedback.model,
+                        temperature=self.cfg.agent.feedback.temperature,
+                    )
+                    scheduled_stage2_names.add(hyperparam_idea.name)
+                    stage2_hyperparam_idea = StageIdea(
+                        name=hyperparam_idea.name,
+                        description=hyperparam_idea.description,
+                        tried_names=list(tried_hyperparams),
+                    )
+                stage4_ablation_idea: StageIdea | None = None
+                if (
+                    self.stage_identifier is StageIdentifier.STAGE4
+                    and node is not None
+                    and is_not_buggy
+                ):
+                    base_code = node.code or ""
+                    tried_ablation_set: set[str] = set()
+                    for prev in self.journal.nodes:
+                        name = prev.ablation_name
+                        if isinstance(name, str) and name.strip():
+                            tried_ablation_set.add(name.strip())
+                    tried_ablation_set |= scheduled_stage4_names
+                    tried_ablations = sorted(tried_ablation_set)[:50]
+                    ablation_idea = propose_next_ablation_idea(
+                        base_code=base_code,
+                        tried=tried_ablations,
+                        model=self.cfg.agent.feedback.model,
+                        temperature=self.cfg.agent.feedback.temperature,
+                    )
+                    scheduled_stage4_names.add(ablation_idea.name)
+                    stage4_ablation_idea = StageIdea(
+                        name=ablation_idea.name,
+                        description=ablation_idea.description,
+                        tried_names=list(tried_ablations),
+                    )
                 task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
+                    "stage_goals": self.stage_goals,
+                    "evaluation_metric_spec": self.evaluation_metric_spec,
                     "cfg": self.cfg,
                     "gpu_id": gpu_id,
                     "memory_summary": memory_summary,
-                    "evaluation_metrics": self.evaluation_metrics,
                     "stage_identifier": self.stage_identifier,
-                    "new_ablation_idea": new_ablation_idea,
-                    "new_hyperparam_idea": new_hyperparam_idea,
-                    "best_stage3_plot_code": best_stage3_plot_code,
                     "seed_eval": seed_eval,
+                    "seed_value": seed_value,
+                    "seed_aggregation": None,
+                    "stage2_hyperparam_idea": stage2_hyperparam_idea,
+                    "stage4_ablation_idea": stage4_ablation_idea,
                     "event_callback": self.event_callback,
                     "execution_id": execution_id,
                     "user_feedback_payload": user_feedback_payload,
                 }
-                future = executor.submit(process_node_task, task)
+                future = executor.submit(process_node, **task)
                 futures.append(future)
                 self._future_execution_ids[future] = execution_id
                 self._future_process_ids[future] = process_id
@@ -737,16 +847,6 @@ class ParallelAgent:
                             )
                     logger.debug("Investigating if result node has metric")
                     logger.debug(str(result_node.metric))
-                    Stage2Tuning.update_hyperparam_state(
-                        stage_identifier=stage_identifier,
-                        result_node=result_node,
-                        state_set=self._hyperparam_tuning_state["tried_hyperparams"],
-                    )
-                    Stage4Ablation.update_ablation_state(
-                        stage_identifier=stage_identifier,
-                        result_node=result_node,
-                        state_set=self._ablation_state["completed_ablations"],
-                    )
 
                     self.journal.append(result_node)
                     logger.debug("Added result node to journal")
@@ -1011,7 +1111,7 @@ class ParallelAgent:
                     logger.info("Updated existing node %s with timeout feedback.", execution_id[:8])
             if status == "ok" and pid is not None:
                 try:
-                    os.kill(pid, signal.SIGKILL)
+                    send_signal_to_process_group(pid=pid, sig=signal.SIGKILL)
                     logger.info(
                         "Sent SIGKILL to pid=%s for timed-out execution_id=%s",
                         pid,

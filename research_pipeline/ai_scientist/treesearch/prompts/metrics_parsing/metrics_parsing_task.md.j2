@@ -1,0 +1,24 @@
+You are running inside a sandboxed workspace.
+Your goal is to generate metrics from an already-completed experiment run.
+
+## Inputs
+- Stage: {{ stage_identifier_name }}
+- Experiment code file: `{{ agent_file_name }}`
+- Experiment artifacts: `./working/experiment_data.npy`
+- Primary metric spec (JSON):
+```json
+{{ evaluation_metric_json }}
+```
+
+## Required outputs (MUST)
+- Write a Python script `parse_metrics.py` that:
+  - loads `./working/experiment_data.npy`
+  - extracts final/best values for metrics per dataset
+  - prints metrics with clear labels (dataset name + metric name + final/best)
+  - does NOT train, does NOT download data, and does NOT generate plots
+- Write `metrics_task_result.json` as a JSON object once `parse_metrics.py` is created.
+
+## Notes
+- Use `pathlib.Path` in the script.
+- If you cannot load or interpret the artifact, still write `parse_metrics.py` that prints a clear error.
+

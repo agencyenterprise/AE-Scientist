@@ -16,8 +16,8 @@ import json
 import logging
 import os
 import os.path as osp
+import pickle
 import re
-import shutil
 import sys
 import threading
 import traceback
@@ -29,8 +29,7 @@ from omegaconf import OmegaConf
 
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
-from ai_scientist.perform_icbinb_writeup import gather_citations
-from ai_scientist.perform_icbinb_writeup import perform_writeup as perform_icbinb_writeup
+from ai_scientist.perform_citations import gather_citations
 from ai_scientist.perform_llm_review import ReviewResponseModel, load_paper, perform_review
 from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
@@ -47,6 +46,17 @@ from ai_scientist.telemetry import (
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
 from ai_scientist.treesearch.bfts_utils import idea_to_markdown
+from ai_scientist.treesearch.codex.codex_task_types import EvaluationMetricSpec
+from ai_scientist.treesearch.config import (
+    Config,
+    ReviewConfig,
+    TelemetryConfig,
+    WriteupConfig,
+    apply_log_level,
+    load_task_desc,
+    prep_cfg,
+    save_run,
+)
 from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
@@ -58,16 +68,6 @@ from ai_scientist.treesearch.stages.stage1_baseline import Stage1Baseline
 from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
 from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
 from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
-from ai_scientist.treesearch.utils.config import (
-    Config,
-    ReviewConfig,
-    TelemetryConfig,
-    WriteupConfig,
-    apply_log_level,
-    load_task_desc,
-    prep_cfg,
-    save_run,
-)
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
 from management_server import (
     initialize_execution_registry,
@@ -87,6 +87,13 @@ class TelemetryHooks(NamedTuple):
 
 class ArtifactCallback(Protocol):
     def __call__(self, spec: ArtifactSpec) -> None: ...
+
+
+@dataclass(frozen=True)
+class RunExecutionOutcome:
+    run_dir: Path
+    success: bool
+    message: str
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -378,7 +385,7 @@ def resume_run(
     idea_json_path: str,
     resume_arg: str,
     event_callback: Callable[[BaseEvent], None],
-) -> Path:
+) -> RunExecutionOutcome:
     try:
         logs_root = base_cfg.log_dir
         raw_exp_name = base_cfg.exp_name
@@ -394,7 +401,7 @@ def resume_run(
             logger.info(
                 "All summary files found; skipping stage execution and proceeding to reports."
             )
-            return run_dir
+            return RunExecutionOutcome(run_dir=run_dir, success=True, message="")
 
         s1 = stage_exists(run_dir=run_dir, prefix="stage_1_")
         s2 = stage_exists(run_dir=run_dir, prefix="stage_2_")
@@ -410,17 +417,19 @@ def resume_run(
             next_stage = 4
 
         if next_stage is None:
-            return run_dir
+            return RunExecutionOutcome(run_dir=run_dir, success=True, message="")
 
         fake_config = copy.deepcopy(cfg_obj)
         fake_config.desc_file = Path(idea_json_path)
         task_desc = load_task_desc(cfg=fake_config)
 
+        evaluation_metric_spec = load_evaluation_metric_spec_from_checkpoint(run_dir=run_dir)
         manager = AgentManager(
             task_desc=task_desc,
             cfg=cfg_obj,
             workspace_dir=Path(cfg_obj.workspace_dir),
             event_callback=event_callback,
+            evaluation_metric_spec=evaluation_metric_spec,
         )
 
         if s1:
@@ -539,10 +548,34 @@ def resume_run(
             step_callback=step_callback,
             iteration_started_callback=iteration_started_callback,
         )
-        return run_dir
+        outcome = manager.get_run_outcome()
+        return RunExecutionOutcome(
+            run_dir=run_dir, success=outcome.success, message=outcome.message
+        )
     except Exception:
         logger.exception("Resume failed; exiting.")
         sys.exit(1)
+
+
+def load_evaluation_metric_spec_from_checkpoint(*, run_dir: Path) -> EvaluationMetricSpec:
+    stage_dirs = sorted(
+        [p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("stage_")],
+        key=lambda p: p.name,
+        reverse=True,
+    )
+    for stage_dir in stage_dirs:
+        checkpoint_path = stage_dir / "checkpoint.pkl"
+        if not checkpoint_path.exists():
+            continue
+        with open(checkpoint_path, "rb") as f:
+            checkpoint = pickle.load(f)
+        if not isinstance(checkpoint, dict):
+            raise ValueError(f"Invalid checkpoint format at {checkpoint_path}")
+        spec = checkpoint.get("evaluation_metric_spec")
+        if not isinstance(spec, EvaluationMetricSpec):
+            raise ValueError(f"Missing evaluation_metric_spec in {checkpoint_path}")
+        return spec
+    raise FileNotFoundError(f"No checkpoint.pkl found under {run_dir}")
 
 
 def determine_run_directory(
@@ -596,17 +629,37 @@ def should_generate_reports(run_dir_path: Path | None) -> bool:
     return False
 
 
+def has_aggregated_plots(*, reports_base: str, run_dir_path: Path) -> bool:
+    figures_dir = Path(reports_base) / "figures" / run_dir_path.name
+    if not figures_dir.exists():
+        return False
+    return any(p.is_file() for p in figures_dir.glob("*.png"))
+
+
+def has_writeup_pdf(*, reports_base: str, run_dir_path: Path) -> bool:
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    if not run_out_dir.exists():
+        return False
+    return any(p.is_file() for p in run_out_dir.glob("*.pdf"))
+
+
+def has_review_outputs(*, reports_base: str, run_dir_path: Path) -> bool:
+    run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
+    if not run_out_dir.exists():
+        return False
+    review_text = run_out_dir / "review_text.json"
+    review_imgs = run_out_dir / "review_img_cap_ref.json"
+    return review_text.exists() and review_imgs.exists()
+
+
 def run_plot_aggregation(
-    writeup_cfg: WriteupConfig | None,
+    writeup_cfg: WriteupConfig,
     reports_base: str,
     run_dir_path: Path | None,
-    should_run_reports: bool,
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> bool:
-    if writeup_cfg is None or not should_run_reports:
-        return False
     try:
         aggregate_plots(
             base_folder=reports_base,
@@ -642,31 +695,15 @@ def run_plot_aggregation(
         return False
 
 
-def cleanup_aggregated_results(reports_base: str) -> None:
-    shutil.rmtree(osp.join(reports_base, "experiment_results"), ignore_errors=True)
-
-
 def run_writeup_stage(
-    writeup_cfg: WriteupConfig | None,
+    writeup_cfg: WriteupConfig,
     reports_base: str,
     run_dir_path: Path | None,
-    should_run_reports: bool,
-    agg_ok: bool,
     artifact_callback: ArtifactCallback,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> None:
-    if writeup_cfg is None:
-        logger.info("Writeup configuration missing; skipping writeup stage.")
-        return
-    if not should_run_reports:
-        logger.info("Reports generation disabled; skipping writeup stage.")
-        return
-    if not agg_ok:
-        logger.info("Plot aggregation failed; skipping writeup stage.")
-        return
 
-    writeup_type = writeup_cfg.writeup_type.lower()
     writeup_retries = writeup_cfg.writeup_retries
     num_cite_rounds = writeup_cfg.num_cite_rounds
     writeup_model = writeup_cfg.model
@@ -688,26 +725,16 @@ def run_writeup_stage(
     for attempt in range(writeup_retries):
         logger.info(f"Writeup attempt {attempt + 1} of {writeup_retries}")
         try:
-            if writeup_type == "normal":
-                writeup_success = perform_writeup(
-                    base_folder=reports_base,
-                    model=writeup_model,
-                    page_limit=8,
-                    citations_text=citations_text,
-                    run_dir_name=run_dir_path.name if run_dir_path is not None else None,
-                    temperature=writeup_cfg.temperature,
-                    event_callback=event_callback,
-                    run_id=run_id,
-                )
-            else:
-                writeup_success = perform_icbinb_writeup(
-                    base_folder=reports_base,
-                    model=writeup_model,
-                    page_limit=4,
-                    citations_text=citations_text,
-                    run_dir_name=run_dir_path.name if run_dir_path is not None else None,
-                    temperature=writeup_cfg.temperature,
-                )
+            writeup_success = perform_writeup(
+                base_folder=reports_base,
+                model=writeup_model,
+                page_limit=8,
+                citations_text=citations_text,
+                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
+                temperature=writeup_cfg.temperature,
+                event_callback=event_callback,
+                run_id=run_id,
+            )
         except Exception as exc:
             last_error = exc
             logger.exception("Writeup attempt %s failed.", attempt + 1)
@@ -754,20 +781,15 @@ def run_writeup_stage(
 
 
 def run_review_stage(
-    review_cfg: ReviewConfig | None,
+    review_cfg: ReviewConfig,
     reports_base: str,
-    run_dir_path: Path | None,
-    should_run_reports: bool,
-    agg_ok: bool,
+    run_dir_path: Path,
     artifact_callback: ArtifactCallback,
     telemetry_cfg: TelemetryConfig | None,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
     webhook_client: WebhookClient | None = None,
 ) -> None:
-    if review_cfg is None or run_dir_path is None or not should_run_reports or not agg_ok:
-        return
-
     pdf_path = find_pdf_path_for_review(
         idea_dir=reports_base,
         run_dir_name=run_dir_path.name if run_dir_path is not None else None,
@@ -942,70 +964,86 @@ def execute_launcher(args: argparse.Namespace) -> None:
             )
             hw_stats_reporter.start()
 
-    run_success = False
-    failure_message: str | None = None
+    run_success = True
+    failure_message = ""
     try:
         idea_json_path = str(base_cfg.desc_file)
         with open(idea_json_path, "r") as f:
             idea = json.load(f)
             logger.info(f"Loaded idea from {idea_json_path}")
 
-        resume_run_dir: Path | None = None
+        resume_outcome: RunExecutionOutcome | None = None
         if args.resume is not None:
-            resume_run_dir = resume_run(
+            resume_outcome = resume_run(
                 base_cfg=base_cfg,
                 idea_json_path=idea_json_path,
                 resume_arg=args.resume,
                 event_callback=event_callback,
             )
+            run_success = resume_outcome.success
+            failure_message = resume_outcome.message
         else:
-            perform_experiments_bfts(base_config_path, event_callback)
+            outcome = perform_experiments_bfts(base_config_path, event_callback)
+            run_success = outcome.success
+            failure_message = outcome.message
 
         run_dir_path = determine_run_directory(
             top_log_dir=top_log_dir,
             existing_runs_before=existing_runs_before,
-            resume_run_dir=resume_run_dir,
+            resume_run_dir=resume_outcome.run_dir if resume_outcome is not None else None,
         )
         write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
 
-        should_run_reports = should_generate_reports(run_dir_path=run_dir_path)
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
+        if writeup_cfg is not None and run_dir_path is not None:
+            agg_ok = True
+            if has_aggregated_plots(reports_base=reports_base, run_dir_path=run_dir_path):
+                logger.info(
+                    "Existing aggregated plots detected for %s; skipping plot aggregation.",
+                    run_dir_path.name,
+                )
+            else:
+                agg_ok = run_plot_aggregation(
+                    writeup_cfg=writeup_cfg,
+                    reports_base=reports_base,
+                    run_dir_path=run_dir_path,
+                    artifact_callback=artifact_callback,
+                    event_callback=event_callback,
+                    run_id=run_id,
+                )
 
-        agg_ok = run_plot_aggregation(
-            writeup_cfg=writeup_cfg,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            artifact_callback=artifact_callback,
-            event_callback=event_callback,
-            run_id=run_id,
-        )
+            if has_writeup_pdf(reports_base=reports_base, run_dir_path=run_dir_path):
+                logger.info(
+                    "Existing writeup PDF detected for %s; skipping writeup stage.",
+                    run_dir_path.name,
+                )
+            elif agg_ok:
+                run_writeup_stage(
+                    writeup_cfg=writeup_cfg,
+                    reports_base=reports_base,
+                    run_dir_path=run_dir_path,
+                    artifact_callback=artifact_callback,
+                    event_callback=event_callback,
+                    run_id=run_id,
+                )
 
-        cleanup_aggregated_results(reports_base=reports_base)
-
-        run_writeup_stage(
-            writeup_cfg=writeup_cfg,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            agg_ok=agg_ok,
-            artifact_callback=artifact_callback,
-            event_callback=event_callback,
-            run_id=run_id,
-        )
-
-        run_review_stage(
-            review_cfg=review_cfg if review_enabled else None,
-            reports_base=reports_base,
-            run_dir_path=run_dir_path,
-            should_run_reports=should_run_reports,
-            agg_ok=agg_ok,
-            artifact_callback=artifact_callback,
-            telemetry_cfg=base_cfg.telemetry,
-            event_callback=event_callback,
-            run_id=run_id,
-            webhook_client=webhook_client,
-        )
+            if review_enabled and review_cfg is not None:
+                if has_review_outputs(reports_base=reports_base, run_dir_path=run_dir_path):
+                    logger.info(
+                        "Existing review outputs detected for %s; skipping review stage.",
+                        run_dir_path.name,
+                    )
+                else:
+                    run_review_stage(
+                        review_cfg=review_cfg,
+                        reports_base=reports_base,
+                        run_dir_path=run_dir_path,
+                        artifact_callback=artifact_callback,
+                        telemetry_cfg=base_cfg.telemetry,
+                        event_callback=event_callback,
+                        run_id=run_id,
+                        webhook_client=webhook_client,
+                    )
 
         if artifact_callback is not None and run_dir_path is not None:
             # This call is also performed by the server before terminating the pod.
@@ -1028,17 +1066,18 @@ def execute_launcher(args: argparse.Namespace) -> None:
             )
 
         logger.info("Finished running the experiment.")
-        run_success = True
     except Exception as exc:
+        run_success = False
         failure_message = str(exc)
         raise
     finally:
         try:
             if webhook_client is not None:
                 try:
+                    message = failure_message.strip() or None
                     run_finished_future = webhook_client.publish_run_finished(
                         success=run_success,
-                        message=failure_message,
+                        message=message,
                     )
                     run_finished_future.result(timeout=None)
                 except Exception:

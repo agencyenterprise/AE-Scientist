@@ -27,9 +27,8 @@ writeup:
   plot_model: gpt-5.2
   citation_model: gpt-5.2
   temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
-  writeup_type: normal
   writeup_retries: 3
-  num_cite_rounds: 5
+  num_cite_rounds: 1
 
 review:
   model: gpt-5.2
@@ -43,10 +42,10 @@ agent:
   type: parallel
   num_workers: 1
   stages:
-    stage1_max_iters: 20
-    stage2_max_iters: 10
-    stage3_max_iters: 10
-    stage4_max_iters: 10
+    stage1_max_iters: 10
+    stage2_max_iters: 5
+    stage3_max_iters: 5
+    stage4_max_iters: 5
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 1
   multi_seed_eval:

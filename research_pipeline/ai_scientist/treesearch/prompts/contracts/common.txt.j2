@@ -1,0 +1,7 @@
+## Node result contract (STRICT; enforced by the harness)
+- You MUST include the following keys in `node_result.json` with the exact types:
+  - `plan`: string (non-empty)
+  - `is_buggy_plots`: boolean (true/false; never null)
+  - `datasets_successfully_tested`: list of strings (can be empty)
+  - `is_seed_agg_node`: boolean (false for normal runs; true only for seed aggregation runs)
+- Do not add extra top-level keys to `node_result.json` beyond the Node schema; unexpected keys are treated as contract violations.

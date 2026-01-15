@@ -1,0 +1,6 @@
+- Stage-specific required fields:
+  - Stage 4: `ablation_name` must be a non-empty string.
+    - `ablation_name` is the identifier of the single ablation you ran in this node (use a short, descriptive name).
+    - if an assigned ablation idea is provided, set `ablation_name` exactly to that idea name.
+    - store the ablation results under a dedicated key in `working/experiment_data.npy` (e.g. `experiment_data["ablation"][ablation_name] = {...}`) while preserving the parent schema.
+    - if `is_buggy_plots` is false, you MUST write at least 1 `.png` plot into `./working/`.

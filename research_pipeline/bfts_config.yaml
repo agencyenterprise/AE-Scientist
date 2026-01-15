@@ -28,7 +28,6 @@ writeup:
   plot_model: Qwen/Qwen2.5-VL-7B-Instruct
   citation_model: Qwen/Qwen2.5-VL-7B-Instruct
   temperature: 1.0
-  writeup_type: normal
   writeup_retries: 3
   num_cite_rounds: 5
 
