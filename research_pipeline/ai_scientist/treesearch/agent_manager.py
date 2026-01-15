@@ -419,7 +419,13 @@ class AgentManager:
             candidates.extend(reversed(history))
 
         for journal in candidates:
-            best_node = journal.get_best_node()
+            # Prefer deterministic, metric-only selection for stage-to-stage seeding.
+            # This ensures we carry forward the "best by metrics" node (when available),
+            # rather than an LLM-chosen node which may use non-metric evidence.
+            best_node = journal.get_best_node(only_good=True, use_val_metric_only=True)
+            if best_node is None:
+                # Fallback to the default selection mode when no metrics are available yet.
+                best_node = journal.get_best_node()
             if best_node:
                 # Create a clean copy of the node for the next stage
                 copied_node = copy.deepcopy(best_node)
