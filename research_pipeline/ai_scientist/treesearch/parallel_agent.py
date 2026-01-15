@@ -730,8 +730,17 @@ class ParallelAgent:
                 user_feedback_payload = ""
                 if node is not None:
                     user_feedback_payload = self._one_shot_user_feedback_payloads.pop(node.id, "")
+                is_not_buggy = (
+                    node_data is not None
+                    and isinstance(node_data, dict)
+                    and node_data.get("is_buggy") is False
+                )
                 stage2_hyperparam_idea: StageIdea | None = None
-                if self.stage_identifier is StageIdentifier.STAGE2 and node is not None:
+                if (
+                    self.stage_identifier is StageIdentifier.STAGE2
+                    and node is not None
+                    and is_not_buggy
+                ):
                     base_code = node.code or ""
                     tried_hyperparam_set: set[str] = set()
                     for prev in self.journal.nodes:
@@ -753,7 +762,11 @@ class ParallelAgent:
                         tried_names=list(tried_hyperparams),
                     )
                 stage4_ablation_idea: StageIdea | None = None
-                if self.stage_identifier is StageIdentifier.STAGE4 and node is not None:
+                if (
+                    self.stage_identifier is StageIdentifier.STAGE4
+                    and node is not None
+                    and is_not_buggy
+                ):
                     base_code = node.code or ""
                     tried_ablation_set: set[str] = set()
                     for prev in self.journal.nodes:
