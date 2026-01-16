@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import IO, Callable, cast
 
 from ...llm.token_tracker import save_cost_track
-from ..events import BaseEvent, RunLogEvent
+from ..events import BaseEvent, CodexEvent
 from ..process_utils import terminate_process_group
 
 logger = logging.getLogger("ai-scientist")
@@ -126,6 +126,8 @@ class CodexCliRunner:
         self,
         *,
         task_file: Path,
+        stage: str,
+        node: int,
         pid_callback: Callable[[int], None] | None,
         termination_checker: Callable[[], bool] | None,
     ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
@@ -193,63 +195,25 @@ class CodexCliRunner:
                     if not isinstance(obj, dict):
                         return
                     typ = obj.get("type")
-                    if typ == "error":
+                    if typ is not None:
                         self._event_callback(
-                            RunLogEvent(message=f"[codex:error] {line}", level="info")
+                            CodexEvent(stage=stage, node=node, event_type=typ, event_content=line)
                         )
-                        return
-                    if typ == "turn.completed":
-                        self._event_callback(
-                            RunLogEvent(message=f"[codex:{typ}] {line}", level="info")
-                        )
-                        # Extract and save token usage for cost tracking
-                        usage = obj.get("usage")
-                        if isinstance(usage, dict):
-                            input_tokens = usage.get("input_tokens")
-                            output_tokens = usage.get("output_tokens")
-                            if input_tokens is not None and output_tokens is not None:
-                                try:
-                                    save_cost_track(
-                                        self._model,
-                                        input_tokens=int(input_tokens),
-                                        output_tokens=int(output_tokens),
-                                    )
-                                except Exception:
-                                    logger.exception("Failed to save token usage")
-                        return
-                    if typ in ("thread.started", "turn.started", "turn.failed"):
-                        self._event_callback(
-                            RunLogEvent(message=f"[codex:{typ}] {line}", level="info")
-                        )
-                        return
-                    if typ == "item.started":
-                        self._event_callback(
-                            RunLogEvent(message=f"[codex:{typ}] {line}", level="info")
-                        )
-                        return
-                    item = obj.get("item")
-                    if not isinstance(item, dict):
-                        return
-                    item_type = item.get("type")
-                    if item_type == "agent_message":
-                        text = item.get("text")
-                        if isinstance(text, str):
-                            self._event_callback(
-                                RunLogEvent(message=f"[codex:agent_message] {text}", level="info")
-                            )
-                        return
-                    if item_type == "command_execution":
-                        cmd = item.get("command")
-                        status = item.get("status")
-                        if isinstance(cmd, str):
-                            cmd_one_line = " ".join(cmd.splitlines())
-                            self._event_callback(
-                                RunLogEvent(
-                                    message=f"[codex:cmd:{status}] {cmd_one_line[:400]}",
-                                    level="info",
-                                )
-                            )
-                        return
+                        # Extract and save token usage for cost tracking on turn completion
+                        if typ == "turn.completed":
+                            usage = obj.get("usage")
+                            if isinstance(usage, dict):
+                                input_tokens = usage.get("input_tokens")
+                                output_tokens = usage.get("output_tokens")
+                                if input_tokens is not None and output_tokens is not None:
+                                    try:
+                                        save_cost_track(
+                                            self._model,
+                                            input_tokens=int(input_tokens),
+                                            output_tokens=int(output_tokens),
+                                        )
+                                    except Exception:
+                                        logger.exception("Failed to save token usage")
 
                 while True:
                     if termination_checker is not None and termination_checker():
@@ -275,8 +239,11 @@ class CodexCliRunner:
                             try:
                                 decoded_chunk = chunk.decode("utf-8", errors="replace").rstrip()
                                 self._event_callback(
-                                    RunLogEvent(
-                                        message=f"[codex:stderr] {decoded_chunk}", level="info"
+                                    CodexEvent(
+                                        stage=stage,
+                                        node=node,
+                                        event_type="stderr",
+                                        event_content=decoded_chunk,
                                     )
                                 )
                             except (ValueError, TypeError):

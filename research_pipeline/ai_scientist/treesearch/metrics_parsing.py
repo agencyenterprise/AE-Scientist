@@ -119,6 +119,7 @@ def generate_and_assign_metrics(
     workspace_dir: Path,
     working_dir: Path,
     node: Node,
+    node_index: int,
     parent_node: Node | None,
     stage_identifier: StageIdentifier,
     evaluation_metric_spec: EvaluationMetricSpec,
@@ -205,6 +206,8 @@ def generate_and_assign_metrics(
         )
         term_out, _, exc_type, exc_info = metrics_runner.run(
             task_file=metrics_task_file,
+            stage=stage_identifier.prefixed_name,
+            node=node_index,
             pid_callback=None,
             termination_checker=None,
         )

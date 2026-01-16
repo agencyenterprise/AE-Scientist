@@ -748,6 +748,7 @@ class FakeRunner:
                 "started_at": started_at.isoformat(),
             }
         )
+        self._emit_codex_events(stage_name=stage_name, node_index=iteration)
         if self._code_event_delay_seconds > 0:
             time.sleep(self._code_event_delay_seconds)
         exec_time = self._random_exec_time_seconds
@@ -774,6 +775,43 @@ class FakeRunner:
             existing = _executions_by_id.get(execution_id)
             if existing is not None:
                 _executions_by_id[execution_id] = existing._replace(status="success")
+
+    def _emit_codex_events(self, *, stage_name: str, node_index: int) -> None:
+        item_event = {
+            "type": "item.started",
+            "item": {
+                "id": f"item_{uuid.uuid4().hex[:6]}",
+                "type": "command_execution",
+                "command": "bash -lc ls",
+                "status": "in_progress",
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data={
+                "stage": stage_name,
+                "node": node_index,
+                "event_type": "item.started",
+                "event_content": item_event,
+            },
+        )
+        turn_event = {
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": 1200,
+                "cached_input_tokens": 800,
+                "output_tokens": 250,
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data={
+                "stage": stage_name,
+                "node": node_index,
+                "event_type": "turn.completed",
+                "event_content": turn_event,
+            },
+        )
 
     def _emit_progress_flow(self) -> None:
         total_iterations = len(self._stage_plan) * self._iterations_per_stage
