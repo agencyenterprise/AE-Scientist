@@ -154,10 +154,10 @@ class ExperimentConfig:
 class WriteupConfig:
     model: str
     plot_model: str
-    temperature: float = 1.0
-    citation_model: Optional[str] = None
-    writeup_retries: int = 3
-    num_cite_rounds: int = 5
+    temperature: float
+    citation_model: str
+    writeup_retries: int
+    num_cite_rounds: int
 
 
 @dataclass

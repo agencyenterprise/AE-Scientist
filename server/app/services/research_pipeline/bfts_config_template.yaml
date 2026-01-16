@@ -16,23 +16,23 @@ exec:
   format_tb_ipython: False
 
 generate_report: True
-# LLM settings for final report from journal
+
 report:
   model: gpt-5.2
-  temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+  temperature: 1.0
 
 # LLM settings for paper writeup
 writeup:
   model: gpt-5.2
   plot_model: gpt-5.2
   citation_model: gpt-5.2
-  temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+  temperature: 1.0
   writeup_retries: 3
-  num_cite_rounds: 1
+  num_cite_rounds: 5
 
 review:
   model: gpt-5.2
-  temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+  temperature: 1.0
 
 experiment:
   num_syn_datasets: 1
@@ -54,16 +54,16 @@ agent:
   # LLM settings for coding
   code:
     model: gpt-5.2
-    temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+    temperature: 1.0
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
     model: gpt-5.2
-    temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+    temperature: 1.0
 
   vlm_feedback:
     model: gpt-5.2
-    temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+    temperature: 1.0
 
   search:
     max_debug_depth: 5  # increased from 3 - try harder to debug
