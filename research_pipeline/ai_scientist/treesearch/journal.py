@@ -769,9 +769,6 @@ class Journal:
                 exc = n.exc_type or "Unknown"
                 analysis_preview = (n.analysis or "").strip().replace("\n", " ")
                 lines.append(f"- {n.id[:8]} exc_type={exc} analysis={analysis_preview}")
-                if n.user_feedback_payload:
-                    fb_preview = n.user_feedback_payload.strip().replace("\n", " ")
-                    lines.append(f"  user_feedback={fb_preview}")
 
         summary_text = "\n".join(lines).strip()
         logger.debug("Summary text (include_code=%s):\n%s", include_code, summary_text)

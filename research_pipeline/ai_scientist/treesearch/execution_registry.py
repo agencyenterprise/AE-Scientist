@@ -100,17 +100,56 @@ def update_pid(*, execution_id: str, pid: int) -> None:
     logger.info("Recorded pid=%s for execution_id=%s", pid, execution_id)
 
 
-def clear_pid(execution_id: str) -> None:
+def clear_pid(*, execution_id: str) -> None:
+    """
+    Clear the recorded pid for an execution in the shared PID state.
+
+    Important: when an execution is terminated, the shared state entry can also carry the
+    termination payload. In that case we preserve the entry and only clear pid-related
+    keys so workers can still read the payload after the process is killed.
+    """
     shared = _shared_pid_state
     if shared is None:
         return
     try:
+        shared_entry = shared.get(execution_id)
+        if not shared_entry:
+            return
+
+        should_preserve = bool(
+            shared_entry.get("payload")
+            or shared_entry.get("terminated")
+            or shared_entry.get("skip_pending")
+        )
+        if should_preserve:
+            shared_entry.pop("pid", None)
+            shared_entry.pop("reported_at", None)
+            shared[execution_id] = shared_entry
+            logger.debug("Cleared pid (preserving payload) for execution_id=%s", execution_id)
+            return
+
         shared.pop(execution_id, None)
         logger.debug("Cleared pid for execution_id=%s", execution_id)
     except Exception:
         # Manager proxies can raise when shutting down; ignore best-effort cleanup.
         logger.debug("Failed to clear pid for execution_id=%s during shutdown", execution_id)
-        pass
+        return
+
+
+def clear_shared_entry(*, execution_id: str) -> None:
+    """Remove the shared PID state entry entirely (including any termination payload)."""
+    shared = _shared_pid_state
+    if shared is None:
+        return
+    try:
+        shared.pop(execution_id, None)
+        logger.debug("Cleared shared execution entry for execution_id=%s", execution_id)
+    except Exception:
+        logger.debug(
+            "Failed to clear shared execution entry for execution_id=%s during shutdown",
+            execution_id,
+        )
+        return
 
 
 def mark_completed(execution_id: str) -> None:
@@ -119,7 +158,7 @@ def mark_completed(execution_id: str) -> None:
         if entry is not None:
             entry.status = "completed"
             logger.info("Marked execution_id=%s as completed", execution_id)
-    clear_pid(execution_id)
+    clear_shared_entry(execution_id=execution_id)
 
 
 def mark_terminated(*, execution_id: str, payload: str) -> Optional["Node"]:
@@ -231,7 +270,7 @@ def clear_execution(execution_id: str) -> None:
     with _lock:
         _entries.pop(execution_id, None)
         logger.info("Cleared execution registry entry for execution_id=%s", execution_id)
-    clear_pid(execution_id)
+    clear_shared_entry(execution_id=execution_id)
 
 
 def has_active_execution(execution_id: str) -> bool:

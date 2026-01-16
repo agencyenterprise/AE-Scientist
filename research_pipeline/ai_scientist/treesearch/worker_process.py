@@ -1105,6 +1105,43 @@ def process_node(
 
     node_result = _load_node_result(output_json_file=output_json_file)
     if node_result is None:
+        termination_payload = execution_registry.get_termination_payload(execution_id) or ""
+        exc_type_value = str(exc_type or "ExecutionTerminatedError")
+
+        def _return_terminated_result(*, analysis: str) -> dict[str, object]:
+            return _return_buggy_node_dict(
+                cfg=cfg,
+                execution_id=execution_id,
+                plan="",
+                code="",
+                analysis=analysis,
+                exc_type=exc_type_value,
+                exec_time=exec_time,
+                term_out=term_out,
+                exc_info=exc_info,
+                parent_node=parent_node,
+                working_dir=working_dir,
+                event_callback=event_callback,
+            )
+
+        if termination_payload.strip():
+            logger.debug(
+                "codex.output.terminated execution_id=%s node_index=%s",
+                execution_id[:8],
+                node_index,
+            )
+            return _return_terminated_result(
+                analysis=(
+                    f"User terminated execution and provided the feedback {termination_payload.strip()}"
+                )
+            )
+        if execution_registry.is_terminated(execution_id):
+            logger.debug(
+                "codex.output.terminated execution_id=%s node_index=%s",
+                execution_id[:8],
+                node_index,
+            )
+            return _return_terminated_result(analysis="User terminated execution.")
         logger.debug(
             "codex.output.missing_node_result execution_id=%s expected_path=%s",
             execution_id[:8],
