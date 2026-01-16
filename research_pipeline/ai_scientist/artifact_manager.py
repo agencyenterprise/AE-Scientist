@@ -218,7 +218,14 @@ class ArtifactPublisher:
             except Exception:
                 logger.exception("Failed to emit artifact SSE event (non-fatal)")
         else:
-            logger.warning("No webhook client available to emit artifact SSE event")
+            logger.warning(
+                "No webhook client available to emit artifact SSE event for artifact_id=%s, artifact_type=%s, filename=%s, file_size=%s, file_type=%s",
+                artifact_id,
+                spec.artifact_type,
+                request.filename,
+                file_size,
+                file_type,
+            )
 
     def close(self) -> None:
         shutil.rmtree(self._temp_dir, ignore_errors=True)
