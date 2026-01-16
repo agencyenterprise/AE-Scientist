@@ -1,14 +1,104 @@
 import json
 import logging
+import os
 import selectors
 import subprocess
 import time
 from pathlib import Path
-from typing import IO, Callable, Sequence, cast
+from typing import IO, Callable, cast
 
+from ...llm.token_tracker import save_cost_track
 from ..process_utils import terminate_process_group
 
 logger = logging.getLogger("ai-scientist")
+
+
+def _managed_venv_dir(*, workspace_dir: Path) -> Path:
+    return workspace_dir / ".ai_scientist_venv"
+
+
+def _venv_python_path(*, venv_dir: Path) -> Path:
+    python_path = venv_dir / "bin" / "python"
+    if python_path.exists():
+        return python_path
+    raise FileNotFoundError(f"Python executable not found in venv at {venv_dir}")
+
+
+def _run_uv(
+    *, args: list[str], timeout_seconds: int, extra_env: dict[str, str], cwd: Path
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    for key, value in extra_env.items():
+        env[key] = value
+    return subprocess.run(
+        args=["uv", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=float(timeout_seconds),
+        env=env,
+        cwd=str(cwd),
+    )
+
+
+def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> Path:
+    """
+    Ensure a per-workspace venv exists (under the worker's workspace dir) and has project deps.
+
+    This venv is used by Codex so `python` / `pip` resolve consistently during the run.
+    """
+    venv_dir = _managed_venv_dir(workspace_dir=workspace_dir)
+    if not venv_dir.exists():
+        _run_uv(
+            args=["venv", "--system-site-packages", str(venv_dir)],
+            timeout_seconds=600,
+            extra_env={},
+            cwd=workspace_dir,
+        )
+    venv_python = _venv_python_path(venv_dir=venv_dir)
+
+    src_pyproject = research_pipeline_root / "pyproject.toml"
+    dst_pyproject = workspace_dir / "pyproject.toml"
+    if src_pyproject.exists():
+        dst_pyproject.write_text(src_pyproject.read_text(encoding="utf-8"), encoding="utf-8")
+
+    src_lock = research_pipeline_root / "uv.lock"
+    dst_lock = workspace_dir / "uv.lock"
+    if src_lock.exists():
+        dst_lock.write_text(src_lock.read_text(encoding="utf-8"), encoding="utf-8")
+
+    _run_uv(
+        args=["sync"],
+        timeout_seconds=600,
+        extra_env={
+            "UV_PROJECT_ENVIRONMENT": str(venv_dir),
+            "UV_PYTHON": str(venv_python),
+        },
+        cwd=workspace_dir,
+    )
+    return venv_dir
+
+
+def build_codex_exec_env(*, base_env: dict[str, str]) -> dict[str, str]:
+    env = dict(base_env)
+    openai_api_key = env.get("OPENAI_API_KEY")
+    if openai_api_key:
+        env["CODEX_API_KEY"] = openai_api_key
+    env["CI"] = "1"
+    env["NO_UPDATE_NOTIFIER"] = "1"
+    env["DISABLE_UPDATE_NOTIFIER"] = "1"
+    env["npm_config_update_notifier"] = "false"
+    return env
+
+
+def build_codex_env(*, venv_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    bin_dir = venv_dir / "bin"
+    env["VIRTUAL_ENV"] = str(venv_dir)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    env["PIP_REQUIRE_VIRTUALENV"] = "1"
+    env["PYTHONNOUSERSITE"] = "1"
+    return build_codex_exec_env(base_env=env)
 
 
 class CodexCliRunner:
@@ -19,14 +109,14 @@ class CodexCliRunner:
         session_log_name: str,
         events_log_name: str,
         timeout_seconds: int,
-        argv: Sequence[str],
+        model: str,
         env: dict[str, str],
     ) -> None:
         self._workspace_dir = workspace_dir
         self._session_log_name = session_log_name
         self._events_log_name = events_log_name
         self._timeout_seconds = timeout_seconds
-        self._argv = list(argv)
+        self._model = model
         self._env = dict(env)
 
     def run(
@@ -51,8 +141,17 @@ class CodexCliRunner:
         # Use non-interactive automation mode via `codex exec`.
         # See docs: https://developers.openai.com/codex/noninteractive
         prompt = task_file.read_text(encoding="utf-8", errors="replace")
-        argv = [*self._argv, prompt]
-        logger.info("Starting Codex CLI: %s (cwd=%s)", " ".join(argv[:3]), self._workspace_dir)
+        argv = [
+            "codex",
+            "exec",
+            "--yolo",
+            "--skip-git-repo-check",
+            "--json",
+            "--model",
+            self._model,
+            prompt,
+        ]
+        logger.info("Starting Codex CLI: %s (cwd=%s)", " ".join(argv), self._workspace_dir)
 
         proc: subprocess.Popen[bytes] | None = None
         try:
@@ -104,7 +203,24 @@ class CodexCliRunner:
                     if typ == "error":
                         _emit(f"[codex:error] {line}")
                         return
-                    if typ in ("thread.started", "turn.started", "turn.completed", "turn.failed"):
+                    if typ == "turn.completed":
+                        _emit(f"[codex:{typ}] {line}")
+                        # Extract and save token usage for cost tracking
+                        usage = obj.get("usage")
+                        if isinstance(usage, dict):
+                            input_tokens = usage.get("input_tokens")
+                            output_tokens = usage.get("output_tokens")
+                            if input_tokens is not None and output_tokens is not None:
+                                try:
+                                    save_cost_track(
+                                        self._model,
+                                        input_tokens=int(input_tokens),
+                                        output_tokens=int(output_tokens),
+                                    )
+                                except Exception:
+                                    logger.exception("Failed to save token usage")
+                        return
+                    if typ in ("thread.started", "turn.started", "turn.failed"):
                         _emit(f"[codex:{typ}] {line}")
                         return
                     item = obj.get("item")
