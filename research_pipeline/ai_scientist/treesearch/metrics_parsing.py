@@ -114,7 +114,6 @@ def generate_and_assign_metrics(
     *,
     cfg: AppConfig,
     codex_env: dict[str, str],
-    codex_argv: list[str],
     codex_timeout_seconds: int,
     venv_dir: Path,
     workspace_dir: Path,
@@ -193,7 +192,7 @@ def generate_and_assign_metrics(
             session_log_name="codex_session__metrics.log",
             events_log_name="codex_events__metrics.jsonl",
             timeout_seconds=codex_timeout_seconds,
-            argv=codex_argv,
+            model=cfg.agent.code.model,
             env=codex_env,
         )
 

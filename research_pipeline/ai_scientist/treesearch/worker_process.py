@@ -15,8 +15,7 @@ from pydantic import BaseModel, Field
 from ai_scientist.llm import structured_query_with_schema
 
 from . import execution_registry
-from .codex.codex_cli_runner import CodexCliRunner
-from .codex.codex_env import build_codex_env, ensure_codex_venv
+from .codex.codex_cli_runner import CodexCliRunner, build_codex_env, ensure_codex_venv
 from .codex.codex_task_types import (
     CodexTaskContext,
     EvaluationMetricSpec,
@@ -254,7 +253,6 @@ def _process_seed_eval_reuse(
     working_dir: Path,
     venv_dir: Path,
     codex_env: dict[str, str],
-    codex_argv: list[str],
     execution_id: str,
     seed_eval: bool,
     seed_value: int,
@@ -344,7 +342,6 @@ def _process_seed_eval_reuse(
     metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
         codex_env=codex_env,
-        codex_argv=list(codex_argv),
         codex_timeout_seconds=int(cfg.exec.timeout),
         venv_dir=venv_dir,
         workspace_dir=workspace_dir,
@@ -911,7 +908,6 @@ def _run_codex_cli(
     execution_id: str,
     stage_name: str,
     cfg: AppConfig,
-    codex_argv: list[str],
     codex_env: dict[str, str],
     task_file: Path,
     event_callback: Callable[[BaseEvent], None],
@@ -921,7 +917,7 @@ def _run_codex_cli(
         session_log_name="codex_session.log",
         events_log_name="codex_events.jsonl",
         timeout_seconds=cfg.exec.timeout,
-        argv=codex_argv,
+        model=cfg.agent.code.model,
         env=codex_env,
     )
 
@@ -1021,13 +1017,6 @@ def process_node(
         research_pipeline_root=RESEARCH_PIPELINE_ROOT,
     )
     codex_env = build_codex_env(venv_dir=venv_dir)
-    codex_argv = [
-        "codex",
-        "exec",
-        "--yolo",
-        "--skip-git-repo-check",
-        "--json",
-    ]
 
     parent_node = _load_parent_node(node_data=node_data)
     logger.debug(
@@ -1068,7 +1057,6 @@ def process_node(
             working_dir=working_dir,
             venv_dir=venv_dir,
             codex_env=codex_env,
-            codex_argv=codex_argv,
             execution_id=execution_id,
             seed_eval=seed_eval,
             seed_value=seed_value,
@@ -1101,7 +1089,6 @@ def process_node(
         execution_id=execution_id,
         stage_name=stage_name,
         cfg=cfg,
-        codex_argv=codex_argv,
         codex_env=codex_env,
         task_file=task_file,
         event_callback=event_callback,
@@ -1298,7 +1285,6 @@ def process_node(
     metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
         codex_env=codex_env,
-        codex_argv=list(codex_argv),
         codex_timeout_seconds=int(cfg.exec.timeout),
         venv_dir=venv_dir,
         workspace_dir=workspace_dir,
