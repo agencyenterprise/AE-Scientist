@@ -852,6 +852,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/codex-event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Codex Event */
+        post: operations["ingest_codex_event_api_research_pipeline_events_codex_event_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/running-code": {
         parameters: {
             query?: never;
@@ -1639,6 +1656,13 @@ export interface components {
              * Format: uri
              */
             checkout_url: string;
+        };
+        /** CodexEventPayload */
+        CodexEventPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Event */
+            event: Record<string, never>;
         };
         /** ConversationCostResponse */
         ConversationCostResponse: {
@@ -5507,6 +5531,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunLogPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_codex_event_api_research_pipeline_events_codex_event_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodexEventPayload"];
             };
         };
         responses: {
