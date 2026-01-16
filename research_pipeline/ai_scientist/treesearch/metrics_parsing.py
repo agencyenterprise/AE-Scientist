@@ -194,6 +194,7 @@ def generate_and_assign_metrics(
             timeout_seconds=codex_timeout_seconds,
             model=cfg.agent.code.model,
             env=codex_env,
+            event_callback=event_callback,
         )
 
         event_callback(
@@ -206,7 +207,6 @@ def generate_and_assign_metrics(
             task_file=metrics_task_file,
             pid_callback=None,
             termination_checker=None,
-            stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
         )
         node.parse_metrics_plan = task_text
         node.parse_term_out = term_out

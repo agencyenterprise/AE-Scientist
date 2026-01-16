@@ -919,6 +919,7 @@ def _run_codex_cli(
         timeout_seconds=cfg.exec.timeout,
         model=cfg.agent.code.model,
         env=codex_env,
+        event_callback=event_callback,
     )
 
     started_at = datetime.now(timezone.utc)
@@ -942,7 +943,6 @@ def _run_codex_cli(
         task_file=task_file,
         pid_callback=lambda pid: _pid_tracker(pid=pid),
         termination_checker=_termination_checker,
-        stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
     )
     logger.debug(
         "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
