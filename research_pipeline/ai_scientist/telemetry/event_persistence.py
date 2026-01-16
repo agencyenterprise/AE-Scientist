@@ -590,6 +590,7 @@ class EventPersistenceManager:
     def _insert_codex_event(
         self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
     ) -> None:
+        event_content = payload.get("event_content")
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -607,7 +608,7 @@ class EventPersistenceManager:
                     payload.get("stage"),
                     payload.get("node"),
                     payload.get("event_type"),
-                    payload.get("event_content"),
+                    psycopg2.extras.Json(event_content),
                 ),
             )
 
