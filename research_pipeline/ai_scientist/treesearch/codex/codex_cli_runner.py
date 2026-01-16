@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import IO, Callable, cast
 
 from ...llm.token_tracker import save_cost_track
+from ..events import BaseEvent, CodexEvent
 from ..process_utils import terminate_process_group
 
 logger = logging.getLogger("ai-scientist")
@@ -111,6 +112,7 @@ class CodexCliRunner:
         timeout_seconds: int,
         model: str,
         env: dict[str, str],
+        event_callback: Callable[[BaseEvent], None],
     ) -> None:
         self._workspace_dir = workspace_dir
         self._session_log_name = session_log_name
@@ -118,14 +120,16 @@ class CodexCliRunner:
         self._timeout_seconds = timeout_seconds
         self._model = model
         self._env = dict(env)
+        self._event_callback = event_callback
 
     def run(
         self,
         *,
         task_file: Path,
+        stage: str,
+        node: int,
         pid_callback: Callable[[int], None] | None,
         termination_checker: Callable[[], bool] | None,
-        stream_callback: Callable[[str], None] | None = None,
     ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
         """
         Run Codex CLI inside workspace_dir using a task file.
@@ -181,15 +185,6 @@ class CodexCliRunner:
                 sel.register(stderr_pipe, selectors.EVENT_READ, data="stderr")
                 stdout_buf = b""
 
-                def _emit(msg: str) -> None:
-                    if stream_callback is None:
-                        return
-                    try:
-                        stream_callback(msg)
-                    except (OSError, RuntimeError, ValueError, TypeError):
-                        # Never fail the run because the UI/event sink failed.
-                        return
-
                 def _maybe_emit_jsonl(line: str) -> None:
                     # Emit only high-signal items to the outer UI.
                     # Users can always inspect codex_events.jsonl for full detail.
@@ -200,45 +195,25 @@ class CodexCliRunner:
                     if not isinstance(obj, dict):
                         return
                     typ = obj.get("type")
-                    if typ == "error":
-                        _emit(f"[codex:error] {line}")
-                        return
-                    if typ == "turn.completed":
-                        _emit(f"[codex:{typ}] {line}")
-                        # Extract and save token usage for cost tracking
-                        usage = obj.get("usage")
-                        if isinstance(usage, dict):
-                            input_tokens = usage.get("input_tokens")
-                            output_tokens = usage.get("output_tokens")
-                            if input_tokens is not None and output_tokens is not None:
-                                try:
-                                    save_cost_track(
-                                        self._model,
-                                        input_tokens=int(input_tokens),
-                                        output_tokens=int(output_tokens),
-                                    )
-                                except Exception:
-                                    logger.exception("Failed to save token usage")
-                        return
-                    if typ in ("thread.started", "turn.started", "turn.failed"):
-                        _emit(f"[codex:{typ}] {line}")
-                        return
-                    item = obj.get("item")
-                    if not isinstance(item, dict):
-                        return
-                    item_type = item.get("type")
-                    if item_type == "agent_message":
-                        text = item.get("text")
-                        if isinstance(text, str):
-                            _emit(f"[codex:agent_message] {text}")
-                        return
-                    if item_type == "command_execution":
-                        cmd = item.get("command")
-                        status = item.get("status")
-                        if isinstance(cmd, str):
-                            cmd_one_line = " ".join(cmd.splitlines())
-                            _emit(f"[codex:cmd:{status}] {cmd_one_line[:400]}")
-                        return
+                    if typ is not None:
+                        self._event_callback(
+                            CodexEvent(stage=stage, node=node, event_type=typ, event_content=line)
+                        )
+                        # Extract and save token usage for cost tracking on turn completion
+                        if typ == "turn.completed":
+                            usage = obj.get("usage")
+                            if isinstance(usage, dict):
+                                input_tokens = usage.get("input_tokens")
+                                output_tokens = usage.get("output_tokens")
+                                if input_tokens is not None and output_tokens is not None:
+                                    try:
+                                        save_cost_track(
+                                            self._model,
+                                            input_tokens=int(input_tokens),
+                                            output_tokens=int(output_tokens),
+                                        )
+                                    except Exception:
+                                        logger.exception("Failed to save token usage")
 
                 while True:
                     if termination_checker is not None and termination_checker():
@@ -262,10 +237,16 @@ class CodexCliRunner:
                         if key.data == "stderr":
                             # Codex progress lines are typically on stderr (human readable).
                             try:
-                                _emit(
-                                    f"[codex:stderr] {chunk.decode('utf-8', errors='replace').rstrip()}"
+                                decoded_chunk = chunk.decode("utf-8", errors="replace").rstrip()
+                                self._event_callback(
+                                    CodexEvent(
+                                        stage=stage,
+                                        node=node,
+                                        event_type="stderr",
+                                        event_content=decoded_chunk,
+                                    )
                                 )
-                            except (OSError, RuntimeError, ValueError, TypeError):
+                            except (ValueError, TypeError):
                                 pass
                             continue
 

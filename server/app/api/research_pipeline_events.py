@@ -295,6 +295,11 @@ class RunLogPayload(BaseModel):
     event: RunLogEvent
 
 
+class CodexEventPayload(BaseModel):
+    run_id: str
+    event: dict[str, Any]
+
+
 class RunningCodeEventPayload(BaseModel):
     execution_id: str
     stage_name: str
@@ -750,6 +755,14 @@ async def ingest_run_log(
             ),
         ),
     )
+
+
+@router.post("/codex-event", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_codex_event(
+    payload: CodexEventPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    logger.info("RP codex event received: run=%s event=%s", payload.run_id, payload.event)
 
 
 @router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)

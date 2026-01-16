@@ -258,6 +258,7 @@ def _process_seed_eval_reuse(
     seed_value: int,
     parent_node: Node,
     event_callback: Callable[[BaseEvent], None],
+    node_index: int,
 ) -> dict[str, object]:
     """
     Execute the parent node's experiment code under a different seed (no Codex involved).
@@ -347,6 +348,7 @@ def _process_seed_eval_reuse(
         workspace_dir=workspace_dir,
         working_dir=working_dir,
         node=child_node,
+        node_index=node_index,
         parent_node=parent_node,
         stage_identifier=stage_identifier,
         evaluation_metric_spec=evaluation_metric_spec,
@@ -402,6 +404,7 @@ class NodeTask(TypedDict):
     gpu_id: int | None
     execution_id: str
     user_feedback_payload: str
+    node_index: int
 
 
 class ExecutionTerminatedError(RuntimeError):
@@ -911,6 +914,7 @@ def _run_codex_cli(
     codex_env: dict[str, str],
     task_file: Path,
     event_callback: Callable[[BaseEvent], None],
+    node: int,
 ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
@@ -919,6 +923,7 @@ def _run_codex_cli(
         timeout_seconds=cfg.exec.timeout,
         model=cfg.agent.code.model,
         env=codex_env,
+        event_callback=event_callback,
     )
 
     started_at = datetime.now(timezone.utc)
@@ -940,9 +945,10 @@ def _run_codex_cli(
 
     term_out, exec_time, exc_type, exc_info = runner.run(
         task_file=task_file,
+        stage=stage_name,
+        node=node,
         pid_callback=lambda pid: _pid_tracker(pid=pid),
         termination_checker=_termination_checker,
-        stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
     )
     logger.debug(
         "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
@@ -993,6 +999,7 @@ def process_node(
     gpu_id: int | None,
     execution_id: str,
     user_feedback_payload: str,
+    node_index: int,
 ) -> dict[str, object]:
     """
     Worker entrypoint for producing a single `Node`.
@@ -1062,6 +1069,7 @@ def process_node(
             seed_value=seed_value,
             parent_node=parent_node,
             event_callback=event_callback,
+            node_index=node_index,
         )
 
     output_json_file, task_file, _env_ctx = _prepare_codex_task_file(
@@ -1092,6 +1100,7 @@ def process_node(
         codex_env=codex_env,
         task_file=task_file,
         event_callback=event_callback,
+        node=node_index,
     )
 
     node_result = _load_node_result(output_json_file=output_json_file)
@@ -1290,6 +1299,7 @@ def process_node(
         workspace_dir=workspace_dir,
         working_dir=working_dir,
         node=child_node,
+        node_index=node_index,
         parent_node=parent_node,
         stage_identifier=stage_identifier,
         evaluation_metric_spec=evaluation_metric_spec,

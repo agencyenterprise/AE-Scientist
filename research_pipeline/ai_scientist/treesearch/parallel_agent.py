@@ -221,6 +221,7 @@ class ParallelAgent:
         execution_ids: list[str] = []
         seed_process_ids: list[str | None] = []  # Track process IDs for GPU release
         executor = self._ensure_executor()
+        next_node_index = len(self.journal.nodes)
         for seed in range(self.cfg.agent.multi_seed_eval["num_seeds"]):
             gpu_id = None
             process_id = f"seed_{seed}_worker"
@@ -265,7 +266,9 @@ class ParallelAgent:
                 "event_callback": self.event_callback,
                 "execution_id": execution_id,
                 "user_feedback_payload": "",
+                "node_index": next_node_index,
             }
+            next_node_index += 1
             future = executor.submit(process_node, **task)
             futures.append(future)
             execution_ids.append(execution_id)
@@ -346,6 +349,7 @@ class ParallelAgent:
                     stage_name=self.stage_name,
                     seed_nodes=seed_payload,
                 )
+                agg_node_index = len(self.journal.nodes)
                 agg_task: NodeTask = {
                     "node_data": node_data,
                     "task_desc": self.task_desc,
@@ -363,6 +367,7 @@ class ParallelAgent:
                     "event_callback": self.event_callback,
                     "execution_id": aggregation_execution_id,
                     "user_feedback_payload": "",
+                    "node_index": agg_node_index,
                 }
                 agg_future = executor.submit(process_node, **agg_task)
                 agg_data = agg_future.result(timeout=self.timeout)
@@ -699,6 +704,7 @@ class ParallelAgent:
         futures: list[Future] = []
         scheduled_stage2_names: set[str] = set()
         scheduled_stage4_names: set[str] = set()
+        next_node_index = len(self.journal.nodes)
         try:
             for node, node_data in zip(nodes_to_process, node_data_list):
                 self.stage_skip.ensure_no_skip_pending()
@@ -804,7 +810,9 @@ class ParallelAgent:
                     "event_callback": self.event_callback,
                     "execution_id": execution_id,
                     "user_feedback_payload": user_feedback_payload,
+                    "node_index": next_node_index,
                 }
+                next_node_index += 1
                 future = executor.submit(process_node, **task)
                 futures.append(future)
                 self._future_execution_ids[future] = execution_id

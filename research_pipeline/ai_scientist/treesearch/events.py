@@ -15,6 +15,7 @@ EventKind = Literal[
     "stage_skip_window",
     "artifact_uploaded",
     "review_completed",
+    "codex_event",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
@@ -100,6 +101,38 @@ class RunLogEvent(BaseEvent):
 
     def persistence_record(self) -> PersistenceRecord:
         return ("run_log", {"message": self.message, "level": self.level})
+
+
+@dataclass(frozen=True)
+class CodexEvent(BaseEvent):
+    """Event emitted for Codex CLI execution information."""
+
+    stage: str
+    node: int
+    event_type: str
+    event_content: str
+
+    def type(self) -> str:
+        return "ai.codex.event"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "node": self.node,
+            "event_type": self.event_type,
+            "event_content": self.event_content,
+        }
+
+    def persistence_record(self) -> PersistenceRecord:
+        return (
+            "codex_event",
+            {
+                "stage": self.stage,
+                "node": self.node,
+                "event_type": self.event_type,
+                "event_content": self.event_content,
+            },
+        )
 
 
 @dataclass(frozen=True)

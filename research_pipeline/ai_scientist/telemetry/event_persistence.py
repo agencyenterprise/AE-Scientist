@@ -54,6 +54,7 @@ class WebhookClient:
         "stage_skip_window": "/stage-skip-window",
         "artifact_uploaded": "/artifact-uploaded",
         "review_completed": "/review-completed",
+        "codex_event": "/codex-event",
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
@@ -353,6 +354,8 @@ class EventPersistenceManager:
                 )
             elif event.kind == "stage_skip_window":
                 self._upsert_stage_skip_window(connection=connection, payload=event.data)
+            elif event.kind == "codex_event":
+                self._insert_codex_event(connection=connection, payload=event.data)
         if self._webhook_client is not None:
             self._webhook_client.publish(kind=event.kind, payload=event.data)
 
@@ -581,6 +584,31 @@ class EventPersistenceManager:
                     self._run_id,
                     payload.get("message"),
                     payload.get("level", "info"),
+                ),
+            )
+
+    def _insert_codex_event(
+        self, *, connection: psycopg2.extensions.connection, payload: dict[str, Any]
+    ) -> None:
+        event_content = payload.get("event_content")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO rp_codex_events (
+                    run_id,
+                    stage,
+                    node,
+                    event_type,
+                    event_content
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    self._run_id,
+                    payload.get("stage"),
+                    payload.get("node"),
+                    payload.get("event_type"),
+                    psycopg2.extras.Json(event_content),
                 ),
             )
 

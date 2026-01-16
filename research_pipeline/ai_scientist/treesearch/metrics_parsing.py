@@ -119,6 +119,7 @@ def generate_and_assign_metrics(
     workspace_dir: Path,
     working_dir: Path,
     node: Node,
+    node_index: int,
     parent_node: Node | None,
     stage_identifier: StageIdentifier,
     evaluation_metric_spec: EvaluationMetricSpec,
@@ -194,6 +195,7 @@ def generate_and_assign_metrics(
             timeout_seconds=codex_timeout_seconds,
             model=cfg.agent.code.model,
             env=codex_env,
+            event_callback=event_callback,
         )
 
         event_callback(
@@ -204,9 +206,10 @@ def generate_and_assign_metrics(
         )
         term_out, _, exc_type, exc_info = metrics_runner.run(
             task_file=metrics_task_file,
+            stage=stage_identifier.prefixed_name,
+            node=node_index,
             pid_callback=None,
             termination_checker=None,
-            stream_callback=lambda msg: event_callback(RunLogEvent(message=msg, level="info")),
         )
         node.parse_metrics_plan = task_text
         node.parse_term_out = term_out
