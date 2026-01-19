@@ -1,7 +1,7 @@
 """Create narrator timeline tables for event-driven state management.
 
-Revision ID: 0034
-Revises: 0033
+Revision ID: 0035
+Revises: 0034
 Create Date: 2026-01-13
 
 This migration creates two tables for the narrator architecture:
@@ -16,8 +16,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "0034"
-down_revision: Union[str, None] = "0033"
+revision: str = "0035"
+down_revision: Union[str, None] = "0034"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
