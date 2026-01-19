@@ -927,15 +927,90 @@ def _run_codex_cli(
     )
 
     started_at = datetime.now(timezone.utc)
+    run_completed_emitted = False
     event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
-    event_callback(
-        RunningCodeEvent(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            code="(Codex-managed)",
-            started_at=started_at,
+
+    def _codex_json_event_callback(*, line: str, obj: dict[str, object]) -> None:
+        """
+        Handle raw Codex JSONL events during `codex exec --json` execution.
+
+        Goals:
+        - **Live code streaming**: while the Codex-controlled command that runs our agent file
+          (commonly `runfile.py`) is still running, emit `RunningCodeEvent` updates where
+          `code` is the current contents of the agent file on disk. This keeps the UI in sync
+          with what will actually be executed, instead of only showing the task markdown.
+        - **Early completion**: when that command reaches `status="completed"`, emit
+          `RunCompletedEvent` immediately (based on the Codex event) and suppress the later
+          fallback `RunCompletedEvent` emitted after `runner.run(...)` returns.
+
+        Notes:
+        - We only react to Codex events shaped like:
+          `{"type":"item.started|item.completed", "item": {"type":"command_execution", ...}}`
+        - We filter to the command that references the agent file name or `runfile.py`
+          (using both the parsed command string and the raw JSON line as a fallback).
+        - This is best-effort: if the file is missing/empty we simply skip emitting updates.
+        """
+        nonlocal run_completed_emitted
+        if run_completed_emitted:
+            return
+
+        # We only care about the command execution item because that's what produces the
+        # agent file on disk and has a clear completed/in-progress lifecycle.
+        item = obj.get("item")
+        if not isinstance(item, dict):
+            return
+        if item.get("type") != "command_execution":
+            return
+
+        command = item.get("command")
+        if not isinstance(command, str):
+            return
+
+        agent_file_name = str(cfg.exec.agent_file_name)
+        if (
+            agent_file_name not in command
+            and "runfile.py" not in command
+            and agent_file_name not in line
+            and "runfile.py" not in line
+        ):
+            return
+
+        status = item.get("status")
+        if status == "completed":
+            completed_at = datetime.now(timezone.utc)
+            exec_time = (completed_at - started_at).total_seconds()
+            status_value: Literal["success", "failed"] = "success"
+            exit_code = item.get("exit_code")
+            if isinstance(exit_code, int) and exit_code != 0:
+                status_value = "failed"
+            # Emit completion immediately based on Codex' command lifecycle, so the UI doesn't
+            # wait for the whole Codex session teardown to finish.
+            event_callback(
+                RunCompletedEvent(
+                    execution_id=execution_id,
+                    stage_name=stage_name,
+                    status=status_value,
+                    exec_time=exec_time,
+                    completed_at=completed_at,
+                )
+            )
+            run_completed_emitted = True
+            return
+
+        runfile_path = workspace_dir / agent_file_name
+        runfile_content = _read_text_or_empty(path=runfile_path)
+        if not runfile_content.strip():
+            return
+        # Stream the current on-disk code while Codex is still running the command.
+        event_callback(
+            RunningCodeEvent(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                code=runfile_content,
+                started_at=started_at,
+                run_type="main_execution",
+            )
         )
-    )
 
     def _pid_tracker(*, pid: int) -> None:
         execution_registry.update_pid(execution_id=execution_id, pid=pid)
@@ -949,6 +1024,7 @@ def _run_codex_cli(
         node=node,
         pid_callback=lambda pid: _pid_tracker(pid=pid),
         termination_checker=_termination_checker,
+        json_event_callback=lambda line, obj: _codex_json_event_callback(line=line, obj=obj),
     )
     logger.debug(
         "codex.run.completed execution_id=%s status=%s exec_time_s=%s exc_type=%s exc_info=%s workspace_dir=%s session_log=%s events_jsonl=%s",
@@ -964,15 +1040,16 @@ def _run_codex_cli(
 
     completed_at = datetime.now(timezone.utc)
     status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
-    event_callback(
-        RunCompletedEvent(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            status=status,
-            exec_time=exec_time,
-            completed_at=completed_at,
+    if not run_completed_emitted:
+        event_callback(
+            RunCompletedEvent(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                status=status,
+                exec_time=exec_time,
+                completed_at=completed_at,
+            )
         )
-    )
     if exc_type is None:
         execution_registry.mark_completed(execution_id=execution_id)
     else:

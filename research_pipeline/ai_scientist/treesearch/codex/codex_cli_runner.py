@@ -130,6 +130,7 @@ class CodexCliRunner:
         node: int,
         pid_callback: Callable[[int], None] | None,
         termination_checker: Callable[[], bool] | None,
+        json_event_callback: Callable[[str, dict[str, object]], None] | None = None,
     ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
         """
         Run Codex CLI inside workspace_dir using a task file.
@@ -194,6 +195,8 @@ class CodexCliRunner:
                         return
                     if not isinstance(obj, dict):
                         return
+                    if json_event_callback is not None:
+                        json_event_callback(line, obj)
                     typ = obj.get("type")
                     if typ is not None:
                         self._event_callback(

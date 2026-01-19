@@ -385,7 +385,7 @@ class EventPersistenceManager:
     ) -> None:
         execution_id = payload.get("execution_id")
         stage_name = payload.get("stage_name")
-        run_type = payload.get("run_type") or "main_execution"
+        run_type = payload.get("run_type")
         code = payload.get("code")
         started_at = self._coerce_timestamp(value=payload.get("started_at"))
         completed_at = self._coerce_timestamp(value=payload.get("completed_at"))

@@ -286,7 +286,7 @@ class RunningCodeEvent(BaseEvent):
     stage_name: str
     code: str
     started_at: datetime
-    run_type: str = "main_execution"
+    run_type: str
 
     def type(self) -> str:
         return "ai.run.running_code"
