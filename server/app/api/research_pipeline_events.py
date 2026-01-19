@@ -30,7 +30,7 @@ from app.models.research_pipeline import (
     ResearchRunStageProgress,
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
-from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.research_pipeline import ResearchRunSubstageSummary, RunType
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
@@ -305,7 +305,7 @@ class RunningCodeEventPayload(BaseModel):
     stage_name: str
     code: str
     started_at: str
-    run_type: str = "main_execution"
+    run_type: RunType
 
 
 class RunningCodePayload(BaseModel):
@@ -319,7 +319,7 @@ class RunCompletedEventPayload(BaseModel):
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: str
-    run_type: str = "main_execution"
+    run_type: RunType
 
 
 class RunCompletedPayload(BaseModel):

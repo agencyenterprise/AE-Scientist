@@ -1,6 +1,15 @@
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, Literal, Optional, Tuple
+
+
+class RunType(str, Enum):
+    """Execution stream identifier for code execution telemetry."""
+
+    CODEX_EXECUTION = "codex_execution"
+    RUNFILE_EXECUTION = "runfile_execution"
+
 
 EventKind = Literal[
     "run_stage_progress",
@@ -286,7 +295,7 @@ class RunningCodeEvent(BaseEvent):
     stage_name: str
     code: str
     started_at: datetime
-    run_type: str
+    run_type: RunType
 
     def type(self) -> str:
         return "ai.run.running_code"
@@ -295,7 +304,7 @@ class RunningCodeEvent(BaseEvent):
         return {
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
-            "run_type": self.run_type,
+            "run_type": self.run_type.value,
             "code": self.code,
             "started_at": self.started_at.isoformat(),
         }
@@ -306,7 +315,7 @@ class RunningCodeEvent(BaseEvent):
             {
                 "execution_id": self.execution_id,
                 "stage_name": self.stage_name,
-                "run_type": self.run_type,
+                "run_type": self.run_type.value,
                 "code": self.code,
                 "started_at": self.started_at.isoformat(),
             },
@@ -320,7 +329,7 @@ class RunCompletedEvent(BaseEvent):
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: datetime
-    run_type: str = "main_execution"
+    run_type: RunType
 
     def type(self) -> str:
         return "ai.run.run_completed"
@@ -329,7 +338,7 @@ class RunCompletedEvent(BaseEvent):
         return {
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
-            "run_type": self.run_type,
+            "run_type": self.run_type.value,
             "status": self.status,
             "exec_time": self.exec_time,
             "completed_at": self.completed_at.isoformat(),
@@ -341,7 +350,7 @@ class RunCompletedEvent(BaseEvent):
             {
                 "execution_id": self.execution_id,
                 "stage_name": self.stage_name,
-                "run_type": self.run_type,
+                "run_type": self.run_type.value,
                 "status": self.status,
                 "exec_time": self.exec_time,
                 "completed_at": self.completed_at.isoformat(),

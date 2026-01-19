@@ -138,7 +138,15 @@ export default function ResearchRunDetailPage() {
     paper_generation_progress,
     best_node_selections = [],
     code_execution,
+    code_executions,
   } = details;
+
+  const codexExecution =
+    code_executions?.codex_execution ??
+    (code_execution?.run_type === "codex_execution" ? code_execution : null);
+  const runfileExecution =
+    code_executions?.runfile_execution ??
+    (code_execution?.run_type === "runfile_execution" ? code_execution : null);
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 
@@ -203,7 +211,8 @@ export default function ResearchRunDetailPage() {
               paperGenerationProgress={paper_generation_progress}
               bestNodeSelections={best_node_selections ?? []}
               stageSkipState={stageSkipState}
-              currentCodeExecution={code_execution ?? null}
+              codexExecution={codexExecution}
+              runfileExecution={runfileExecution}
               runStatus={run.status}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
               onSkipStage={conversationId ? handleSkipStage : undefined}

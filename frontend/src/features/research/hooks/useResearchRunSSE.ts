@@ -52,6 +52,7 @@ interface UseResearchRunSSEReturn {
 
 interface CodeExecutionCompletionEvent {
   execution_id: string;
+  run_type: ResearchRunCodeExecution["run_type"];
   status: "success" | "failed";
   exec_time: number;
   completed_at: string;
@@ -126,7 +127,7 @@ function normalizeCodeExecution(
   return {
     execution_id: snapshot.execution_id,
     stage_name: snapshot.stage_name,
-    run_type: snapshot.run_type,
+    run_type: snapshot.run_type as ResearchRunCodeExecution["run_type"],
     code: snapshot.code,
     status: snapshot.status,
     started_at: snapshot.started_at,
@@ -141,7 +142,7 @@ function mapCodeExecutionStartedEvent(
   return {
     execution_id: event.execution_id,
     stage_name: event.stage_name,
-    run_type: event.run_type ?? "main_execution",
+    run_type: (event.run_type ?? "codex_execution") as ResearchRunCodeExecution["run_type"],
     code: event.code,
     status: "running",
     started_at: event.started_at,
@@ -203,6 +204,20 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     code_execution: normalizeCodeExecution(
       "code_execution" in data ? (data.code_execution as ApiCodeExecutionSnapshot | null) : null
     ),
+    code_executions:
+      "code_execution" in data && data.code_execution
+        ? (() => {
+            const normalized = normalizeCodeExecution(
+              data.code_execution as ApiCodeExecutionSnapshot | null
+            );
+            if (!normalized) {
+              return null;
+            }
+            return {
+              [normalized.run_type]: normalized,
+            } as ResearchRunDetails["code_executions"];
+          })()
+        : null,
   };
 }
 
@@ -370,6 +385,7 @@ export function useResearchRunSSE({
                   const completed = event.data as ApiCodeExecutionCompletedData;
                   onCodeExecutionCompleted({
                     execution_id: completed.execution_id,
+                    run_type: completed.run_type ?? "codex_execution",
                     status: completed.status,
                     exec_time: completed.exec_time,
                     completed_at: completed.completed_at,

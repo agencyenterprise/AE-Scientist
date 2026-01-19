@@ -28,6 +28,9 @@ class FakeRunPodWebhookPublisher:
     def publish_running_code(self, payload: dict[str, Any]) -> None:
         self._publish("running_code", payload)
 
+    def publish_run_log(self, payload: dict[str, Any]) -> None:
+        self._publish("run_log", payload)
+
     def publish_run_completed(self, payload: dict[str, Any]) -> None:
         self._publish("run_completed", payload)
 

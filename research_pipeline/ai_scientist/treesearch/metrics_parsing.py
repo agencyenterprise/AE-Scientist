@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List
 
@@ -10,7 +11,7 @@ from ai_scientist.llm import structured_query_with_schema
 from .codex.codex_cli_runner import CodexCliRunner
 from .codex.codex_task_types import EvaluationMetricSpec
 from .config import Config as AppConfig
-from .events import BaseEvent, RunLogEvent
+from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
 from .executor import run_python_script
 from .journal import Node
 from .prompts.render import render_text
@@ -204,12 +205,33 @@ def generate_and_assign_metrics(
                 level="info",
             )
         )
-        term_out, _, exc_type, exc_info = metrics_runner.run(
+        started_at = datetime.now(timezone.utc)
+        event_callback(
+            RunningCodeEvent(
+                execution_id=f"{node.id}_metrics",
+                stage_name=stage_identifier.prefixed_name,
+                code=task_text,
+                started_at=started_at,
+                run_type=RunType.CODEX_EXECUTION,
+            )
+        )
+        term_out, exec_time, exc_type, exc_info = metrics_runner.run(
             task_file=metrics_task_file,
             stage=stage_identifier.prefixed_name,
             node=node_index,
             pid_callback=None,
             termination_checker=None,
+        )
+        completed_at = datetime.now(timezone.utc)
+        event_callback(
+            RunCompletedEvent(
+                execution_id=f"{node.id}_metrics",
+                stage_name=stage_identifier.prefixed_name,
+                status="success" if exc_type is None else "failed",
+                exec_time=float(exec_time),
+                completed_at=completed_at,
+                run_type=RunType.CODEX_EXECUTION,
+            )
         )
         node.parse_metrics_plan = task_text
         node.parse_term_out = term_out

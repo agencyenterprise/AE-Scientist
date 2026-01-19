@@ -6142,9 +6142,8 @@
             "description": "Stage name reported by the research pipeline"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "description": "Type of execution (e.g., main_execution)"
+            "$ref": "#/components/schemas/RunType",
+            "description": "Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
           },
           "code": {
             "type": "string",
@@ -6209,8 +6208,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "status": {
             "type": "string",
@@ -6272,8 +6270,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "code": {
             "type": "string",
@@ -8132,9 +8129,7 @@
             "title": "Completed At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -8143,7 +8138,8 @@
           "stage_name",
           "status",
           "exec_time",
-          "completed_at"
+          "completed_at",
+          "run_type"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -8241,6 +8237,15 @@
         ],
         "title": "RunStartedPayload"
       },
+      "RunType": {
+        "type": "string",
+        "enum": [
+          "codex_execution",
+          "runfile_execution"
+        ],
+        "title": "RunType",
+        "description": "Execution stream identifier for research pipeline code execution telemetry."
+      },
       "RunningCodeEventPayload": {
         "properties": {
           "execution_id": {
@@ -8260,9 +8265,7 @@
             "title": "Started At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -8270,7 +8273,8 @@
           "execution_id",
           "stage_name",
           "code",
-          "started_at"
+          "started_at",
+          "run_type"
         ],
         "title": "RunningCodeEventPayload"
       },
