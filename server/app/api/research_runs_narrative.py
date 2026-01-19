@@ -12,8 +12,8 @@ from typing import AsyncGenerator, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models.narrator_state import ResearchRunState
 from app.services.database import DatabaseManager, get_database
@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/research-runs", tags=["narrator"])
 
 
-def _serialize_for_json(obj: Union[datetime, dict, list, tuple]) -> Union[str, dict, list, tuple]:
+def _serialize_for_json(
+    obj: Union[datetime, dict, list, tuple, BaseModel],
+) -> Union[str, dict, list, tuple, BaseModel]:
     """
     Recursively serialize objects for JSON, handling datetime objects.
 
