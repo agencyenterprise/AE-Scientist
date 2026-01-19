@@ -16,6 +16,7 @@ import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
+import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
@@ -661,13 +662,7 @@ function ActiveExecutionCard({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestAcknowledged, setRequestAcknowledged] = useState(false);
-  const startedAtMs = useMemo(() => {
-    const started = codexExecution?.started_at ?? runfileExecution?.started_at ?? null;
-    return started ? new Date(started).getTime() : Date.now();
-  }, [codexExecution?.started_at, runfileExecution?.started_at]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
-  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     setIsDialogOpen(false);
@@ -675,20 +670,51 @@ function ActiveExecutionCard({
     setError(null);
     setIsSubmitting(false);
     setRequestAcknowledged(false);
-    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
-  }, [executionId, startedAtMs]);
+    setNowMs(Date.now());
+  }, [executionId]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+      setNowMs(Date.now());
     }, 1000);
     return () => window.clearInterval(intervalId);
-  }, [startedAtMs]);
+  }, []);
 
-  const startedAtLabel = new Date(
-    codexExecution?.started_at ?? runfileExecution?.started_at ?? Date.now()
-  ).toLocaleString();
-  const formattedDuration = useMemo(() => formatDuration(elapsedSeconds), [elapsedSeconds]);
+  const codexStartedAtLabel = useMemo(() => {
+    if (!codexExecution?.started_at) {
+      return "-";
+    }
+    return new Date(codexExecution.started_at).toLocaleString();
+  }, [codexExecution?.started_at]);
+
+  const runfileStartedAtLabel = useMemo(() => {
+    if (!runfileExecution?.started_at) {
+      return "-";
+    }
+    return new Date(runfileExecution.started_at).toLocaleString();
+  }, [runfileExecution?.started_at]);
+
+  const codexElapsedSeconds = useMemo(() => {
+    return getElapsedSecondsForExecution({ execution: codexExecution, nowMs });
+  }, [codexExecution, nowMs]);
+
+  const runfileElapsedSeconds = useMemo(() => {
+    return getElapsedSecondsForExecution({ execution: runfileExecution, nowMs });
+  }, [runfileExecution, nowMs]);
+
+  const formattedCodexDuration = useMemo(() => {
+    if (codexElapsedSeconds === null) {
+      return "-";
+    }
+    return formatDurationClockSeconds(codexElapsedSeconds);
+  }, [codexElapsedSeconds]);
+
+  const formattedRunfileDuration = useMemo(() => {
+    if (runfileElapsedSeconds === null) {
+      return "-";
+    }
+    return formatDurationClockSeconds(runfileElapsedSeconds);
+  }, [runfileElapsedSeconds]);
 
   const handleClose = () => {
     if (isSubmitting) {
@@ -734,21 +760,31 @@ function ActiveExecutionCard({
       <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
         <div className="flex flex-col gap-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-            Code execution in progress
+            Codex execution in progress
           </p>
           <p className="text-sm font-mono text-white">{formatNodeId(executionId)}</p>
           <p className="text-xs text-slate-400">
-            Stage {(codexExecution ?? runfileExecution)?.stage_name ?? "-"} • Started{" "}
-            {startedAtLabel}
+            Stage {codexExecution?.stage_name ?? runfileExecution?.stage_name ?? "-"} • Started{" "}
+            {codexStartedAtLabel}
           </p>
           <p className="text-xs text-emerald-200">
-            Running for <span className="font-semibold">{formattedDuration}</span>
+            Running for <span className="font-semibold">{formattedCodexDuration}</span>
           </p>
         </div>
         {codexExecution && (
           <details className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
             <summary className="cursor-pointer text-xs font-semibold text-slate-200">
-              Codex task (click to expand)
+              <div className="flex items-center justify-between gap-2">
+                <span>Codex task</span>
+                <span
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                >
+                  <CopyToClipboardButton text={codexExecution.code} label="Copy task code" />
+                </span>
+              </div>
             </summary>
             <div className="mt-2 max-h-60 overflow-y-auto">
               <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
@@ -757,12 +793,28 @@ function ActiveExecutionCard({
             </div>
           </details>
         )}
-        {runfileExecution && runfileExecution.status === "running" && (
-          <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3 max-h-60 overflow-y-auto">
-            <p className="mb-2 text-xs font-semibold text-slate-200">runfile.py (executing)</p>
-            <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
-              {runfileExecution.code}
-            </pre>
+
+        {runfileExecution && (
+          <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div className="flex flex-col">
+                <p className="text-xs font-semibold text-slate-200">runfile.py</p>
+                <p className="text-[11px] text-slate-400">
+                  Sub-execution • {runfileExecution.status.toUpperCase()} • Started{" "}
+                  {runfileStartedAtLabel}
+                </p>
+                <p className="text-[11px] text-slate-300">
+                  Execution time{" "}
+                  <span className="font-semibold">{formattedRunfileDuration}</span>
+                </p>
+              </div>
+              <CopyToClipboardButton text={runfileExecution.code} label="Copy runfile code" />
+            </div>
+            <div className="max-h-60 overflow-y-auto">
+              <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
+                {runfileExecution.code}
+              </pre>
+            </div>
           </div>
         )}
         {requestAcknowledged && (
@@ -812,7 +864,7 @@ function ActiveExecutionCard({
   );
 }
 
-function formatDuration(totalSeconds: number): string {
+function formatDurationClockSeconds(totalSeconds: number): string {
   const clamped = Math.max(0, totalSeconds);
   const hours = Math.floor(clamped / 3600);
   const minutes = Math.floor((clamped % 3600) / 60);
@@ -822,4 +874,28 @@ function formatDuration(totalSeconds: number): string {
     return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
   }
   return `${pad(minutes)}:${pad(seconds)}`;
+}
+
+function getElapsedSecondsForExecution({
+  execution,
+  nowMs,
+}: {
+  execution: ResearchRunCodeExecution | null;
+  nowMs: number;
+}): number | null {
+  if (!execution) {
+    return null;
+  }
+  if (typeof execution.exec_time === "number" && Number.isFinite(execution.exec_time)) {
+    return Math.max(0, Math.floor(execution.exec_time));
+  }
+  if (!execution.started_at) {
+    return null;
+  }
+  const startedMs = new Date(execution.started_at).getTime();
+  const endMs = execution.completed_at ? new Date(execution.completed_at).getTime() : nowMs;
+  if (Number.isNaN(startedMs) || Number.isNaN(endMs)) {
+    return null;
+  }
+  return Math.max(0, Math.floor((endMs - startedMs) / 1000));
 }
