@@ -24,6 +24,8 @@ from app.models.timeline_events import (
     NodeResultEvent,
     PaperGenerationStepEvent,
     ProgressUpdateEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
     StageCompletedEvent,
     StageStartedEvent,
     TimelineEvent,
@@ -458,7 +460,7 @@ def handle_paper_generation_progress_event(
 
 
 def handle_run_finished_event(
-    _run_id: str, _event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+    _run_id: str, event_data: Dict[str, Any], state: Optional[ResearchRunState] = None
 ) -> List[TimelineEvent]:
     """
     Transform run_finished event into timeline event.
@@ -467,15 +469,82 @@ def handle_run_finished_event(
 
     Args:
         run_id: Research run ID
-        event_data: Raw run_finished event data (success, status, message)
-        state: Current research run state (unused)
+        event_data: Raw run_finished event data (success, status, message, reason)
+        state: Current research run state (for summary info)
 
     Returns:
-        Empty list (no timeline event, just triggers cleanup)
+        List containing RunFinishedEvent
     """
-    # No timeline event needed - this is just for cleanup signaling
-    # The actual completion is already captured by stage_completed events
-    return []
+    # Extract data from event
+    success = event_data.get("success", False)
+    status = event_data.get("status", "failed")  # "completed" or "failed"
+    message = event_data.get("message")
+    reason = event_data.get("reason", "pipeline_completed" if success else "pipeline_error")
+
+    # Generate headline based on status
+    if success:
+        headline = "Research Run Completed Successfully"
+    elif reason == "heartbeat_timeout":
+        headline = "Research Run Failed - Container Timeout"
+    elif reason == "deadline_exceeded":
+        headline = "Research Run Failed - Time Limit Exceeded"
+    elif reason == "user_cancelled":
+        headline = "Research Run Cancelled by User"
+    elif reason == "container_died":
+        headline = "Research Run Failed - Container Died"
+    else:
+        headline = "Research Run Failed"
+
+    # Extract summary info from state if available
+    stages_completed = 0
+    total_nodes_executed = 0
+    total_duration_seconds = None
+    best_result = None
+    summary = None
+
+    if state:
+        # Count completed stages
+        stages_completed = sum(1 for stage in state.stages if stage.status == "completed")
+
+        # Count total nodes from active_nodes history (approximation)
+        total_nodes_executed = sum(
+            stage.total_nodes for stage in state.stages if stage.total_nodes > 0
+        )
+
+        # Calculate duration if we have timestamps
+        if state.started_running_at and state.completed_at:
+            total_duration_seconds = (state.completed_at - state.started_running_at).total_seconds()
+
+        # Get best result
+        best_result = state.best_metrics
+
+        # Generate summary
+        if success:
+            summary = (
+                f"Completed {stages_completed} stages with {total_nodes_executed} nodes executed."
+            )
+        else:
+            summary = f"Run stopped after {stages_completed} stages. {message or 'Unknown error'}"
+
+    # Create timeline event
+    event = RunFinishedEvent(
+        id=str(uuid.uuid4()),
+        timestamp=datetime.now(timezone.utc),
+        stage=state.current_stage if state and state.current_stage else "unknown",
+        node_id=None,
+        headline=headline,
+        status=status,
+        success=success,
+        reason=reason,
+        message=message,
+        summary=summary,
+        total_duration_seconds=total_duration_seconds,
+        stages_completed=stages_completed,
+        total_nodes_executed=total_nodes_executed,
+        best_result=best_result,
+    )
+
+    return [event]
 
 
 # ============================================================================
@@ -488,6 +557,7 @@ TransformerFn = Callable[
     List[TimelineEvent],
 ]
 
+
 # The actual dispatch table
 # We use a controlled cast here to bridge the gap between:
 # - What we know: each transformer handles specific raw event types correctly
@@ -496,6 +566,56 @@ TransformerFn = Callable[
 # This is a standard pattern in typed Python for event dispatch systems.
 # The invariant we're asserting: "The event_type key guarantees the correct
 # raw event data structure will be passed to each transformer at runtime."
+def handle_run_started_event(
+    _run_id: str, event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+) -> List[TimelineEvent]:
+    """
+    Transform run_started event into timeline event.
+
+    This marks the transition from "pending" to "running" when the container is ready.
+
+    Args:
+        run_id: Research run ID
+        event_data: Raw run_started event data (started_running_at, gpu_type, cost)
+        state: Current research run state (unused)
+
+    Returns:
+        List containing RunStartedEvent
+    """
+    # Extract data from event
+    gpu_type = event_data.get("gpu_type")
+    cost_per_hour_cents = event_data.get("cost_per_hour_cents")
+    started_at_str = event_data.get("started_running_at")
+
+    # Parse timestamp
+    if started_at_str:
+        if isinstance(started_at_str, str):
+            timestamp = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+        else:
+            timestamp = datetime.now(timezone.utc)
+    else:
+        timestamp = datetime.now(timezone.utc)
+
+    # Generate headline
+    if gpu_type:
+        headline = f"Research Run Started on {gpu_type}"
+    else:
+        headline = "Research Run Started"
+
+    # Create timeline event (not associated with any stage yet)
+    event = RunStartedEvent(
+        id=str(uuid.uuid4()),
+        timestamp=timestamp,
+        stage="",  # No stage yet - run just started
+        node_id=None,
+        headline=headline,
+        gpu_type=gpu_type,
+        cost_per_hour_cents=cost_per_hour_cents,
+    )
+
+    return [event]
+
+
 EVENT_HANDLERS: Dict[str, TransformerFn] = cast(
     Dict[str, TransformerFn],
     {
@@ -506,6 +626,7 @@ EVENT_HANDLERS: Dict[str, TransformerFn] = cast(
         "best_node_selection": handle_best_node_selection_event,
         "running_code": handle_running_code_event,
         "run_completed": handle_run_completed_event,
+        "run_started": handle_run_started_event,
         "run_finished": handle_run_finished_event,
     },
 )

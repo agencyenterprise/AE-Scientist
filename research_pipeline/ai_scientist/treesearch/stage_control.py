@@ -1,5 +1,4 @@
 import logging
-import os
 import signal
 import threading
 import time
@@ -7,6 +6,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from . import execution_registry
 from .events import BaseEvent, RunLogEvent
+from .process_utils import send_signal_to_process_group
 
 logger = logging.getLogger(__name__)
 _lock = threading.RLock()
@@ -77,7 +77,7 @@ def _terminate_active_executions_for_stage(*, stage_name: str, reason: str) -> N
             )
             continue
         try:
-            os.kill(pid, signal.SIGKILL)
+            send_signal_to_process_group(pid=pid, sig=signal.SIGKILL)
             logger.info(
                 "Sent SIGKILL to pid=%s for execution_id=%s (stage=%s).",
                 pid,

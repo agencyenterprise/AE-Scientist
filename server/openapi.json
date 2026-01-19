@@ -2050,6 +2050,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/codex-event": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Codex Event",
+        "operationId": "ingest_codex_event_api_research_pipeline_events_codex_event_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexEventPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/running-code": {
       "post": {
         "tags": [
@@ -3244,6 +3289,90 @@
         }
       }
     },
+    "/api/research-runs/{run_id}/narrative-state": {
+      "get": {
+        "tags": [
+          "narrator"
+        ],
+        "summary": "Get Narrative State",
+        "description": "Get the current narrator state for a research run.\n\nThis endpoint exists primarily to ensure ResearchRunState and TimelineEvent\ntypes are properly exported to the OpenAPI schema and generated in frontend types.\n\nReturns the complete state including timeline events.\n\nArgs:\n    run_id: Research run ID\n    request: FastAPI request object (for auth)\n    db: Database manager\n\nReturns:\n    ResearchRunState with full timeline",
+        "operationId": "get_narrative_state_api_research_runs__run_id__narrative_state_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-runs/{run_id}/narrative-stream": {
+      "get": {
+        "tags": [
+          "narrator"
+        ],
+        "summary": "Narrative Stream",
+        "description": "SSE endpoint that streams narrator timeline events and state updates.\n\nEvent Types:\n- \"state_snapshot\": Complete state snapshot (sent on connect)\n- \"timeline_event\": Individual timeline event (sent on connect + live)\n- \"state_delta\": Partial state update with only changed fields (live)\n- \"ping\": Keepalive ping (every 30s)\n\nArgs:\n    run_id: Research run ID\n    request: FastAPI request object (for auth)\n    db: Database manager\n\nReturns:\n    StreamingResponse streaming narrator events",
+        "operationId": "narrative_stream_api_research_runs__run_id__narrative_stream_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/": {
       "get": {
         "tags": [
@@ -3315,6 +3444,76 @@
   },
   "components": {
     "schemas": {
+      "ActiveNode": {
+        "properties": {
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id",
+            "description": "Unique execution ID"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "Current execution status",
+            "default": "running"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At",
+            "description": "When execution started"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "When execution completed"
+          },
+          "exec_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exec Time",
+            "description": "Execution time in seconds"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "description": "Type of run",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "execution_id",
+          "stage",
+          "started_at"
+        ],
+        "title": "ActiveNode",
+        "description": "Represents a node currently executing in the research pipeline."
+      },
       "ArtifactPresignedUrlResponse": {
         "properties": {
           "url": {
@@ -3871,6 +4070,24 @@
           "checkout_url"
         ],
         "title": "CheckoutSessionCreateResponse"
+      },
+      "CodexEventPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "type": "object",
+            "title": "Event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "CodexEventPayload"
       },
       "ConversationCostResponse": {
         "properties": {
@@ -5788,6 +6005,115 @@
         "title": "MessageResponse",
         "description": "Simple message response."
       },
+      "MetricCollection": {
+        "properties": {
+          "primary": {
+            "$ref": "#/components/schemas/MetricInterpretation",
+            "description": "Primary metric being optimized"
+          },
+          "secondary": {
+            "items": {
+              "$ref": "#/components/schemas/MetricInterpretation"
+            },
+            "type": "array",
+            "title": "Secondary",
+            "description": "Additional metrics tracked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "primary"
+        ],
+        "title": "MetricCollection",
+        "description": "Group of related metrics for a node or stage."
+      },
+      "MetricInterpretation": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Metric name",
+            "examples": [
+              "accuracy",
+              "f1_score"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "title": "Value",
+            "description": "Raw metric value"
+          },
+          "formatted": {
+            "type": "string",
+            "title": "Formatted",
+            "description": "Formatted for display",
+            "examples": [
+              "82.3%",
+              "0.823"
+            ]
+          },
+          "interpretation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interpretation",
+            "description": "What this value means",
+            "examples": [
+              "5.2% above baseline",
+              "Best result so far"
+            ]
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context",
+            "description": "Evaluation context",
+            "examples": [
+              "Validation set",
+              "Test dataset"
+            ]
+          },
+          "comparison": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison",
+            "description": "Comparison with baseline/previous best",
+            "examples": [
+              {
+                "baseline": 0.77,
+                "delta_vs_baseline": 0.053,
+                "delta_vs_previous": 0.013,
+                "previous_best": 0.81
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "formatted"
+        ],
+        "title": "MetricInterpretation",
+        "description": "Interpreted metric with human-readable context.\n\nTransforms raw metric (0.8234567) into meaningful information:\n- Formatted: \"82.3%\"\n- Interpretation: \"5.2% above baseline\""
+      },
       "ModelCost": {
         "properties": {
           "model": {
@@ -5805,6 +6131,293 @@
           "cost"
         ],
         "title": "ModelCost"
+      },
+      "NodeExecutionCompletedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "node_execution_completed"
+            ],
+            "const": "node_execution_completed",
+            "title": "Type",
+            "default": "node_execution_completed"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id",
+            "description": "Unique execution ID"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "Execution status"
+          },
+          "exec_time": {
+            "type": "number",
+            "title": "Exec Time",
+            "description": "Execution time in seconds"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "description": "Type of run",
+            "default": "main_execution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "execution_id",
+          "status",
+          "exec_time"
+        ],
+        "title": "NodeExecutionCompletedEvent",
+        "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered by run_completed events from research pipeline\n- Tracks node completion with timing and status\n- Pairs with NodeExecutionStartedEvent\n\nFrequency: 10-50 per stage (one per node execution)"
+      },
+      "NodeExecutionStartedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "node_execution_started"
+            ],
+            "const": "node_execution_started",
+            "title": "Type",
+            "default": "node_execution_started"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "execution_id": {
+            "type": "string",
+            "title": "Execution Id",
+            "description": "Unique execution ID"
+          },
+          "run_type": {
+            "type": "string",
+            "title": "Run Type",
+            "description": "Type of run",
+            "default": "main_execution"
+          },
+          "code_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Preview",
+            "description": "Preview of code being executed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "execution_id"
+        ],
+        "title": "NodeExecutionStartedEvent",
+        "description": "Emitted when a node starts executing code.\n\nEmission Criteria:\n- Triggered by running_code events from research pipeline\n- Tracks individual node execution lifecycle\n- Helps show concurrent node execution\n\nFrequency: 10-50 per stage (one per node execution)"
+      },
+      "NodeResultEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "node_result"
+            ],
+            "const": "node_result",
+            "title": "Type",
+            "default": "node_result"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failure",
+              "partial"
+            ],
+            "title": "Outcome",
+            "description": "Execution outcome"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Brief description of what occurred"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Interpreted metrics"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Type",
+            "description": "Error type if failed"
+          },
+          "error_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Summary",
+            "description": "Error explanation if failed"
+          },
+          "exec_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exec Time",
+            "description": "Execution time in seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "outcome"
+        ],
+        "title": "NodeResultEvent",
+        "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered when substage_event arrives with node completion\n- Includes metrics from corresponding stage_progress event\n- Emitted for each node that completes (success or failure)\n\nFrequency: 10-50 per stage (varies by stage complexity)"
       },
       "PaperGenerationProgressEvent": {
         "properties": {
@@ -5867,6 +6480,211 @@
           "event"
         ],
         "title": "PaperGenerationProgressPayload"
+      },
+      "PaperGenerationStepEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "paper_generation_step"
+            ],
+            "const": "paper_generation_step",
+            "title": "Type",
+            "default": "paper_generation_step"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "step": {
+            "type": "string",
+            "enum": [
+              "plot_aggregation",
+              "citation_gathering",
+              "paper_writeup",
+              "paper_review"
+            ],
+            "title": "Step",
+            "description": "Current step"
+          },
+          "substep": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Substep",
+            "description": "Substep if applicable"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "What's happening in this step"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Overall progress (0.0-1.0)"
+          },
+          "step_progress": {
+            "type": "number",
+            "title": "Step Progress",
+            "description": "Progress within this step (0.0-1.0)"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details",
+            "description": "Step-specific details (figures selected, citations found, etc.)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "step",
+          "progress",
+          "step_progress"
+        ],
+        "title": "PaperGenerationStepEvent",
+        "description": "Emitted during Stage 5 (paper generation).\n\nEmission Criteria:\n- Triggered by paper_generation_progress events\n- Shows current step and progress within paper generation\n- Emitted for each major paper generation step\n\nFrequency: 4-6 per paper generation stage"
+      },
+      "ProgressUpdateEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "progress_update"
+            ],
+            "const": "progress_update",
+            "title": "Type",
+            "default": "progress_update"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "current_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Focus",
+            "description": "What's happening right now"
+          },
+          "iteration": {
+            "type": "integer",
+            "title": "Iteration",
+            "description": "Current iteration within the stage (1-based index)"
+          },
+          "max_iterations": {
+            "type": "integer",
+            "title": "Max Iterations",
+            "description": "Total iterations planned"
+          },
+          "current_best": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current best metrics if available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "iteration",
+          "max_iterations"
+        ],
+        "title": "ProgressUpdateEvent",
+        "description": "Emitted periodically to show current focus.\n\nEmission Criteria:\n- Triggered by stage_progress events (every iteration)\n- Shows current iteration, focus, and progress metrics\n- Throttled to avoid overwhelming the timeline\n\nFrequency: ~10 per stage (one per iteration)"
       },
       "ResearchCost": {
         "properties": {
@@ -6079,9 +6897,8 @@
             "description": "Stage name reported by the research pipeline"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "description": "Type of execution (e.g., main_execution)"
+            "$ref": "#/components/schemas/RunType",
+            "description": "Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
           },
           "code": {
             "type": "string",
@@ -6146,8 +6963,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "status": {
             "type": "string",
@@ -6209,8 +7025,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "code": {
             "type": "string",
@@ -7501,6 +8316,304 @@
         ],
         "title": "ResearchRunStageSkipWindowUpdate"
       },
+      "ResearchRunState": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id",
+            "description": "Unique run identifier"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id"
+          },
+          "overall_goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Goal"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageGoal"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stage"
+          },
+          "current_stage_goal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageGoal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeline": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RunStartedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageStartedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/NodeResultEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageCompletedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ProgressUpdateEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/PaperGenerationStepEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/NodeExecutionStartedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/NodeExecutionCompletedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/RunFinishedEvent"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "node_execution_completed": "#/components/schemas/NodeExecutionCompletedEvent",
+                  "node_execution_started": "#/components/schemas/NodeExecutionStartedEvent",
+                  "node_result": "#/components/schemas/NodeResultEvent",
+                  "paper_generation_step": "#/components/schemas/PaperGenerationStepEvent",
+                  "progress_update": "#/components/schemas/ProgressUpdateEvent",
+                  "run_finished": "#/components/schemas/RunFinishedEvent",
+                  "run_started": "#/components/schemas/RunStartedEvent",
+                  "stage_completed": "#/components/schemas/StageCompletedEvent",
+                  "stage_started": "#/components/schemas/StageStartedEvent"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Timeline"
+          },
+          "current_focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Focus"
+          },
+          "active_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveNode"
+            },
+            "type": "array",
+            "title": "Active Nodes"
+          },
+          "overall_progress": {
+            "type": "number",
+            "title": "Overall Progress",
+            "default": 0.0
+          },
+          "current_stage_progress": {
+            "type": "number",
+            "title": "Current Stage Progress",
+            "default": 0.0
+          },
+          "best_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Node Id"
+          },
+          "best_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "best_node_reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Node Reasoning"
+          },
+          "artifact_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Artifact Ids"
+          },
+          "tree_viz": {
+            "type": "object",
+            "title": "Tree Viz"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "started_running_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started Running At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "gpu_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Type"
+          },
+          "estimated_cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Cents"
+          },
+          "actual_cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Cost Cents"
+          },
+          "cost_per_hour_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Hour Cents"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "conversation_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResearchRunState",
+        "description": "Complete state of a research run. Single source of truth for frontend."
+      },
       "ResearchRunStopResponse": {
         "properties": {
           "run_id": {
@@ -8069,9 +9182,7 @@
             "title": "Completed At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -8080,7 +9191,8 @@
           "stage_name",
           "status",
           "exec_time",
-          "completed_at"
+          "completed_at",
+          "run_type"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -8100,6 +9212,151 @@
           "event"
         ],
         "title": "RunCompletedPayload"
+      },
+      "RunFinishedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_finished"
+            ],
+            "const": "run_finished",
+            "title": "Type",
+            "default": "run_finished"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "description": "Final run status"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Whether the run completed successfully"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "pipeline_completed",
+              "pipeline_error",
+              "heartbeat_timeout",
+              "deadline_exceeded",
+              "user_cancelled",
+              "container_died"
+            ],
+            "title": "Reason",
+            "description": "Why the run finished"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Human-readable completion message"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Summary of what was accomplished"
+          },
+          "total_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Duration Seconds",
+            "description": "Total run duration in seconds"
+          },
+          "stages_completed": {
+            "type": "integer",
+            "title": "Stages Completed",
+            "description": "Number of stages completed",
+            "default": 0
+          },
+          "total_nodes_executed": {
+            "type": "integer",
+            "title": "Total Nodes Executed",
+            "description": "Total nodes executed",
+            "default": 0
+          },
+          "best_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Best result achieved if available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "status",
+          "success",
+          "reason"
+        ],
+        "title": "RunFinishedEvent",
+        "description": "Emitted when the entire research run finishes (success or failure).\n\nEmission Criteria:\n- Triggered by run_finished events from research pipeline\n- Triggered by monitor timeout/failure detection\n- Triggered by user cancellation\n- Final event in the timeline\n\nFrequency: 1 per run (always the last event)"
       },
       "RunFinishedPayload": {
         "properties": {
@@ -8165,6 +9422,85 @@
         ],
         "title": "RunLogPayload"
       },
+      "RunStartedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_started"
+            ],
+            "const": "run_started",
+            "title": "Type",
+            "default": "run_started"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "gpu_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Type",
+            "description": "GPU type allocated"
+          },
+          "cost_per_hour_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Hour Cents",
+            "description": "Cost per hour in cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline"
+        ],
+        "title": "RunStartedEvent",
+        "description": "Emitted when the research run actually starts executing (container is ready).\n\nEmission Criteria:\n- Triggered by run_started events from research pipeline\n- Marks the transition from \"pending\" to \"running\"\n- First event in the timeline (after creation)\n\nFrequency: 1 per run (always the first event)"
+      },
       "RunStartedPayload": {
         "properties": {
           "run_id": {
@@ -8177,6 +9513,15 @@
           "run_id"
         ],
         "title": "RunStartedPayload"
+      },
+      "RunType": {
+        "type": "string",
+        "enum": [
+          "codex_execution",
+          "runfile_execution"
+        ],
+        "title": "RunType",
+        "description": "Execution stream identifier for research pipeline code execution telemetry."
       },
       "RunningCodeEventPayload": {
         "properties": {
@@ -8197,9 +9542,7 @@
             "title": "Started At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -8207,7 +9550,8 @@
           "execution_id",
           "stage_name",
           "code",
-          "started_at"
+          "started_at",
+          "run_type"
         ],
         "title": "RunningCodeEventPayload"
       },
@@ -8277,6 +9621,280 @@
           "message"
         ],
         "title": "SkipStageResponse"
+      },
+      "StageCompletedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_completed"
+            ],
+            "const": "stage_completed",
+            "title": "Type",
+            "default": "stage_completed"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "What was accomplished (from substage_summary)"
+          },
+          "best_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Node Id",
+            "description": "ID of best node from this stage"
+          },
+          "best_metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Best metrics achieved"
+          },
+          "total_attempts": {
+            "type": "integer",
+            "title": "Total Attempts",
+            "description": "Total nodes explored",
+            "default": 0
+          },
+          "successful_attempts": {
+            "type": "integer",
+            "title": "Successful Attempts",
+            "description": "Nodes that completed successfully",
+            "default": 0
+          },
+          "failed_attempts": {
+            "type": "integer",
+            "title": "Failed Attempts",
+            "description": "Nodes that failed",
+            "default": 0
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Confidence in results (from substage_summary)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline"
+        ],
+        "title": "StageCompletedEvent",
+        "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when substage_completed event arrives\n- Enriched with data from substage_summary event (already LLM-generated)\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
+      },
+      "StageGoal": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Display title"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal",
+            "description": "What we're trying to achieve"
+          },
+          "approach": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approach",
+            "description": "How we're approaching it"
+          },
+          "success_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criteria",
+            "description": "How we know we're done"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed",
+              "skipped"
+            ],
+            "title": "Status",
+            "description": "Current status",
+            "default": "pending"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At",
+            "description": "When stage started"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At",
+            "description": "When stage completed"
+          },
+          "current_iteration": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Iteration",
+            "description": "Current iteration"
+          },
+          "max_iterations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Iterations",
+            "description": "Maximum iterations"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress",
+            "description": "Progress 0.0-1.0"
+          },
+          "total_nodes": {
+            "type": "integer",
+            "title": "Total Nodes",
+            "description": "Total nodes in this stage",
+            "default": 0
+          },
+          "buggy_nodes": {
+            "type": "integer",
+            "title": "Buggy Nodes",
+            "description": "Number of buggy nodes",
+            "default": 0
+          },
+          "good_nodes": {
+            "type": "integer",
+            "title": "Good Nodes",
+            "description": "Number of good nodes",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "title"
+        ],
+        "title": "StageGoal",
+        "description": "Goal and metadata for a pipeline stage."
       },
       "StageProgressEvent": {
         "properties": {
@@ -8425,6 +10043,79 @@
           "event"
         ],
         "title": "StageSkipWindowPayload"
+      },
+      "StageStartedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_started"
+            ],
+            "const": "stage_started",
+            "title": "Type",
+            "default": "stage_started"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "stage_name": {
+            "type": "string",
+            "title": "Stage Name",
+            "description": "Human-readable stage name"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal",
+            "description": "What we're trying to achieve"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "stage_name"
+        ],
+        "title": "StageStartedEvent",
+        "description": "Emitted when a stage begins.\n\nEmission Criteria:\n- Triggered when stage_progress event arrives with iteration = 0\n- OR when first substage_event arrives for a new stage\n- Emitted once per stage (5 times per run)\n\nFrequency: 5 per run (one per stage)"
       },
       "SubstageCompletedEvent": {
         "properties": {

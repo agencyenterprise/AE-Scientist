@@ -1,11 +1,13 @@
 import logging
-from typing import ClassVar
+from typing import ClassVar, Tuple
 
 from ai_scientist.llm import structured_query_with_schema
 
+from ..codex.node_result_contract import NodeResultContractContext
+from ..config import Config as AppConfig
 from ..journal import Journal, Node
+from ..prompts.render import render_lines, render_text
 from ..stage_identifiers import StageIdentifier
-from ..utils.config import Config as AppConfig
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,20 @@ class Stage3Plotting(Stage):
     # Memoization cache for substage-completion queries:
     # key -> (is_complete, message)
     _substage_completion_cache: dict[str, tuple[bool, str]] = {}
+
+    def evaluate_substage_completion(self) -> Tuple[bool, str]:
+        return Stage3Plotting.compute_substage_completion(
+            goals=self._meta.goals,
+            journal=self._context.journal,
+            cfg=self._context.cfg,
+        )
+
+    def evaluate_stage_completion(self) -> Tuple[bool, str]:
+        return Stage3Plotting.compute_stage_completion(
+            journal=self._context.journal,
+            cfg=self._context.cfg,
+            max_stage3_iterations=self._meta.max_iterations,
+        )
 
     @staticmethod
     def parse_vlm_feedback(*, node: Node) -> str:
@@ -51,25 +67,21 @@ class Stage3Plotting(Stage):
         cached = Stage3Plotting._substage_completion_cache.get(cache_key)
         if cached is not None:
             logger.debug(
-                f"Stage3 substage-completion cache HIT for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Goals unchanged. Skipping LLM."
+                "Stage3 substage-completion cache HIT for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return cached
         logger.debug(
-            f"Stage3 substage-completion cache MISS for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
+            "Stage3 substage-completion cache MISS for best_node=%s (metric=%s). Invoking LLM.",
+            best_node.id[:8],
+            metric_val,
         )
         vlm_feedback = Stage3Plotting.parse_vlm_feedback(node=best_node)
-        eval_prompt = f"""
-        Evaluate if the current sub-stage is complete based on the following evidence:
-        1. Figure Analysis:
-        {vlm_feedback}
-
-        Requirements for completion:
-        - {goals}
-
-        Provide a detailed evaluation of completion status.
-        """
+        eval_prompt = render_text(
+            template_name="stage_completion/stage3_substage.txt.j2",
+            context={"vlm_feedback": vlm_feedback, "goals": goals},
+        )
         evaluation = structured_query_with_schema(
             system_message=eval_prompt,
             user_message=None,
@@ -81,16 +93,19 @@ class Stage3Plotting(Stage):
             result = True, str(evaluation.reasoning or "sub-stage complete")
             Stage3Plotting._substage_completion_cache[cache_key] = result
             logger.debug(
-                f"Stage3 substage-completion result cached for best_node={best_node.id[:8]} "
-                f"(metric={metric_val})."
+                "Stage3 substage-completion result cached for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return result
         missing = ", ".join(evaluation.missing_criteria)
         result = False, "Missing criteria: " + missing
         Stage3Plotting._substage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage3 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Missing: {missing}"
+            "Stage3 substage-completion result cached (incomplete) for best_node=%s (metric=%s). Missing: %s",
+            best_node.id[:8],
+            metric_val,
+            missing,
         )
         return result
 
@@ -115,20 +130,6 @@ class Stage3Plotting(Stage):
                     journal.nodes[-1].exec_time_feedback = exec_time_feedback
                 return False, exec_time_feedback
         return False, "stage not completed"
-
-    def evaluate_substage_completion(self) -> tuple[bool, str]:
-        return Stage3Plotting.compute_substage_completion(
-            goals=self._meta.goals,
-            journal=self._context.journal,
-            cfg=self._context.cfg,
-        )
-
-    def evaluate_stage_completion(self) -> tuple[bool, str]:
-        return Stage3Plotting.compute_stage_completion(
-            journal=self._context.journal,
-            cfg=self._context.cfg,
-            max_stage3_iterations=self._meta.max_iterations,
-        )
 
     def reset_skip_state(self) -> None:
         super().reset_skip_state()
@@ -168,9 +169,22 @@ class Stage3Plotting(Stage):
             self._set_skip_state(can_skip=False, reason=reason)
             return
         reason = "Stage 3 has plot artifacts ready for downstream stages."
-        logger.info(
-            "Stage 3 skip allowed: %s (best_node=%s)",
-            reason,
-            best_node_id,
-        )
+        logger.info("Stage 3 skip allowed: %s (best_node=%s)", reason, best_node_id)
         self._set_skip_state(can_skip=True, reason=reason)
+
+
+def codex_node_result_contract_prompt_lines() -> list[str]:
+    return render_lines(template_name="contracts/stage3.txt.j2", context={})
+
+
+def validate_node_result_contract(
+    *, node_result: dict[str, object], ctx: NodeResultContractContext
+) -> list[str]:
+    errors: list[str] = []
+    is_buggy_plots = node_result.get("is_buggy_plots")
+    if is_buggy_plots is False:
+        if ctx.working_png_count <= 0:
+            errors.append(
+                "Stage3 requires at least one .png in ./working when is_buggy_plots=false"
+            )
+    return errors

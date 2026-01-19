@@ -8,11 +8,12 @@ Handles persistence of:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from pydantic import TypeAdapter
 
 from app.models.narrator_state import ResearchRunState
 from app.models.timeline_events import TimelineEvent
@@ -20,6 +21,9 @@ from app.models.timeline_events import TimelineEvent
 from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
+
+# Type adapter for parsing TimelineEvent union
+_timeline_event_adapter: TypeAdapter[TimelineEvent] = TypeAdapter(TimelineEvent)
 
 
 # ============================================================================
@@ -92,11 +96,12 @@ class NarratorMixin(ConnectionProvider):
         *,
         event_type: Optional[str] = None,
         stage: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[TimelineEvent]:
         """
-        Get timeline events for a run.
+        Get timeline events for a run as Pydantic models.
 
-        Hydrates stripped fields from columns back into event_data.
+        Hydrates stripped fields from columns back into event_data,
+        then parses into proper TimelineEvent models.
         """
         conditions = ["run_id = %s"]
         params: List[Any] = [run_id]
@@ -123,8 +128,8 @@ class NarratorMixin(ConnectionProvider):
                 await cursor.execute(query, params)  # pyright: ignore[reportArgumentType]
                 rows = await cursor.fetchall() or []
 
-        # Hydrate stripped fields back into event_data
-        events = []
+        # Hydrate stripped fields back into event_data and parse as Pydantic models
+        events: List[TimelineEvent] = []
         for row in rows:
             event_data = dict(row["event_data"])
             # Re-add the fields that were stripped
@@ -134,12 +139,10 @@ class NarratorMixin(ConnectionProvider):
             event_data["stage"] = row["stage"]
             event_data["node_id"] = row["node_id"]
 
-            events.append(
-                {
-                    **dict(row),
-                    "event_data": event_data,
-                }
-            )
+            # Parse into proper TimelineEvent Pydantic model
+            # TimelineEvent is a discriminated union, use TypeAdapter to validate
+            timeline_event = _timeline_event_adapter.validate_python(event_data)
+            events.append(timeline_event)
 
         return events
 
@@ -249,7 +252,7 @@ class NarratorMixin(ConnectionProvider):
         """
         Get current research run state.
 
-        Hydrates timeline from rp_timeline_events table.
+        Hydrates timeline from rp_timeline_events table as proper Pydantic models.
 
         Args:
             run_id: Research run ID
@@ -274,9 +277,9 @@ class NarratorMixin(ConnectionProvider):
         state_dict = dict(row["state_data"])
         state_dict["version"] = row["version"]
 
-        # Hydrate timeline from rp_timeline_events
+        # Hydrate timeline from rp_timeline_events (now returns proper TimelineEvent models)
         timeline_events = await self.get_timeline_events(run_id)
-        state_dict["timeline"] = [event["event_data"] for event in timeline_events]
+        state_dict["timeline"] = timeline_events
 
         return ResearchRunState(**state_dict)
 
@@ -287,7 +290,7 @@ class NarratorMixin(ConnectionProvider):
         Get current research run state with row-level lock (SELECT FOR UPDATE).
 
         This should be called within a transaction to hold the lock.
-        Hydrates timeline from rp_timeline_events table.
+        Hydrates timeline from rp_timeline_events table as proper Pydantic models.
 
         Args:
             run_id: Research run ID
@@ -313,9 +316,9 @@ class NarratorMixin(ConnectionProvider):
         state_dict = dict(row["state_data"])
         state_dict["version"] = row["version"]
 
-        # Hydrate timeline from rp_timeline_events
+        # Hydrate timeline from rp_timeline_events (now returns proper TimelineEvent models)
         timeline_events = await self.get_timeline_events(run_id)
-        state_dict["timeline"] = [event["event_data"] for event in timeline_events]
+        state_dict["timeline"] = timeline_events
 
         return ResearchRunState(**state_dict)
 

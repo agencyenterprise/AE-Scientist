@@ -30,7 +30,7 @@ from app.models.research_pipeline import (
     ResearchRunStageProgress,
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
-from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.research_pipeline import ResearchRunSubstageSummary, RunType
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
@@ -296,12 +296,17 @@ class RunLogPayload(BaseModel):
     event: RunLogEvent
 
 
+class CodexEventPayload(BaseModel):
+    run_id: str
+    event: dict[str, Any]
+
+
 class RunningCodeEventPayload(BaseModel):
     execution_id: str
     stage_name: str
     code: str
     started_at: str
-    run_type: str = "main_execution"
+    run_type: RunType
 
 
 class RunningCodePayload(BaseModel):
@@ -315,7 +320,7 @@ class RunCompletedEventPayload(BaseModel):
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: str
-    run_type: str = "main_execution"
+    run_type: RunType
 
 
 class RunCompletedPayload(BaseModel):
@@ -789,6 +794,14 @@ async def ingest_run_log(
     )
 
 
+@router.post("/codex-event", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_codex_event(
+    payload: CodexEventPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    logger.info("RP codex event received: run=%s event=%s", payload.run_id, payload.event)
+
+
 @router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_running_code(
     payload: RunningCodePayload,
@@ -913,6 +926,19 @@ async def ingest_run_started(
             data=run_event,
         ),
     )
+
+    # Ingest into narrator to update state with started_running_at
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="run_started",
+        event_data={
+            "started_running_at": now.isoformat(),
+            "gpu_type": run.gpu_type,
+            "cost_per_hour_cents": int(run.cost * 100) if run.cost else None,
+        },
+    )
+
     logger.info("RP run started: run=%s", payload.run_id)
 
 
@@ -1232,6 +1258,7 @@ async def _retry_run_after_gpu_shortage(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
             gpu_types=retry_gpu_types,
+            conversation_id=idea_version.conversation_id or -1,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",

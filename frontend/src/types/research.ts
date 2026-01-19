@@ -173,6 +173,7 @@ export interface ResearchRunDetailsApi {
   best_node_selections?: BestNodeSelectionApi[];
   stage_skip_windows?: StageSkipWindowApi[];
   code_execution?: ResearchRunCodeExecution | null;
+  code_executions?: Partial<Record<RunType, ResearchRunCodeExecution>> | null;
 }
 
 // Frontend types (camelCase) - using same structure for SSE compatibility
@@ -263,10 +264,12 @@ export interface PaperGenerationEvent {
   created_at: string;
 }
 
+export type RunType = "codex_execution" | "runfile_execution";
+
 export interface ResearchRunCodeExecution {
   execution_id: string;
   stage_name: string;
-  run_type: string;
+  run_type: RunType;
   code: string;
   status: string;
   started_at: string;
@@ -328,6 +331,7 @@ export interface ResearchRunDetails {
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
   code_execution?: ResearchRunCodeExecution | null;
+  code_executions?: Partial<Record<RunType, ResearchRunCodeExecution>> | null;
 }
 
 export interface TreeVizItemApi {

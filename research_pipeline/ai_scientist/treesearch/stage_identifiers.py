@@ -27,6 +27,13 @@ class StageIdentifier(Enum):
     def ordered(cls) -> tuple["StageIdentifier", ...]:
         return tuple(cls)
 
+    @classmethod
+    def from_prefixed_name(cls, *, prefixed_name: str) -> "StageIdentifier | None":
+        for identifier in cls:
+            if identifier.prefixed_name == prefixed_name:
+                return identifier
+        return None
+
     def next_stage(self) -> "StageIdentifier | None":
         order = self.ordered()
         idx = order.index(self)

@@ -1,15 +1,15 @@
 import logging
-from typing import ClassVar, List, Protocol, Tuple
+from typing import ClassVar, Tuple
 
 from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
-from ..journal import Journal, Node
+from ..codex.node_result_contract import NodeResultContractContext, is_non_empty_string
+from ..config import Config as AppConfig
+from ..journal import Journal
+from ..prompts.render import render_lines, render_text
 from ..stage_identifiers import StageIdentifier
-from ..types import PromptType
-from ..utils.config import Config as AppConfig
-from ..utils.response import wrap_code
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -30,14 +30,51 @@ class AblationIdea(BaseModel):
     )
 
 
-class SupportsStage4Agent(Protocol):
-    def plan_and_code_query(
-        self,
-        *,
-        prompt: PromptType,
-        retries: int = 3,
-        enforce_gpu: bool,
-    ) -> Tuple[str, str]: ...
+def propose_next_ablation_idea(
+    *, base_code: str, tried: list[str], model: str, temperature: float
+) -> AblationIdea:
+    """
+    Stage 4 (ablation): propose ONE new ablation idea, avoiding repeats.
+    This is harness-owned so we can enforce diversity deterministically.
+    """
+    prompt: dict[str, object] = {
+        "Introduction": (
+            "You are an AI researcher conducting ablation studies. "
+            "Based on the current implementation and previous ablations (if any), "
+            "propose ONE new ablation study that tests a different aspect of the model."
+        ),
+        "Base code you are working on": base_code,
+        "Previous Ablations": {
+            "Has been tried": tried if tried else "Nothing has been tried yet.",
+        },
+        "Instructions": {
+            "Requirements": [
+                "1. Identify ONE specific component/feature to ablate.",
+                "2. Ensure the ablation is different from previous completed or running attempts.",
+                "3. The ablation should be a new idea, not a trivial variation of a previous idea.",
+                "4. Keep the core model architecture unchanged unless the ablation explicitly targets it.",
+            ]
+        },
+    }
+
+    retry_limit = 5
+    for _ in range(retry_limit):
+        try:
+            result = structured_query_with_schema(
+                system_message=prompt,
+                user_message=None,
+                model=model,
+                temperature=temperature,
+                schema_class=AblationIdea,
+            )
+        except Exception:
+            continue
+        name = result.name.strip()
+        description = result.description.strip()
+        if name and description:
+            return AblationIdea(name=name, description=description)
+
+    return AblationIdea(name="ablate dropout", description="ablate dropout")
 
 
 class Stage4Ablation(Stage):
@@ -50,116 +87,13 @@ class Stage4Ablation(Stage):
     # key -> (is_complete, message)
     _substage_completion_cache: dict[str, tuple[bool, str]] = {}
 
-    @staticmethod
-    def build_ablation_node(
-        *, agent: SupportsStage4Agent, parent_node: Node, ablation_idea: AblationIdea
-    ) -> Node:
-        prompt: PromptType = {
-            "Introduction": (
-                "You are an experienced AI researcher. You are provided with a previously developed "
-                "baseline implementation. Your task is to implement the ablation study for the following idea: "
-                + ablation_idea.name
-                + ". "
-                + ablation_idea.description
-            ),
-            "Base code you are working on": wrap_code(parent_node.code),
-            "Feedback about execution time": parent_node.exec_time_feedback,
-            "Instructions": {},
-        }
-        if parent_node.user_feedback_payload:
-            prompt["User feedback"] = parent_node.user_feedback_payload
-        abl_instructions: dict[str, str | list[str]] = {}
-        abl_instructions |= {
-            "Implementation guideline": [
-                "The code should be a single-file python program that is self-contained and can be executed as-is.",
-                "No parts of the code should be skipped, don't terminate the code execution before finishing the script.",
-                "Data saving requirements:",
-                "- Save all plottable data (metrics, losses, predictions, etc.) as numpy arrays using np.save()",
-                "- Use the following naming convention for saved files:",
-                "  ```python",
-                "  # At the start of your code",
-                "  experiment_data = {",
-                "      'ablation_type_1': {",
-                "          'dataset_name_1': {",
-                "              'metrics': {'train': [], 'val': []},",
-                "              'losses': {'train': [], 'val': []},",
-                "              'predictions': [],",
-                "              'ground_truth': [],",
-                "          },",
-                "      },",
-                "  }",
-                "Make sure to use a filename 'experiment_data.npy' to save the data. Do not use any other filename.",
-            ]
-        }
-        prompt["Instructions"] = abl_instructions
-        plan, code = agent.plan_and_code_query(prompt=prompt, enforce_gpu=True)
-        logger.debug("----- LLM code start (stage4 ablation) -----")
-        logger.debug(code)
-        logger.debug("----- LLM code end (stage4 ablation) -----")
-        return Node(
-            plan="Ablation name: " + ablation_idea.name + ".\n" + plan,
-            code=code,
-            parent=parent_node,
-            ablation_name=ablation_idea.name,
+    def evaluate_substage_completion(self) -> Tuple[bool, str]:
+        return Stage4Ablation.compute_substage_completion(
+            goals=self._meta.goals, journal=self._context.journal, cfg=self._context.cfg
         )
 
-    @staticmethod
-    def propose_next_ablation_idea(
-        *, base_stage3_code: str, completed: List[str], model: str, temperature: float
-    ) -> AblationIdea:
-        ablation_prompt: dict[str, object] = {
-            "Introduction": (
-                "You are an AI researcher conducting ablation studies. "
-                "Based on the current implementation and previous ablations (if any), "
-                "propose ONE new ablation study that tests a different aspect of the model."
-            ),
-            "Base code you are working on": wrap_code(base_stage3_code),
-            "Previous Ablations": {
-                "Has been tried": (completed if completed else "Nothing has been tried yet."),
-            },
-            "Instructions": {
-                "Requirements": [
-                    "1. Identify ONE specific component/feature to ablate.",
-                    "2. Ensure the ablation is different from previous completed or running attempts.",
-                    "3. The ablation should be a new idea, not a variation of previous ideas.",
-                    "4. If you have only used a single synthetic dataset throughout the experiment, one of your ablations should be to use multiple synthetic datasets (at least 3 different datasets).",
-                ]
-            },
-        }
-
-        retry_count = 0
-        retry_limit = 5
-        while retry_count < retry_limit:
-            try:
-                result = structured_query_with_schema(
-                    system_message=ablation_prompt,
-                    model=model,
-                    temperature=temperature,
-                    schema_class=AblationIdea,
-                )
-            except Exception:
-                retry_count += 1
-                continue
-
-            name = result.name.strip()
-            description = result.description.strip()
-            if name and description:
-                return AblationIdea(name=name, description=description)
-
-            retry_count += 1
-        return AblationIdea(name="add one more layer", description="add one more layer")
-
-    @staticmethod
-    def update_ablation_state(
-        *, stage_identifier: StageIdentifier, result_node: Node, state_set: set[str]
-    ) -> None:
-        if stage_identifier is not StageIdentifier.STAGE4:
-            return
-        ablation_name = result_node.ablation_name
-        if ablation_name is None:
-            return
-        if not result_node.is_buggy:
-            state_set.add(ablation_name)
+    def evaluate_stage_completion(self) -> Tuple[bool, str]:
+        return Stage4Ablation.compute_stage_completion()
 
     @staticmethod
     def compute_substage_completion(
@@ -173,20 +107,20 @@ class Stage4Ablation(Stage):
         cached = Stage4Ablation._substage_completion_cache.get(cache_key)
         if cached is not None:
             logger.debug(
-                f"Stage4 substage-completion cache HIT for best_node={best_node.id[:8]} "
-                f"(metric={metric_val}). Goals unchanged. Skipping LLM."
+                "Stage4 substage-completion cache HIT for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return cached
         logger.debug(
-            f"Stage4 substage-completion cache MISS for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Goals changed or new best node. Invoking LLM."
+            "Stage4 substage-completion cache MISS for best_node=%s (metric=%s). Invoking LLM.",
+            best_node.id[:8],
+            metric_val,
         )
-        prompt = f"""
-        Evaluate if the ablation sub-stage is complete given the goals:
-        - {goals}
-
-        Consider whether the ablation variations produce consistent and interpretable differences.
-        """
+        prompt = render_text(
+            template_name="stage_completion/stage4_substage.txt.j2",
+            context={"goals": goals},
+        )
         evaluation = structured_query_with_schema(
             system_message=prompt,
             user_message=None,
@@ -198,30 +132,25 @@ class Stage4Ablation(Stage):
             result = True, str(evaluation.reasoning or "sub-stage complete")
             Stage4Ablation._substage_completion_cache[cache_key] = result
             logger.debug(
-                f"Stage4 substage-completion result cached for best_node={best_node.id[:8]} "
-                f"(metric={metric_val})."
+                "Stage4 substage-completion result cached for best_node=%s (metric=%s).",
+                best_node.id[:8],
+                metric_val,
             )
             return result
         missing = ", ".join(evaluation.missing_criteria)
         result = False, "Missing criteria: " + missing
         Stage4Ablation._substage_completion_cache[cache_key] = result
         logger.debug(
-            f"Stage4 substage-completion result cached (incomplete) for best_node={best_node.id[:8]} "
-            f"(metric={metric_val}). Missing: {missing}"
+            "Stage4 substage-completion result cached (incomplete) for best_node=%s (metric=%s). Missing: %s",
+            best_node.id[:8],
+            metric_val,
+            missing,
         )
         return result
 
     @staticmethod
     def compute_stage_completion() -> tuple[bool, str]:
         return False, "stage not completed"
-
-    def evaluate_substage_completion(self) -> tuple[bool, str]:
-        return Stage4Ablation.compute_substage_completion(
-            goals=self._meta.goals, journal=self._context.journal, cfg=self._context.cfg
-        )
-
-    def evaluate_stage_completion(self) -> tuple[bool, str]:
-        return Stage4Ablation.compute_stage_completion()
 
     def reset_skip_state(self) -> None:
         super().reset_skip_state()
@@ -244,3 +173,30 @@ class Stage4Ablation(Stage):
             reason = "Run at least one ablation node before skipping final stage."
         logger.info("Stage 4 skip blocked: %s", reason)
         self._set_skip_state(can_skip=False, reason=reason)
+
+
+def codex_node_result_contract_prompt_lines() -> list[str]:
+    return render_lines(template_name="contracts/stage4.txt.j2", context={})
+
+
+def validate_node_result_contract(
+    *, node_result: dict[str, object], ctx: NodeResultContractContext
+) -> list[str]:
+    errors: list[str] = []
+    if not is_non_empty_string(value=node_result.get("ablation_name")):
+        errors.append("Stage4 requires ablation_name to be a non-empty string")
+    expected = ctx.expected_ablation_name
+    if expected is not None:
+        actual = node_result.get("ablation_name")
+        if actual != expected:
+            errors.append(
+                f"Stage4 requires ablation_name={expected!r} (got {actual!r}); set it exactly to the assigned idea name"
+            )
+
+    is_buggy_plots = node_result.get("is_buggy_plots")
+    if is_buggy_plots is False:
+        if ctx.working_png_count <= 0:
+            errors.append(
+                "Stage4 requires at least one .png in ./working when is_buggy_plots=false"
+            )
+    return errors

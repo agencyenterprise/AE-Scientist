@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-from textwrap import dedent
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional
 
 import numpy as np
@@ -12,6 +11,7 @@ from pydantic import BaseModel, Field
 from pypdf import PdfReader
 
 from ai_scientist.llm import get_structured_response_from_llm
+from ai_scientist.prompts.render import render_text
 from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
@@ -109,51 +109,21 @@ class ReviewResponseModel(BaseModel):
 
 REVIEW_RESPONSE_SCHEMA = ReviewResponseModel
 
-reviewer_system_prompt_base = (
-    "You are an experienced ML researcher completing a NeurIPS-style review. "
-    "Provide careful, evidence-based judgments that calibrate to historical scoring standards."
+reviewer_system_prompt_base = render_text(
+    template_name="llm_review/reviewer_system_prompt_base.txt.j2",
+    context={},
 )
-reviewer_system_prompt_strict = reviewer_system_prompt_base + (
-    " When information is missing or claims appear unsupported, lower the affected scores and explain why."
+reviewer_system_prompt_strict = render_text(
+    template_name="llm_review/reviewer_system_prompt_strict.txt.j2",
+    context={},
 )
-reviewer_system_prompt_balanced = reviewer_system_prompt_base + (
-    " Reward strong evidence and novelty, but also acknowledge incremental contributions when they are solid. "
-    "Do not default to middling scores—use the entire scale when justified."
-)
-
-template_instructions = """
-Produce a rigorous NeurIPS-style review. Your response must be valid JSON matching the ReviewResponseModel schema (fields defined via the structured output description). Use every field exactly once and respect the documented rating scales. Ground every claim in the paper or provided context.
-"""
-
-neurips_form = (
-    """
-## Review Form
-You are filling out the standard NeurIPS review. Summaries should be faithful, and numerical scores must reflect the evidence within the paper and the auxiliary context provided.
-
-1. **Summary** – State the main contributions factually. Authors should agree with this section.
-2. **Strengths & Weaknesses** – Evaluate the work along originality, technical quality, clarity, and significance. Cite concrete passages, experiments, or missing elements.
-3. **Questions for Authors** – Ask targeted questions whose answers could change your opinion or clarify uncertainty.
-4. **Limitations & Ethical Considerations** – Mention stated limitations and any missing discussion of societal impact. Suggest improvements when gaps exist.
-5. **Numerical Scores** – Use the scales below. Each score must align with the justification you provide.
-   - Originality, Quality, Clarity, Significance, Soundness, Presentation, Contribution: 1 (poor/low) – 4 (excellent/very high)
-   - Overall: 1–10 using the NeurIPS anchors (6 ≈ solid accept, 4–5 borderline, 1–3 reject, 7–8 strong accept, 9–10 award level)
-   - Confidence: 1 (guessing) – 5 (certain; checked details)
-6. **Decision** – Output only `Accept` or `Reject`, reflecting the balance of evidence. Borderline cases must still pick one side.
-
-Always ground your reasoning in the supplied paper, context snippets, or obvious missing elements. Reward rigorous negative results and honest discussion of limitations.
-"""
-    + template_instructions
+reviewer_system_prompt_balanced = render_text(
+    template_name="llm_review/reviewer_system_prompt_balanced.txt.j2",
+    context={},
 )
 
-CALIBRATION_GUIDE = dedent(
-    """
-Calibration guidance:
-- Use the full 1–4 and 1–10 scales. Do not default to 3/4 or 5/10 when unsure.
-- If experiments are missing or inconclusive, lower Quality and Significance rather than the entire review.
-- Strong clarity or reproducibility should be rewarded even if results are incremental.
-- Confidence should reflect how well the supplied context addresses your questions (e.g., lack of metrics → low confidence).
-"""
-)
+neurips_form = render_text(template_name="llm_review/neurips_form.md.j2", context={})
+CALIBRATION_GUIDE = render_text(template_name="llm_review/calibration_guide.txt.j2", context={})
 
 
 def _format_mapping_block(title: str, data: Dict[str, Any]) -> str:

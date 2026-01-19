@@ -1,27 +1,30 @@
 import copy
-import json
 import logging
 import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any, Callable, List, Literal, Optional, cast
 
-from dataclasses_json import DataClassJsonMixin
 from pydantic import BaseModel
 
-from ai_scientist.llm import query, structured_query_with_schema
+from ai_scientist.llm import structured_query_with_schema
 
 from .events import BaseEvent, BestNodeSelectedEvent, RunLogEvent
-from .interpreter import ExecutionResult
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import trim_long_string
 
 logger = logging.getLogger(__name__)
 
 
+class DataClassJsonMixin:
+    """Local stub to avoid a hard dependency on `dataclasses_json` in codex-only mode."""
+
+
 class NodeSelectionResponse(BaseModel):
+    # Retained for backward compatibility with stored journals; not used in codex-only mode.
     selected_id: str
     reasoning: str
 
@@ -92,7 +95,7 @@ class Node(DataClassJsonMixin):
 
     # ---- VLM feedback ----
     plot_analyses: list[dict[str, Any]] = field(default_factory=list)
-    vlm_feedback_summary: List[str] = field(default_factory=list)
+    vlm_feedback_summary: str = field(default="", kw_only=True)
     datasets_successfully_tested: List[str] = field(default_factory=list)
 
     # ---- execution time feedback ----
@@ -130,7 +133,7 @@ class Node(DataClassJsonMixin):
     def __deepcopy__(self, memo: dict) -> "Node":
         # Create a new instance with copied attributes
         cls = self.__class__
-        result = cls.__new__(cls)
+        result = object.__new__(cls)
         memo[id(self)] = result
 
         # Copy all attributes except parent and children to avoid circular references
@@ -167,21 +170,22 @@ class Node(DataClassJsonMixin):
             return "draft"
         return "debug" if self.parent.is_buggy else "improve"
 
-    def absorb_exec_result(self, exec_result: ExecutionResult) -> None:
+    def absorb_exec_result(self, exec_result: object) -> None:
         """Absorb the result of executing the code from this node."""
-        self._term_out = exec_result.term_out
-        self.exec_time = exec_result.exec_time
-        self.exc_type = exec_result.exc_type
-        self.exc_info = exec_result.exc_info
-        self.exc_stack = exec_result.exc_stack
+        # Best-effort attribute extraction to support older callers.
+        self._term_out = getattr(exec_result, "term_out", None)
+        self.exec_time = getattr(exec_result, "exec_time", None)
+        self.exc_type = getattr(exec_result, "exc_type", None)
+        self.exc_info = getattr(exec_result, "exc_info", None)
+        self.exc_stack = getattr(exec_result, "exc_stack", None)
 
-    def absorb_plot_exec_result(self, plot_exec_result: ExecutionResult) -> None:
+    def absorb_plot_exec_result(self, plot_exec_result: object) -> None:
         """Absorb the result of executing the plotting code from this node."""
-        self.plot_term_out = plot_exec_result.term_out
-        self.plot_exec_time = plot_exec_result.exec_time
-        self.plot_exc_type = plot_exec_result.exc_type
-        self.plot_exc_info = plot_exec_result.exc_info
-        self.plot_exc_stack = plot_exec_result.exc_stack
+        self.plot_term_out = getattr(plot_exec_result, "term_out", None)
+        self.plot_exec_time = getattr(plot_exec_result, "exec_time", None)
+        self.plot_exc_type = getattr(plot_exec_result, "exc_type", None)
+        self.plot_exc_info = getattr(plot_exec_result, "exc_info", None)
+        self.plot_exc_stack = getattr(plot_exec_result, "exc_stack", None)
 
     @property
     def term_out(self) -> str:
@@ -217,7 +221,7 @@ class Node(DataClassJsonMixin):
             return 0
         return self.parent.debug_depth + 1
 
-    def to_dict(self) -> dict[str, object]:  # type: ignore[override]
+    def to_dict(self) -> dict[str, object]:
         """Convert node to dictionary for serialization"""
         return {
             "code": self.code,
@@ -287,8 +291,10 @@ class Node(DataClassJsonMixin):
         }
 
     @classmethod
-    def from_dict(cls, data: dict, journal: Optional["Journal"] = None) -> "Node":  # type: ignore[override]
+    def from_dict(cls, data: dict, journal: Optional["Journal"] = None) -> "Node":
         """Create a Node from a dictionary, optionally linking to journal for relationships"""
+        # Work on a copy: callers may reuse the original dict (e.g. for logging).
+        data = dict(data)
         # Remove relationship IDs from constructor data
         parent_id = data.pop("parent_id", None)
         data.pop("children", [])
@@ -304,13 +310,15 @@ class Node(DataClassJsonMixin):
                     description=metric_data.get("description"),
                 )
             else:
-                # Handle legacy format or None
+                # Handle older format or None
                 data["metric"] = (
                     WorstMetricValue() if data.get("is_buggy") else MetricValue(metric_data)
                 )
 
-        # Create node instance
-        node = cls(**data)
+        # Create node instance (ignore unknown keys)
+        allowed_keys = {f.name for f in dataclass_fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in allowed_keys}
+        node = cls(**filtered)
 
         # If journal is provided, restore relationships
         if journal is not None and isinstance(parent_id, str):
@@ -593,13 +601,12 @@ class Journal:
             ),
             "Candidates": "",
         }
-        # Gather info about each node
         logger.debug(
-            f"Building prompt with {len(candidate_nodes)} candidate nodes: "
-            f"{[n.id[:8] for n in candidate_nodes]}"
+            "Building prompt with %s candidate nodes: %s",
+            len(candidate_nodes),
+            [n.id[:8] for n in candidate_nodes],
         )
         for node in candidate_nodes:
-            # Always include ID for each candidate, then attach available evidence
             candidate_info = f"ID: {node.id}\n"
             if node.metric:
                 candidate_info += f"Metric: {str(node.metric)}\n"
@@ -610,22 +617,18 @@ class Journal:
             else:
                 candidate_info += "N/A\n"
             logger.debug(
-                f"Adding candidate to prompt: {node.id[:8]} "
-                f"(has_metric={node.metric is not None}, is_seed={node.is_seed_node})",
+                "Adding candidate to prompt: %s (has_metric=%s is_seed=%s)",
+                node.id[:8],
+                node.metric is not None,
+                node.is_seed_node,
             )
             prompt["Candidates"] += candidate_info
 
-        # Verify all candidates were included
-        candidates_in_prompt = prompt["Candidates"].count("ID: ")
-        logger.debug(
-            f"Prompt built: {candidates_in_prompt} candidate(s) in prompt text "
-            f"(expected {len(candidate_nodes)})"
-        )
-
         try:
             logger.info(
-                f"Invoking LLM for best-node selection with {len(candidate_ids)} candidates: "
-                f"{[cid[:8] for cid in candidate_ids]}"
+                "Invoking LLM for best-node selection with %s candidates: %s",
+                len(candidate_ids),
+                [cid[:8] for cid in candidate_ids],
             )
             selection = structured_query_with_schema(
                 system_message=prompt,
@@ -634,100 +637,81 @@ class Journal:
                 temperature=self.node_selection_temperature,
                 schema_class=NODE_SELECTION_SCHEMA,
             )
-
             selected_id = str(selection.selected_id)
             selected_node = next(
                 (node for node in candidate_nodes if str(node.id) == selected_id), None
             )
-            if selected_node:
-                logger.info(f"Selected node {selected_node.id} as best implementation")
-                logger.info(f"Reasoning: {selection.reasoning}")
-                logger.info(
-                    f"LLM-selected best node: {selected_node.id[:8]}. "
-                    "Emitting events and caching result."
-                )
-
-                # Emit user-facing event with the selection reasoning
+            if selected_node is not None:
+                reasoning_text = str(selection.reasoning or "")
                 self.event_callback(
                     RunLogEvent(
                         message=f"🎯 Selected best implementation: {selected_node.id[:8]}...",
                         level="info",
                     )
                 )
-                # Send detailed reasoning
-                reasoning_text = str(selection.reasoning or "")
-                reasoning_preview = (
+                preview = (
                     reasoning_text[:500] + "..." if len(reasoning_text) > 500 else reasoning_text
                 )
-                self.event_callback(
-                    RunLogEvent(message=f"💡 Reasoning: {reasoning_preview}", level="info")
-                )
-
+                if preview.strip():
+                    self.event_callback(
+                        RunLogEvent(message=f"💡 Reasoning: {preview}", level="info")
+                    )
                 self._emit_best_node_reasoning(node=selected_node, reasoning=reasoning_text)
 
-                # Update cache
                 self._best_cache[sig] = selected_node
                 self._best_cache_time_map[sig] = time.time()
                 self._best_cache_candidate_ids_map[sig] = candidate_ids
                 self._best_cache_total_nodes_count_map[sig] = total_nodes_count
                 return selected_node
-            else:
-                logger.warning("Falling back to metric-based selection")
-                nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
-                selected_fallback = (
-                    max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
-                    if nodes_with_metric
-                    else None
-                )
-                if selected_fallback:
-                    fallback_reason = (
+
+            # LLM returned an unknown ID; fall back to metric-based best (if available)
+            logger.warning(
+                "LLM returned unknown selected_id=%s; falling back to metric-based selection",
+                selected_id,
+            )
+            nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
+            selected_fallback = (
+                max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
+                if nodes_with_metric
+                else None
+            )
+            if selected_fallback is not None:
+                self._emit_best_node_reasoning(
+                    node=selected_fallback,
+                    reasoning=(
                         f"LLM selected unknown node id {selected_id}; "
                         "stored best metric candidate instead."
-                    )
-                    self._emit_best_node_reasoning(
-                        node=selected_fallback,
-                        reasoning=fallback_reason,
-                    )
-                self._best_cache[sig] = selected_fallback
-                self._best_cache_time_map[sig] = time.time()
-                self._best_cache_candidate_ids_map[sig] = candidate_ids
-                self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-                logger.warning(
-                    f"LLM selection id not found among candidates. Falling back to metric. "
-                    f"Selected: {selected_fallback.id[:8] if selected_fallback else None}. Cached."
+                    ),
                 )
-                return selected_fallback
+            self._best_cache[sig] = selected_fallback
+            self._best_cache_time_map[sig] = time.time()
+            self._best_cache_candidate_ids_map[sig] = candidate_ids
+            self._best_cache_total_nodes_count_map[sig] = total_nodes_count
+            return selected_fallback
 
-        except Exception as e:
-            logger.error(f"Error in LLM selection process: {e}")
-            logger.warning("Falling back to metric-based selection")
+        except Exception as exc:
+            logger.warning(
+                "Error in LLM best-node selection; falling back to metric-based selection (%s)", exc
+            )
             nodes_with_metric = [n for n in candidate_nodes if n.metric is not None]
             selected_on_error = (
                 max(nodes_with_metric, key=lambda n: cast(MetricValue, n.metric))
                 if nodes_with_metric
                 else None
             )
-            if selected_on_error:
+            if selected_on_error is not None:
                 self._emit_best_node_reasoning(
                     node=selected_on_error,
-                    reasoning=f"LLM selection error: {e}. Falling back to best metric.",
+                    reasoning=f"LLM selection error: {exc}. Falling back to best metric.",
                 )
             self._best_cache[sig] = selected_on_error
             self._best_cache_time_map[sig] = time.time()
             self._best_cache_candidate_ids_map[sig] = candidate_ids
             self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-            logger.error(
-                f"Exception during LLM selection. Falling back to metric. "
-                f"Selected: {selected_on_error.id[:8] if selected_on_error else None}. Cached.",
-                exc_info=True,
-            )
             return selected_on_error
 
     def generate_summary(self, include_code: bool = False) -> str:
-        """Generate a summary of the research progress using LLM.
-
-        Includes both successes and failures.
-        """
+        """Generate a deterministic summary of progress (codex-only mode)."""
         if not self.nodes:
             return "No experiments conducted yet."
 
@@ -755,53 +739,39 @@ class Journal:
             f"include_code={include_code}, "
             f"good_nodes_count={len(good_ids)}, "
             f"buggy_nodes_count={len(buggy_ids)}. "
-            "Invoking LLM to generate summary."
+            "Building deterministic summary from current journal state."
         )
 
-        prompt = {
-            "Introduction": (
-                "You are an AI researcher summarizing experimental progress. "
-                "Please analyze both successful and failed experiments to provide insights "
-                "for future improvements."
-            ),
-            "Successful Experiments": "",
-            "Failed Experiments": "",
-        }
+        best = self.get_best_node(only_good=True, use_val_metric_only=True)
+        best_id = best.id[:8] if best is not None else "N/A"
+        best_metric = str(best.metric) if best is not None and best.metric is not None else "N/A"
+        lines: list[str] = []
+        lines.append(f"Stage: {self.stage_name}")
+        lines.append(f"Total nodes: {len(self.nodes)}")
+        lines.append(f"Good nodes: {len(self.good_nodes)}")
+        lines.append(f"Buggy nodes: {len(self.buggy_nodes)}")
+        lines.append(f"Best node: {best_id} (metric: {best_metric})")
 
-        for node in self.good_nodes:
-            exp_info = f"Design: {node.plan}\n  "
-            exp_info += f"Results: {node.analysis}\n"
-            exp_info += f"Metric: {str(node.metric)}\n"
-            if include_code:
-                exp_info += f"Code: {node.code}\n"
-            prompt["Successful Experiments"] += exp_info
+        if self.good_nodes:
+            recent_good = sorted(self.good_nodes, key=lambda n: n.ctime, reverse=True)[:3]
+            lines.append("Recent successful experiments:")
+            for n in recent_good:
+                metric_str = str(n.metric) if n.metric is not None else "N/A"
+                plan_preview = (n.plan or "").strip().replace("\n", " ")
+                lines.append(f"- {n.id[:8]} metric={metric_str} plan={plan_preview}")
+                if include_code and n.code:
+                    lines.append(f"  code_chars={len(n.code)}")
 
-        for node in self.buggy_nodes:
-            failure_info = f"Design: {node.plan}\n  "
-            failure_info += f"Error Analysis: {node.analysis}\n  "
-            failure_info += (
-                f"Error Type: {node.exc_type if node.exc_type is not None else 'Unknown'}\n  "
-            )
-            if node.user_feedback_payload:
-                failure_info += f"User killed the execution and provided the following feedback: {node.user_feedback_payload}\n  "
-            failure_info += f"Debug Depth: {node.debug_depth}\n  "
-            if include_code:
-                failure_info += f"Code: {node.code}\n  "
-            prompt["Failed Experiments"] += failure_info
+        if self.buggy_nodes:
+            recent_bad = sorted(self.buggy_nodes, key=lambda n: n.ctime, reverse=True)[:3]
+            lines.append("Recent failures:")
+            for n in recent_bad:
+                exc = n.exc_type or "Unknown"
+                analysis_preview = (n.analysis or "").strip().replace("\n", " ")
+                lines.append(f"- {n.id[:8]} exc_type={exc} analysis={analysis_preview}")
 
-        summary_resp = query(
-            system_message=prompt,
-            user_message=(
-                "Please provide a comprehensive summary of the experimental progress that includes:\n"
-                "1. Key patterns of success across working experiments\n"
-                "2. Common failure patterns and pitfalls to avoid\n"
-                "3. Specific recommendations for future experiments based on both successes and failures"
-            ),
-            model=self.summary_model,
-            temperature=self.summary_temperature,
-        )
-
-        summary_text = summary_resp if isinstance(summary_resp, str) else json.dumps(summary_resp)
+        summary_text = "\n".join(lines).strip()
+        logger.debug("Summary text (include_code=%s):\n%s", include_code, summary_text)
         # Cache and return
         self._summary_cache[cache_key] = summary_text
         logger.debug(

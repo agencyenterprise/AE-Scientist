@@ -156,7 +156,6 @@ python launch_scientist_bfts.py <config_file>
     plot_model: gpt-5
     citation_model: gpt-5
     temperature: 0.8
-    writeup_type: normal
     writeup_retries: 3
     num_cite_rounds: 5
   ```
@@ -164,7 +163,6 @@ python launch_scientist_bfts.py <config_file>
 - `plot_model`: LLM used for plot aggregation.
 - `citation_model`: LLM used for citation gathering (falls back to `model` when omitted).
 - `temperature`: Sampling temperature shared across citation, drafting, and reflection steps.
-- `writeup_type`: `normal` for 8-page or `icbinb` for 4-page writeups.
 - `writeup_retries`: Maximum number of writeup attempts.
 - `num_cite_rounds`: Maximum number of citation gathering rounds.
 - Remove the `writeup` block entirely to skip writeup and review.
@@ -208,7 +206,7 @@ python launch_scientist_bfts.py bfts_config_gpt-5.yaml --resume 1
    - Stage 3: Creative research (plotting)
    - Stage 4: Ablation studies
 3. **Aggregates plots** across runs using the specified model
-4. **Generates paper writeup** (normal or ICBINB format) using the specified model
+4. **Generates paper writeup** using the specified model
 5. **Gathers citations** using the specified citation model
 6. **Performs paper review** (text and images/captions/references) using the model defined in the config's `review` section (when present)
 

@@ -1,0 +1,48 @@
+{% set datasets = environment_context.get("datasets") %}
+{% if datasets is not mapping %}
+You may use any dataset from any source, but avoid re-downloading available data.
+{% else %}
+{% set hf_lines = datasets.get("hf_cache_lines") %}
+{% set local_lines = datasets.get("local_datasets_lines") %}
+{% set s3_lines = datasets.get("s3_folder_lines") %}
+{% set s3_download_snippet = datasets.get("s3_download_snippet") %}
+{% set s3_upload_snippet = datasets.get("s3_upload_snippet") %}
+{% set local_dir = datasets.get("datasets_local_dir", "") %}
+
+You may use any dataset from any source, but avoid re-downloading available data.
+
+**Hugging Face cache (already cached):**
+{% if hf_lines is iterable %}
+{% for x in hf_lines %}{{ x }}
+{% endfor %}
+{% else %}
+- (unknown)
+{% endif %}
+
+**Local datasets (already downloaded):** (use subfolders per dataset under {{ local_dir }})
+{% if local_lines is iterable %}
+{% for x in local_lines %}{{ x }}
+{% endfor %}
+{% else %}
+- (unknown)
+{% endif %}
+
+{% if s3_lines is iterable and s3_lines %}
+**Some datasets are available on S3, you can download them if you need to (the download is very fast):**
+{% for x in s3_lines %}{{ x }}
+{% endfor %}
+
+{% if s3_download_snippet is string and s3_download_snippet.strip() %}
+**How to download from S3 into the local dataset cache (paste into your script):**
+
+{{ s3_download_snippet.strip() }}
+{% endif %}
+
+{% if s3_upload_snippet is string and s3_upload_snippet.strip() %}
+**How to upload a dataset to S3 for future runs (paste into your script):**
+
+{{ s3_upload_snippet.strip() }}
+{% endif %}
+{% endif %}
+{% endif %}
+

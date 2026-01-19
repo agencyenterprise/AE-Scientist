@@ -31,10 +31,7 @@ def save_cost_track(
     input_tokens: int | None = None,
     output_tokens: int | None = None,
     ai_message: AIMessage | None = None,
-    run_id: str | None = None,
 ) -> None:
-    if run_id is None:
-        run_id = RUN_ID
     if (input_tokens is None or output_tokens is None) and ai_message is None:
         raise ValueError("Either input_tokens and output_tokens or ai_message must be provided")
     if ai_message:
@@ -44,6 +41,7 @@ def save_cost_track(
         if output_tokens is None and usage_metadata:
             output_tokens = int(usage_metadata.get("output_tokens", 0) or 0)
 
+    run_id = RUN_ID
     model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
     if _should_use_db_tracking(run_id):
