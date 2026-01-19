@@ -88,26 +88,3 @@ export function isNearBottom(container: HTMLElement | null, threshold: number = 
 export function getScrollContainer(containerRef: React.RefObject<HTMLElement>): HTMLElement | null {
   return containerRef.current;
 }
-
-/**
- * Debounce function for scroll event handlers.
- *
- * @param fn - Function to debounce
- * @param delay - Delay in milliseconds
- * @returns Debounced function
- */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  return (...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      fn(...args);
-    }, delay);
-  };
-}

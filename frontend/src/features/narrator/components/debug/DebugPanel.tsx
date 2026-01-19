@@ -14,9 +14,10 @@ export function DebugPanel({ state }: DebugPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Don't render in production
-  if (!isDevelopment) {
-    return null;
-  }
+  // TODO: enable this when the feature is stable, fine for beta testing
+  // if (!isDevelopment) {
+  //   return null;
+  // }
 
   if (!state) {
     return (
