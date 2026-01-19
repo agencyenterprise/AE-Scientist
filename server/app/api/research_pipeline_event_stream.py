@@ -346,12 +346,15 @@ async def _build_initial_stream_payload(
         ResearchRunBestNodeSelection.from_db_record(event).model_dump()
         for event in await db.list_best_node_reasoning_events(run_id=run_id)
     ]
-    latest_code_execution = await db.get_latest_code_execution_event(run_id=run_id)
-    code_execution_snapshot = (
-        ResearchRunCodeExecution.from_db_record(latest_code_execution).model_dump()
-        if latest_code_execution
-        else None
+    latest_code_executions_by_type = await db.list_latest_code_execution_events_by_run_type(
+        run_id=run_id
     )
+    code_executions_snapshot: dict[str, object] = {}
+    for record in latest_code_executions_by_type:
+        snapshot = ResearchRunCodeExecution.from_db_record(record).model_dump()
+        run_type = snapshot.get("run_type")
+        if isinstance(run_type, str):
+            code_executions_snapshot[run_type] = snapshot
     stage_skip_windows = [
         ResearchRunStageSkipWindow.from_db_record(record).model_dump()
         for record in await db.list_stage_skip_windows(run_id=run_id)
@@ -368,7 +371,7 @@ async def _build_initial_stream_payload(
         "events": run_events,
         "paper_generation_progress": paper_gen_events,
         "best_node_selections": best_node_payload,
-        "code_execution": code_execution_snapshot,
+        "code_executions": code_executions_snapshot,
         "stage_skip_windows": stage_skip_windows,
         "hw_cost_estimate": _build_hw_cost_event_payload(
             started_running_at=current_run.started_running_at,

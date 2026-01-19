@@ -242,9 +242,9 @@ class ResearchRunInitialEventData(BaseModel):
         None,
         description="Hardware cost billed so far, if available.",
     )
-    code_execution: ResearchRunCodeExecution | None = Field(
-        None,
-        description="Latest code execution snapshot available for the run.",
+    code_executions: dict[RunType, ResearchRunCodeExecution] = Field(
+        default_factory=dict,
+        description="Latest code execution snapshot per run_type for the run.",
     )
 
 

@@ -305,6 +305,36 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 row = await cursor.fetchone()
         return CodeExecutionEvent(**row) if row else None
 
+    async def list_latest_code_execution_events_by_run_type(
+        self,
+        *,
+        run_id: str,
+    ) -> List[CodeExecutionEvent]:
+        """Fetch the latest code execution event per run_type for a run."""
+        query = """
+            SELECT DISTINCT ON (run_type)
+                   id,
+                   run_id,
+                   execution_id,
+                   stage_name,
+                   run_type,
+                   code,
+                   status,
+                   started_at,
+                   completed_at,
+                   exec_time,
+                   created_at,
+                   updated_at
+            FROM rp_code_execution_events
+            WHERE run_id = %s
+            ORDER BY run_type, started_at DESC NULLS LAST, id DESC
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                rows = await cursor.fetchall()
+        return [CodeExecutionEvent(**row) for row in (rows or [])]
+
     async def list_stage_skip_windows(self, run_id: str) -> List[StageSkipWindowRecord]:
         """Fetch all recorded stage skip eligibility windows for a run."""
         query = """

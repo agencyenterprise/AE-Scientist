@@ -6958,16 +6958,13 @@
             ],
             "description": "Hardware cost billed so far, if available."
           },
-          "code_execution": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ResearchRunCodeExecution"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Latest code execution snapshot available for the run."
+          "code_executions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ResearchRunCodeExecution"
+            },
+            "type": "object",
+            "title": "Code Executions",
+            "description": "Latest code execution snapshot per run_type for the run."
           }
         },
         "type": "object",
