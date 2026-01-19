@@ -200,7 +200,6 @@ export function useResearchRunDetails({
       } as NonNullable<ResearchRunDetails["code_executions"]>;
       return {
         ...prev,
-        code_execution: execution,
         code_executions: nextExecutions,
       };
     });
@@ -217,15 +216,6 @@ export function useResearchRunDetails({
       }
       return {
         ...prev,
-        code_execution:
-          prev.code_execution && prev.code_execution.execution_id === event.execution_id
-            ? {
-                ...prev.code_execution,
-                status: event.status,
-                exec_time: event.exec_time,
-                completed_at: event.completed_at,
-              }
-            : prev.code_execution,
         code_executions: {
           ...(prev.code_executions ?? {}),
           [event.run_type]: {
@@ -386,8 +376,6 @@ export function useResearchRunDetails({
         ? {
             ...prev,
             run: { ...prev.run, status },
-            code_execution: null,
-            code_executions: null,
           }
         : null
     );

@@ -137,16 +137,11 @@ export default function ResearchRunDetailPage() {
     substage_summaries = [],
     paper_generation_progress,
     best_node_selections = [],
-    code_execution,
     code_executions,
   } = details;
 
-  const codexExecution =
-    code_executions?.codex_execution ??
-    (code_execution?.run_type === "codex_execution" ? code_execution : null);
-  const runfileExecution =
-    code_executions?.runfile_execution ??
-    (code_execution?.run_type === "runfile_execution" ? code_execution : null);
+  const codexExecution = code_executions?.codex_execution ?? null;
+  const runfileExecution = code_executions?.runfile_execution ?? null;
   const canStopRun =
     conversationId !== null && (run.status === "running" || run.status === "pending");
 

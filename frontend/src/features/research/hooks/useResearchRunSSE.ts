@@ -188,6 +188,27 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
       ? ((data as { stage_skip_windows?: ApiStageSkipWindow[] }).stage_skip_windows ?? [])
       : [];
 
+  const initialCodeExecutions = (() => {
+    const raw = (
+      data as unknown as {
+        code_executions?: Record<string, ApiCodeExecutionSnapshot | null>;
+      }
+    ).code_executions;
+    if (!raw || typeof raw !== "object") {
+      return {};
+    }
+    const next: Partial<Record<ResearchRunCodeExecution["run_type"], ResearchRunCodeExecution>> =
+      {};
+    for (const value of Object.values(raw)) {
+      const normalized = normalizeCodeExecution(value);
+      if (!normalized) {
+        continue;
+      }
+      next[normalized.run_type] = normalized;
+    }
+    return next as ResearchRunDetails["code_executions"];
+  })();
+
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
@@ -201,23 +222,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     stage_skip_windows: rawStageSkipWindows.map(normalizeStageSkipWindow),
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,
-    code_execution: normalizeCodeExecution(
-      "code_execution" in data ? (data.code_execution as ApiCodeExecutionSnapshot | null) : null
-    ),
-    code_executions:
-      "code_execution" in data && data.code_execution
-        ? (() => {
-            const normalized = normalizeCodeExecution(
-              data.code_execution as ApiCodeExecutionSnapshot | null
-            );
-            if (!normalized) {
-              return null;
-            }
-            return {
-              [normalized.run_type]: normalized,
-            } as ResearchRunDetails["code_executions"];
-          })()
-        : null,
+    code_executions: initialCodeExecutions,
   };
 }
 

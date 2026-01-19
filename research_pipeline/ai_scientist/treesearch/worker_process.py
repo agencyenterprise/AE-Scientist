@@ -940,7 +940,7 @@ def _run_codex_cli(
     )
 
     runfile_started_at: datetime | None = None
-    runfile_completed_emitted = False
+    runfile_item_id: str | None = None
 
     def _codex_json_event_callback(*, line: str, obj: dict[str, object]) -> None:
         """
@@ -962,9 +962,7 @@ def _run_codex_cli(
           (using both the parsed command string and the raw JSON line as a fallback).
         - This is best-effort: if the file is missing/empty we simply skip emitting updates.
         """
-        nonlocal runfile_completed_emitted, runfile_started_at
-        if runfile_completed_emitted:
-            return
+        nonlocal runfile_item_id, runfile_started_at
 
         # We only care about the command execution item because that's what produces the
         # agent file on disk and has a clear completed/in-progress lifecycle.
@@ -987,7 +985,17 @@ def _run_codex_cli(
         ):
             return
 
+        item_id = item.get("id")
+        if not isinstance(item_id, str):
+            item_id = None
+
         status = item.get("status")
+        if status == "in_progress":
+            # Start a new runfile window for each command_execution item.
+            if runfile_item_id != item_id:
+                runfile_item_id = item_id
+                runfile_started_at = datetime.now(timezone.utc)
+
         if status == "completed":
             completed_at = datetime.now(timezone.utc)
             exec_time_base = started_at if runfile_started_at is None else runfile_started_at
@@ -1006,10 +1014,13 @@ def _run_codex_cli(
                     run_type=RunType.RUNFILE_EXECUTION,
                 )
             )
-            runfile_completed_emitted = True
+            runfile_item_id = None
+            runfile_started_at = None
             return
 
         runfile_path = workspace_dir / agent_file_name
+        if not runfile_path.exists():
+            return
         runfile_content = _read_text_or_empty(path=runfile_path)
         if not runfile_content.strip():
             return
