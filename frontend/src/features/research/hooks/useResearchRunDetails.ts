@@ -46,6 +46,7 @@ interface UseResearchRunDetailsReturn {
 
 interface CodeExecutionCompletionPayload {
   execution_id: string;
+  run_type: ResearchRunCodeExecution["run_type"];
   status: "success" | "failed";
   exec_time: number;
   completed_at: string;
@@ -189,24 +190,50 @@ export function useResearchRunDetails({
   }, []);
 
   const handleCodeExecutionStarted = useCallback((execution: ResearchRunCodeExecution) => {
-    setDetails(prev => (prev ? { ...prev, code_execution: execution } : prev));
+    setDetails(prev => {
+      if (!prev) {
+        return prev;
+      }
+      const nextExecutions = {
+        ...(prev.code_executions ?? {}),
+        [execution.run_type]: execution,
+      } as NonNullable<ResearchRunDetails["code_executions"]>;
+      return {
+        ...prev,
+        code_execution: execution,
+        code_executions: nextExecutions,
+      };
+    });
   }, []);
 
   const handleCodeExecutionCompleted = useCallback((event: CodeExecutionCompletionPayload) => {
     setDetails(prev => {
-      if (!prev?.code_execution) {
+      if (!prev) {
         return prev;
       }
-      if (prev.code_execution.execution_id !== event.execution_id) {
+      const existing = prev.code_executions?.[event.run_type];
+      if (!existing || existing.execution_id !== event.execution_id) {
         return prev;
       }
       return {
         ...prev,
-        code_execution: {
-          ...prev.code_execution,
-          status: event.status,
-          exec_time: event.exec_time,
-          completed_at: event.completed_at,
+        code_execution:
+          prev.code_execution && prev.code_execution.execution_id === event.execution_id
+            ? {
+                ...prev.code_execution,
+                status: event.status,
+                exec_time: event.exec_time,
+                completed_at: event.completed_at,
+              }
+            : prev.code_execution,
+        code_executions: {
+          ...(prev.code_executions ?? {}),
+          [event.run_type]: {
+            ...existing,
+            status: event.status,
+            exec_time: event.exec_time,
+            completed_at: event.completed_at,
+          },
         },
       };
     });
@@ -360,6 +387,7 @@ export function useResearchRunDetails({
             ...prev,
             run: { ...prev.run, status },
             code_execution: null,
+            code_executions: null,
           }
         : null
     );

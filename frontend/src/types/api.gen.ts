@@ -2879,11 +2879,8 @@ export interface components {
              * @description Stage name reported by the research pipeline
              */
             stage_name: string;
-            /**
-             * Run Type
-             * @description Type of execution (e.g., main_execution)
-             */
-            run_type: string;
+            /** @description Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command). */
+            run_type: components["schemas"]["RunType"];
             /**
              * Code
              * @description Python source code submitted for execution
@@ -2916,8 +2913,7 @@ export interface components {
             execution_id: string;
             /** Stage Name */
             stage_name: string;
-            /** Run Type */
-            run_type: string;
+            run_type: components["schemas"]["RunType"];
             /**
              * Status
              * @enum {string}
@@ -2943,8 +2939,7 @@ export interface components {
             execution_id: string;
             /** Stage Name */
             stage_name: string;
-            /** Run Type */
-            run_type: string;
+            run_type: components["schemas"]["RunType"];
             /** Code */
             code: string;
             /** Started At */
@@ -3839,11 +3834,7 @@ export interface components {
             exec_time: number;
             /** Completed At */
             completed_at: string;
-            /**
-             * Run Type
-             * @default main_execution
-             */
-            run_type: string;
+            run_type: components["schemas"]["RunType"];
         };
         /** RunCompletedPayload */
         RunCompletedPayload: {
@@ -3881,6 +3872,12 @@ export interface components {
             /** Run Id */
             run_id: string;
         };
+        /**
+         * RunType
+         * @description Execution stream identifier for research pipeline code execution telemetry.
+         * @enum {string}
+         */
+        RunType: "codex_execution" | "runfile_execution";
         /** RunningCodeEventPayload */
         RunningCodeEventPayload: {
             /** Execution Id */
@@ -3891,11 +3888,7 @@ export interface components {
             code: string;
             /** Started At */
             started_at: string;
-            /**
-             * Run Type
-             * @default main_execution
-             */
-            run_type: string;
+            run_type: components["schemas"]["RunType"];
         };
         /** RunningCodePayload */
         RunningCodePayload: {

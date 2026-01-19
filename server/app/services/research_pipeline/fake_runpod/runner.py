@@ -6,7 +6,7 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
@@ -27,6 +27,9 @@ from app.services.research_pipeline.fake_runpod.persistence import FakeRunPodPer
 from app.services.research_pipeline.fake_runpod.webhooks import FakeRunPodWebhookPublisher
 
 logger = logging.getLogger(__name__)
+
+MIN_FAKE_RUNFILE_RUNNING_SECONDS = 15.0
+MIN_FAKE_CODEX_OUTLIVES_RUNFILE_SECONDS = 5.0
 
 
 class PodRecord(NamedTuple):
@@ -719,53 +722,143 @@ class FakeRunner:
     def _emit_code_execution_events(self, *, stage_name: str, iteration: int) -> None:
         execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
         started_at = datetime.now(timezone.utc)
-        fake_code = (
-            f"# Fake experiment for {stage_name} iteration {iteration + 1}\n"
-            f"print('Simulating execution for run {self._run_id}')\n"
+        logger.debug(
+            "[FakeRunner %s] Emitting code execution events execution_id=%s stage=%s iteration=%s",
+            self._run_id[:8],
+            execution_id,
+            stage_name,
+            iteration + 1,
         )
-        run_type = "main_execution"
+        fake_task_markdown = (
+            f"# Fake Codex task for {stage_name} iteration {iteration + 1}\n\n"
+            "This simulates the markdown prompt we send to Codex.\n\n"
+            "## Objective\n"
+            "Write `runfile.py` with a minimal experiment and then execute it.\n\n"
+            "## Files\n"
+            "- `runfile.py`: main script to execute\n"
+        )
+        fake_runfile_code = (
+            "from __future__ import annotations\n\n"
+            "def main() -> None:\n"
+            "    print('Hello from fake runfile execution')\n\n"
+            "main()\n"
+        )
+        codex_run_type = "codex_execution"
+        runfile_run_type = "runfile_execution"
         with _lock:
             _executions_by_id[execution_id] = ExecutionRecord(
                 run_id=self._run_id,
                 stage_name=stage_name,
-                run_type=run_type,
+                run_type=codex_run_type,
                 started_at=started_at,
                 status="running",
             )
         self._db.record_code_execution_start(
             execution_id=execution_id,
             stage_name=stage_name,
-            code=fake_code,
+            code=fake_task_markdown,
             started_at=started_at,
-            run_type=run_type,
+            run_type=codex_run_type,
+        )
+        logger.debug(
+            "[FakeRunner %s] Published running_code (codex_execution) execution_id=%s",
+            self._run_id[:8],
+            execution_id,
         )
         self._webhooks.publish_running_code(
             {
                 "execution_id": execution_id,
                 "stage_name": stage_name,
-                "run_type": run_type,
-                "code": fake_code,
+                "run_type": codex_run_type,
+                "code": fake_task_markdown,
                 "started_at": started_at.isoformat(),
             }
         )
+
+        # Emit Codex JSONL-like events so the UI can show Codex activity.
         self._emit_codex_events(stage_name=stage_name, node_index=iteration)
-        if self._code_event_delay_seconds > 0:
-            time.sleep(self._code_event_delay_seconds)
-        exec_time = self._random_exec_time_seconds
-        completed_at = started_at + timedelta(seconds=exec_time)
+
+        # Simulate the moment when Codex starts executing the runfile.
+        time.sleep(1)
+        runfile_started_at = datetime.now(timezone.utc)
+        self._db.record_code_execution_start(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            code=fake_runfile_code,
+            started_at=runfile_started_at,
+            run_type=runfile_run_type,
+        )
+        self._webhooks.publish_running_code(
+            {
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": runfile_run_type,
+                "code": fake_runfile_code,
+                "started_at": runfile_started_at.isoformat(),
+            }
+        )
+
+        # Keep the "runfile execution" shorter than the overall Codex session.
+        runfile_exec_time = max(
+            MIN_FAKE_RUNFILE_RUNNING_SECONDS, float(self._random_exec_time_seconds) * 0.4
+        )
+        logger.debug(
+            "[FakeRunner %s] Starting runfile execution execution_id=%s running_for_s=%.1f",
+            self._run_id[:8],
+            execution_id,
+            runfile_exec_time,
+        )
+        time.sleep(runfile_exec_time)
+        runfile_completed_at = datetime.now(timezone.utc)
+        runfile_exec_time = max(0.0, (runfile_completed_at - runfile_started_at).total_seconds())
+        logger.debug(
+            "[FakeRunner %s] Completing runfile execution execution_id=%s completed_at=%s",
+            self._run_id[:8],
+            execution_id,
+            runfile_completed_at.isoformat(),
+        )
+        self._db.record_code_execution_completion(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            completed_at=runfile_completed_at,
+            exec_time=runfile_exec_time,
+            status="success",
+            run_type=runfile_run_type,
+        )
+        self._webhooks.publish_run_completed(
+            {
+                "execution_id": execution_id,
+                "stage_name": stage_name,
+                "run_type": runfile_run_type,
+                "status": "success",
+                "exec_time": runfile_exec_time,
+                "completed_at": runfile_completed_at.isoformat(),
+            }
+        )
+
+        # Ensure codex_execution always outlives runfile_execution.
+        time.sleep(MIN_FAKE_CODEX_OUTLIVES_RUNFILE_SECONDS)
+        completed_at = datetime.now(timezone.utc)
+        exec_time = max(0.0, (completed_at - started_at).total_seconds())
+        logger.debug(
+            "[FakeRunner %s] Completing codex execution execution_id=%s completed_at=%s",
+            self._run_id[:8],
+            execution_id,
+            completed_at.isoformat(),
+        )
         self._db.record_code_execution_completion(
             execution_id=execution_id,
             stage_name=stage_name,
             completed_at=completed_at,
             exec_time=exec_time,
             status="success",
-            run_type=run_type,
+            run_type=codex_run_type,
         )
         self._webhooks.publish_run_completed(
             {
                 "execution_id": execution_id,
                 "stage_name": stage_name,
-                "run_type": run_type,
+                "run_type": codex_run_type,
                 "status": "success",
                 "exec_time": exec_time,
                 "completed_at": completed_at.isoformat(),
@@ -777,12 +870,13 @@ class FakeRunner:
                 _executions_by_id[execution_id] = existing._replace(status="success")
 
     def _emit_codex_events(self, *, stage_name: str, node_index: int) -> None:
+        item_id = f"item_{uuid.uuid4().hex[:6]}"
         item_event = {
             "type": "item.started",
             "item": {
-                "id": f"item_{uuid.uuid4().hex[:6]}",
+                "id": item_id,
                 "type": "command_execution",
-                "command": "bash -lc ls",
+                "command": "bash -lc python runfile.py",
                 "status": "in_progress",
             },
         }
@@ -793,6 +887,25 @@ class FakeRunner:
                 "node": node_index,
                 "event_type": "item.started",
                 "event_content": item_event,
+            },
+        )
+        item_completed_event = {
+            "type": "item.completed",
+            "item": {
+                "id": item_id,
+                "type": "command_execution",
+                "command": "bash -lc python runfile.py",
+                "status": "completed",
+                "exit_code": 0,
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data={
+                "stage": stage_name,
+                "node": node_index,
+                "event_type": "item.completed",
+                "event_content": item_completed_event,
             },
         )
         turn_event = {
@@ -1374,10 +1487,10 @@ def main() -> None:
         app,
         host="127.0.0.1",
         port=int(port_value),
-        log_level="info",
+        log_level="debug",
     )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     main()

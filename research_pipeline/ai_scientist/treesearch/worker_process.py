@@ -36,7 +36,7 @@ from .codex.seed_aggregation import (
 )
 from .config import Config as AppConfig
 from .config import TaskDescription, apply_log_level
-from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent
+from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
 from .executor import run_python_script
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
@@ -926,9 +926,21 @@ def _run_codex_cli(
         event_callback=event_callback,
     )
 
+    codex_task_content = _read_text_or_empty(path=task_file)
     started_at = datetime.now(timezone.utc)
-    run_completed_emitted = False
     event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
+    event_callback(
+        RunningCodeEvent(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            code=codex_task_content,
+            started_at=started_at,
+            run_type=RunType.CODEX_EXECUTION,
+        )
+    )
+
+    runfile_started_at: datetime | None = None
+    runfile_completed_emitted = False
 
     def _codex_json_event_callback(*, line: str, obj: dict[str, object]) -> None:
         """
@@ -939,9 +951,9 @@ def _run_codex_cli(
           (commonly `runfile.py`) is still running, emit `RunningCodeEvent` updates where
           `code` is the current contents of the agent file on disk. This keeps the UI in sync
           with what will actually be executed, instead of only showing the task markdown.
-        - **Early completion**: when that command reaches `status="completed"`, emit
-          `RunCompletedEvent` immediately (based on the Codex event) and suppress the later
-          fallback `RunCompletedEvent` emitted after `runner.run(...)` returns.
+        - **Runfile lifecycle**: when the runfile command reaches `status="completed"`, emit a
+          `RunCompletedEvent` for `run_type="runfile_execution"`.
+        - The `codex_execution` lifecycle is always completed after `runner.run(...)` returns.
 
         Notes:
         - We only react to Codex events shaped like:
@@ -950,8 +962,8 @@ def _run_codex_cli(
           (using both the parsed command string and the raw JSON line as a fallback).
         - This is best-effort: if the file is missing/empty we simply skip emitting updates.
         """
-        nonlocal run_completed_emitted
-        if run_completed_emitted:
+        nonlocal runfile_completed_emitted, runfile_started_at
+        if runfile_completed_emitted:
             return
 
         # We only care about the command execution item because that's what produces the
@@ -978,13 +990,12 @@ def _run_codex_cli(
         status = item.get("status")
         if status == "completed":
             completed_at = datetime.now(timezone.utc)
-            exec_time = (completed_at - started_at).total_seconds()
+            exec_time_base = started_at if runfile_started_at is None else runfile_started_at
+            exec_time = (completed_at - exec_time_base).total_seconds()
             status_value: Literal["success", "failed"] = "success"
             exit_code = item.get("exit_code")
             if isinstance(exit_code, int) and exit_code != 0:
                 status_value = "failed"
-            # Emit completion immediately based on Codex' command lifecycle, so the UI doesn't
-            # wait for the whole Codex session teardown to finish.
             event_callback(
                 RunCompletedEvent(
                     execution_id=execution_id,
@@ -992,9 +1003,10 @@ def _run_codex_cli(
                     status=status_value,
                     exec_time=exec_time,
                     completed_at=completed_at,
+                    run_type=RunType.RUNFILE_EXECUTION,
                 )
             )
-            run_completed_emitted = True
+            runfile_completed_emitted = True
             return
 
         runfile_path = workspace_dir / agent_file_name
@@ -1002,13 +1014,15 @@ def _run_codex_cli(
         if not runfile_content.strip():
             return
         # Stream the current on-disk code while Codex is still running the command.
+        if runfile_started_at is None:
+            runfile_started_at = datetime.now(timezone.utc)
         event_callback(
             RunningCodeEvent(
                 execution_id=execution_id,
                 stage_name=stage_name,
                 code=runfile_content,
-                started_at=started_at,
-                run_type="main_execution",
+                started_at=runfile_started_at,
+                run_type=RunType.RUNFILE_EXECUTION,
             )
         )
 
@@ -1040,16 +1054,16 @@ def _run_codex_cli(
 
     completed_at = datetime.now(timezone.utc)
     status: Literal["success", "failed"] = "success" if exc_type is None else "failed"
-    if not run_completed_emitted:
-        event_callback(
-            RunCompletedEvent(
-                execution_id=execution_id,
-                stage_name=stage_name,
-                status=status,
-                exec_time=exec_time,
-                completed_at=completed_at,
-            )
+    event_callback(
+        RunCompletedEvent(
+            execution_id=execution_id,
+            stage_name=stage_name,
+            status=status,
+            exec_time=exec_time,
+            completed_at=completed_at,
+            run_type=RunType.CODEX_EXECUTION,
         )
+    )
     if exc_type is None:
         execution_registry.mark_completed(execution_id=execution_id)
     else:

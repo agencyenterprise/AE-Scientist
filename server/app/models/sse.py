@@ -24,6 +24,7 @@ from app.models.research_pipeline import (
     ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
+    RunType,
     TreeVizItem,
 )
 from app.services.chat_models import ChatStatus
@@ -286,7 +287,7 @@ class ResearchRunBestNodeEvent(BaseModel):
 class ResearchRunCodeExecutionStartedData(BaseModel):
     execution_id: str
     stage_name: str
-    run_type: str
+    run_type: RunType
     code: str
     started_at: str
 
@@ -299,7 +300,7 @@ class ResearchRunCodeExecutionStartedEvent(BaseModel):
 class ResearchRunCodeExecutionCompletedData(BaseModel):
     execution_id: str
     stage_name: str
-    run_type: str
+    run_type: RunType
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: str

@@ -24,7 +24,8 @@ interface ResearchPipelineStagesProps {
   paperGenerationProgress: PaperGenerationEvent[];
   bestNodeSelections: BestNodeSelection[];
   stageSkipState: StageSkipStateMap;
-  currentCodeExecution?: ResearchRunCodeExecution | null;
+  codexExecution?: ResearchRunCodeExecution | null;
+  runfileExecution?: ResearchRunCodeExecution | null;
   runStatus: string;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
   onSkipStage?: (stageSlug: string) => Promise<void>;
@@ -252,7 +253,8 @@ export function ResearchPipelineStages({
   paperGenerationProgress,
   bestNodeSelections,
   stageSkipState,
-  currentCodeExecution,
+  codexExecution,
+  runfileExecution,
   runStatus,
   onTerminateExecution,
   onSkipStage,
@@ -447,11 +449,12 @@ export function ResearchPipelineStages({
             ? PAPER_GENERATION_STEPS.findIndex(s => s.key === latestPaperEvent.step)
             : -1;
 
+          const stageExecution = codexExecution ?? runfileExecution ?? null;
           const isStageExecutionActive =
             runStatus === "running" &&
-            currentCodeExecution &&
-            currentCodeExecution.status === "running" &&
-            extractStageSlug(currentCodeExecution.stage_name) === stage.key;
+            stageExecution &&
+            stageExecution.status === "running" &&
+            extractStageSlug(stageExecution.stage_name) === stage.key;
 
           const displayMax =
             info.maxIterations ?? (info.iteration !== null ? info.iteration + 1 : 0);
@@ -546,9 +549,11 @@ export function ResearchPipelineStages({
                 )}
               </div>
 
-              {isStageExecutionActive && currentCodeExecution && (
+              {isStageExecutionActive && stageExecution && (
                 <ActiveExecutionCard
-                  execution={currentCodeExecution}
+                  executionId={stageExecution.execution_id}
+                  codexExecution={codexExecution ?? null}
+                  runfileExecution={runfileExecution ?? null}
                   onTerminateExecution={onTerminateExecution}
                 />
               )}
@@ -639,20 +644,27 @@ export function ResearchPipelineStages({
 }
 
 interface ActiveExecutionCardProps {
-  execution: ResearchRunCodeExecution;
+  executionId: string;
+  codexExecution: ResearchRunCodeExecution | null;
+  runfileExecution: ResearchRunCodeExecution | null;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
 }
 
-function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutionCardProps) {
+function ActiveExecutionCard({
+  executionId,
+  codexExecution,
+  runfileExecution,
+  onTerminateExecution,
+}: ActiveExecutionCardProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestAcknowledged, setRequestAcknowledged] = useState(false);
-  const startedAtMs = useMemo(
-    () => new Date(execution.started_at).getTime(),
-    [execution.started_at]
-  );
+  const startedAtMs = useMemo(() => {
+    const started = codexExecution?.started_at ?? runfileExecution?.started_at ?? null;
+    return started ? new Date(started).getTime() : Date.now();
+  }, [codexExecution?.started_at, runfileExecution?.started_at]);
   const [elapsedSeconds, setElapsedSeconds] = useState(() =>
     Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
   );
@@ -664,7 +676,7 @@ function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutio
     setIsSubmitting(false);
     setRequestAcknowledged(false);
     setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
-  }, [execution.execution_id, startedAtMs]);
+  }, [executionId, startedAtMs]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -673,7 +685,9 @@ function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutio
     return () => window.clearInterval(intervalId);
   }, [startedAtMs]);
 
-  const startedAtLabel = new Date(execution.started_at).toLocaleString();
+  const startedAtLabel = new Date(
+    codexExecution?.started_at ?? runfileExecution?.started_at ?? Date.now()
+  ).toLocaleString();
   const formattedDuration = useMemo(() => formatDuration(elapsedSeconds), [elapsedSeconds]);
 
   const handleClose = () => {
@@ -691,7 +705,7 @@ function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutio
     setIsSubmitting(true);
     setError(null);
     try {
-      await onTerminateExecution(execution.execution_id, feedback.trim());
+      await onTerminateExecution(executionId, feedback.trim());
       setIsDialogOpen(false);
       setFeedback("");
       setRequestAcknowledged(true);
@@ -722,19 +736,35 @@ function ActiveExecutionCard({ execution, onTerminateExecution }: ActiveExecutio
           <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
             Code execution in progress
           </p>
-          <p className="text-sm font-mono text-white">{formatNodeId(execution.execution_id)}</p>
+          <p className="text-sm font-mono text-white">{formatNodeId(executionId)}</p>
           <p className="text-xs text-slate-400">
-            Stage {execution.stage_name} • Started {startedAtLabel}
+            Stage {(codexExecution ?? runfileExecution)?.stage_name ?? "-"} • Started{" "}
+            {startedAtLabel}
           </p>
           <p className="text-xs text-emerald-200">
             Running for <span className="font-semibold">{formattedDuration}</span>
           </p>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3 max-h-60 overflow-y-auto">
-          <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
-            {execution.code}
-          </pre>
-        </div>
+        {codexExecution && (
+          <details className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-200">
+              Codex task (click to expand)
+            </summary>
+            <div className="mt-2 max-h-60 overflow-y-auto">
+              <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
+                {codexExecution.code}
+              </pre>
+            </div>
+          </details>
+        )}
+        {runfileExecution && runfileExecution.status === "running" && (
+          <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3 max-h-60 overflow-y-auto">
+            <p className="mb-2 text-xs font-semibold text-slate-200">runfile.py (executing)</p>
+            <pre className="text-xs font-mono text-slate-100 whitespace-pre-wrap">
+              {runfileExecution.code}
+            </pre>
+          </div>
+        )}
         {requestAcknowledged && (
           <p className="text-xs text-amber-300">
             Termination requested. Waiting for the worker to stop…
