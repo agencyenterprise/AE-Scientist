@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.api.research_pipeline_event_stream import usd_to_cents
-from app.api.research_pipeline_events import ingest_narration_event
+from app.services.narrator.narrator_service import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
