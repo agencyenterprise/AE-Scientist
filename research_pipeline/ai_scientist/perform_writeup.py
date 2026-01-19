@@ -164,7 +164,8 @@ def _ensure_all_figures_referenced(writeup_file: str, plot_names: list[str]) -> 
         logger.debug(traceback.format_exc())
 
 
-def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
+def compile_latex(cwd: str, pdf_file: str) -> bool:
+    LATEX_COMPILE_TIMEOUT = 180
     logger.info("=" * 80)
     logger.info("GENERATING LATEX")
     logger.debug(f"cwd (latex folder): {cwd}")
@@ -189,7 +190,7 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout,
+                timeout=LATEX_COMPILE_TIMEOUT,
             )
             logger.debug(f"Command {i + 1} return code: {result.returncode}")
             if result.returncode != 0:
@@ -204,7 +205,7 @@ def compile_latex(cwd: str, pdf_file: str, timeout: int = 30) -> bool:
                 )
         except subprocess.TimeoutExpired:
             logger.exception(
-                f"EXCEPTION in compile_latex: LaTeX timed out after {timeout} seconds."
+                f"EXCEPTION in compile_latex: LaTeX timed out after {LATEX_COMPILE_TIMEOUT} seconds."
             )
         except subprocess.CalledProcessError:
             logger.exception(
