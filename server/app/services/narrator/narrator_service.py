@@ -35,17 +35,6 @@ from .state_reducer import apply_changes, reduce
 
 logger = logging.getLogger(__name__)
 
-
-# ============================================================================
-# FEATURE FLAG
-# ============================================================================
-
-
-def is_narrator_enabled() -> bool:
-    """Check if narrator service is enabled via feature flag."""
-    return getattr(settings, "ENABLE_NARRATOR", False)
-
-
 # ============================================================================
 # EVENT QUEUE - ONE QUEUE PER RUN_ID
 # ============================================================================
@@ -194,10 +183,6 @@ async def ingest_narration_event(
         - Feature-flagged: Can be disabled without breaking existing system
         - Sequential: Events processed one at a time per run_id
     """
-    # Check feature flag
-    if not is_narrator_enabled():
-        return
-
     try:
         # Get queue for this run
         queue = _get_queue_for_run(run_id)
@@ -311,15 +296,17 @@ async def _process_single_event(
         # Step 6: Publish state delta to SSE subscribers (only changed fields)
         if accumulated_changes:
             # Serialize the changes for JSON transmission
+            from pydantic import BaseModel
+            
             serialized_changes: Dict[str, Any] = {}
             for key, value in accumulated_changes.items():
-                if hasattr(value, "model_dump"):
-                    # Pydantic model - serialize it
+                if isinstance(value, BaseModel):
+                    # Pydantic model instance - serialize it
                     serialized_changes[key] = value.model_dump(mode="json")
                 elif isinstance(value, list):
-                    # List - serialize each item if it's a Pydantic model
+                    # List - serialize each item if it's a Pydantic model instance
                     serialized_changes[key] = [
-                        item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                        item.model_dump(mode="json") if isinstance(item, BaseModel) else item
                         for item in value
                     ]
                 else:

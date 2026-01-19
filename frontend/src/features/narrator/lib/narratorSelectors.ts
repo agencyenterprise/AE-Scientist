@@ -88,7 +88,7 @@ export function groupEventsByStage(state: ResearchRunState | null): StageGroup[]
   // Group events by stage ID
   const eventsByStage = new Map<string, TimelineEvent[]>();
   for (const event of events) {
-    if (!event.stage) continue;
+    if (!event.stage || event.stage === "") continue;
     const stageEvents = eventsByStage.get(event.stage) || [];
     stageEvents.push(event);
     eventsByStage.set(event.stage, stageEvents);

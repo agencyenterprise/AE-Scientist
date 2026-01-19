@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/research-runs", tags=["narrator"])
 
 
-def _serialize_for_json(
-    obj: Union[datetime, dict, list, tuple],
-) -> Union[str, dict, list, tuple]:
+def _serialize_for_json(obj: Union[datetime, dict, list, tuple]) -> Union[str, dict, list, tuple]:
     """
     Recursively serialize objects for JSON, handling datetime objects.
 
@@ -42,6 +40,9 @@ def _serialize_for_json(
         return [_serialize_for_json(item) for item in obj]
     elif isinstance(obj, tuple):
         return tuple(_serialize_for_json(item) for item in obj)
+    else:
+        # Return primitive types as-is (str, int, float, bool, None)
+        return obj
 
 
 @router.get("/{run_id}/narrative-state", response_model=ResearchRunState)

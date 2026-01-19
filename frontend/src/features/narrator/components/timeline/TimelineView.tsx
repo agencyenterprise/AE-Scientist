@@ -156,7 +156,7 @@ export const TimelineView = forwardRef<TimelineViewHandle, TimelineViewProps>(fu
       className="h-[600px] border rounded-lg relative"
       scrollbarClassName="mx-1 mt-20 pb-24 w-4"
     >
-      <div ref={handleTimelineRef} className="flex flex-col w-full">
+      <div ref={handleTimelineRef} className="flex flex-col w-full pb-12">
         {stageGroups.map((stage, index) => {
           // Expand current stage and completed stages by default
           const defaultExpanded = stage.stageId === currentStage || stage.status === "completed";
@@ -165,7 +165,7 @@ export const TimelineView = forwardRef<TimelineViewHandle, TimelineViewProps>(fu
             <StageSection
               isExpanded={expandedStages.includes(stage.stageId)}
               toggleExpanded={() => toggleExpanded(stage.stageId)}
-              key={`${stage.stageId}`}
+              key={stage.stageId || `stage_${index}`}
               stage={stage}
               index={index}
               defaultExpanded={defaultExpanded}
