@@ -3780,8 +3780,13 @@ export interface components {
             hw_cost_estimate?: components["schemas"]["ResearchRunHwCostEstimateData"] | null;
             /** @description Hardware cost billed so far, if available. */
             hw_cost_actual?: components["schemas"]["ResearchRunHwCostActualData"] | null;
-            /** @description Latest code execution snapshot available for the run. */
-            code_execution?: components["schemas"]["ResearchRunCodeExecution"] | null;
+            /**
+             * Code Executions
+             * @description Latest code execution snapshot per run_type for the run.
+             */
+            code_executions?: {
+                [key: string]: components["schemas"]["ResearchRunCodeExecution"];
+            };
         };
         /**
          * ResearchRunListItem

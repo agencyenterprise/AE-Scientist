@@ -172,8 +172,7 @@ export interface ResearchRunDetailsApi {
   tree_viz: TreeVizItemApi[];
   best_node_selections?: BestNodeSelectionApi[];
   stage_skip_windows?: StageSkipWindowApi[];
-  code_execution?: ResearchRunCodeExecution | null;
-  code_executions?: Partial<Record<RunType, ResearchRunCodeExecution>> | null;
+  code_executions: Partial<Record<RunType, ResearchRunCodeExecution>>;
 }
 
 // Frontend types (camelCase) - using same structure for SSE compatibility
@@ -330,8 +329,7 @@ export interface ResearchRunDetails {
   stage_skip_windows?: StageSkipWindow[];
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
-  code_execution?: ResearchRunCodeExecution | null;
-  code_executions?: Partial<Record<RunType, ResearchRunCodeExecution>> | null;
+  code_executions: Partial<Record<RunType, ResearchRunCodeExecution>>;
 }
 
 export interface TreeVizItemApi {
