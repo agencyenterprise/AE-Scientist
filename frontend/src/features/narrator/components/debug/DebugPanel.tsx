@@ -2,7 +2,6 @@
 
 import { ResearchRunState } from "@/features/narrator/systems/resources/narratorStore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { isDevelopment } from "@/shared/lib/config";
 import { ChevronDown, ChevronUp, Bug } from "lucide-react";
 import { useState } from "react";
 
