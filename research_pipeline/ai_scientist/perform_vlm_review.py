@@ -3,13 +3,14 @@ import hashlib
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import pymupdf  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field
 
 from ai_scientist.llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
 from ai_scientist.perform_llm_review import load_paper
+from ai_scientist.prompts.render import render_text
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,9 @@ def encode_image_to_base64(image_data: str | list[bytes] | bytes) -> str:
         raise TypeError(f"Unsupported image data type: {type(image_data)}")
 
 
-reviewer_system_prompt_base = (
-    "You are an AI researcher who is reviewing a paper that was submitted to a prestigious ML venue."
-    "Be critical and cautious in your decision."
+reviewer_system_prompt_base = render_text(
+    template_name="vlm/reviewer_system_prompt_base.txt.j2",
+    context={},
 )
 
 
@@ -83,76 +84,17 @@ class FigureImageCaptionRefReview(BaseModel):
     review: ImageCaptionRefReview
 
 
-img_cap_ref_review_prompt = """The abstract of the paper is:
-
-{abstract}
-
-You will be given an image via the vision API. As a careful scientist reviewer, your task is to:
-  1. Examine the provided image closely.
-  2. Describe in detail what the image shows in a scientific manner.
-  3. Critically analyze whether the image content aligns with the given caption:
-
-{caption}
-
-  4. We also have references in the main text that mention the figure:
-
-{main_text_figrefs}
-
-You should:
-  - Examine the figure in detail: conclude elements in figures (e.g. name of axis) and describe what information is shown (e.g. the line of loss decreases monotonically but plateaus after X epochs)
-  - Suggest any potential improvements or issues in the figure itself (e.g., missing legend, unclear labeling, no meaningful conclusion, mismatch with what the caption claims).
-  - Critique the caption: does it accurately describe the figure? Is it too long/short? Does it include a concise takeaway?
-  - Review how well the main text references (figrefs) explain the figure: are they missing? Do they adequately describe the figure's content, context, or purpose?
-
-Reason carefully through these observations before replying. Only after finishing your internal reasoning should you respond with a JSON object matching the ImageCaptionRefReview schema. Do not include any additional prose around the JSON; ensure it is valid and properly formatted for automatic parsing.
-Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
+class _ImgCapRefPromptContext(NamedTuple):
+    abstract: str
+    caption: str
+    main_text_figrefs: str
 
 
-img_cap_selection_prompt = """The abstract of the paper is:
-
-{abstract}
-
-You will be given an image via the vision API. As a careful scientist reviewer, your task is to:
-  1. Examine the provided image closely.
-  2. Describe in detail what the image shows in a scientific manner.
-  3. Critically analyze whether the image content aligns with the given caption:
-
-{caption}
-
-  4. We also have references in the main text that mention the figure:
-
-{main_text_figrefs}
-
-  5. We have limited pages to present contents:
-
-{reflection_page_info}
-
-You should:
-  - Examine the figure in detail: conclude elements in figures (e.g. name of axis) and describe what information is shown (e.g. the line of loss decreases monotonically but plateaus after X epochs)
-  - Critique the caption: does it accurately describe the figure? Is it too long/short? Does it include a concise takeaway?
-  - Review how well the main text references (figrefs) explain the figure: are they missing? Do they adequately describe the figure's content, context, or purpose?
-
-After considering all of the above, you should carefully evaluate:
-  - Given the current page limit, does this image and its relevant text add significant value to the paper's scientific argument?
-  - Given the current page limit, is this image too sparse in information? Should it be combined with other figures in the main text?
-  - Does this figure contain subfigures?
-  - Is this figure not very informative? For example, some figures may show bars with very similar heights that are difficult to distinguish, or present data in a way that does not effectively communicate meaningful differences or patterns.
-
-Think step-by-step about these considerations, then respond with a JSON object matching the ImageSelectionReview schema. Provide strictly the JSON (no extra commentary) so it can be parsed automatically.
-Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
-
-img_review_prompt = """
-
-You will be given an image via the vision API. As a careful scientist reviewer, your task is to:
-  1. Examine the provided image closely.
-  2. Describe in detail what the image shows in a scientific manner.
-
-You should:
-  - Examine the figure in detail: conclude elements in figures (e.g. name of axis) and describe what information is shown (e.g. the line of loss decreases monotonically but plateaus after X epochs)
-  - Suggest any potential improvements or issues in the figure itself (e.g., missing legend, unclear labeling, no meaningful conclusion, mismatch with what the caption claims).
-
-Deliberate carefully before answering. When ready, return only a JSON object matching the ImageReview schema so it can be parsed without additional text.
-Ensure the JSON is valid and properly formatted, as it will be parsed automatically."""
+class _ImgCapSelectionPromptContext(NamedTuple):
+    abstract: str
+    caption: str
+    main_text_figrefs: str
+    reflection_page_info: str
 
 
 def extract_figure_screenshots(
@@ -353,10 +295,14 @@ def generate_vlm_img_cap_ref_review(
     model: str,
     temperature: float,
 ) -> ImageCaptionRefReview | None:
-    prompt = img_cap_ref_review_prompt.format(
+    prompt_ctx = _ImgCapRefPromptContext(
         abstract=abstract,
-        caption=img["caption"],
-        main_text_figrefs=img["main_text_figrefs"],
+        caption=str(img["caption"]),
+        main_text_figrefs=str(img["main_text_figrefs"]),
+    )
+    prompt = render_text(
+        template_name="vlm/img_cap_ref_review_prompt.txt.j2",
+        context=prompt_ctx._asdict(),
     )
     try:
         parsed, _ = get_structured_response_from_vlm(
@@ -378,7 +324,7 @@ def generate_vlm_img_review(
     model: str,
     temperature: float,
 ) -> Dict[str, Any] | None:
-    prompt = img_review_prompt
+    prompt = render_text(template_name="vlm/img_review_prompt.txt.j2", context={})
     try:
         parsed, _ = get_structured_response_from_vlm(
             msg=prompt,
@@ -471,11 +417,15 @@ def generate_vlm_img_selection_review(
     reflection_page_info: str,
     temperature: float,
 ) -> Dict[str, Any] | None:
-    prompt = img_cap_selection_prompt.format(
+    selection_ctx = _ImgCapSelectionPromptContext(
         abstract=abstract,
-        caption=img["caption"],
-        main_text_figrefs=img["main_text_figrefs"],
+        caption=str(img["caption"]),
+        main_text_figrefs=str(img["main_text_figrefs"]),
         reflection_page_info=reflection_page_info,
+    )
+    prompt = render_text(
+        template_name="vlm/img_cap_selection_prompt.txt.j2",
+        context=selection_ctx._asdict(),
     )
     try:
         parsed, _ = get_structured_response_from_vlm(

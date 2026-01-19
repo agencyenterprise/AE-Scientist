@@ -1,0 +1,9 @@
+## Seed aggregation task (multi-seed roll-up)
+- The JSON context in `codex_task.md` includes a `seed_aggregation` object describing seed runs.
+- Your job is to aggregate results across seeds and produce a rolled-up report + plots.
+- Load each seed run's `experiment_data.npy` from the provided `exp_results_dir` paths when available.
+- Compute mean ± std/sem across seeds where applicable and produce summary plots (error bars, aggregated curves).
+- Save aggregated results into `./working/experiment_data.npy` so a separate metrics-parsing pass can compute final/best metric values.
+- Write plots as `.png` files into `./working/`.
+- Ensure the aggregation succeeds and produces plots; the runner determines plot success from the artifacts in `./working/`.
+

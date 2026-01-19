@@ -15,9 +15,8 @@ logger = logging.getLogger("ai-scientist")
 
 def encode_image_to_base64(image_path: str) -> str:
     """Convert an image to base64 string."""
-    with Image.open(image_path) as img:
-        if img.mode == "RGBA":
-            img = img.convert("RGB")
+    with Image.open(image_path) as img_file:
+        img = img_file.convert("RGB") if img_file.mode == "RGBA" else img_file.copy()
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG")
         image_bytes = buffer.getvalue()

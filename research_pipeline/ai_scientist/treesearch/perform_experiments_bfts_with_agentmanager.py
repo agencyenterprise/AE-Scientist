@@ -11,27 +11,27 @@ High-level steps:
 - Optionally generate final summary reports at the end
 """
 
-import atexit
 import json
 import logging
-import shutil
 import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from .agent_manager import AgentManager
+from .agent_manager import AgentManager, RunOutcome
+from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
+from .evaluation_metric import define_evaluation_metric_spec_via_llm
 from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
 from .journal import Journal
 from .log_summarization import overall_summarize
+from .node_summary import generate_node_summary
 from .stages.base import StageMeta
-from .utils.config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 
 logger = logging.getLogger("ai-scientist")
 
 
 def perform_experiments_bfts(
     config_path: Path, event_callback: Callable[[BaseEvent], None]
-) -> None:
+) -> RunOutcome:
     # Load configuration for this run
     cfg = load_cfg(config_path)
     logger.info(f'Starting run "{cfg.exp_name}"')
@@ -41,18 +41,23 @@ def perform_experiments_bfts(
     # Load the task description (idea) for the experiment
     task_desc = load_task_desc(cfg)
 
-    global_step = 0
-
     # Prepare a clean agent workspace for the run
     logger.info("Preparing agent workspace (copying and extracting files) ...")
-    prep_agent_workspace(cfg)
+    prep_agent_workspace(cfg=cfg)
 
-    def cleanup() -> None:
-        if global_step == 0:
-            # Remove workspace if the run produced no steps
-            shutil.rmtree(cfg.workspace_dir)
-
-    atexit.register(cleanup)
+    # Define the global evaluation metric spec once for this run.
+    try:
+        event_callback(
+            RunLogEvent(message="Defining global evaluation metric spec via LLM...", level="info")
+        )
+    except (OSError, RuntimeError, ValueError, TypeError):
+        logger.exception("Failed to emit run log event for metric definition.")
+    stage_cfg = cfg.agent.feedback
+    evaluation_metric_spec = define_evaluation_metric_spec_via_llm(
+        task_desc=task_desc,
+        model=stage_cfg.model,
+        temperature=stage_cfg.temperature,
+    )
 
     # Initialize the AgentManager (orchestrates stages and substages)
     manager = AgentManager(
@@ -60,6 +65,7 @@ def perform_experiments_bfts(
         cfg=cfg,
         workspace_dir=Path(cfg.workspace_dir),
         event_callback=event_callback,
+        evaluation_metric_spec=evaluation_metric_spec,
     )
 
     # Track iteration timing for smart ETA calculation
@@ -68,6 +74,7 @@ def perform_experiments_bfts(
     # Track per-stage iteration state to avoid duplicate progress events and
     # to ensure iteration counts start from 1 for each main stage.
     last_reported_iteration_by_stage: dict[str, int] = {}
+    stage_best_node_summary_written: set[str] = set()
 
     def iteration_started_callback(stage: StageMeta, journal: Journal) -> None:
         nonlocal iteration_start_time
@@ -149,15 +156,6 @@ def perform_experiments_bfts(
             notes_dir = cfg.log_dir / f"stage_{stage.name}" / "notes"
             notes_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save latest node summary
-            latest_node = None
-            if journal.nodes:
-                latest_node = journal.nodes[-1]
-                if latest_node.agent is not None:
-                    summary = latest_node.agent.generate_node_summary(latest_node)
-                    with open(notes_dir / f"node_{latest_node.id}_summary.json", "w") as f:
-                        json.dump(summary, f, indent=2)
-
             # Generate and save stage progress summary
             best_node = journal.get_best_node()
             # Compute good_nodes once to avoid repeated property calls (which also log)
@@ -174,6 +172,51 @@ def perform_experiments_bfts(
 
             with open(notes_dir / "stage_progress.json", "w") as f:
                 json.dump(stage_summary, f, indent=2)
+
+            # Generate a single LLM summary at the end of the stage (not per node).
+            if (
+                manager.has_stage_completed(stage.name)
+                and stage.name not in stage_best_node_summary_written
+            ):
+                best_node_for_summary = journal.get_best_node(
+                    only_good=True, use_val_metric_only=True
+                )
+                node_for_summary = (
+                    best_node_for_summary if best_node_for_summary is not None else None
+                )
+                if node_for_summary is None and journal.nodes:
+                    node_for_summary = journal.nodes[-1]
+                if node_for_summary is not None:
+                    try:
+                        logger.debug(
+                            "node_summary.callsite purpose=%s node=%s stage=%s",
+                            "step_callback.stage_completed_best_node_summary",
+                            node_for_summary.id[:8],
+                            stage.name,
+                        )
+                        summary = generate_node_summary(
+                            purpose="step_callback.stage_completed_best_node_summary",
+                            model=journal.summary_model,
+                            temperature=journal.summary_temperature,
+                            stage_name=stage.name,
+                            node=node_for_summary,
+                            task_desc=task_desc,
+                        )
+                    except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                        summary = None
+                    if summary is not None:
+                        payload = {
+                            "stage": stage.name,
+                            "node_id": node_for_summary.id,
+                            "summary": summary,
+                        }
+                        with open(
+                            notes_dir / "best_node_summary.json",
+                            mode="w",
+                            encoding="utf-8",
+                        ) as f:
+                            json.dump(payload, f, indent=2)
+                        stage_best_node_summary_written.add(stage.name)
 
             # Save the run as before
             save_run(cfg, journal, stage_name=f"stage_{stage.name}")
@@ -210,6 +253,7 @@ def perform_experiments_bfts(
         step_callback=step_callback,
         iteration_started_callback=iteration_started_callback,
     )
+    outcome = manager.get_run_outcome()
 
     if cfg.generate_report:
         logger.info("Generating final report from all stages...")
@@ -245,6 +289,7 @@ def perform_experiments_bfts(
         logger.info(f"- Baseline summary: {baseline_summary_path}")
         logger.info(f"- Research summary: {research_summary_path}")
         logger.info(f"- Ablation summary: {ablation_summary_path}")
+    return outcome
 
 
 if __name__ == "__main__":

@@ -2050,6 +2050,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/codex-event": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Codex Event",
+        "operationId": "ingest_codex_event_api_research_pipeline_events_codex_event_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexEventPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/running-code": {
       "post": {
         "tags": [
@@ -4025,6 +4070,24 @@
           "checkout_url"
         ],
         "title": "CheckoutSessionCreateResponse"
+      },
+      "CodexEventPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "type": "object",
+            "title": "Event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "CodexEventPayload"
       },
       "ConversationCostResponse": {
         "properties": {
@@ -6834,9 +6897,8 @@
             "description": "Stage name reported by the research pipeline"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "description": "Type of execution (e.g., main_execution)"
+            "$ref": "#/components/schemas/RunType",
+            "description": "Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
           },
           "code": {
             "type": "string",
@@ -6901,8 +6963,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "status": {
             "type": "string",
@@ -6964,8 +7025,7 @@
             "title": "Stage Name"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type"
+            "$ref": "#/components/schemas/RunType"
           },
           "code": {
             "type": "string",
@@ -9122,9 +9182,7 @@
             "title": "Completed At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -9133,7 +9191,8 @@
           "stage_name",
           "status",
           "exec_time",
-          "completed_at"
+          "completed_at",
+          "run_type"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -9455,6 +9514,15 @@
         ],
         "title": "RunStartedPayload"
       },
+      "RunType": {
+        "type": "string",
+        "enum": [
+          "codex_execution",
+          "runfile_execution"
+        ],
+        "title": "RunType",
+        "description": "Execution stream identifier for research pipeline code execution telemetry."
+      },
       "RunningCodeEventPayload": {
         "properties": {
           "execution_id": {
@@ -9474,9 +9542,7 @@
             "title": "Started At"
           },
           "run_type": {
-            "type": "string",
-            "title": "Run Type",
-            "default": "main_execution"
+            "$ref": "#/components/schemas/RunType"
           }
         },
         "type": "object",
@@ -9484,7 +9550,8 @@
           "execution_id",
           "stage_name",
           "code",
-          "started_at"
+          "started_at",
+          "run_type"
         ],
         "title": "RunningCodeEventPayload"
       },

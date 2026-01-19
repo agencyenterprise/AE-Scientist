@@ -1,0 +1,71 @@
+# path to the task data directory
+log_level: "DEBUG"
+
+desc_file: idea_example.json
+workspace_dir: workspaces
+log_dir: "workspaces/logs"
+min_num_gpus: 0
+telemetry: null
+
+exp_name: run # a random experiment name will be generated if not provided
+
+# settings for code execution
+exec:
+  timeout: 7200
+  agent_file_name: runfile.py
+  format_tb_ipython: False
+
+generate_report: True
+# LLM settings for final report from journal
+report:
+  model: gpt-5
+  temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+
+# LLM settings for paper writeup
+writeup:
+  model: gpt-5
+  plot_model: gpt-5
+  citation_model: gpt-5
+  temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+  writeup_retries: 3
+  num_cite_rounds: 5
+
+review:
+  model: gpt-5
+  temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+
+experiment:
+  num_syn_datasets: 1
+
+# agent hyperparams
+agent:
+  type: parallel
+  num_workers: 1
+  stages:
+    stage1_max_iters: 10
+    stage2_max_iters: 5
+    stage3_max_iters: 5
+    stage4_max_iters: 5
+  # whether to instruct the agent to use CV (set to 1 to disable)
+  k_fold_validation: 1
+  multi_seed_eval:
+    num_seeds: 1 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
+
+  # LLM settings for coding
+  code:
+    model: gpt-5
+    temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+
+  # LLM settings for evaluating program output / tracebacks
+  feedback:
+    model: gpt-5
+    temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+
+  vlm_feedback:
+    model: gpt-5
+    temperature: 1.0  # Note: gpt-5 ignores temperature; this value is not used by the model.
+
+  search:
+    max_debug_depth: 5  # increased from 3 - try harder to debug
+    debug_prob: 0.7     # increased from 0.5 - debug more often
+    num_drafts: 3

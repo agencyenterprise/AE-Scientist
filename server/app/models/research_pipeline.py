@@ -2,6 +2,7 @@
 Pydantic models for research pipeline run APIs.
 """
 
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -23,6 +24,30 @@ from app.services.database.rp_events import (
     SubstageSummaryEvent,
 )
 from app.services.database.rp_tree_viz import TreeVizRecord
+
+
+class RunType(str, Enum):
+    """Execution stream identifier for research pipeline code execution telemetry."""
+
+    CODEX_EXECUTION = "codex_execution"
+    RUNFILE_EXECUTION = "runfile_execution"
+
+
+def parse_run_type(*, run_type: str) -> RunType:
+    """
+    Convert persisted run_type strings into the supported RunType enum.
+
+    Notes:
+    - Some older DB rows may contain legacy values like "main_execution".
+    - Unknown values are mapped to RUNFILE_EXECUTION to avoid 500s while keeping the API stable.
+    """
+    normalized = run_type.strip().lower()
+    if normalized == RunType.CODEX_EXECUTION.value:
+        return RunType.CODEX_EXECUTION
+    if normalized in (RunType.RUNFILE_EXECUTION.value, "main_execution"):
+        return RunType.RUNFILE_EXECUTION
+    return RunType.RUNFILE_EXECUTION
+
 
 # ============================================================================
 # List API Models
@@ -276,7 +301,10 @@ class ResearchRunCodeExecution(BaseModel):
 
     execution_id: str = Field(..., description="Unique identifier for the code execution attempt")
     stage_name: str = Field(..., description="Stage name reported by the research pipeline")
-    run_type: str = Field(..., description="Type of execution (e.g., main_execution)")
+    run_type: RunType = Field(
+        ...,
+        description="Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command).",
+    )
     code: str = Field(..., description="Python source code submitted for execution")
     status: str = Field(..., description="Execution status reported by the worker")
     started_at: str = Field(..., description="ISO timestamp when execution began")
@@ -288,7 +316,7 @@ class ResearchRunCodeExecution(BaseModel):
         return ResearchRunCodeExecution(
             execution_id=record.execution_id,
             stage_name=record.stage_name,
-            run_type=record.run_type,
+            run_type=parse_run_type(run_type=record.run_type),
             code=record.code,
             status=record.status,
             started_at=record.started_at.isoformat(),

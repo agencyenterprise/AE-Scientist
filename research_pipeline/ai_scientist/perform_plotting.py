@@ -7,89 +7,49 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, NamedTuple, Optional
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel, Field
 
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import get_structured_response_from_llm
-from ai_scientist.perform_icbinb_writeup import (
+from ai_scientist.prompts.render import render_text
+from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
+from ai_scientist.writeup_artifacts import (
     filter_experiment_summaries,
     load_exp_summaries,
     load_idea_text,
 )
-from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 
 logger = logging.getLogger(__name__)
 
 MAX_FIGURES = 12
 
-AGGREGATOR_SYSTEM_MSG = f"""You are an ambitious AI researcher who is preparing final plots for a scientific paper submission.
-You have multiple experiment summaries (baseline, research, ablation), each possibly containing references to different plots or numerical insights.
-There is also a top-level 'research_idea.md' file that outlines the overarching research direction.
-Your job is to produce ONE Python script that fully aggregates and visualizes the final results for a comprehensive research paper.
 
-Key points:
-1) Combine or replicate relevant existing plotting code, referencing how data was originally generated (from code references) to ensure correctness.
-2) Create a complete set of final scientific plots, stored in 'figures/' only (since only those are used in the final paper).
-3) Make sure to use existing .npy data for analysis; do NOT hallucinate data. If single numeric results are needed, these may be copied from the JSON summaries.
-4) Only create plots where the data is best presented as a figure and not as a table. E.g. don't use bar plots if the data is hard to visually compare.
-5) If there are plots based on synthetic data, include them in the appendix.
+class _AggregatorSystemMsgContext(NamedTuple):
+    max_figures: int
 
-Implement best practices:
-- Do not produce extraneous or irrelevant plots.
-- Maintain clarity, minimal but sufficient code.
-- Demonstrate thoroughness for a final research paper submission.
-- Do NOT reference non-existent files or images.
-- Use the .npy files to get data for the plots and key numbers from the JSON summaries.
-- Demarcate each individual plot, and put them in separate try-catch blocks so that the failure of one plot does not affect the others.
-- Make sure to only create plots that are unique and needed for the final paper and appendix. A good number could be around {MAX_FIGURES} plots in total.
-- Aim to aggregate multiple figures into one plot if suitable, i.e. if they are all related to the same topic. You can place up to 3 plots in one row.
-- Provide well-labeled plots (axes, legends, titles) that highlight main findings. Use informative names everywhere, including in the legend for referencing them in the final paper. Make sure the legend is always visible.
-- Make the plots look professional (if applicable, no top and right spines, dpi of 300, adequate ylim, etc.).
-- Do not use labels with underscores, e.g. "loss_vs_epoch" should be "loss vs epoch".
-- For image examples, select a few categories/classes to showcase the diversity of results instead of showing a single category/class. Some can be included in the main paper, while the rest can go in the appendix.
 
-Return your response using the structured schema, filling the `script` field with the final Python aggregator code.
-"""
+AGGREGATOR_SYSTEM_MSG = render_text(
+    template_name="plotting/aggregator_system_msg.txt.j2",
+    context=_AggregatorSystemMsgContext(max_figures=MAX_FIGURES)._asdict(),
+)
+
+
+class _AggregatorPromptContext(NamedTuple):
+    idea_text: str
+    combined_summaries_str: str
 
 
 def build_aggregator_prompt(combined_summaries_str: str, idea_text: str) -> str:
-    return f"""
-We have three JSON summaries of scientific experiments: baseline, research, ablation.
-They may contain lists of figure descriptions, code to generate the figures, and paths to the .npy files containing the numerical results.
-Our goal is to produce final, publishable figures.
-
---- RESEARCH IDEA ---
-```
-{idea_text}
-```
-
-IMPORTANT:
-- The aggregator script must load existing .npy experiment data from the "exp_results_npy_files" fields (ONLY using full and exact file paths in the summary JSONs) for thorough plotting.
-- It should call os.makedirs("figures", exist_ok=True) before saving any plots.
-- Aim for a balance of empirical results, ablations, and diverse, informative visuals in 'figures/' that comprehensively showcase the finalized research outcomes.
-- If you need .npy paths from the summary, only copy those paths directly (rather than copying and parsing the entire summary).
-
-Your generated Python script must:
-1) Load or refer to relevant data and .npy files from these summaries. Use the full and exact file paths in the summary JSONs.
-2) Synthesize or directly create final, scientifically meaningful plots for a final research paper (comprehensive and complete), referencing the original code if needed to see how the data was generated.
-3) Carefully combine or replicate relevant existing plotting code to produce these final aggregated plots in 'figures/' only, since only those are used in the final paper.
-4) Do not hallucinate data. Data must either be loaded from .npy files or copied from the JSON summaries.
-5) The aggregator script must be fully self-contained, and place the final plots in 'figures/'.
-6) This aggregator script should produce a comprehensive and final set of scientific plots for the final paper, reflecting all major findings from the experiment data.
-7) Make sure that every plot is unique and not duplicated from the original plots. Delete any duplicate plots if necessary.
-8) Each figure can have up to 3 subplots using fig, ax = plt.subplots(1, 3).
-9) Use a font size larger than the default for plot labels and titles to ensure they are readable in the final PDF paper.
-
-
-Below are the summaries in JSON:
-
-{combined_summaries_str}
-
-Provide your answer using the structured response schema (field: script). Do not include commentary outside the schema.
-"""
+    ctx = _AggregatorPromptContext(
+        idea_text=idea_text, combined_summaries_str=combined_summaries_str
+    )
+    return render_text(
+        template_name="plotting/aggregator_prompt.txt.j2",
+        context=ctx._asdict(),
+    )
 
 
 class AggregatorScriptResponse(BaseModel):

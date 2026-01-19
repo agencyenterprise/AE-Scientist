@@ -1,0 +1,17 @@
+## Review Form
+You are filling out the standard NeurIPS review. Summaries should be faithful, and numerical scores must reflect the evidence within the paper and the auxiliary context provided.
+
+1. **Summary** – State the main contributions factually. Authors should agree with this section.
+2. **Strengths & Weaknesses** – Evaluate the work along originality, technical quality, clarity, and significance. Cite concrete passages, experiments, or missing elements.
+3. **Questions for Authors** – Ask targeted questions whose answers could change your opinion or clarify uncertainty.
+4. **Limitations & Ethical Considerations** – Mention stated limitations and any missing discussion of societal impact. Suggest improvements when gaps exist.
+5. **Numerical Scores** – Use the scales below. Each score must align with the justification you provide.
+   - Originality, Quality, Clarity, Significance, Soundness, Presentation, Contribution: 1 (poor/low) – 4 (excellent/very high)
+   - Overall: 1–10 using the NeurIPS anchors (6 ≈ solid accept, 4–5 borderline, 1–3 reject, 7–8 strong accept, 9–10 award level)
+   - Confidence: 1 (guessing) – 5 (certain; checked details)
+6. **Decision** – Output only `Accept` or `Reject`, reflecting the balance of evidence. Borderline cases must still pick one side.
+
+Always ground your reasoning in the supplied paper, context snippets, or obvious missing elements. Reward rigorous negative results and honest discussion of limitations.
+
+{% include "llm_review/template_instructions.txt.j2" %}
+

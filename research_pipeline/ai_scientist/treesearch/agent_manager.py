@@ -17,11 +17,10 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple
 
 from pydantic import BaseModel
 
-from ai_scientist.llm import structured_query_with_schema
 from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
@@ -32,9 +31,10 @@ from ai_scientist.treesearch.events import (
 )
 
 from . import stage_control
+from .codex.codex_task_types import EvaluationMetricSpec
+from .config import Config, TaskDescription
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
-from .multi_seed_evaluation import run_plot_aggregation
 from .parallel_agent import ParallelAgent
 from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
 from .stage_identifiers import StageIdentifier
@@ -45,9 +45,14 @@ from .stages.stage1_baseline import Stage1Baseline
 from .stages.stage2_tuning import Stage2Tuning
 from .stages.stage3_plotting import Stage3Plotting
 from .stages.stage4_ablation import Stage4Ablation
-from .utils.config import Config, TaskDescription
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RunOutcome:
+    success: bool
+    message: str
 
 
 class SubstageGoalResponse(BaseModel):
@@ -84,6 +89,7 @@ class AgentManager:
         cfg: Config,
         workspace_dir: Path,
         event_callback: Callable[[BaseEvent], None],
+        evaluation_metric_spec: EvaluationMetricSpec,
     ) -> None:
         # Ingest and validate task description (idea)
 
@@ -113,7 +119,17 @@ class AgentManager:
         self._attempt_iteration_by_stage: Dict[str, int] = {}
         self._forced_stage_completion_reasons: Dict[str, str] = {}
         self._stage_skip_states: Dict[str, bool] = {}
+        self._run_outcome = RunOutcome(success=True, message="")
         stage_control.reset_stage_state()
+        self.evaluation_metric_spec = evaluation_metric_spec
+
+    def get_run_outcome(self) -> RunOutcome:
+        return self._run_outcome
+
+    def _mark_run_failed(self, *, message: str) -> None:
+        if not self._run_outcome.success:
+            return
+        self._run_outcome = RunOutcome(success=False, message=message)
 
     def get_max_iterations(self, *, stage_identifier: StageIdentifier) -> int:
         """Get max iterations for a stage from config."""
@@ -122,33 +138,6 @@ class AgentManager:
     def get_attempt_iteration(self, stage_name: str) -> int:
         """Return how many iterations have been attempted for a stage."""
         return self._attempt_iteration_by_stage.get(stage_name, 0)
-
-    def _get_task_desc_str(self) -> str:
-        task_desc = """You are an ambitious AI researcher who is looking to publish a paper that will contribute significantly to the field.
-You have an idea and you want to conduct creative experiments to gain scientific insights.
-Your aim is to run experiments to gather sufficient results for a top conference paper.
-Your research idea:\n\n
-"""
-        task_desc += (
-            "Title:\n"
-            + self.task_desc.title
-            + "\n"
-            + "Abstract:\n"
-            + self.task_desc.abstract
-            + "\n"
-            + "Short Hypothesis:\n"
-            + self.task_desc.short_hypothesis
-            + "\n"
-        )
-        if self.task_desc.code is not None:
-            logger.info("Loading code example from idea input")
-            task_desc += "Code To Use:\n" + self.task_desc.code + "\n"
-        else:
-            logger.info("Loading example code from example_code.py")
-            example_code_path = Path(__file__).parent.parent / "example_code.py"
-            example_code = example_code_path.read_text()
-            task_desc += "Code To Use:\n" + example_code + "\n"
-        return task_desc
 
     def _create_initial_stage(self) -> None:
         """Create the initial stage configuration"""
@@ -205,7 +194,7 @@ Your research idea:\n\n
     def _build_stage_impl(self, stage_meta: StageMeta, journal: Journal) -> StageImpl:
         ctx = StageContext(
             cfg=self.cfg,
-            task_desc=self._curate_task_desc(stage_meta),
+            task_desc=self.task_desc,
             stage_identifier=stage_meta.identifier,
             journal=journal,
             workspace_dir=self.workspace_dir,
@@ -299,35 +288,6 @@ Your research idea:\n\n
                 )
         return None
 
-    def _curate_task_desc(self, stage: StageMeta) -> str:
-        task_desc = self._get_task_desc_str()
-
-        if stage.slug == Stage3Plotting.MAIN_STAGE_SLUG:
-            experiments = self.task_desc.experiments
-            experiment_str: Optional[str] = None
-
-            if isinstance(experiments, list) and experiments:
-                if isinstance(experiments[0], str):
-                    experiment_str = "\n".join(cast(List[str], experiments))
-                elif isinstance(experiments[0], dict):
-                    experiments_list = cast(List[Dict[str, str]], experiments)
-                    experiment_str = "\n".join(
-                        [f"{k}: {v}" for d in experiments_list for k, v in d.items()]
-                    )
-            elif isinstance(experiments, str):
-                experiment_str = experiments
-
-            if experiment_str is not None:
-                task_desc += "Experiment Plan: " + experiment_str + "\n"
-        elif stage.slug == Stage4Ablation.MAIN_STAGE_SLUG:
-            if isinstance(self.task_desc.risk_factors_and_limitations, list):
-                risk_factors_str = "\n".join(self.task_desc.risk_factors_and_limitations)
-            else:
-                risk_factors_str = self.task_desc.risk_factors_and_limitations
-            task_desc += "Risk Factors and Limitations: " + risk_factors_str + "\n"
-
-        return task_desc
-
     def _save_checkpoint(self) -> None:
         """Save the current state of the experiment"""
         # Persist journals, config and current stage for resuming/review
@@ -349,6 +309,7 @@ Your research idea:\n\n
             "cfg": self.cfg,
             "workspace_dir": self.workspace_dir,
             "current_stage": self.current_stage,
+            "evaluation_metric_spec": self.evaluation_metric_spec,
         }
         logger.info(f"Saving checkpoint to {save_path}")
         with open(save_path, "wb") as f:
@@ -359,10 +320,6 @@ Your research idea:\n\n
         # Derive a stage-local copy of config and curated task description
         stage_cfg = copy.deepcopy(self.cfg)
         stage_cfg.agent.search.num_drafts = stage.num_drafts
-        task_desc = self._curate_task_desc(stage)
-
-        task_desc = f"{task_desc}\n\nCurrent Main Stage: {stage.slug}\n"
-        task_desc += f"Sub-stage goals: {stage.goals}"
 
         # Determine carryover best nodes based on current main stage
         if stage.identifier is StageIdentifier.STAGE2:
@@ -396,7 +353,9 @@ Your research idea:\n\n
 
         # Construct the worker agent for this substage
         return ParallelAgent(
-            task_desc=task_desc,
+            task_desc=self.task_desc,
+            stage_goals=stage.goals,
+            evaluation_metric_spec=self.evaluation_metric_spec,
             cfg=stage_cfg,
             journal=self.journals[stage.name],
             stage_identifier=stage.identifier,
@@ -410,9 +369,10 @@ Your research idea:\n\n
         self, current_substage: StageMeta, journal: Journal
     ) -> Tuple[bool, str]:
         """Check if the current sub-stage is complete"""
-        # Terminate if max iterations reached
+        # Terminate if max iterations reached (count attempts, not nodes).
         limit = current_substage.max_iterations
-        if len(journal.nodes) >= limit:
+        current_iter = self.get_attempt_iteration(stage_name=current_substage.name)
+        if current_iter >= limit:
             logger.info(f"Stage {current_substage.name} completed: reached max iterations")
             return True, "Reached max iterations"
         stage_obj = self._build_stage_impl(current_substage, journal)
@@ -421,9 +381,10 @@ Your research idea:\n\n
     def _check_stage_completion(self, stage: StageMeta) -> Tuple[bool, str]:
         """Check if current stage is complete based on criteria"""
         journal = self.journals[stage.name]
-        # Terminate if max iterations reached
+        # Terminate if max iterations reached (count attempts, not nodes).
         limit = stage.max_iterations
-        if len(journal.nodes) >= limit:
+        current_iter = self.get_attempt_iteration(stage_name=stage.name)
+        if current_iter >= limit:
             logger.info(f"Stage {stage.name} completed: reached max iterations")
             if stage.identifier is StageIdentifier.STAGE1:
                 # For initial stage, if it didn't even find a working implementation until max iterations,
@@ -458,7 +419,13 @@ Your research idea:\n\n
             candidates.extend(reversed(history))
 
         for journal in candidates:
-            best_node = journal.get_best_node()
+            # Prefer deterministic, metric-only selection for stage-to-stage seeding.
+            # This ensures we carry forward the "best by metrics" node (when available),
+            # rather than an LLM-chosen node which may use non-metric evidence.
+            best_node = journal.get_best_node(only_good=True, use_val_metric_only=True)
+            if best_node is None:
+                # Fallback to the default selection mode when no metrics are available yet.
+                best_node = journal.get_best_node()
             if best_node:
                 # Create a clean copy of the node for the next stage
                 copied_node = copy.deepcopy(best_node)
@@ -483,59 +450,21 @@ Your research idea:\n\n
         issues = identify_issues(journal=journal)
         progress = analyze_progress(journal=journal)
 
-        # Create prompt for the LLM
         best_metric = metrics.get("best_metric")
         best_value_str = "N/A"
         if isinstance(best_metric, dict):
             val = best_metric.get("value")
             best_value_str = str(val) if val is not None else "N/A"
-        prompt = f"""
-        Based on the current experimental progress, generate focused goals for the next sub-stage.
 
-        Main Stage Goals:
-        {main_stage_goal}
-
-        Current Progress:
-        - Total attempts: {metrics['total_nodes']}
-        - Successful implementations: {metrics['good_nodes']}
-        - Best performance: {best_value_str}
-        - Convergence status: {progress['convergence_status']}
-
-        Current Issues:
-        {json.dumps(issues, indent=2)}
-
-        Recent Changes:
-        {json.dumps(progress['recent_changes'], indent=2)}
-
-        Generate specific, actionable sub-stage goals that:
-        1. Address current issues and limitations
-        2. Build on recent progress
-        3. Move towards main stage goals
-        4. Are concrete and measurable
-        """
-
-        try:
-            # Get response from LLM
-            response = structured_query_with_schema(
-                system_message=prompt,
-                user_message=None,
-                model=self.cfg.agent.feedback.model,
-                temperature=self.cfg.agent.feedback.temperature,
-                schema_class=SubstageGoalResponse,
-            )
-            goal_str = f"""
-            {response.goals}
-            """
-
-            return goal_str.strip()
-
-        except Exception:
-            logger.exception("Error generating sub-stage goals")
-            # Provide fallback goals if LLM fails
-            return """
-            Sub-stage Goals:
-            Continue progress on main stage objectives while addressing current issues.
-            """.strip()
+        top_issues = json.dumps(issues, indent=2)[:800]
+        recent_changes = json.dumps(progress.get("recent_changes", []), indent=2)[:800]
+        return (
+            "Sub-stage Goals:\n"
+            f"- Maintain alignment with main stage goals:\n{main_stage_goal}\n"
+            f"- Improve best metric (current best: {best_value_str})\n"
+            f"- Address top issues:\n{top_issues}\n"
+            f"- Continue iterating based on recent changes:\n{recent_changes}\n"
+        ).strip()
 
     def _create_next_substage(
         self, current_substage: StageMeta, journal: Journal
@@ -596,9 +525,12 @@ Your research idea:\n\n
             if prev_best:
                 self.journals[current_substage.name].append(prev_best)
                 return True
-            logger.error(
-                f"No previous best implementation found for {current_substage.name}. Something went wrong so finishing the experiment..."
+            message = (
+                "No previous best implementation found for "
+                f"{current_substage.name}. Something went wrong so finishing the experiment..."
             )
+            logger.error(message)
+            self._mark_run_failed(message=message)
             return False
         return True
 
@@ -608,21 +540,21 @@ Your research idea:\n\n
         current_substage: StageMeta,
         step_callback: Optional[Callable[[StageMeta, Journal], None]],
     ) -> bool:
-        """Run multi-seed evaluation and plot aggregation when a main stage completes.
+        """Run multi-seed evaluation (and a Codex seed aggregation task) when a main stage completes.
 
         Returns True on success, False if a required best node could not be found.
         """
         best_node = self._get_best_implementation(current_substage.name)
         if not best_node:
-            logger.error(
-                f"No best node found for {current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
+            message = (
+                "No best node found for "
+                f"{current_substage.name} during multi-seed eval, something went wrong so finishing the experiment..."
             )
+            logger.error(message)
+            self._mark_run_failed(message=message)
             return False
 
-        seed_nodes = agent._run_multi_seed_evaluation(best_node)
-        if step_callback:
-            step_callback(current_substage, self.journals[current_substage.name])
-        run_plot_aggregation(agent=agent, node=best_node, seed_nodes=seed_nodes)
+        agent._run_multi_seed_evaluation(best_node)
         if step_callback:
             step_callback(current_substage, self.journals[current_substage.name])
         logger.info(f"Stage {current_substage.name} multi-seed eval done.")
@@ -1019,99 +951,3 @@ Your research idea:\n\n
         else:
             self._clear_all_stage_skip_states(reason="Experiment halted")
             stage_control.clear_stage_state()
-
-    def _gather_stage_metrics(self, journal: Journal) -> Dict[str, Any]:
-        """Gather detailed metrics and analysis from the stage's nodes"""
-        metrics: Dict[str, Any] = {
-            "total_nodes": len(journal.nodes),
-            "good_nodes": len(journal.good_nodes),
-            "buggy_nodes": len(journal.buggy_nodes),
-            "best_metric": None,
-            "node_summaries": [],
-            "vlm_feedback": [],
-        }
-
-        # Gather individual node summaries
-        for node in journal.nodes:
-            if node.agent is not None:
-                node_summary = node.agent.generate_node_summary(node)
-                metrics["node_summaries"].append(node_summary)
-
-        # Get VLM feedback from plot analysis
-        for node in journal.good_nodes:
-            if node.vlm_feedback is not None:
-                metrics["vlm_feedback"].append(node.vlm_feedback)
-
-        best_node = journal.get_best_node()
-        if best_node and best_node.metric is not None:
-            metrics["best_metric"] = {
-                "value": best_node.metric.value,
-                "name": best_node.metric.name or "validation_metric",
-                "maximize": bool(best_node.metric.maximize),
-                "analysis": best_node.analysis,
-            }
-
-        return metrics
-
-    def _identify_issues(self, journal: Journal) -> List[str]:
-        """Identify systemic issues and challenges from the current stage's results"""
-        issues = []
-
-        # Look for patterns in leaf nodes (endpoints of improvement attempts)
-        leaf_nodes = [n for n in journal.nodes if n.is_leaf]
-        buggy_leaves = [n for n in leaf_nodes if n.is_buggy]
-
-        # If we have buggy leaf nodes, it means we couldn't fix some issues
-        if buggy_leaves:
-            # Group similar issues
-            error_patterns: Dict[str, List[str]] = {}
-            for node in buggy_leaves:
-                key = node.analysis if node.analysis is not None else "Unknown error"
-                error_patterns.setdefault(key, []).append(node.id)
-
-            # Report persistent issues
-            for error_msg, node_ids in error_patterns.items():
-                if len(node_ids) >= 2:  # If same error occurs multiple times
-                    issues.append(f"Persistent issue in nodes {node_ids}: {error_msg}")
-
-        # Include VLM-identified systemic issues
-        vlm_issues = set()  # Use set to avoid duplicate issues
-        for node in journal.good_nodes:
-            vlm_feedback = node.vlm_feedback
-            if isinstance(vlm_feedback, dict):
-                # Look for systemic issues identified by VLM
-                if "systemic_issues" in vlm_feedback:
-                    vlm_issues.update(vlm_feedback["systemic_issues"])
-                # Look for recurring patterns in plot analysis
-                if "plot_analyses" in vlm_feedback:
-                    for analysis in vlm_feedback["plot_analyses"]:
-                        if "limitation" in analysis.get("type", "").lower():
-                            vlm_issues.add(f"VLM (Node {node.id}): {analysis['analysis']}")
-
-        issues.extend(list(vlm_issues))
-
-        return issues
-
-    def _analyze_progress(self, journal: Journal) -> Dict[str, Any]:
-        """Analyze progress and convergence in the current stage"""
-        progress: Dict[str, Any] = {
-            "iterations_completed": len(journal.nodes),
-            "improvements_found": 0,
-            "convergence_status": "not_converged",
-            "improvement_trend": [],
-            "recent_changes": [],
-        }
-
-        # Analyze recent changes
-        recent_nodes = journal.nodes[-3:] if len(journal.nodes) >= 3 else journal.nodes
-        for node in recent_nodes:
-            if not node.is_buggy:
-                change = {
-                    "node_id": node.id,
-                    "metric": (node.metric.value if node.metric is not None else None),
-                    "parent_id": node.parent.id if node.parent else None,
-                    "analysis": node.analysis,
-                }
-                progress["recent_changes"].append(change)
-
-        return progress
