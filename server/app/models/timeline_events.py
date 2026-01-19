@@ -248,12 +248,70 @@ class NodeExecutionCompletedEvent(TimelineEventBase):
     run_type: str = Field(default="main_execution", description="Type of run")
 
 
+class RunStartedEvent(TimelineEventBase):
+    """
+    Emitted when the research run actually starts executing (container is ready).
+
+    Emission Criteria:
+    - Triggered by run_started events from research pipeline
+    - Marks the transition from "pending" to "running"
+    - First event in the timeline (after creation)
+
+    Frequency: 1 per run (always the first event)
+    """
+
+    type: Literal["run_started"] = "run_started"
+
+    headline: str = Field(..., description="Short headline")
+    gpu_type: Optional[str] = Field(None, description="GPU type allocated")
+    cost_per_hour_cents: Optional[int] = Field(None, description="Cost per hour in cents")
+
+
+class RunFinishedEvent(TimelineEventBase):
+    """
+    Emitted when the entire research run finishes (success or failure).
+
+    Emission Criteria:
+    - Triggered by run_finished events from research pipeline
+    - Triggered by monitor timeout/failure detection
+    - Triggered by user cancellation
+    - Final event in the timeline
+
+    Frequency: 1 per run (always the last event)
+    """
+
+    type: Literal["run_finished"] = "run_finished"
+
+    headline: str = Field(..., description="Short headline")
+    status: Literal["completed", "failed", "cancelled"] = Field(..., description="Final run status")
+    success: bool = Field(..., description="Whether the run completed successfully")
+    reason: Literal[
+        "pipeline_completed",
+        "pipeline_error",
+        "heartbeat_timeout",
+        "deadline_exceeded",
+        "user_cancelled",
+        "container_died",
+    ] = Field(..., description="Why the run finished")
+    message: Optional[str] = Field(None, description="Human-readable completion message")
+    summary: Optional[str] = Field(None, description="Summary of what was accomplished")
+    total_duration_seconds: Optional[float] = Field(
+        None, description="Total run duration in seconds"
+    )
+    stages_completed: int = Field(0, description="Number of stages completed")
+    total_nodes_executed: int = Field(0, description="Total nodes executed")
+    best_result: Optional[MetricCollection] = Field(
+        None, description="Best result achieved if available"
+    )
+
+
 # ============================================================================
 # TIMELINE EVENT UNION
 # ============================================================================
 
 TimelineEvent = Annotated[
     Union[
+        RunStartedEvent,
         StageStartedEvent,
         NodeResultEvent,
         StageCompletedEvent,
@@ -261,6 +319,7 @@ TimelineEvent = Annotated[
         PaperGenerationStepEvent,
         NodeExecutionStartedEvent,
         NodeExecutionCompletedEvent,
+        RunFinishedEvent,
     ],
     Field(discriminator="type"),
 ]

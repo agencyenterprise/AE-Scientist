@@ -15,6 +15,8 @@ from app.models.timeline_events import (
     NodeResultEvent,
     PaperGenerationStepEvent,
     ProgressUpdateEvent,
+    RunFinishedEvent,
+    RunStartedEvent,
     StageCompletedEvent,
     StageStartedEvent,
     TimelineEvent,
@@ -185,6 +187,57 @@ def handle_paper_generation_step(
             break
     changes["stages"] = updated_stages
 
+    return StateUpdateResult(changes=changes)
+
+
+def handle_run_started(state: ResearchRunState, event: RunStartedEvent) -> StateUpdateResult:
+    """
+    Handle run_started event - updates state with started_running_at and cost info.
+
+    Updates:
+    - started_running_at: Set to event timestamp
+    - gpu_type: Set GPU type
+    - cost_per_hour_cents: Set cost per hour
+    - status: Set to "running"
+    - timeline: Append event
+    """
+    changes: Dict[str, Any] = {
+        "timeline": state.timeline + [event],
+        "status": "running",
+        "started_running_at": event.timestamp,
+        "updated_at": event.timestamp,
+    }
+
+    # Set GPU type and cost if provided
+    if event.gpu_type:
+        changes["gpu_type"] = event.gpu_type
+
+    if event.cost_per_hour_cents:
+        changes["cost_per_hour_cents"] = event.cost_per_hour_cents
+
+    return StateUpdateResult(changes=changes)
+
+
+def handle_run_finished(state: ResearchRunState, event: RunFinishedEvent) -> StateUpdateResult:
+    """
+    Handle run_finished event - marks the run as complete/failed.
+
+    Updates:
+    - status: Set to "completed", "failed", or "cancelled"
+    - completed_at: Set to event timestamp
+    - error_message: Set if run failed
+    - timeline: Append event
+    """
+    changes: Dict[str, Any] = {
+        "timeline": state.timeline + [event],
+        "status": event.status,
+        "completed_at": event.timestamp,
+        "updated_at": event.timestamp,
+    }
+
+    # Set error message if failed
+    if not event.success and event.message:
+        changes["error_message"] = event.message
 
     return StateUpdateResult(changes=changes)
 
@@ -208,6 +261,7 @@ HandlerFn = Callable[[ResearchRunState, TimelineEvent], StateUpdateResult]
 HANDLERS: Dict[str, HandlerFn] = cast(
     Dict[str, HandlerFn],
     {
+        "run_started": handle_run_started,
         "stage_started": handle_stage_started,
         "node_result": handle_node_result,
         "stage_completed": handle_stage_completed,
@@ -215,6 +269,7 @@ HANDLERS: Dict[str, HandlerFn] = cast(
         "paper_generation_step": handle_paper_generation_step,
         "node_execution_started": handle_node_execution_started,
         "node_execution_completed": handle_node_execution_completed,
+        "run_finished": handle_run_finished,
     },
 )
 

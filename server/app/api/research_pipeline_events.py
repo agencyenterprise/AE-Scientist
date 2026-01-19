@@ -913,6 +913,19 @@ async def ingest_run_started(
             data=run_event,
         ),
     )
+
+    # Ingest into narrator to update state with started_running_at
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="run_started",
+        event_data={
+            "started_running_at": now.isoformat(),
+            "gpu_type": run.gpu_type,
+            "cost_per_hour_cents": int(run.cost * 100) if run.cost else None,
+        },
+    )
+
     logger.info("RP run started: run=%s", payload.run_id)
 
 
@@ -1232,6 +1245,7 @@ async def _retry_run_after_gpu_shortage(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
             gpu_types=retry_gpu_types,
+            conversation_id=idea_version.conversation_id or None,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",

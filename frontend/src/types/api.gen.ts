@@ -4114,7 +4114,7 @@ export interface components {
             current_stage?: string | null;
             current_stage_goal?: components["schemas"]["StageGoal"] | null;
             /** Timeline */
-            timeline?: (components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"])[];
+            timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
             /** Current Focus */
             current_focus?: string | null;
             /** Active Nodes */
@@ -4421,6 +4421,97 @@ export interface components {
             run_id: string;
             event: components["schemas"]["RunCompletedEventPayload"];
         };
+        /**
+         * RunFinishedEvent
+         * @description Emitted when the entire research run finishes (success or failure).
+         *
+         *     Emission Criteria:
+         *     - Triggered by run_finished events from research pipeline
+         *     - Triggered by monitor timeout/failure detection
+         *     - Triggered by user cancellation
+         *     - Final event in the timeline
+         *
+         *     Frequency: 1 per run (always the last event)
+         */
+        RunFinishedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run_finished";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Status
+             * @description Final run status
+             * @enum {string}
+             */
+            status: "completed" | "failed" | "cancelled";
+            /**
+             * Success
+             * @description Whether the run completed successfully
+             */
+            success: boolean;
+            /**
+             * Reason
+             * @description Why the run finished
+             * @enum {string}
+             */
+            reason: "pipeline_completed" | "pipeline_error" | "heartbeat_timeout" | "deadline_exceeded" | "user_cancelled" | "container_died";
+            /**
+             * Message
+             * @description Human-readable completion message
+             */
+            message?: string | null;
+            /**
+             * Summary
+             * @description Summary of what was accomplished
+             */
+            summary?: string | null;
+            /**
+             * Total Duration Seconds
+             * @description Total run duration in seconds
+             */
+            total_duration_seconds?: number | null;
+            /**
+             * Stages Completed
+             * @description Number of stages completed
+             * @default 0
+             */
+            stages_completed: number;
+            /**
+             * Total Nodes Executed
+             * @description Total nodes executed
+             * @default 0
+             */
+            total_nodes_executed: number;
+            /** @description Best result achieved if available */
+            best_result?: components["schemas"]["MetricCollection"] | null;
+        };
         /** RunFinishedPayload */
         RunFinishedPayload: {
             /** Run Id */
@@ -4445,6 +4536,60 @@ export interface components {
             /** Run Id */
             run_id: string;
             event: components["schemas"]["RunLogEvent"];
+        };
+        /**
+         * RunStartedEvent
+         * @description Emitted when the research run actually starts executing (container is ready).
+         *
+         *     Emission Criteria:
+         *     - Triggered by run_started events from research pipeline
+         *     - Marks the transition from "pending" to "running"
+         *     - First event in the timeline (after creation)
+         *
+         *     Frequency: 1 per run (always the first event)
+         */
+        RunStartedEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /**
+             * Stage
+             * @description Stage identifier (e.g., '1_initial_implementation')
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "run_started";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Gpu Type
+             * @description GPU type allocated
+             */
+            gpu_type?: string | null;
+            /**
+             * Cost Per Hour Cents
+             * @description Cost per hour in cents
+             */
+            cost_per_hour_cents?: number | null;
         };
         /** RunStartedPayload */
         RunStartedPayload: {

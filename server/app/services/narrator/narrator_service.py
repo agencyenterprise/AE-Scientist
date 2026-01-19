@@ -23,6 +23,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 
 from app.api.narrator_stream import publish_narrator_event
 from app.config import settings
@@ -283,7 +284,7 @@ async def _process_single_event(
         # Step 3: Persist timeline events and publish to SSE subscribers
         for timeline_event in timeline_events:
             await db.insert_timeline_event(run_id=run_id, event=timeline_event)
-            
+
             # Publish timeline event to SSE subscribers immediately after persistence
             publish_narrator_event(
                 run_id=run_id,
@@ -295,7 +296,7 @@ async def _process_single_event(
         # Accumulate all state changes to publish as a single delta
         new_state = current_state
         accumulated_changes: Dict[str, Any] = {}
-        
+
         for timeline_event in timeline_events:
             update_result = reduce(new_state, timeline_event)
 
@@ -324,7 +325,7 @@ async def _process_single_event(
                 else:
                     # Primitive type - use as is
                     serialized_changes[key] = value
-            
+
             publish_narrator_event(
                 run_id=run_id,
                 event_type="state_delta",
@@ -363,13 +364,38 @@ async def _get_or_create_state_locked(
 
     if current_state is None:
         # First event for this run - create initial state
-        logger.info("Narrator: Creating initial state for run=%s", run_id)
+        logger.info("Narrator: Creating initial state for run=%s (fallback path)", run_id)
 
-        # TODO: Get conversation_id from research_pipeline_runs table
+        # Get conversation_id and idea info from research_pipeline_runs + ideas tables
+        # TODO: move this somewhere else or throw if we don't need to recover in case the state gets deleted mid-run
+        async with conn.cursor(row_factory=dict_row) as cursor:
+            await cursor.execute(
+                """
+                SELECT 
+                    rpr.idea_id,
+                    i.conversation_id,
+                    i.short_hypothesis
+                FROM research_pipeline_runs rpr
+                JOIN ideas i ON i.id = rpr.idea_id
+                WHERE rpr.run_id = %s
+                """,
+                (run_id,),
+            )
+            row = await cursor.fetchone()
+
+        if row is None:
+            logger.error("Narrator: Cannot create state for unknown run=%s", run_id)
+            raise ValueError(f"Research run not found: {run_id}")
+
+        conversation_id = row["conversation_id"]
+        short_hypothesis = row["short_hypothesis"]
+
         current_state = create_initial_state(
             run_id=run_id,
-            conversation_id=0,  # Placeholder
+            conversation_id=conversation_id,
             status="running",
+            overall_goal=short_hypothesis,
+            hypothesis=short_hypothesis,
         )
 
         # Persist initial state (using the same connection/transaction)
@@ -390,6 +416,8 @@ async def initialize_run_state(
     conversation_id: int,
     overall_goal: Optional[str] = None,
     hypothesis: Optional[str] = None,
+    gpu_type: Optional[str] = None,
+    cost_per_hour_cents: Optional[int] = None,
 ) -> ResearchRunState:
     """
     Initialize state for a new research run.
@@ -402,6 +430,8 @@ async def initialize_run_state(
         conversation_id: Associated conversation ID
         overall_goal: Optional research objective
         hypothesis: Optional hypothesis being tested
+        gpu_type: Optional GPU type
+        cost_per_hour_cents: Optional cost per hour in cents
 
     Returns:
         Initial research run state
@@ -414,6 +444,14 @@ async def initialize_run_state(
         overall_goal=overall_goal,
         hypothesis=hypothesis,
     )
+
+    # Add cost information
+    if gpu_type:
+        initial_state = initial_state.model_copy(update={"gpu_type": gpu_type})
+    if cost_per_hour_cents:
+        initial_state = initial_state.model_copy(
+            update={"cost_per_hour_cents": cost_per_hour_cents}
+        )
 
     # Persist to database
     await db.upsert_research_run_state(run_id=run_id, state=initial_state)

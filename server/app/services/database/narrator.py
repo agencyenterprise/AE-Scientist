@@ -8,7 +8,7 @@ Handles persistence of:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row

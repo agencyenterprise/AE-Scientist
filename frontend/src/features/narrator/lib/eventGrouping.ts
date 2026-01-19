@@ -1,6 +1,6 @@
 /**
  * Event grouping algorithm - Pure functions for detecting and grouping similar events.
- * 
+ *
  * Purpose: Detect sequences of repetitive events (e.g., 300 progress updates during
  * a 5-hour code execution) and group them for better UX.
  */
@@ -18,6 +18,7 @@ export interface SingleEventItem {
 export interface GroupedEventItem {
   type: "grouped";
   events: TimelineEvent[]; // Chronologically ordered, latest last
+  firstEvent: TimelineEvent;
   latestEvent: TimelineEvent;
   count: number;
 }
@@ -26,13 +27,13 @@ export type EventItem = SingleEventItem | GroupedEventItem;
 
 /**
  * Group similar consecutive events together.
- * 
+ *
  * Algorithm:
  * 1. Iterate through events chronologically
  * 2. If event is similar to previous group, add it
  * 3. Otherwise, finalize previous group and start new one
  * 4. Only group if we have 2+ similar events
- * 
+ *
  * @param events Timeline events (should be chronologically sorted)
  * @returns Array of single or grouped event items
  */
@@ -66,10 +67,7 @@ export function groupSimilarEvents(events: TimelineEvent[]): EventItem[] {
 /**
  * Determine if an event should be grouped with the current group.
  */
-function shouldGroupWith(
-  event: TimelineEvent,
-  group: TimelineEvent[]
-): boolean {
+function shouldGroupWith(event: TimelineEvent, group: TimelineEvent[]): boolean {
   if (group.length === 0) return false;
 
   const lastEvent = group[group.length - 1];
@@ -93,10 +91,7 @@ function shouldGroupWith(
 /**
  * Type-specific grouping rules.
  */
-function shouldGroupByType(
-  event: TimelineEvent,
-  lastEvent: TimelineEvent
-): boolean {
+function shouldGroupByType(event: TimelineEvent, lastEvent: TimelineEvent): boolean {
   switch (event.type) {
     case "progress_update":
       // Group progress updates from same stage
@@ -118,9 +113,11 @@ function shouldGroupByType(
       // Group paper generation steps
       return true;
 
+    case "run_started":
     case "stage_started":
     case "stage_completed":
-      // Never group stage transitions (important milestones)
+    case "run_finished":
+      // Never group run lifecycle or stage transitions (important milestones)
       return false;
 
     default:
@@ -140,10 +137,11 @@ function finalizeGroup(group: TimelineEvent[]): EventItem {
   }
 
   const latestEvent = group[group.length - 1]!;
-
+  const firstEvent = group[0]!;
   return {
     type: "grouped",
     events: group,
+    firstEvent,
     latestEvent,
     count: group.length,
   };
@@ -191,6 +189,7 @@ export function formatTimestamp(timestamp: string): string {
  */
 export function getEventTypeLabel(type: string): string {
   const labels: Record<string, string> = {
+    run_started: "Run Started",
     stage_started: "Stage Started",
     stage_completed: "Stage Completed",
     progress_update: "Progress Update",
@@ -198,6 +197,7 @@ export function getEventTypeLabel(type: string): string {
     node_execution_started: "Execution Started",
     node_execution_completed: "Execution Completed",
     paper_generation_step: "Paper Generation",
+    run_finished: "Run Finished",
   };
 
   return labels[type] || type;
@@ -208,6 +208,7 @@ export function getEventTypeLabel(type: string): string {
  */
 export function getEventTypeIcon(type: string): string {
   const icons: Record<string, string> = {
+    run_started: "🎬",
     stage_started: "🚀",
     stage_completed: "✅",
     progress_update: "🔄",
@@ -215,6 +216,7 @@ export function getEventTypeIcon(type: string): string {
     node_execution_started: "▶️",
     node_execution_completed: "⏹️",
     paper_generation_step: "📝",
+    run_finished: "🏁",
   };
 
   return icons[type] || "•";
@@ -225,6 +227,7 @@ export function getEventTypeIcon(type: string): string {
  */
 export function getEventTypeColor(type: string): string {
   const colors: Record<string, string> = {
+    run_started: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     stage_started: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     stage_completed: "bg-green-500/10 text-green-400 border-green-500/20",
     progress_update: "bg-purple-500/10 text-purple-400 border-purple-500/20",
@@ -232,8 +235,8 @@ export function getEventTypeColor(type: string): string {
     node_execution_started: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
     node_execution_completed: "bg-teal-500/10 text-teal-400 border-teal-500/20",
     paper_generation_step: "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    run_finished: "bg-slate-500/10 text-slate-300 border-slate-500/30",
   };
 
   return colors[type] || "bg-gray-500/10 text-gray-400 border-gray-500/20";
 }
-

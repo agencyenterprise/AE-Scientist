@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.api.research_pipeline_event_stream import usd_to_cents
+from app.api.research_pipeline_events import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
@@ -406,6 +407,7 @@ async def create_and_launch_research_run(
     idea_data: IdeaPayloadSource,
     requested_by_first_name: str,
     gpu_types: list[str],
+    conversation_id: int,
 ) -> tuple[str, PodLaunchInfo]:
     db = get_database()
     if not gpu_types:
@@ -422,6 +424,23 @@ async def create_and_launch_research_run(
         container_disk_gb=CONTAINER_DISK_GB,
         volume_disk_gb=WORKSPACE_DISK_GB,
     )
+
+    # Initialize narrator state for this run
+    from app.services.narrator.narrator_service import initialize_run_state
+
+    # Get the run to extract cost info
+    run = await db.get_research_pipeline_run(run_id)
+
+    await initialize_run_state(
+        db=db,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        overall_goal=idea_data.short_hypothesis,
+        hypothesis=idea_data.short_hypothesis,
+        gpu_type=run.gpu_type if run else None,
+        cost_per_hour_cents=int(run.cost * 100) if run and run.cost else None,
+    )
+
     idea_payload = _idea_version_to_payload(idea_data)
 
     config_name = f"{run_id}_config.yaml"
@@ -517,6 +536,7 @@ async def submit_idea_for_research(
             idea_data=cast(IdeaPayloadSource, idea_data),
             requested_by_first_name=requester_first_name,
             gpu_types=[payload.gpu_type],
+            conversation_id=conversation_id,
         )
         return ResearchRunAcceptedResponse(
             run_id=run_id,
@@ -1010,6 +1030,18 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
                 message=stop_message,
             ),
         ),
+    )
+
+    await ingest_narration_event(
+        db,
+        run_id=run_id,
+        event_type="run_finished",
+        event_data={
+            "success": False,
+            "status": "cancelled",
+            "message": stop_message,
+            "reason": "user_cancelled",
+        },
     )
 
     return ResearchRunStopResponse(

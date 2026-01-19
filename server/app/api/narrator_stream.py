@@ -42,7 +42,7 @@ def unregister_narrator_queue(run_id: str, queue: asyncio.Queue[QueuePayload]) -
 def publish_narrator_event(run_id: str, event_type: str, data: Dict[str, Any]) -> None:
     """
     Publish a narrator event to all subscribers for a run.
-    
+
     Args:
         run_id: Research run ID
         event_type: Type of event ("timeline_event", "state_snapshot", or "state_delta")
@@ -51,10 +51,10 @@ def publish_narrator_event(run_id: str, event_type: str, data: Dict[str, Any]) -
     subscribers = _NARRATOR_STREAM_SUBSCRIBERS.get(run_id)
     if not subscribers:
         return
-    
+
     payload: QueuePayload = {"type": event_type, "data": data}
     stale: list[asyncio.Queue[QueuePayload]] = []
-    
+
     for queue in list(subscribers):
         try:
             queue.put_nowait(payload)
@@ -65,10 +65,9 @@ def publish_narrator_event(run_id: str, event_type: str, data: Dict[str, Any]) -
                 run_id,
             )
             stale.append(queue)
-    
+
     for queue in stale:
         subscribers.discard(queue)
-    
+
     if not subscribers:
         _NARRATOR_STREAM_SUBSCRIBERS.pop(run_id, None)
-

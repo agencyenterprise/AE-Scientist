@@ -8332,6 +8332,9 @@
             "items": {
               "oneOf": [
                 {
+                  "$ref": "#/components/schemas/RunStartedEvent"
+                },
+                {
                   "$ref": "#/components/schemas/StageStartedEvent"
                 },
                 {
@@ -8351,6 +8354,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/NodeExecutionCompletedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/RunFinishedEvent"
                 }
               ],
               "discriminator": {
@@ -8361,6 +8367,8 @@
                   "node_result": "#/components/schemas/NodeResultEvent",
                   "paper_generation_step": "#/components/schemas/PaperGenerationStepEvent",
                   "progress_update": "#/components/schemas/ProgressUpdateEvent",
+                  "run_finished": "#/components/schemas/RunFinishedEvent",
+                  "run_started": "#/components/schemas/RunStartedEvent",
                   "stage_completed": "#/components/schemas/StageCompletedEvent",
                   "stage_started": "#/components/schemas/StageStartedEvent"
                 }
@@ -9146,6 +9154,151 @@
         ],
         "title": "RunCompletedPayload"
       },
+      "RunFinishedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_finished"
+            ],
+            "const": "run_finished",
+            "title": "Type",
+            "default": "run_finished"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "description": "Final run status"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Whether the run completed successfully"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "pipeline_completed",
+              "pipeline_error",
+              "heartbeat_timeout",
+              "deadline_exceeded",
+              "user_cancelled",
+              "container_died"
+            ],
+            "title": "Reason",
+            "description": "Why the run finished"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "Human-readable completion message"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Summary of what was accomplished"
+          },
+          "total_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Duration Seconds",
+            "description": "Total run duration in seconds"
+          },
+          "stages_completed": {
+            "type": "integer",
+            "title": "Stages Completed",
+            "description": "Number of stages completed",
+            "default": 0
+          },
+          "total_nodes_executed": {
+            "type": "integer",
+            "title": "Total Nodes Executed",
+            "description": "Total nodes executed",
+            "default": 0
+          },
+          "best_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricCollection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Best result achieved if available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "status",
+          "success",
+          "reason"
+        ],
+        "title": "RunFinishedEvent",
+        "description": "Emitted when the entire research run finishes (success or failure).\n\nEmission Criteria:\n- Triggered by run_finished events from research pipeline\n- Triggered by monitor timeout/failure detection\n- Triggered by user cancellation\n- Final event in the timeline\n\nFrequency: 1 per run (always the last event)"
+      },
       "RunFinishedPayload": {
         "properties": {
           "run_id": {
@@ -9209,6 +9362,85 @@
           "event"
         ],
         "title": "RunLogPayload"
+      },
+      "RunStartedEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier (e.g., '1_initial_implementation')"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_started"
+            ],
+            "const": "run_started",
+            "title": "Type",
+            "default": "run_started"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "gpu_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Type",
+            "description": "GPU type allocated"
+          },
+          "cost_per_hour_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Per Hour Cents",
+            "description": "Cost per hour in cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline"
+        ],
+        "title": "RunStartedEvent",
+        "description": "Emitted when the research run actually starts executing (container is ready).\n\nEmission Criteria:\n- Triggered by run_started events from research pipeline\n- Marks the transition from \"pending\" to \"running\"\n- First event in the timeline (after creation)\n\nFrequency: 1 per run (always the first event)"
       },
       "RunStartedPayload": {
         "properties": {
