@@ -21,6 +21,7 @@ Pattern:
 import asyncio
 import logging
 from typing import Any, Dict, Optional
+from pydantic import BaseModel
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
@@ -296,7 +297,6 @@ async def _process_single_event(
         # Step 6: Publish state delta to SSE subscribers (only changed fields)
         if accumulated_changes:
             # Serialize the changes for JSON transmission
-            from pydantic import BaseModel
             
             serialized_changes: Dict[str, Any] = {}
             for key, value in accumulated_changes.items():
