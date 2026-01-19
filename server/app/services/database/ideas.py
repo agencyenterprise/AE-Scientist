@@ -277,19 +277,21 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 await cursor.execute(
                     """
                     SELECT
-                        idea_id,
-                        id as version_id,
-                        title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        experiments,
-                        expected_outcome,
-                        risk_factors_and_limitations,
-                        is_manual_edit,
-                        version_number,
-                        created_at
-                    FROM idea_versions
+                        iv.idea_id,
+                        i.conversation_id,
+                        iv.id as version_id,
+                        iv.title,
+                        iv.short_hypothesis,
+                        iv.related_work,
+                        iv.abstract,
+                        iv.experiments,
+                        iv.expected_outcome,
+                        iv.risk_factors_and_limitations,
+                        iv.is_manual_edit,
+                        iv.version_number,
+                        iv.created_at
+                    FROM idea_versions iv
+                    JOIN ideas i ON iv.idea_id = i.id
                     WHERE idea_id = %s
                     ORDER BY version_number DESC
                 """,
@@ -299,6 +301,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
         return [
             IdeaVersionData(
                 idea_id=row["idea_id"],
+                conversation_id=row["conversation_id"],
                 version_id=row["version_id"],
                 title=row["title"],
                 short_hypothesis=row["short_hypothesis"],

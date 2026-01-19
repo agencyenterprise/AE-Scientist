@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from app.api.research_pipeline_event_stream import usd_to_cents
-from app.services.narrator.narrator_service import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
@@ -41,6 +40,7 @@ from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
 from app.services.research_pipeline.runpod_manager import (
     CONTAINER_DISK_GB,
     POD_READY_POLL_INTERVAL_SECONDS,
@@ -424,9 +424,6 @@ async def create_and_launch_research_run(
         container_disk_gb=CONTAINER_DISK_GB,
         volume_disk_gb=WORKSPACE_DISK_GB,
     )
-
-    # Initialize narrator state for this run
-    from app.services.narrator.narrator_service import initialize_run_state
 
     # Get the run to extract cost info
     run = await db.get_research_pipeline_run(run_id)
