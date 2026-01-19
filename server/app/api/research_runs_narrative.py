@@ -68,13 +68,6 @@ async def get_narrative_state(
     """
     # Authenticate user
     get_current_user(request)
-
-    # Check if narrator is enabled
-    if not settings.ENABLE_NARRATOR:
-        raise HTTPException(
-            status_code=503, detail="Narrator service is not enabled. Set ENABLE_NARRATOR=true"
-        )
-
     # Get state from database
     state = await db.get_research_run_state(run_id)
 
@@ -109,12 +102,6 @@ async def narrative_stream(
     """
     # Authenticate user
     get_current_user(request)
-
-    # Check if narrator is enabled
-    if not settings.ENABLE_NARRATOR:
-        raise HTTPException(
-            status_code=503, detail="Narrator service is not enabled. Set ENABLE_NARRATOR=true"
-        )
 
     def _format_sse_event(event_type: str, data: str) -> str:
         """Format event in SSE protocol format."""
