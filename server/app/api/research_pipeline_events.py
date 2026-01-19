@@ -47,10 +47,11 @@ from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEven
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
-from app.services import get_database
+from app.services import DatabaseManager, get_database
 from app.services.database.ideas import IdeaVersionData
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.database.users import UserData
+from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline import (
     RunPodError,
     fetch_pod_billing_summary,
@@ -411,6 +412,7 @@ def _next_stream_event_id() -> int:
 async def ingest_stage_progress(
     payload: StageProgressPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
@@ -443,11 +445,20 @@ async def ingest_stage_progress(
         ),
     )
 
+    # Narrator: Ingest event for timeline
+    await ingest_narration_event(
+        db,
+        run_id=payload.run_id,
+        event_type="stage_progress",
+        event_data=event.model_dump(),
+    )
+
 
 @router.post("/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_substage_completed(
     payload: SubstageCompletedPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
@@ -478,11 +489,20 @@ async def ingest_substage_completed(
         ),
     )
 
+    # Narrator: Ingest event for timeline
+    await ingest_narration_event(
+        db,
+        run_id=payload.run_id,
+        event_type="substage_completed",
+        event_data=event.model_dump(),
+    )
+
 
 @router.post("/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_paper_generation_progress(
     payload: PaperGenerationProgressPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
@@ -510,6 +530,14 @@ async def ingest_paper_generation_progress(
             type="paper_generation_progress",
             data=paper_event,
         ),
+    )
+
+    # Narrator: Ingest event for timeline
+    await ingest_narration_event(
+        db,
+        run_id=payload.run_id,
+        event_type="paper_generation_progress",
+        event_data=event.model_dump(),
     )
 
 
@@ -625,6 +653,7 @@ async def ingest_substage_summary(
 async def ingest_best_node_selection(
     payload: BestNodeSelectionPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     reasoning_preview = (
@@ -651,6 +680,14 @@ async def ingest_best_node_selection(
             type="best_node_selection",
             data=best_node,
         ),
+    )
+
+    # Narrator: Ingest event for timeline
+    await ingest_narration_event(
+        db,
+        run_id=payload.run_id,
+        event_type="best_node_selection",
+        event_data=event.model_dump(),
     )
 
 
@@ -793,6 +830,14 @@ async def ingest_running_code(
         ),
     )
 
+    # Ingest into narrator
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="running_code",
+        event_data=event.model_dump(),
+    )
+
 
 @router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_completed(
@@ -821,6 +866,14 @@ async def ingest_run_completed(
                 ),
             ),
         ),
+    )
+
+    # Ingest into narrator
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="run_completed",
+        event_data=event.model_dump(),
     )
 
 
@@ -873,6 +926,19 @@ async def ingest_run_started(
             data=run_event,
         ),
     )
+
+    # Ingest into narrator to update state with started_running_at
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="run_started",
+        event_data={
+            "started_running_at": now.isoformat(),
+            "gpu_type": run.gpu_type,
+            "cost_per_hour_cents": int(run.cost * 100) if run.cost else None,
+        },
+    )
+
     logger.info("RP run started: run=%s", payload.run_id)
 
 
@@ -932,11 +998,23 @@ async def ingest_run_finished(
         SSECompleteEvent(
             type="complete",
             data=ResearchRunCompleteData(
-                status=new_status,  # type: ignore[arg-type]
+                status=new_status,
                 success=payload.success,
                 message=payload.message,
             ),
         ),
+    )
+
+    # Ingest into narrator for timeline and queue cleanup
+    await ingest_narration_event(
+        cast(DatabaseManager, db),
+        run_id=payload.run_id,
+        event_type="run_finished",
+        event_data={
+            "success": payload.success,
+            "status": new_status,
+            "message": payload.message,
+        },
     )
 
     if run.pod_id:
@@ -1180,6 +1258,7 @@ async def _retry_run_after_gpu_shortage(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
             gpu_types=retry_gpu_types,
+            conversation_id=idea_version.conversation_id or -1,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",

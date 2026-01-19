@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowLeft, Loader2, StopCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ArrowLeft, BookOpen, Loader2, StopCircle } from "lucide-react";
+import { useRouter, useParams } from "next/navigation";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
 
@@ -30,6 +30,8 @@ export function ResearchRunHeader({
   onStopRun,
 }: ResearchRunHeaderProps) {
   const router = useRouter();
+  const params = useParams();
+  const runId = params?.runId as string;
 
   return (
     <div className="flex items-center gap-4">
@@ -43,6 +45,16 @@ export function ResearchRunHeader({
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-white max-w-3xl">{title}</h1>
           {getStatusBadge(status, "lg")}
+          <button
+            onClick={() => router.push(`/research/${runId}/narrative`)}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-2 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"
+          >
+            <BookOpen className="h-4 w-4" />
+            Narrative View
+            <span className="ml-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+              BETA
+            </span>
+          </button>
           {canStopRun && (
             <button
               onClick={onStopRun}
@@ -67,6 +79,7 @@ export function ResearchRunHeader({
           {runNumber ? `Run ${runNumber} • ` : ""}
           Created {formatRelativeTime(createdAt)}
         </p>
+
         {stopError && (
           <p className="mt-2 text-sm text-red-400" role="alert">
             {stopError}

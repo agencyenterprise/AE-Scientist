@@ -7,6 +7,7 @@ from typing import Dict, Optional, Protocol, cast
 
 from psycopg import AsyncConnection
 
+from app.api.research_pipeline_events import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
@@ -14,6 +15,7 @@ from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
+from app.services.database import DatabaseManager
 from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.research_pipeline import (
@@ -381,6 +383,19 @@ class ResearchPipelineMonitor:
                 ),
             ),
         )
+
+        await ingest_narration_event(
+            cast(DatabaseManager, db),
+            run_id=run.run_id,
+            event_type="run_finished",
+            event_data={
+                "success": False,
+                "status": "failed",
+                "message": message,
+                "reason": reason,
+            },
+        )
+
         if run.pod_id:
             logger.info(
                 "Triggering pod artifacts upload for run %s before pod termination (trigger=%s, pod_id=%s).",

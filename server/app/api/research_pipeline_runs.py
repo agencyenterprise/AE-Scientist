@@ -32,6 +32,7 @@ from app.models import (
     ResearchRunSubstageSummary,
     TreeVizItem,
 )
+from app.models.narrator_state import ResearchRunStatus
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
@@ -39,6 +40,7 @@ from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
 from app.services.research_pipeline.runpod_manager import (
     CONTAINER_DISK_GB,
     POD_READY_POLL_INTERVAL_SECONDS,
@@ -405,6 +407,7 @@ async def create_and_launch_research_run(
     idea_data: IdeaPayloadSource,
     requested_by_first_name: str,
     gpu_types: list[str],
+    conversation_id: int,
 ) -> tuple[str, PodLaunchInfo]:
     db = get_database()
     if not gpu_types:
@@ -421,6 +424,20 @@ async def create_and_launch_research_run(
         container_disk_gb=CONTAINER_DISK_GB,
         volume_disk_gb=WORKSPACE_DISK_GB,
     )
+
+    # Get the run to extract cost info
+    run = await db.get_research_pipeline_run(run_id)
+
+    await initialize_run_state(
+        db=db,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        overall_goal=idea_data.short_hypothesis,
+        hypothesis=idea_data.short_hypothesis,
+        gpu_type=run.gpu_type if run else None,
+        cost_per_hour_cents=int(run.cost * 100) if run and run.cost else None,
+    )
+
     idea_payload = _idea_version_to_payload(idea_data)
 
     config_name = f"{run_id}_config.yaml"
@@ -516,6 +533,7 @@ async def submit_idea_for_research(
             idea_data=cast(IdeaPayloadSource, idea_data),
             requested_by_first_name=requester_first_name,
             gpu_types=[payload.gpu_type],
+            conversation_id=conversation_id,
         )
         return ResearchRunAcceptedResponse(
             run_id=run_id,
@@ -950,7 +968,10 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
             SSECompleteEvent(
                 type="complete",
                 data=ResearchRunCompleteData(
-                    status=run.status,  # type: ignore[arg-type]
+                    status=cast(
+                        ResearchRunStatus,
+                        run.status,
+                    ),
                     success=run.status == "completed",
                     message=message,
                 ),
@@ -1006,6 +1027,18 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
                 message=stop_message,
             ),
         ),
+    )
+
+    await ingest_narration_event(
+        db,
+        run_id=run_id,
+        event_type="run_finished",
+        event_data={
+            "success": False,
+            "status": "cancelled",
+            "message": stop_message,
+            "reason": "user_cancelled",
+        },
     )
 
     return ResearchRunStopResponse(
