@@ -45,15 +45,12 @@ export function formatProgress(progress: number): string {
   return `${Math.round(progress * 100)}%`;
 }
 
-export function getEventsByStage(
-  events: TimelineEvent[],
-  stageId: string
-): TimelineEvent[] {
-  return events.filter((event) => event.stage === stageId);
+export function getEventsByStage(events: TimelineEvent[], stageId: string): TimelineEvent[] {
+  return events.filter(event => event.stage === stageId);
 }
 
 export function getLatestEvent(events: TimelineEvent[]): TimelineEvent | null {
-  return events.length > 0 ? events[events.length - 1] ?? null : null;
+  return events.length > 0 ? (events[events.length - 1] ?? null) : null;
 }
 
 // ============================================================================
@@ -80,9 +77,7 @@ export interface StageGroup {
  * Group timeline events by stage, maintaining chronological order.
  * Returns stages in the order they appear in state.stages.
  */
-export function groupEventsByStage(
-  state: ResearchRunState | null
-): StageGroup[] {
+export function groupEventsByStage(state: ResearchRunState | null): StageGroup[] {
   if (!state) return [];
 
   const stages = state.stages || [];
@@ -100,7 +95,7 @@ export function groupEventsByStage(
   }
 
   // Build stage groups in order
-  return stages.map((stageGoal) => {
+  return stages.map(stageGoal => {
     const stageId = stageGoal.stage;
     const stageEvents = eventsByStage.get(stageId) || [];
 
@@ -112,25 +107,18 @@ export function groupEventsByStage(
       status = "in_progress";
     } else if (stageEvents.length > 0) {
       // Check if stage has completed event
-      const hasCompleted = stageEvents.some(
-        (e) => e.type === "stage_completed"
-      );
+      const hasCompleted = stageEvents.some(e => e.type === "stage_completed");
       status = hasCompleted ? "completed" : "in_progress";
     }
 
     // Calculate time range
     const timeRange = {
       start: stageEvents.length > 0 ? stageEvents[0]?.timestamp || null : null,
-      end:
-        stageEvents.length > 0
-          ? stageEvents[stageEvents.length - 1]?.timestamp || null
-          : null,
+      end: stageEvents.length > 0 ? stageEvents[stageEvents.length - 1]?.timestamp || null : null,
     };
 
     // Count active nodes for this stage
-    const activeNodeCount = activeNodes.filter(
-      (node) => node.stage === stageId
-    ).length;
+    const activeNodeCount = activeNodes.filter(node => node.stage === stageId).length;
 
     return {
       stageId,
@@ -152,7 +140,7 @@ export function getStageMetadata(
   stageId: string
 ): Omit<StageGroup, "events"> | null {
   const groups = groupEventsByStage(state);
-  const group = groups.find((g) => g.stageId === stageId);
+  const group = groups.find(g => g.stageId === stageId);
   if (!group) return null;
 
   const { events: _events, ...metadata } = group;
@@ -169,11 +157,7 @@ export function getStages(state: ResearchRunState | null): StageGoal[] {
 /**
  * Get a specific stage goal by ID.
  */
-export function getStageGoal(
-  state: ResearchRunState | null,
-  stageId: string
-): StageGoal | null {
+export function getStageGoal(state: ResearchRunState | null, stageId: string): StageGoal | null {
   const stages = getStages(state);
-  return stages.find((s) => s.stage === stageId) || null;
+  return stages.find(s => s.stage === stageId) || null;
 }
-

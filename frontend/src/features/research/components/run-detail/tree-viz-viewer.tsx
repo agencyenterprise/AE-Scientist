@@ -87,7 +87,14 @@ const DIVIDER_OFFSET = 2.0; // Offset from calculated position
 const LABEL_BG_HEIGHT = 5;
 const LABEL_BG_PADDING_TOP = 3.5;
 
-export function TreeVizViewer({ viz, artifacts, conversationId, runId, stageId, bestNodeId }: Props) {
+export function TreeVizViewer({
+  viz,
+  artifacts,
+  conversationId,
+  runId,
+  stageId,
+  bestNodeId,
+}: Props) {
   const payload = viz.viz as TreeVizPayload;
 
   // Determine initial selection: use bestNodeId if available and valid, otherwise default to 0

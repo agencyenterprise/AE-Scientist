@@ -1,5 +1,3 @@
-import { ResearchRunStreamEvent } from "@/types";
-
 /**
  * SSE frame type.
  *

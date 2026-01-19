@@ -22,7 +22,13 @@ interface Props {
   substageSummaries?: SubstageSummary[];
 }
 
-export function TreeVizCard({ treeViz, conversationId, runId, artifacts, substageSummaries }: Props) {
+export function TreeVizCard({
+  treeViz,
+  conversationId,
+  runId,
+  artifacts,
+  substageSummaries,
+}: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
 
