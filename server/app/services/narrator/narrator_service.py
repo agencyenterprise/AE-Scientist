@@ -68,6 +68,8 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
     logger.info("Narrator: Started queue processor for run=%s", run_id)
 
     while True:
+        event_type: str = "<not_set>"
+        event_data: Dict[str, Any] = {}
         try:
             # Check if run is complete and queue is empty BEFORE waiting for next event
             if _run_completed.get(run_id, False) and queue.qsize() == 0:
@@ -96,8 +98,10 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
             break
         except Exception as exc:
             logger.exception(
-                "Narrator: Error in queue processor for run=%s: %s",
+                "Narrator: Error in queue processor for run=%s type=%s event_data=%r: %s",
                 run_id,
+                event_type,
+                event_data,
                 exc,
             )
             # Mark task as done even on error to prevent queue blocking

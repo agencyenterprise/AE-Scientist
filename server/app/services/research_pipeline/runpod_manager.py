@@ -877,10 +877,9 @@ def _upload_runpod_artifacts_via_ssh_sync(
     remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
     remote_command = (
         "cd /workspace/AE-Scientist/research_pipeline && "
-        "source .venv/bin/activate && "
-        f"{remote_env} python upload_file.py "
+        f"{remote_env} .venv/bin/python upload_file.py "
         "--file-path /workspace/research_pipeline.log --artifact-type run_log || true && "
-        f"{remote_env} python upload_folder.py "
+        f"{remote_env} .venv/bin/python upload_folder.py "
         "--folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
         "--artifact-type workspace_archive "
         "--archive-name 0-run-workspace.zip"

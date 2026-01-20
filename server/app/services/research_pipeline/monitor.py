@@ -258,7 +258,7 @@ class ResearchPipelineMonitor:
                 db,
                 run,
                 "Pipeline did not start within the grace period.",
-                "pipeline_monitor",
+                "deadline_exceeded",
             )
 
     async def _handle_running_run(
@@ -270,7 +270,7 @@ class ResearchPipelineMonitor:
                 db,
                 run,
                 f"Pipeline exceeded maximum runtime of {self._max_runtime.total_seconds() / 3600:.1f} hours.",
-                "pipeline_monitor",
+                "deadline_exceeded",
             )
             return
 
@@ -296,7 +296,7 @@ class ResearchPipelineMonitor:
                     db,
                     run,
                     "Pipeline failed to send an initial heartbeat.",
-                    "pipeline_monitor",
+                    "heartbeat_timeout",
                 )
             return
 
@@ -316,7 +316,7 @@ class ResearchPipelineMonitor:
                     db,
                     run,
                     "Pipeline heartbeats exceeded failure threshold.",
-                    "pipeline_monitor",
+                    "heartbeat_timeout",
                 )
             return
 
@@ -344,7 +344,7 @@ class ResearchPipelineMonitor:
                         db,
                         run,
                         f"Pod status is {status}; terminating run.",
-                        "pipeline_monitor",
+                        "container_died",
                     )
             except RunPodError as exc:
                 logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
