@@ -15,6 +15,7 @@ from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEven
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
+from app.models.sse import ResearchRunTerminationStatusEvent as SSETerminationStatusEvent
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ StreamEventModel = Union[
     SSESubstageSummaryEvent,
     SSERunEvent,
     SSECompleteEvent,
+    SSETerminationStatusEvent,
     SSELogEvent,
     SSEArtifactEvent,
     SSEReviewCompletedEvent,

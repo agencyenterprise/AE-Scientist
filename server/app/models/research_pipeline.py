@@ -3,11 +3,12 @@ Pydantic models for research pipeline run APIs.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from app.models.conversations import ResearchRunSummary
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRunEvent as DBResearchRunEvent,
@@ -95,9 +96,37 @@ class ResearchRunInfo(ResearchRunSummary):
     start_deadline_at: Optional[str] = Field(
         None, description="ISO timestamp representing the start deadline window"
     )
+    termination_status: Literal["none", "requested", "in_progress", "terminated", "failed"] = Field(
+        ...,
+        description="Termination workflow status for the associated pod cleanup.",
+    )
+    termination_last_error: Optional[str] = Field(
+        None,
+        description="Last termination workflow error, if any.",
+    )
 
     @staticmethod
-    def from_db_record(run: ResearchPipelineRun) -> "ResearchRunInfo":
+    def from_db_record(
+        *,
+        run: ResearchPipelineRun,
+        termination: ResearchPipelineRunTermination | None,
+    ) -> "ResearchRunInfo":
+        termination_status: Literal["none", "requested", "in_progress", "terminated", "failed"] = (
+            "none"
+        )
+        termination_last_error: Optional[str] = None
+
+        if termination is not None:
+            if termination.status == "requested":
+                termination_status = "requested"
+            elif termination.status == "in_progress":
+                termination_status = "in_progress"
+            elif termination.status == "terminated":
+                termination_status = "terminated"
+            elif termination.status == "failed":
+                termination_status = "failed"
+            termination_last_error = termination.last_error
+
         return ResearchRunInfo(
             run_id=run.run_id,
             status=run.status,
@@ -116,6 +145,8 @@ class ResearchRunInfo(ResearchRunSummary):
             created_at=run.created_at.isoformat(),
             updated_at=run.updated_at.isoformat(),
             start_deadline_at=run.start_deadline_at.isoformat() if run.start_deadline_at else None,
+            termination_status=termination_status,
+            termination_last_error=termination_last_error,
         )
 
 

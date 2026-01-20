@@ -9,6 +9,7 @@ interface ResearchRunHeaderProps {
   title: string;
   runNumber: number | null;
   status: string;
+  terminationStatus: string;
   createdAt: string;
   canStopRun: boolean;
   stopPending: boolean;
@@ -23,6 +24,7 @@ export function ResearchRunHeader({
   title,
   runNumber,
   status,
+  terminationStatus,
   createdAt,
   canStopRun,
   stopPending,
@@ -45,6 +47,21 @@ export function ResearchRunHeader({
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold text-white max-w-3xl">{title}</h1>
           {getStatusBadge(status, "lg")}
+          {(terminationStatus === "requested" || terminationStatus === "in_progress") && (
+            <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-200">
+              Terminating
+            </span>
+          )}
+          {terminationStatus === "terminated" && (
+            <span className="inline-flex items-center rounded-full border border-slate-500/40 bg-slate-500/10 px-3 py-1 text-sm font-medium text-slate-200">
+              Terminated
+            </span>
+          )}
+          {terminationStatus === "failed" && (
+            <span className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-sm font-medium text-red-200">
+              Termination failed
+            </span>
+          )}
           <button
             onClick={() => router.push(`/research/${runId}/narrative`)}
             className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-2 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"

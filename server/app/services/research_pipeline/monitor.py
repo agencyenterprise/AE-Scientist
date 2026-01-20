@@ -11,23 +11,22 @@ from app.api.research_pipeline_events import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
-from app.models.sse import ResearchRunCompleteData
-from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.billing import CreditTransaction
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
-from app.services.research_pipeline import (
-    RunPodError,
-    terminate_pod,
-    upload_runpod_artifacts_via_ssh,
-)
+from app.services.research_pipeline import RunPodError
+from app.services.research_pipeline.pod_termination_worker import PodTerminationWorker
 from app.services.research_pipeline.runpod_manager import RunPodManager
+from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
+from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 
 
 class ResearchRunStore(Protocol):
     async def list_active_research_pipeline_runs(self) -> list[ResearchPipelineRun]: ...
+    async def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]: ...
 
     async def update_research_pipeline_run(
         self,
@@ -52,6 +51,13 @@ class ResearchRunStore(Protocol):
         occurred_at: datetime,
     ) -> None: ...
 
+    async def enqueue_research_pipeline_run_termination(
+        self,
+        *,
+        run_id: str,
+        trigger: str,
+    ) -> ResearchPipelineRunTermination: ...
+
     async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
 
     async def get_user_wallet_balance(self, user_id: int) -> int: ...
@@ -72,6 +78,10 @@ logger = logging.getLogger(__name__)
 
 _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1 = 184467
 _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2 = 991733
+
+_TERMINATION_LEASE_SECONDS = 50 * 60
+_TERMINATION_STUCK_SECONDS = 60 * 60
+_TERMINATION_MAX_CONCURRENCY = 8
 
 
 class PipelineMonitorError(Exception):
@@ -145,7 +155,16 @@ class ResearchPipelineMonitor:
                 return False
 
             logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
+            termination_task: asyncio.Task[None] | None = None
             try:
+                termination_task = asyncio.create_task(
+                    PodTerminationWorker(
+                        runpod_manager=self._runpod_manager,
+                        max_concurrency=_TERMINATION_MAX_CONCURRENCY,
+                        poll_interval_seconds=self._poll_interval,
+                    ).run(stop_event=stop_event),
+                    name="PodTerminationDispatcher",
+                )
                 while not stop_event.is_set():
                     try:
                         await self._check_runs()
@@ -156,6 +175,10 @@ class ResearchPipelineMonitor:
                     except asyncio.TimeoutError:
                         continue
             finally:
+                if termination_task is not None:
+                    termination_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await termination_task
                 await self._release_global_monitor_lock(conn=conn)
                 logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
             return True
@@ -372,17 +395,6 @@ class ResearchPipelineMonitor:
                 data=run_event,
             ),
         )
-        publish_stream_event(
-            run.run_id,
-            SSECompleteEvent(
-                type="complete",
-                data=ResearchRunCompleteData(
-                    status="failed",
-                    success=False,
-                    message=message,
-                ),
-            ),
-        )
 
         await ingest_narration_event(
             cast(DatabaseManager, db),
@@ -396,24 +408,12 @@ class ResearchPipelineMonitor:
             },
         )
 
-        if run.pod_id:
-            logger.info(
-                "Triggering pod artifacts upload for run %s before pod termination (trigger=%s, pod_id=%s).",
-                run.run_id,
-                reason,
-                run.pod_id,
-            )
-            await self._upload_pod_artifacts(run=run, reason=reason)
-            try:
-                await terminate_pod(pod_id=run.pod_id)
-            except RuntimeError:
-                logger.exception("Failed to terminate pod %s", run.pod_id)
-            await self._record_pod_billing_event(
-                db=db,
-                run_id=run.run_id,
-                pod_id=run.pod_id,
-                context=f"{reason}_failure",
-            )
+        termination = await db.enqueue_research_pipeline_run_termination(
+            run_id=run.run_id,
+            trigger=f"pipeline_monitor_failure:{reason}",
+        )
+        publish_termination_status_event(run_id=run.run_id, termination=termination)
+        notify_termination_requested()
 
     async def _bill_run_if_needed(
         self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
@@ -509,31 +509,6 @@ class ResearchPipelineMonitor:
             metadata=metadata,
             occurred_at=datetime.now(timezone.utc),
         )
-
-    async def _upload_pod_artifacts(self, run: ResearchPipelineRun, *, reason: str) -> None:
-        if not run.public_ip or not run.ssh_port:
-            logger.info(
-                "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
-                run.run_id,
-                reason,
-            )
-            return
-        try:
-            logger.info(
-                "Uploading pod artifacts for run %s (trigger=%s, host=%s, port=%s).",
-                run.run_id,
-                reason,
-                run.public_ip,
-                run.ssh_port,
-            )
-            await upload_runpod_artifacts_via_ssh(
-                host=run.public_ip,
-                port=run.ssh_port,
-                run_id=run.run_id,
-                trigger=f"pipeline_monitor_failure:{reason}",
-            )
-        except (RuntimeError, OSError) as exc:
-            logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
 
     async def _maybe_backfill_ssh_info(
         self,

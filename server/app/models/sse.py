@@ -274,6 +274,16 @@ class ResearchRunRunEvent(BaseModel):
     data: ResearchRunEvent
 
 
+class ResearchRunTerminationStatusData(BaseModel):
+    status: Literal["none", "requested", "in_progress", "terminated", "failed"]
+    last_error: Optional[str] = None
+
+
+class ResearchRunTerminationStatusEvent(BaseModel):
+    type: Literal["termination_status"]
+    data: ResearchRunTerminationStatusData
+
+
 class ResearchRunLogEvent(BaseModel):
     type: Literal["log"]
     data: ResearchRunLogEntry
@@ -369,6 +379,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunCompleteEvent,
         ResearchRunStageProgressEvent,
         ResearchRunRunEvent,
+        ResearchRunTerminationStatusEvent,
         ResearchRunLogEvent,
         ResearchRunArtifactEvent,
         ResearchRunReviewCompletedEvent,

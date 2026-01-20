@@ -3740,6 +3740,17 @@ export interface components {
              * @description ISO timestamp representing the start deadline window
              */
             start_deadline_at?: string | null;
+            /**
+             * Termination Status
+             * @description Termination workflow status for the associated pod cleanup.
+             * @enum {string}
+             */
+            termination_status: "none" | "requested" | "in_progress" | "terminated" | "failed";
+            /**
+             * Termination Last Error
+             * @description Last termination workflow error, if any.
+             */
+            termination_last_error?: string | null;
         };
         /** ResearchRunInitialEvent */
         ResearchRunInitialEvent: {
@@ -4205,7 +4216,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -4370,6 +4381,25 @@ export interface components {
              * @description ISO timestamp when the run was last updated
              */
             updated_at: string;
+        };
+        /** ResearchRunTerminationStatusData */
+        ResearchRunTerminationStatusData: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "none" | "requested" | "in_progress" | "terminated" | "failed";
+            /** Last Error */
+            last_error?: string | null;
+        };
+        /** ResearchRunTerminationStatusEvent */
+        ResearchRunTerminationStatusEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "termination_status";
+            data: components["schemas"]["ResearchRunTerminationStatusData"];
         };
         /** ReviewCompletedEvent */
         ReviewCompletedEvent: {

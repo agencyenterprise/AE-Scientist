@@ -804,8 +804,7 @@ function ActiveExecutionCard({
                   {runfileStartedAtLabel}
                 </p>
                 <p className="text-[11px] text-slate-300">
-                  Execution time{" "}
-                  <span className="font-semibold">{formattedRunfileDuration}</span>
+                  Execution time <span className="font-semibold">{formattedRunfileDuration}</span>
                 </p>
               </div>
               <CopyToClipboardButton text={runfileExecution.code} label="Copy runfile code" />

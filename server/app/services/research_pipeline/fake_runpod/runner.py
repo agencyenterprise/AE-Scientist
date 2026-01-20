@@ -738,7 +738,7 @@ class FakeRunner:
             "- `runfile.py`: main script to execute\n"
         )
         fake_runfile_code = (
-            "from __future__ import annotations\n\n"
+            "\n\n"
             "def main() -> None:\n"
             "    print('Hello from fake runfile execution')\n\n"
             "main()\n"

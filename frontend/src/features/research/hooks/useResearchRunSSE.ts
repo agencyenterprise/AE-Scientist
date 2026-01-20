@@ -18,6 +18,7 @@ import type {
   StageSkipWindow,
   StageSkipWindowUpdate,
   LlmReviewResponse,
+  TerminationStatusData,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -34,6 +35,7 @@ interface UseResearchRunSSEOptions {
   onPaperGenerationProgress: (event: PaperGenerationEvent) => void;
   onComplete: (status: string) => void;
   onRunEvent?: (event: unknown) => void;
+  onTerminationStatus?: (event: TerminationStatusData) => void;
   onBestNodeSelection?: (event: BestNodeSelection) => void;
   onSubstageSummary?: (event: SubstageSummary) => void;
   onSubstageCompleted?: (event: SubstageEvent) => void;
@@ -69,6 +71,18 @@ type ApiCodeExecutionCompletedData =
 type ApiStageSkipWindow = ApiComponents["schemas"]["ResearchRunStageSkipWindow"];
 
 function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
+  const terminationRaw = run as unknown as {
+    termination_status?: string;
+    termination_last_error?: string | null;
+  };
+  const termination_status =
+    terminationRaw.termination_status === "requested" ||
+    terminationRaw.termination_status === "in_progress" ||
+    terminationRaw.termination_status === "terminated" ||
+    terminationRaw.termination_status === "failed"
+      ? terminationRaw.termination_status
+      : "none";
+
   return {
     run_id: run.run_id,
     status: run.status,
@@ -86,6 +100,8 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     created_at: run.created_at,
     updated_at: run.updated_at,
     start_deadline_at: run.start_deadline_at ?? null,
+    termination_status,
+    termination_last_error: terminationRaw.termination_last_error ?? null,
   };
 }
 
@@ -238,6 +254,7 @@ export function useResearchRunSSE({
   onPaperGenerationProgress,
   onComplete,
   onRunEvent,
+  onTerminationStatus,
   onHwCostEstimate,
   onHwCostActual,
   onBestNodeSelection,
@@ -351,6 +368,9 @@ export function useResearchRunSSE({
               case "run_event":
                 onRunEvent?.(event.data);
                 break;
+              case "termination_status":
+                onTerminationStatus?.(event.data as TerminationStatusData);
+                break;
               case "log":
                 onLog(event.data as LogEntry);
                 break;
@@ -450,6 +470,7 @@ export function useResearchRunSSE({
     onArtifact,
     onSubstageCompleted,
     onRunEvent,
+    onTerminationStatus,
     onBestNodeSelection,
     onSubstageSummary,
     onPaperGenerationProgress,

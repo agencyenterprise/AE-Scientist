@@ -61,4 +61,3 @@ export function CopyToClipboardButton({ text, label }: CopyToClipboardButtonProp
     </Tooltip>
   );
 }
-

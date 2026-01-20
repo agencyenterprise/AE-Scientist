@@ -17,6 +17,7 @@ from .llm_defaults import LLMDefaultsMixin
 from .llm_token_usages import LlmTokenUsagesMixin
 from .narrator import NarratorMixin
 from .prompts import PromptsMixin
+from .research_pipeline_run_termination import ResearchPipelineRunTerminationMixin
 from .research_pipeline_runs import ResearchPipelineRunsMixin
 from .rp_artifacts import ResearchPipelineArtifactsMixin
 from .rp_events import ResearchPipelineEventsMixin
@@ -38,6 +39,7 @@ class DatabaseManager(
     ImportedConversationSummariesMixin,
     ChatSummariesMixin,
     ResearchPipelineRunsMixin,
+    ResearchPipelineRunTerminationMixin,
     ResearchPipelineArtifactsMixin,
     ResearchPipelineEventsMixin,
     ResearchPipelineLlmReviewsMixin,

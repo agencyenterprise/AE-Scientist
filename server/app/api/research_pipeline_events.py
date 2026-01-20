@@ -37,8 +37,6 @@ from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedData
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
-from app.models.sse import ResearchRunCompleteData
-from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
@@ -49,16 +47,18 @@ from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstage
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
 from app.services.database.ideas import IdeaVersionData
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline import (
     RunPodError,
     fetch_pod_billing_summary,
-    terminate_pod,
     upload_runpod_artifacts_via_ssh,
 )
 from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
+from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
+from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 
 
 class ResearchRunStore(Protocol):
@@ -86,6 +86,13 @@ class ResearchRunStore(Protocol):
         metadata: Dict[str, object],
         occurred_at: datetime,
     ) -> None: ...
+
+    async def enqueue_research_pipeline_run_termination(
+        self,
+        *,
+        run_id: str,
+        trigger: str,
+    ) -> ResearchPipelineRunTermination: ...
 
     async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
 
@@ -993,17 +1000,6 @@ async def ingest_run_finished(
             data=run_event,
         ),
     )
-    publish_stream_event(
-        payload.run_id,
-        SSECompleteEvent(
-            type="complete",
-            data=ResearchRunCompleteData(
-                status=new_status,
-                success=payload.success,
-                message=payload.message,
-            ),
-        ),
-    )
 
     # Ingest into narrator for timeline and queue cleanup
     await ingest_narration_event(
@@ -1017,29 +1013,12 @@ async def ingest_run_finished(
         },
     )
 
-    if run.pod_id:
-        try:
-            logger.info(
-                "Run %s finished (success=%s, message=%s); terminating pod %s.",
-                payload.run_id,
-                payload.success,
-                payload.message,
-                run.pod_id,
-            )
-            # This call is also performed by the research pipeline when the paper was generated.
-            # But we want to be sure to upload the log file and workspace archive so we call it again here.
-            await _upload_pod_artifacts_if_possible(run, trigger="pipeline_event_finish")
-            await terminate_pod(pod_id=run.pod_id)
-            logger.info("Terminated pod %s for run %s", run.pod_id, payload.run_id)
-        except RuntimeError as exc:
-            logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
-        finally:
-            await _record_pod_billing_event(
-                db,
-                run_id=payload.run_id,
-                pod_id=run.pod_id,
-                context="pipeline_event_finish",
-            )
+    termination = await db.enqueue_research_pipeline_run_termination(
+        run_id=payload.run_id,
+        trigger="pipeline_event_finish",
+    )
+    publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    notify_termination_requested()
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
@@ -1163,24 +1142,12 @@ async def ingest_gpu_shortage(
         },
         occurred_at=now,
     )
-    if run.pod_id:
-        await _upload_pod_artifacts_if_possible(run, trigger="gpu_shortage")
-        try:
-            await terminate_pod(pod_id=run.pod_id)
-            logger.info(
-                "Terminated pod %s for run %s after GPU shortage.",
-                run.pod_id,
-                payload.run_id,
-            )
-        except RuntimeError as exc:
-            logger.warning("Failed to terminate pod %s: %s", run.pod_id, exc)
-        finally:
-            await _record_pod_billing_event(
-                db,
-                run_id=payload.run_id,
-                pod_id=run.pod_id,
-                context="gpu_shortage",
-            )
+    termination = await db.enqueue_research_pipeline_run_termination(
+        run_id=payload.run_id,
+        trigger="gpu_shortage",
+    )
+    publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    notify_termination_requested()
     await _retry_run_after_gpu_shortage(db=db, failed_run=run)
 
 

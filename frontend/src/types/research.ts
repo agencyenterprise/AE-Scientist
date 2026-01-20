@@ -57,6 +57,13 @@ export interface ResearchGpuTypesResponse {
 // Status type for UI styling
 export type ResearchRunStatus = "pending" | "running" | "completed" | "failed";
 
+export type ResearchRunTerminationStatus =
+  | "none"
+  | "requested"
+  | "in_progress"
+  | "terminated"
+  | "failed";
+
 // ==========================================
 // Research Run Detail Types (for [runId] page)
 // ==========================================
@@ -79,6 +86,8 @@ export interface ResearchRunInfoApi {
   created_at: string;
   updated_at: string;
   start_deadline_at: string | null;
+  termination_status: ResearchRunTerminationStatus;
+  termination_last_error: string | null;
 }
 
 export interface StageProgressApi {
@@ -193,6 +202,18 @@ export interface ResearchRunInfo {
   created_at: string;
   updated_at: string;
   start_deadline_at: string | null;
+  termination_status: ResearchRunTerminationStatus;
+  termination_last_error: string | null;
+}
+
+export interface TerminationStatusData {
+  status: ResearchRunTerminationStatus;
+  last_error?: string | null;
+}
+
+export interface TerminationStatusStreamEvent {
+  type: "termination_status";
+  data: TerminationStatusData;
 }
 
 export interface HwCostEstimateData {
