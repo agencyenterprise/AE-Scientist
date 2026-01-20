@@ -7580,6 +7580,30 @@
             ],
             "title": "Start Deadline At",
             "description": "ISO timestamp representing the start deadline window"
+          },
+          "termination_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "requested",
+              "in_progress",
+              "terminated",
+              "failed"
+            ],
+            "title": "Termination Status",
+            "description": "Termination workflow status for the associated pod cleanup."
+          },
+          "termination_last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termination Last Error",
+            "description": "Last termination workflow error, if any."
           }
         },
         "type": "object",
@@ -7590,7 +7614,8 @@
           "idea_version_id",
           "cost",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "termination_status"
         ],
         "title": "ResearchRunInfo"
       },
@@ -8649,6 +8674,9 @@
             "$ref": "#/components/schemas/ResearchRunRunEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunTerminationStatusEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunLogEvent"
           },
           {
@@ -8717,7 +8745,8 @@
             "stage_skip_window": "#/components/schemas/ResearchRunStageSkipWindowEvent",
             "substage_completed": "#/components/schemas/ResearchRunSubstageCompletedEvent",
             "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
-            "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent"
+            "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent",
+            "termination_status": "#/components/schemas/ResearchRunTerminationStatusEvent"
           }
         }
       },
@@ -9012,6 +9041,58 @@
         ],
         "title": "ResearchRunSummary",
         "description": "Lightweight overview of a research pipeline run."
+      },
+      "ResearchRunTerminationStatusData": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "requested",
+              "in_progress",
+              "terminated",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ResearchRunTerminationStatusData"
+      },
+      "ResearchRunTerminationStatusEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "termination_status"
+            ],
+            "const": "termination_status",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunTerminationStatusData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunTerminationStatusEvent"
       },
       "ReviewCompletedEvent": {
         "properties": {

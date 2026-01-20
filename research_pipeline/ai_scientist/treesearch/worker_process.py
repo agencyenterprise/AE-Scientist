@@ -213,7 +213,7 @@ def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
     """
     return "\n".join(
         [
-            "from __future__ import annotations",
+            "",
             "",
             "import random",
             "from pathlib import Path",

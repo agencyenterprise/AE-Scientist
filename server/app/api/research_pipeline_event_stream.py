@@ -359,9 +359,12 @@ async def _build_initial_stream_payload(
         ResearchRunStageSkipWindow.from_db_record(record).model_dump()
         for record in await db.list_stage_skip_windows(run_id=run_id)
     ]
+    termination = await db.get_research_pipeline_run_termination(run_id=run_id)
 
     return {
-        "run": ResearchRunInfo.from_db_record(current_run).model_dump(),
+        "run": ResearchRunInfo.from_db_record(
+            run=current_run, termination=termination
+        ).model_dump(),
         "stage_progress": stage_events,
         "logs": log_events,
         "substage_events": substage_events,

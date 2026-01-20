@@ -19,6 +19,7 @@ import type {
   ResearchRunCodeExecution,
   StageSkipWindow,
   StageSkipWindowUpdate,
+  TerminationStatusData,
   LlmReviewResponse,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
@@ -419,13 +420,32 @@ export function useResearchRunDetails({
     console.error("SSE error:", errorMsg);
   }, []);
 
+  const handleTerminationStatus = useCallback((event: TerminationStatusData) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            run: {
+              ...prev.run,
+              termination_status: event.status,
+              termination_last_error: event.last_error ?? null,
+            },
+          }
+        : null
+    );
+  }, []);
+
   // Use SSE for real-time updates
   useResearchRunSSE({
     runId,
     conversationId,
     enabled:
       !!conversationId &&
-      (details?.run.status === "running" || details?.run.status === "pending" || !details),
+      (details?.run.status === "running" ||
+        details?.run.status === "pending" ||
+        details?.run.termination_status === "requested" ||
+        details?.run.termination_status === "in_progress" ||
+        !details),
     onInitialData: handleInitialData,
     onStageProgress: handleStageProgress,
     onLog: handleLog,
@@ -434,6 +454,7 @@ export function useResearchRunDetails({
     onRunUpdate: handleRunUpdate,
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
+    onTerminationStatus: handleTerminationStatus,
     onHwCostEstimate: handleHwCostEstimate,
     onHwCostActual: handleHwCostActual,
     onBestNodeSelection: handleBestNodeSelection,

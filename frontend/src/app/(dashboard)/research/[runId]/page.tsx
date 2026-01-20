@@ -172,6 +172,7 @@ export default function ResearchRunDetailPage() {
           title={title}
           runNumber={runNumber}
           status={run.status}
+          terminationStatus={run.termination_status}
           createdAt={run.created_at}
           canStopRun={canStopRun}
           stopPending={stopPending}
