@@ -47,11 +47,8 @@ from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstage
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
 from app.services.database.ideas import IdeaVersionData
-from app.services.database.research_pipeline_runs import (
-    PodUpdateInfo,
-    ResearchPipelineRun,
-    ResearchPipelineRunTermination,
-)
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline import (
@@ -60,6 +57,7 @@ from app.services.research_pipeline import (
     upload_runpod_artifacts_via_ssh,
 )
 from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
+from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
 from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 
 
@@ -1020,6 +1018,7 @@ async def ingest_run_finished(
         trigger="pipeline_event_finish",
     )
     publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    notify_termination_requested()
 
 
 @router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
@@ -1148,6 +1147,7 @@ async def ingest_gpu_shortage(
         trigger="gpu_shortage",
     )
     publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    notify_termination_requested()
     await _retry_run_after_gpu_shortage(db=db, failed_run=run)
 
 

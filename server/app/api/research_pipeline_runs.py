@@ -56,6 +56,7 @@ from app.services.research_pipeline.runpod_manager import (
     send_execution_feedback_via_ssh,
     upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
 from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 from app.services.s3_service import get_s3_service
 
@@ -916,6 +917,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         trigger="user_stop",
     )
     publish_termination_status_event(run_id=run_id, termination=termination)
+    notify_termination_requested()
 
     # Idempotent stop: if already terminal, do not error—just return and (best-effort) push SSE so UI updates.
     if run.status not in ("pending", "running"):

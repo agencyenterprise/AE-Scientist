@@ -3,28 +3,24 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Literal, Optional, Protocol, cast
+from typing import Dict, Optional, Protocol, cast
 
-import sentry_sdk
 from psycopg import AsyncConnection
 
 from app.api.research_pipeline_events import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
-from app.models.sse import ResearchRunCompleteData
-from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
 from app.services.database.billing import CreditTransaction
-from app.services.database.research_pipeline_runs import (
-    PodUpdateInfo,
-    ResearchPipelineRun,
-    ResearchPipelineRunTermination,
-)
-from app.services.research_pipeline import RunPodError, upload_runpod_artifacts_via_ssh
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
+from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.research_pipeline import RunPodError
+from app.services.research_pipeline.pod_termination_worker import PodTerminationWorker
 from app.services.research_pipeline.runpod_manager import RunPodManager
+from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
 from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 
 
@@ -62,55 +58,6 @@ class ResearchRunStore(Protocol):
         trigger: str,
     ) -> ResearchPipelineRunTermination: ...
 
-    async def claim_research_pipeline_run_termination(
-        self,
-        *,
-        lease_owner: str,
-        lease_seconds: int,
-        stuck_seconds: int,
-    ) -> ResearchPipelineRunTermination | None: ...
-
-    async def get_research_pipeline_run_termination(
-        self,
-        *,
-        run_id: str,
-    ) -> ResearchPipelineRunTermination | None: ...
-
-    async def reschedule_research_pipeline_run_termination(
-        self,
-        *,
-        run_id: str,
-        attempts: int,
-        error: str,
-    ) -> None: ...
-
-    async def mark_research_pipeline_run_termination_artifacts_uploaded(
-        self,
-        *,
-        run_id: str,
-    ) -> None: ...
-
-    async def mark_research_pipeline_run_termination_pod_terminated(
-        self,
-        *,
-        run_id: str,
-    ) -> None: ...
-
-    async def mark_research_pipeline_run_termination_terminated(
-        self,
-        *,
-        run_id: str,
-        attempts: int,
-    ) -> None: ...
-
-    async def mark_research_pipeline_run_termination_failed(
-        self,
-        *,
-        run_id: str,
-        attempts: int,
-        error: str,
-    ) -> None: ...
-
     async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
 
     async def get_user_wallet_balance(self, user_id: int) -> int: ...
@@ -132,9 +79,9 @@ logger = logging.getLogger(__name__)
 _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_1 = 184467
 _PIPELINE_MONITOR_ADVISORY_LOCK_KEY_2 = 991733
 
-_TERMINATION_MAX_UPLOAD_ATTEMPTS = 3
 _TERMINATION_LEASE_SECONDS = 50 * 60
 _TERMINATION_STUCK_SECONDS = 60 * 60
+_TERMINATION_MAX_CONCURRENCY = 8
 
 
 class PipelineMonitorError(Exception):
@@ -208,11 +155,17 @@ class ResearchPipelineMonitor:
                 return False
 
             logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
-            termination_task: asyncio.Task[None] | None = None
+            termination_tasks: list[asyncio.Task[None]] = []
             try:
-                termination_task = asyncio.create_task(
-                    self._run_termination_worker(stop_event=stop_event),
-                    name="PipelineTerminationWorker",
+                termination_tasks.append(
+                    asyncio.create_task(
+                        PodTerminationWorker(
+                            runpod_manager=self._runpod_manager,
+                            max_concurrency=_TERMINATION_MAX_CONCURRENCY,
+                            poll_interval_seconds=self._poll_interval,
+                        ).run(stop_event=stop_event),
+                        name="PodTerminationDispatcher",
+                    )
                 )
                 while not stop_event.is_set():
                     try:
@@ -224,10 +177,10 @@ class ResearchPipelineMonitor:
                     except asyncio.TimeoutError:
                         continue
             finally:
-                if termination_task is not None:
-                    termination_task.cancel()
+                for task in termination_tasks:
+                    task.cancel()
                     with suppress(asyncio.CancelledError):
-                        await termination_task
+                        await task
                 await self._release_global_monitor_lock(conn=conn)
                 logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
             return True
@@ -462,6 +415,7 @@ class ResearchPipelineMonitor:
             trigger=f"pipeline_monitor_failure:{reason}",
         )
         publish_termination_status_event(run_id=run.run_id, termination=termination)
+        notify_termination_requested()
 
     async def _bill_run_if_needed(
         self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
@@ -556,309 +510,6 @@ class ResearchPipelineMonitor:
             event_type="pod_billing_summary",
             metadata=metadata,
             occurred_at=datetime.now(timezone.utc),
-        )
-
-    async def _upload_pod_artifacts(self, run: ResearchPipelineRun, *, reason: str) -> None:
-        if not run.public_ip or not run.ssh_port:
-            logger.info(
-                "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
-                run.run_id,
-                reason,
-            )
-            return
-        try:
-            logger.info(
-                "Uploading pod artifacts for run %s (trigger=%s, host=%s, port=%s).",
-                run.run_id,
-                reason,
-                run.public_ip,
-                run.ssh_port,
-            )
-            await upload_runpod_artifacts_via_ssh(
-                host=run.public_ip,
-                port=run.ssh_port,
-                run_id=run.run_id,
-                trigger=f"pipeline_monitor_failure:{reason}",
-            )
-        except (RuntimeError, OSError) as exc:
-            logger.exception("Failed to upload pod log via SSH for run %s: %s", run.run_id, exc)
-
-    async def _run_termination_worker(self, *, stop_event: asyncio.Event) -> None:
-        lease_owner = f"pipeline_monitor:{os.getpid()}"
-        logger.info(
-            "Termination worker started (lease_owner=%s lease_seconds=%s stuck_seconds=%s max_attempts=%s).",
-            lease_owner,
-            _TERMINATION_LEASE_SECONDS,
-            _TERMINATION_STUCK_SECONDS,
-            _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-        )
-        while not stop_event.is_set():
-            db = cast("ResearchRunStore", get_database())
-            termination = await db.claim_research_pipeline_run_termination(
-                lease_owner=lease_owner,
-                lease_seconds=_TERMINATION_LEASE_SECONDS,
-                stuck_seconds=_TERMINATION_STUCK_SECONDS,
-            )
-            if termination is None:
-                try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
-                except asyncio.TimeoutError:
-                    continue
-                continue
-
-            logger.info(
-                "Claimed termination work (run_id=%s status=%s attempts=%s artifacts_uploaded=%s pod_terminated=%s).",
-                termination.run_id,
-                termination.status,
-                termination.attempts,
-                bool(termination.artifacts_uploaded_at),
-                bool(termination.pod_terminated_at),
-            )
-            await self._process_termination(db=db, termination=termination)
-
-    async def _process_termination(
-        self,
-        *,
-        db: "ResearchRunStore",
-        termination: ResearchPipelineRunTermination,
-    ) -> None:
-        run_id = termination.run_id
-        logger.info(
-            "Processing termination (run_id=%s status=%s attempts=%s).",
-            run_id,
-            termination.status,
-            termination.attempts,
-        )
-        run = await db.get_research_pipeline_run(run_id)
-        if run is None:
-            logger.warning(
-                "Termination refers to missing run; marking failed (run_id=%s).",
-                run_id,
-            )
-            await db.mark_research_pipeline_run_termination_failed(
-                run_id=run_id,
-                attempts=termination.attempts,
-                error=f"Run {run_id} not found while processing termination.",
-            )
-            updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-            publish_termination_status_event(run_id=run_id, termination=updated)
-            return
-
-        attempt_number = int(termination.attempts or 0) + 1
-        logger.info(
-            "Termination attempt %s/%s (run_id=%s pod_id=%s).",
-            attempt_number,
-            _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-            run_id,
-            run.pod_id,
-        )
-
-        # Step A: best-effort artifact upload (skip if already succeeded).
-        upload_failed_error: str | None = None
-        if (
-            termination.artifacts_uploaded_at is None
-            and attempt_number <= _TERMINATION_MAX_UPLOAD_ATTEMPTS
-        ):
-            if run.public_ip and run.ssh_port:
-                try:
-                    logger.info(
-                        "Uploading artifacts via SSH (run_id=%s host=%s port=%s attempt=%s/%s).",
-                        run_id,
-                        run.public_ip,
-                        run.ssh_port,
-                        attempt_number,
-                        _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                    )
-                    await upload_runpod_artifacts_via_ssh(
-                        host=run.public_ip,
-                        port=run.ssh_port,
-                        run_id=run_id,
-                        trigger="termination_worker",
-                    )
-                    await db.mark_research_pipeline_run_termination_artifacts_uploaded(
-                        run_id=run_id
-                    )
-                    logger.info("Artifacts upload succeeded (run_id=%s).", run_id)
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception(
-                        "Artifacts upload failed (run_id=%s attempt=%s/%s).",
-                        run_id,
-                        attempt_number,
-                        _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                    )
-                    upload_failed_error = f"Artifact upload failed for run {run_id}: {exc}"
-            else:
-                upload_failed_error = f"Artifact upload skipped for run {run_id}: missing SSH info."
-                logger.warning("%s", upload_failed_error)
-
-            if (
-                upload_failed_error is not None
-                and attempt_number < _TERMINATION_MAX_UPLOAD_ATTEMPTS
-            ):
-                logger.info(
-                    "Rescheduling termination due to upload failure (run_id=%s attempt=%s/%s).",
-                    run_id,
-                    attempt_number,
-                    _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                )
-                await db.reschedule_research_pipeline_run_termination(
-                    run_id=run_id,
-                    attempts=attempt_number,
-                    error=upload_failed_error,
-                )
-                updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                publish_termination_status_event(run_id=run_id, termination=updated)
-                return
-            if upload_failed_error is not None:
-                logger.warning(
-                    "Proceeding to pod termination despite upload failure (run_id=%s attempt=%s/%s).",
-                    run_id,
-                    attempt_number,
-                    _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                )
-        elif termination.artifacts_uploaded_at is not None:
-            logger.debug("Artifacts already uploaded; skipping upload (run_id=%s).", run_id)
-        else:
-            logger.debug(
-                "Skipping upload due to attempt limit (run_id=%s attempt=%s/%s).",
-                run_id,
-                attempt_number,
-                _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-            )
-
-        # Step B: terminate pod (always attempt on final attempt even if upload failed).
-        if run.pod_id:
-            try:
-                logger.info("Terminating pod (run_id=%s pod_id=%s).", run_id, run.pod_id)
-                await self._runpod_manager.delete_pod(run.pod_id)
-                await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
-                logger.info(
-                    "Pod termination acknowledged (run_id=%s pod_id=%s).", run_id, run.pod_id
-                )
-            except RunPodError as exc:
-                if exc.status == 404:
-                    logger.info(
-                        "Pod already gone (404); treating as terminated (run_id=%s pod_id=%s).",
-                        run_id,
-                        run.pod_id,
-                    )
-                    await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
-                else:
-                    error_message = (
-                        f"RunPod pod termination failed for run {run_id} "
-                        f"(pod_id={run.pod_id}, status={exc.status}): {exc}"
-                    )
-                    logger.warning("%s", error_message)
-                    if attempt_number < _TERMINATION_MAX_UPLOAD_ATTEMPTS:
-                        logger.info(
-                            "Rescheduling termination due to pod termination error (run_id=%s attempt=%s/%s).",
-                            run_id,
-                            attempt_number,
-                            _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                        )
-                        await db.reschedule_research_pipeline_run_termination(
-                            run_id=run_id,
-                            attempts=attempt_number,
-                            error=error_message,
-                        )
-                        updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                        publish_termination_status_event(run_id=run_id, termination=updated)
-                        return
-
-                    sentry_sdk.capture_message(error_message, level="error")
-                    await db.mark_research_pipeline_run_termination_failed(
-                        run_id=run_id,
-                        attempts=attempt_number,
-                        error=error_message,
-                    )
-                    updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                    publish_termination_status_event(run_id=run_id, termination=updated)
-                    logger.warning(
-                        "Termination failed; emitting complete (run_id=%s status=%s).",
-                        run_id,
-                        run.status,
-                    )
-                    publish_stream_event(
-                        run_id,
-                        SSECompleteEvent(
-                            type="complete",
-                            data=ResearchRunCompleteData(
-                                status=cast(
-                                    Literal[
-                                        "pending",
-                                        "running",
-                                        "completed",
-                                        "failed",
-                                        "cancelled",
-                                    ],
-                                    run.status,
-                                ),
-                                success=run.status == "completed",
-                                message=run.error_message,
-                            ),
-                        ),
-                    )
-                    return
-        else:
-            logger.info(
-                "Run has no pod_id; treating as terminated (run_id=%s).",
-                run_id,
-            )
-            await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
-
-        logger.info("Marking termination as terminated (run_id=%s).", run_id)
-        await db.mark_research_pipeline_run_termination_terminated(
-            run_id=run_id,
-            attempts=attempt_number,
-        )
-        updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-        publish_termination_status_event(run_id=run_id, termination=updated)
-
-        if upload_failed_error is not None and attempt_number >= _TERMINATION_MAX_UPLOAD_ATTEMPTS:
-            sentry_sdk.capture_message(
-                f"Run {run_id} terminated without successful artifact upload: {upload_failed_error}",
-                level="warning",
-            )
-            logger.warning(
-                "Run terminated without successful artifact upload (run_id=%s).",
-                run_id,
-            )
-
-        if run.pod_id:
-            logger.info(
-                "Recording pod billing summary (run_id=%s pod_id=%s).",
-                run_id,
-                run.pod_id,
-            )
-            await self._record_pod_billing_event(
-                db=db,
-                run_id=run_id,
-                pod_id=run.pod_id,
-                context="termination_worker",
-            )
-
-        logger.info(
-            "Termination complete; emitting complete SSE (run_id=%s status=%s).", run_id, run.status
-        )
-        publish_stream_event(
-            run_id,
-            SSECompleteEvent(
-                type="complete",
-                data=ResearchRunCompleteData(
-                    status=cast(
-                        Literal[
-                            "pending",
-                            "running",
-                            "completed",
-                            "failed",
-                            "cancelled",
-                        ],
-                        run.status,
-                    ),
-                    success=run.status == "completed",
-                    message=run.error_message,
-                ),
-            ),
         )
 
     async def _maybe_backfill_ssh_info(

@@ -8,11 +8,11 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.models.conversations import ResearchRunSummary
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.research_pipeline_runs import (
     ResearchPipelineRunEvent as DBResearchRunEvent,
 )
-from app.services.database.research_pipeline_runs import ResearchPipelineRunTermination
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import (
     BestNodeReasoningEvent,

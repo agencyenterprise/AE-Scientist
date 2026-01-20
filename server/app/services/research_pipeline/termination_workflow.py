@@ -2,7 +2,7 @@ from typing import Literal, cast
 
 from app.api.research_pipeline_stream import publish_stream_event
 from app.models.sse import ResearchRunTerminationStatusData, ResearchRunTerminationStatusEvent
-from app.services.database.research_pipeline_runs import ResearchPipelineRunTermination
+from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 
 
 def build_termination_status_payload(
