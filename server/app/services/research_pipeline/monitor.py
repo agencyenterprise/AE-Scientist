@@ -155,17 +155,15 @@ class ResearchPipelineMonitor:
                 return False
 
             logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
-            termination_tasks: list[asyncio.Task[None]] = []
+            termination_task: asyncio.Task[None] | None = None
             try:
-                termination_tasks.append(
-                    asyncio.create_task(
-                        PodTerminationWorker(
-                            runpod_manager=self._runpod_manager,
-                            max_concurrency=_TERMINATION_MAX_CONCURRENCY,
-                            poll_interval_seconds=self._poll_interval,
-                        ).run(stop_event=stop_event),
-                        name="PodTerminationDispatcher",
-                    )
+                termination_task = asyncio.create_task(
+                    PodTerminationWorker(
+                        runpod_manager=self._runpod_manager,
+                        max_concurrency=_TERMINATION_MAX_CONCURRENCY,
+                        poll_interval_seconds=self._poll_interval,
+                    ).run(stop_event=stop_event),
+                    name="PodTerminationDispatcher",
                 )
                 while not stop_event.is_set():
                     try:
@@ -177,10 +175,10 @@ class ResearchPipelineMonitor:
                     except asyncio.TimeoutError:
                         continue
             finally:
-                for task in termination_tasks:
-                    task.cancel()
+                if termination_task is not None:
+                    termination_task.cancel()
                     with suppress(asyncio.CancelledError):
-                        await task
+                        await termination_task
                 await self._release_global_monitor_lock(conn=conn)
                 logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
             return True
