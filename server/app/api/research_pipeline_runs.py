@@ -50,6 +50,7 @@ from app.services.research_pipeline.runpod_manager import (
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     get_pipeline_startup_grace_seconds,
+    get_supported_gpu_type_prices,
     get_supported_gpu_types,
     launch_research_pipeline_run,
     request_stage_skip_via_ssh,
@@ -107,6 +108,7 @@ class LaunchResearchRunRequest(BaseModel):
 
 class GpuTypeListResponse(BaseModel):
     gpu_types: list[str]
+    gpu_prices: dict[str, float | None]
 
 
 @router.get(
@@ -114,7 +116,12 @@ class GpuTypeListResponse(BaseModel):
     response_model=GpuTypeListResponse,
 )
 async def list_research_gpu_types() -> GpuTypeListResponse:
-    return GpuTypeListResponse(gpu_types=get_supported_gpu_types())
+    gpu_types = get_supported_gpu_types()
+    prices = await get_supported_gpu_type_prices()
+    return GpuTypeListResponse(
+        gpu_types=gpu_types,
+        gpu_prices={gpu_type: prices.get(gpu_type) for gpu_type in gpu_types},
+    )
 
 
 class ResearchRunStopResponse(BaseModel):

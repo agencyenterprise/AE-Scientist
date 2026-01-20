@@ -52,6 +52,7 @@ export interface ResearchRunListResponse {
 
 export interface ResearchGpuTypesResponse {
   gpu_types: string[];
+  gpu_prices: Record<string, number | null>;
 }
 
 // Status type for UI styling

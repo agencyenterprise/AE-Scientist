@@ -44,6 +44,7 @@ interface UseProjectDraftStateReturn {
     risk_factors_and_limitations: string[];
   }) => Promise<void>;
   gpuTypes: string[];
+  gpuPrices: Record<string, number | null>;
   selectedGpuType: string | null;
   isGpuTypeLoading: boolean;
   setSelectedGpuType: (gpuType: string) => void;
@@ -67,8 +68,14 @@ export function useProjectDraftState({
   // Compose sub-hooks
   const dataState = useProjectDraftData({ conversation });
   const editState = useProjectDraftEdit();
-  const { gpuTypes, selectedGpuType, isGpuTypeLoading, refreshGpuTypes, setSelectedGpuType } =
-    useGpuSelection();
+  const {
+    gpuTypes,
+    gpuPrices,
+    selectedGpuType,
+    isGpuTypeLoading,
+    refreshGpuTypes,
+    setSelectedGpuType,
+  } = useGpuSelection();
 
   // Modal and project creation state (kept local as they're simple)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -204,6 +211,7 @@ export function useProjectDraftState({
     handleConfirmCreateProject,
     updateProjectDraft: dataState.updateProjectDraft,
     gpuTypes,
+    gpuPrices,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,

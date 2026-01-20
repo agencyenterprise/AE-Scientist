@@ -2238,6 +2238,10 @@ export interface components {
         GpuTypeListResponse: {
             /** Gpu Types */
             gpu_types: string[];
+            /** Gpu Prices */
+            gpu_prices: {
+                [key: string]: number | null;
+            };
         };
         /** HTTPValidationError */
         HTTPValidationError: {

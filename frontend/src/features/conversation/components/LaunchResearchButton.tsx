@@ -22,6 +22,7 @@ export function LaunchResearchButton({
     handleLaunchClick,
     handleConfirmLaunch,
     gpuTypes,
+    gpuPrices,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,
@@ -43,6 +44,7 @@ export function LaunchResearchButton({
         onConfirm={handleConfirmLaunch}
         isLoading={isLaunching}
         availableGpuTypes={gpuTypes}
+        gpuPrices={gpuPrices}
         selectedGpuType={selectedGpuType}
         onSelectGpuType={setSelectedGpuType}
         isGpuTypeLoading={isGpuTypeLoading}
