@@ -33,6 +33,7 @@ dependencies = [
     "psutil>=7.2.1",
     "clerk-backend-api>=1.4.1",
     "pyjwt[crypto]>=2.10.1",
+    "runpod>=1.8.1",
 ]
 
 [dependency-groups]

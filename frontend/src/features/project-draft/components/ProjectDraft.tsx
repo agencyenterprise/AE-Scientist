@@ -236,6 +236,7 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
         onClose={projectState.handleCloseCreateModal}
         onConfirm={handleConfirmCreateProject}
         availableGpuTypes={projectState.gpuTypes}
+        gpuPrices={projectState.gpuPrices}
         selectedGpuType={projectState.selectedGpuType}
         onSelectGpuType={projectState.setSelectedGpuType}
         isGpuTypeLoading={projectState.isGpuTypeLoading}

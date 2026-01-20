@@ -5,6 +5,7 @@ import type { ResearchGpuTypesResponse } from "@/types";
 
 interface UseGpuSelectionResult {
   gpuTypes: string[];
+  gpuPrices: Record<string, number | null>;
   selectedGpuType: string | null;
   isGpuTypeLoading: boolean;
   refreshGpuTypes: () => Promise<void>;
@@ -13,6 +14,7 @@ interface UseGpuSelectionResult {
 
 export function useGpuSelection(): UseGpuSelectionResult {
   const [gpuTypes, setGpuTypes] = useState<string[]>([]);
+  const [gpuPrices, setGpuPrices] = useState<Record<string, number | null>>({});
   const [selectedGpuType, setSelectedGpuType] = useState<string | null>(null);
   const [isGpuTypeLoading, setIsGpuTypeLoading] = useState(true);
 
@@ -23,7 +25,9 @@ export function useGpuSelection(): UseGpuSelectionResult {
         "/conversations/research/gpu-types"
       );
       const list = response.gpu_types ?? [];
+      const prices = response.gpu_prices ?? {};
       setGpuTypes(list);
+      setGpuPrices(prices);
       setSelectedGpuType(previous => {
         if (previous && list.includes(previous)) {
           return previous;
@@ -36,6 +40,7 @@ export function useGpuSelection(): UseGpuSelectionResult {
       // eslint-disable-next-line no-console
       console.error("Failed to load GPU types", error);
       setGpuTypes([]);
+      setGpuPrices({});
       setSelectedGpuType(null);
     } finally {
       setIsGpuTypeLoading(false);
@@ -52,6 +57,7 @@ export function useGpuSelection(): UseGpuSelectionResult {
 
   return {
     gpuTypes,
+    gpuPrices,
     selectedGpuType,
     isGpuTypeLoading,
     refreshGpuTypes,

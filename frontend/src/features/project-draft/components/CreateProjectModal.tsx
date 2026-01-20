@@ -9,9 +9,16 @@ interface CreateProjectModalProps {
   onConfirm: () => Promise<void>;
   isLoading?: boolean;
   availableGpuTypes: string[];
+  gpuPrices: Record<string, number | null>;
   selectedGpuType: string | null;
   onSelectGpuType: (gpuType: string) => void;
   isGpuTypeLoading?: boolean;
+}
+
+function formatHourlyPrice(price: number | null | undefined): string | null {
+  if (price === null || price === undefined) return null;
+  if (!Number.isFinite(price)) return null;
+  return `$${price.toFixed(2)}/hr`;
 }
 
 export function CreateProjectModal({
@@ -20,12 +27,14 @@ export function CreateProjectModal({
   onConfirm,
   isLoading = false,
   availableGpuTypes,
+  gpuPrices,
   selectedGpuType,
   onSelectGpuType,
   isGpuTypeLoading = false,
 }: CreateProjectModalProps) {
   const [error, setError] = useState("");
   const isConfirmDisabled = isLoading || isGpuTypeLoading || !selectedGpuType;
+  const selectedPriceLabel = selectedGpuType ? formatHourlyPrice(gpuPrices[selectedGpuType]) : null;
 
   const handleConfirm = async () => {
     setError("");
@@ -95,16 +104,25 @@ export function CreateProjectModal({
                       Select a GPU
                     </option>
                   )}
-                  {availableGpuTypes.map(gpuType => (
-                    <option key={gpuType} value={gpuType}>
-                      {gpuType}
-                    </option>
-                  ))}
+                  {availableGpuTypes.map(gpuType => {
+                    const priceLabel = formatHourlyPrice(gpuPrices[gpuType]);
+                    const optionLabel = priceLabel ? `${gpuType} — ${priceLabel}` : gpuType;
+                    return (
+                      <option key={gpuType} value={gpuType}>
+                        {optionLabel}
+                      </option>
+                    );
+                  })}
                 </select>
               ) : (
                 <div className="text-sm text-[var(--danger)]">
                   No GPU types are currently available. Please try again later.
                 </div>
+              )}
+              {selectedGpuType && (
+                <p className="text-xs text-muted-foreground">
+                  Estimated cost: {selectedPriceLabel ?? "unavailable"} (USD/hour)
+                </p>
               )}
             </div>
           </div>

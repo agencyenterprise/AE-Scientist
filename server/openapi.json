@@ -5107,11 +5107,26 @@
             },
             "type": "array",
             "title": "Gpu Types"
+          },
+          "gpu_prices": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Gpu Prices"
           }
         },
         "type": "object",
         "required": [
-          "gpu_types"
+          "gpu_types",
+          "gpu_prices"
         ],
         "title": "GpuTypeListResponse"
       },

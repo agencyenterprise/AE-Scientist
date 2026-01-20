@@ -13,8 +13,14 @@ export function useLaunchResearch(conversationId: number | null) {
   const router = useRouter();
   const [isLaunchModalOpen, setIsLaunchModalOpen] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
-  const { gpuTypes, selectedGpuType, isGpuTypeLoading, refreshGpuTypes, setSelectedGpuType } =
-    useGpuSelection();
+  const {
+    gpuTypes,
+    gpuPrices,
+    selectedGpuType,
+    isGpuTypeLoading,
+    refreshGpuTypes,
+    setSelectedGpuType,
+  } = useGpuSelection();
 
   const handleLaunchClick = () => {
     void refreshGpuTypes();
@@ -74,6 +80,7 @@ export function useLaunchResearch(conversationId: number | null) {
     handleLaunchClick,
     handleConfirmLaunch,
     gpuTypes,
+    gpuPrices,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,
