@@ -457,10 +457,9 @@ export function ResearchPipelineStages({
             stageExecution.status === "running" &&
             extractStageSlug(stageExecution.stage_name) === stage.key;
 
-          const displayMax =
-            info.maxIterations ?? (info.iteration !== null ? info.iteration + 1 : 0);
+          const displayMax = info.maxIterations ?? info.iteration ?? 0;
           const displayIteration =
-            info.iteration !== null ? Math.min(info.iteration + 1, displayMax) : null;
+            info.iteration !== null ? Math.min(info.iteration, displayMax) : null;
 
           const canShowSkipButton = Boolean(
             stageSkipState[stage.key] &&

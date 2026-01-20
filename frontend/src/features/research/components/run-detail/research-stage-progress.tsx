@@ -11,7 +11,7 @@ interface ResearchStageProgressProps {
  */
 export function ResearchStageProgress({ progress }: ResearchStageProgressProps) {
   const progressPercent = Math.round(progress.progress * 100);
-  const iterationDisplay = Math.min(progress.iteration + 1, progress.max_iterations);
+  const iterationDisplay = Math.min(progress.iteration, progress.max_iterations);
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
