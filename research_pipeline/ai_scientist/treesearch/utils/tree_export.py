@@ -38,6 +38,20 @@ def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
             yield (node.step if node.step is not None else -1, c.step if c.step is not None else -1)
 
 
+def _read_codex_task_markdown(*, node: Node) -> str:
+    exp_results_dir = node.exp_results_dir
+    if not exp_results_dir:
+        return ""
+    try:
+        task_path = Path(exp_results_dir) / "codex_task.md"
+        if not task_path.exists():
+            return ""
+        return task_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        logger.debug("Failed reading codex_task.md for exp_results_dir=%s", exp_results_dir)
+        return ""
+
+
 def _emit_tree_viz_best_node_event(*, journal: Journal, node: Node) -> None:
     """Emit a metric-only best-node event so DB mirrors the tree visualization."""
     try:
@@ -162,8 +176,10 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         _emit_tree_viz_best_node_event(journal=jou, node=best_node)
     metrics: list[dict[str, object] | None] = []
     is_best_node = []
+    codex_task: list[str] = []
 
     for n in jou.nodes:
+        codex_task.append(_read_codex_task_markdown(node=n))
         if n.metric:
             # Pass the entire metric structure for the new format
             if isinstance(n.metric.value, dict) and "metric_names" in n.metric.value:
@@ -269,6 +285,12 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         tmp["metrics"] = metrics
     except Exception as e:
         logger.error(f"Error setting metrics: {e}")
+        raise
+
+    try:
+        tmp["codex_task"] = codex_task
+    except Exception as e:
+        logger.error(f"Error setting codex_task: {e}")
         raise
 
     try:

@@ -17,6 +17,7 @@ import {
   NODE_TYPE_LONG_DESCRIPTIONS,
   BorderStyle,
 } from "@/shared/lib/tree-colors";
+import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 import { NodeTypesLegend } from "./NodeTypesLegend";
 import { NodeStrategyGuide } from "./NodeStrategyGuide";
 
@@ -37,6 +38,7 @@ type TreeVizPayload = TreeVizItem["viz"] & {
   layout: Array<[number, number]>;
   edges: Array<[number, number]>;
   code?: string[];
+  codex_task?: string[];
   plan?: string[];
   analysis?: string[];
   metrics?: Array<MetricEntry | null>;
@@ -121,6 +123,7 @@ export function TreeVizViewer({
       x: coords?.[0] ?? 0,
       y: coords?.[1] ?? 0,
       code: payload.code?.[idx] ?? "",
+      codexTask: payload.codex_task?.[idx] ?? "",
       plan: payload.plan?.[idx] ?? "",
       analysis: payload.analysis?.[idx] ?? "",
       excType: payload.exc_type?.[idx],
@@ -403,7 +406,18 @@ export function TreeVizViewer({
               )}
               <CollapsibleSection label="Plot Plan" value={selectedNode.plotPlan} />
               <CollapsibleSection label="Plot Code" value={selectedNode.plotCode} isMono />
-              <CollapsibleSection label="Code" value={selectedNode.code} isMono />
+              <CollapsibleSection
+                label="Codex Task"
+                value={selectedNode.codexTask}
+                isMono
+                copyLabel="Copy codex task"
+              />
+              <CollapsibleSection
+                label="Code"
+                value={selectedNode.code}
+                isMono
+                copyLabel="Copy code"
+              />
               {plotUrls.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-xs font-semibold text-slate-300">Plots</div>
@@ -490,22 +504,31 @@ function CollapsibleSection({
   label,
   value,
   isMono = false,
+  copyText,
+  copyLabel,
 }: {
   label: string;
   value: string;
   isMono?: boolean;
+  copyText?: string;
+  copyLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   if (!value) return null;
+  const effectiveCopyText = copyText ?? value;
+  const canCopy = Boolean(copyLabel) && Boolean(effectiveCopyText.trim());
   return (
     <div>
-      <button
-        type="button"
-        className="text-xs font-semibold text-slate-300 flex items-center gap-2"
-        onClick={() => setOpen(prev => !prev)}
-      >
-        {open ? "▾" : "▸"} {label}
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="text-xs font-semibold text-slate-300 flex items-center gap-2"
+          onClick={() => setOpen(prev => !prev)}
+        >
+          {open ? "▾" : "▸"} {label}
+        </button>
+        {canCopy && <CopyToClipboardButton text={effectiveCopyText} label={copyLabel ?? ""} />}
+      </div>
       {open && (
         <div className={`mt-1 whitespace-pre-wrap ${isMono ? "font-mono text-xs" : ""}`}>
           {value}

@@ -391,6 +391,7 @@ export interface MergedTreeVizPayload {
   originalNodeIds: number[];
   zoneMetadata?: StageZoneMetadata[];
   code?: string[];
+  codex_task?: string[];
   plan?: string[];
   analysis?: string[];
   metrics?: Array<unknown>;

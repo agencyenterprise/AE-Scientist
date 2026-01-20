@@ -106,6 +106,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
     originalNodeIds: [],
     zoneMetadata: [],
     code: [],
+    codex_task: [],
     plan: [],
     analysis: [],
     metrics: [],
@@ -182,6 +183,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
 
     // Merge all parallel arrays
     if (merged.code) concatArray(merged.code, payload, "code", "");
+    if (merged.codex_task) concatArray(merged.codex_task, payload, "codex_task", "");
     if (merged.plan) concatArray(merged.plan, payload, "plan", "");
     if (merged.analysis) concatArray(merged.analysis, payload, "analysis", "");
     if (merged.metrics) concatArray(merged.metrics, payload, "metrics", null);

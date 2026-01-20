@@ -1400,8 +1400,32 @@ class FakeRunner:
         with data_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
 
+        n_nodes = len(payload.get("layout") or payload.get("code") or [])
+        if n_nodes > 0:
+            # Inject fake Codex task markdown per node (for UI testing).
+            codex_task = payload.get("codex_task")
+            if not isinstance(codex_task, list) or len(codex_task) != n_nodes:
+                codex_task = ["" for _ in range(n_nodes)]
+            for idx in range(n_nodes):
+                codex_task[idx] = "\n".join(
+                    [
+                        "# Codex task (fake)",
+                        "",
+                        f"- stage: {stage_id}",
+                        f"- node_index: {idx}",
+                        f"- version: {version}",
+                        "",
+                        "## Instructions",
+                        "Write code for this node based on the context.",
+                        "",
+                        "## Context",
+                        "This is synthetic data produced by the fake runner.",
+                        "",
+                    ]
+                )
+            payload["codex_task"] = codex_task
+
         if self._plot_filename:
-            n_nodes = len(payload.get("layout") or payload.get("code") or [])
             if n_nodes > 0:
                 plots = payload.get("plots")
                 if not isinstance(plots, list) or len(plots) != n_nodes:
