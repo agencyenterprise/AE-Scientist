@@ -648,7 +648,9 @@ def _build_remote_script(
     ]
     script_parts += ['send_init_status "Cloning repository"', ""]
     script_parts += _repository_setup_commands()
+    script_parts += ['send_init_status "Installing packages"', ""]
     script_parts += _installation_commands()
+    script_parts += ['send_init_status "Installing Codex CLI"', ""]
     script_parts += _codex_installation_commands()
     script_parts += [
         "# === Environment Setup ===",
@@ -675,9 +677,8 @@ def _build_remote_script(
         f"pathlib.Path('{config_filename}').write_bytes(base64.b64decode('{config_content_b64}'))",
         "PY",
         "",
-        "# === Starting Research Pipeline ===",
-        'echo "Launching research pipeline..."',
         "source .venv/bin/activate",
+        'send_init_status "Initializing PyTorch"',
         "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
         "import torch",
         "torch.cuda.set_device(0)",
@@ -687,12 +688,16 @@ def _build_remote_script(
         "scrubbed_config_path=/tmp/run_config.yaml",
         f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
         'if [ -s "$scrubbed_config_path" ]; then',
+        '  send_init_status "Uploading config"',
         '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config || true',
         "else",
         "  echo 'Sanitized config is empty; skipping upload.'",
         "fi",
         "pipeline_exit_code=0",
         "set +e",
+        "# === Starting Research Pipeline ===",
+        'echo "Launching research pipeline..."',
+        'send_init_status "Launching research pipeline"',
         f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
