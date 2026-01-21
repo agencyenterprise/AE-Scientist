@@ -6,6 +6,7 @@
 export interface ResearchRunListItemApi {
   run_id: string;
   status: string;
+  initialization_status: string;
   idea_title: string;
   idea_hypothesis: string | null;
   current_stage: string | null;
@@ -30,6 +31,7 @@ export interface ResearchRunListResponseApi {
 export interface ResearchRun {
   runId: string;
   status: string;
+  initializationStatus: string;
   ideaTitle: string;
   ideaHypothesis: string | null;
   currentStage: string | null;
@@ -56,7 +58,7 @@ export interface ResearchGpuTypesResponse {
 }
 
 // Status type for UI styling
-export type ResearchRunStatus = "pending" | "running" | "completed" | "failed";
+export type ResearchRunStatus = "pending" | "initializing" | "running" | "completed" | "failed";
 
 export type ResearchRunTerminationStatus =
   | "none"
@@ -73,6 +75,7 @@ export type ResearchRunTerminationStatus =
 export interface ResearchRunInfoApi {
   run_id: string;
   status: string;
+  initialization_status: string;
   idea_id: number;
   idea_version_id: number;
   pod_id: string | null;
@@ -189,6 +192,7 @@ export interface ResearchRunDetailsApi {
 export interface ResearchRunInfo {
   run_id: string;
   status: string;
+  initialization_status: string;
   idea_id: number;
   idea_version_id: number;
   pod_id: string | null;

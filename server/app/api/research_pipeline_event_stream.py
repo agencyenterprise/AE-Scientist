@@ -37,7 +37,7 @@ router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
 
 SSE_HEARTBEAT_INTERVAL_SECONDS = 30.0
-RUN_ACTIVE_STATUSES = {"pending", "running"}
+RUN_ACTIVE_STATUSES = {"pending", "initializing", "running"}
 RUN_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 INT64_MIN = -(2**63)

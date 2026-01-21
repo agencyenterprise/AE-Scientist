@@ -920,6 +920,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/initialization-progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Initialization Progress */
+        post: operations["ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/run-finished": {
         parameters: {
             query?: never;
@@ -2525,6 +2542,13 @@ export interface components {
              */
             summary: string;
         };
+        /** InitializationProgressPayload */
+        InitializationProgressPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Message */
+            message: string;
+        };
         /**
          * LLMDefault
          * @description Model for LLM default settings.
@@ -3740,6 +3764,11 @@ export interface components {
              */
             updated_at: string;
             /**
+             * Initialization Status
+             * @description Initialization status message (pending/initializing/running)
+             */
+            initialization_status: string;
+            /**
              * Start Deadline At
              * @description ISO timestamp representing the start deadline window
              */
@@ -3803,6 +3832,28 @@ export interface components {
                 [key: string]: components["schemas"]["ResearchRunCodeExecution"];
             };
         };
+        /** ResearchRunInitializationStatusData */
+        ResearchRunInitializationStatusData: {
+            /**
+             * Initialization Status
+             * @description Latest initialization status message for the run.
+             */
+            initialization_status: string;
+            /**
+             * Updated At
+             * @description ISO timestamp for the status update.
+             */
+            updated_at: string;
+        };
+        /** ResearchRunInitializationStatusEvent */
+        ResearchRunInitializationStatusEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "initialization_status";
+            data: components["schemas"]["ResearchRunInitializationStatusData"];
+        };
         /**
          * ResearchRunListItem
          * @description Item in the research runs list with enriched data from related tables.
@@ -3818,6 +3869,11 @@ export interface components {
              * @description Current status of the run
              */
             status: string;
+            /**
+             * Initialization Status
+             * @description Initialization status message (pending/initializing/running)
+             */
+            initialization_status: string;
             /**
              * Idea Title
              * @description Title from the idea version
@@ -4220,7 +4276,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -6648,6 +6704,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["RunStartedPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializationProgressPayload"];
             };
         };
         responses: {

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
@@ -12,6 +13,8 @@ from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.database import DatabaseManager
 from app.services.research_pipeline.monitor import pipeline_monitor
+from app.services.research_pipeline.runpod_gpu_pricing import warm_gpu_price_cache
+from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
 from app.validation import validate_configuration
 
 # Initialize Sentry (must be done before FastAPI app is created)
@@ -74,6 +77,10 @@ validate_configuration()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await pipeline_monitor.start()
+    asyncio.create_task(
+        coro=warm_gpu_price_cache(gpu_types=get_supported_gpu_types()),
+        name="runpod_gpu_price_warmup",
+    )
     try:
         yield
     finally:

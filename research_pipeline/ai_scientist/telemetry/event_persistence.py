@@ -58,6 +58,7 @@ class WebhookClient:
     }
     _RUN_STARTED_PATH = "/run-started"
     _RUN_FINISHED_PATH = "/run-finished"
+    _INITIALIZATION_PROGRESS_PATH = "/initialization-progress"
     _HEARTBEAT_PATH = "/heartbeat"
     _HW_STATS_PATH = "/hw-stats"
     _GPU_SHORTAGE_PATH = "/gpu-shortage"
@@ -141,7 +142,15 @@ class WebhookClient:
         return self._post(path=endpoint, payload=body)
 
     def publish_run_started(self) -> Future[None]:
+        logger.info("Publishing run started event for run_id=%s", self._run_id)
         return self._post(path=self._RUN_STARTED_PATH, payload={"run_id": self._run_id})
+
+    def publish_initialization_progress(self, *, message: str) -> Future[None]:
+        payload = {
+            "run_id": self._run_id,
+            "message": message,
+        }
+        return self._post(path=self._INITIALIZATION_PROGRESS_PATH, payload=payload)
 
     def publish_run_finished(
         self,
@@ -235,10 +244,12 @@ class EventPersistenceManager:
         self._run_id = run_id
         self._webhook_client = webhook_client
         ctx = multiprocessing.get_context("spawn")
-        self._manager = ctx.Manager()
+        # Avoid spawning a multiprocessing.Manager(), which can be slow in containerized
+        # environments. A plain multiprocessing queue is sufficient: child processes can
+        # enqueue events, while the main process drains them in a single writer thread.
         self._queue = cast(
             multiprocessing.queues.Queue[PersistableEvent | None],
-            self._manager.Queue(maxsize=queue_maxsize),
+            ctx.Queue(maxsize=queue_maxsize),
         )
         self._stop_sentinel: Optional[PersistableEvent] = None
         self._thread = threading.Thread(
@@ -267,8 +278,6 @@ class EventPersistenceManager:
         finally:
             self._started = False
         self._close_queue()
-        if self._manager is not None:
-            self._manager.shutdown()
 
     def _close_queue(self) -> None:
         def _invoke(obj: object, method_name: str) -> bool:

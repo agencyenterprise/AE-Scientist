@@ -23,6 +23,11 @@ import type {
 
 export type { ResearchRunDetails };
 
+export interface InitializationStatusData {
+  initialization_status: string;
+  updated_at: string;
+}
+
 interface UseResearchRunSSEOptions {
   runId: string;
   conversationId: number | null;
@@ -46,6 +51,7 @@ interface UseResearchRunSSEOptions {
   onCodeExecutionCompleted?: (event: CodeExecutionCompletionEvent) => void;
   onStageSkipWindow?: (event: StageSkipWindowUpdate) => void;
   onReviewCompleted?: (review: LlmReviewResponse) => void;
+  onInitializationStatus?: (event: InitializationStatusData) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -86,6 +92,8 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
   return {
     run_id: run.run_id,
     status: run.status,
+    initialization_status:
+      (run as unknown as { initialization_status?: string }).initialization_status ?? "pending",
     idea_id: run.idea_id,
     idea_version_id: run.idea_version_id,
     pod_id: run.pod_id ?? null,
@@ -255,6 +263,7 @@ export function useResearchRunSSE({
   onComplete,
   onRunEvent,
   onTerminationStatus,
+  onInitializationStatus,
   onHwCostEstimate,
   onHwCostActual,
   onBestNodeSelection,
@@ -365,6 +374,9 @@ export function useResearchRunSSE({
               case "stage_progress":
                 onStageProgress(event.data as StageProgress);
                 break;
+              case "initialization_status":
+                onInitializationStatus?.(event.data as InitializationStatusData);
+                break;
               case "run_event":
                 onRunEvent?.(event.data);
                 break;
@@ -466,6 +478,7 @@ export function useResearchRunSSE({
     runId,
     ensureInitialSnapshot,
     onStageProgress,
+    onInitializationStatus,
     onLog,
     onArtifact,
     onSubstageCompleted,

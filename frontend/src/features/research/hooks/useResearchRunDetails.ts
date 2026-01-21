@@ -23,6 +23,7 @@ import type {
   LlmReviewResponse,
 } from "@/types/research";
 import { useResearchRunSSE } from "./useResearchRunSSE";
+import type { InitializationStatusData } from "./useResearchRunSSE";
 
 interface UseResearchRunDetailsOptions {
   runId: string;
@@ -435,6 +436,21 @@ export function useResearchRunDetails({
     );
   }, []);
 
+  const handleInitializationStatus = useCallback((event: InitializationStatusData) => {
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            run: {
+              ...prev.run,
+              initialization_status: event.initialization_status,
+              updated_at: event.updated_at,
+            },
+          }
+        : null
+    );
+  }, []);
+
   // Use SSE for real-time updates
   useResearchRunSSE({
     runId,
@@ -442,6 +458,7 @@ export function useResearchRunDetails({
     enabled:
       !!conversationId &&
       (details?.run.status === "running" ||
+        details?.run.status === "initializing" ||
         details?.run.status === "pending" ||
         details?.run.termination_status === "requested" ||
         details?.run.termination_status === "in_progress" ||
@@ -455,6 +472,7 @@ export function useResearchRunDetails({
     onComplete: handleComplete,
     onRunEvent: handleRunEvent,
     onTerminationStatus: handleTerminationStatus,
+    onInitializationStatus: handleInitializationStatus,
     onHwCostEstimate: handleHwCostEstimate,
     onHwCostActual: handleHwCostActual,
     onBestNodeSelection: handleBestNodeSelection,

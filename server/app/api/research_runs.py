@@ -28,6 +28,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
     return ResearchRunListItem(
         run_id=row["run_id"],
         status=row["status"],
+        initialization_status=row.get("initialization_status") or "pending",
         idea_title=row["idea_title"] or "Untitled",
         idea_hypothesis=row.get("idea_hypothesis"),
         current_stage=row.get("current_stage"),

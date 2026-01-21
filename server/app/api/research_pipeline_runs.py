@@ -38,6 +38,7 @@ from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
+from app.services.research_pipeline.runpod_gpu_pricing import get_gpu_type_prices
 from app.services.research_pipeline.runpod_manager import (
     CONTAINER_DISK_GB,
     POD_READY_POLL_INTERVAL_SECONDS,
@@ -50,7 +51,6 @@ from app.services.research_pipeline.runpod_manager import (
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     get_pipeline_startup_grace_seconds,
-    get_supported_gpu_type_prices,
     get_supported_gpu_types,
     launch_research_pipeline_run,
     request_stage_skip_via_ssh,
@@ -117,7 +117,7 @@ class GpuTypeListResponse(BaseModel):
 )
 async def list_research_gpu_types() -> GpuTypeListResponse:
     gpu_types = get_supported_gpu_types()
-    prices = await get_supported_gpu_type_prices()
+    prices = await get_gpu_type_prices(gpu_types=gpu_types)
     return GpuTypeListResponse(
         gpu_types=gpu_types,
         gpu_prices={gpu_type: prices.get(gpu_type) for gpu_type in gpu_types},
@@ -464,6 +464,8 @@ async def create_and_launch_research_run(
         )
         await db.update_research_pipeline_run(
             run_id=run_id,
+            status="initializing",
+            initialization_status="Pod allocated",
             pod_update_info=PodUpdateInfo(
                 pod_id=pod_info.pod_id,
                 pod_name=pod_info.pod_name,

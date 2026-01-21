@@ -60,6 +60,9 @@ class ResearchRunListItem(BaseModel):
 
     run_id: str = Field(..., description="Unique identifier of the run")
     status: str = Field(..., description="Current status of the run")
+    initialization_status: str = Field(
+        ..., description="Initialization status message (pending/initializing/running)"
+    )
     idea_title: str = Field(..., description="Title from the idea version")
     idea_hypothesis: Optional[str] = Field(
         None, description="Short hypothesis from the idea version"
@@ -93,6 +96,9 @@ class ResearchRunListResponse(BaseModel):
 
 
 class ResearchRunInfo(ResearchRunSummary):
+    initialization_status: str = Field(
+        ..., description="Initialization status message (pending/initializing/running)"
+    )
     start_deadline_at: Optional[str] = Field(
         None, description="ISO timestamp representing the start deadline window"
     )
@@ -130,6 +136,7 @@ class ResearchRunInfo(ResearchRunSummary):
         return ResearchRunInfo(
             run_id=run.run_id,
             status=run.status,
+            initialization_status=run.initialization_status,
             idea_id=run.idea_id,
             idea_version_id=run.idea_version_id,
             pod_id=run.pod_id,

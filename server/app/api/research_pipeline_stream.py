@@ -7,6 +7,7 @@ from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunInitializationStatusEvent as SSEInitializationStatusEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
@@ -26,6 +27,7 @@ StreamEventModel = Union[
     SSESubstageEvent,
     SSESubstageSummaryEvent,
     SSERunEvent,
+    SSEInitializationStatusEvent,
     SSECompleteEvent,
     SSETerminationStatusEvent,
     SSELogEvent,
