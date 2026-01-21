@@ -49,7 +49,10 @@ class AuthService:
                 # User already has Clerk ID - just update their info
                 logger.info(f"Found existing Clerk user: {user.email}")
                 updated_user = await self.db.update_user(
-                    user_id=user.id, email=user_info["email"], name=user_info["name"]
+                    user_id=user.id,
+                    email=user_info["email"],
+                    name=user_info["name"],
+                    clerk_user_id=user_info["clerk_user_id"],
                 )
                 if not updated_user:
                     logger.error("Failed to update existing user")

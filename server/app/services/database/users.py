@@ -71,14 +71,31 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
             User data if successful, None otherwise
         """
         try:
+            insert_sql = (
+                """
+                        INSERT INTO users (clerk_user_id, email, name)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (clerk_user_id) DO UPDATE
+                        SET email = EXCLUDED.email,
+                            name = EXCLUDED.name,
+                            updated_at = NOW()
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        """
+                if clerk_user_id is not None
+                else """
+                        INSERT INTO users (clerk_user_id, email, name)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (email) DO UPDATE
+                        SET name = EXCLUDED.name,
+                            clerk_user_id = COALESCE(users.clerk_user_id, EXCLUDED.clerk_user_id),
+                            updated_at = NOW()
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        """
+            )
             async with self.aget_connection() as conn:
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
-                        """
-                        INSERT INTO users (clerk_user_id, email, name)
-                        VALUES (%s, %s, %s)
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
-                        """,
+                        insert_sql,
                         (clerk_user_id, email, name),
                     )
                     has_free_credits = should_give_free_credits(email)
