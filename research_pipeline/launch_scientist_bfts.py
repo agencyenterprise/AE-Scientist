@@ -20,6 +20,7 @@ import pickle
 import re
 import sys
 import threading
+import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -257,6 +258,7 @@ def on_event(event: BaseEvent) -> None:
 
 
 def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryHooks:
+    started_at = time.monotonic()
     event_callback: Callable[[BaseEvent], None] = EventQueueEmitter(queue=None, fallback=on_event)
     if telemetry_cfg is None:
         return TelemetryHooks(event_callback=event_callback, persistence=None, webhook=None)
@@ -271,11 +273,13 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
     webhook_url = (telemetry_cfg.webhook_url or "").strip()
     webhook_token = (telemetry_cfg.webhook_token or "").strip()
     if webhook_url and webhook_token:
+        webhook_started = time.monotonic()
         webhook_client = WebhookClient(
             base_url=webhook_url,
             token=webhook_token,
             run_id=run_identifier,
         )
+        webhook_ms = int((time.monotonic() - webhook_started) * 1000)
     elif webhook_url or webhook_token:
         logger.warning("Telemetry webhook config incomplete; skipping webhook publishing.")
 
@@ -288,12 +292,27 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         )
 
     try:
+        persistence_started = time.monotonic()
         event_persistence = EventPersistenceManager(
             database_url=db_url or None,
             run_id=run_identifier,
             webhook_client=webhook_client,
         )
+        persistence_init_ms = int((time.monotonic() - persistence_started) * 1000)
+
+        start_started = time.monotonic()
         event_persistence.start()
+        start_ms = int((time.monotonic() - start_started) * 1000)
+
+        total_ms = int((time.monotonic() - started_at) * 1000)
+        logger.info(
+            "Telemetry init timings for run_id=%s: webhook_ms=%s persistence_init_ms=%s start_ms=%s total_ms=%s",
+            run_identifier,
+            locals().get("webhook_ms", 0),
+            persistence_init_ms,
+            start_ms,
+            total_ms,
+        )
         logger.info("Telemetry sinks enabled for run_id=%s", run_identifier)
         return TelemetryHooks(
             event_callback=EventQueueEmitter(queue=event_persistence.queue, fallback=on_event),

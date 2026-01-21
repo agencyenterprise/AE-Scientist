@@ -177,6 +177,7 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
   return {
     runId: apiRun.run_id,
     status: apiRun.status,
+    initializationStatus: apiRun.initialization_status,
     ideaTitle: apiRun.idea_title,
     ideaHypothesis: apiRun.idea_hypothesis,
     currentStage: apiRun.current_stage,

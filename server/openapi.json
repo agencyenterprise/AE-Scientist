@@ -2230,6 +2230,51 @@
         }
       }
     },
+    "/api/research-pipeline/events/initialization-progress": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Initialization Progress",
+        "operationId": "ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializationProgressPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/run-finished": {
       "post": {
         "tags": [
@@ -5576,6 +5621,24 @@
         "title": "ImportedConversationSummaryUpdate",
         "description": "Data required to update a conversation summary."
       },
+      "InitializationProgressPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "message"
+        ],
+        "title": "InitializationProgressPayload"
+      },
       "LLMDefault": {
         "properties": {
           "llm_provider": {
@@ -7584,6 +7647,11 @@
             "title": "Updated At",
             "description": "ISO timestamp when the run was last updated"
           },
+          "initialization_status": {
+            "type": "string",
+            "title": "Initialization Status",
+            "description": "Initialization status message (pending/initializing/running)"
+          },
           "start_deadline_at": {
             "anyOf": [
               {
@@ -7630,6 +7698,7 @@
           "cost",
           "created_at",
           "updated_at",
+          "initialization_status",
           "termination_status"
         ],
         "title": "ResearchRunInfo"
@@ -7777,6 +7846,47 @@
         ],
         "title": "ResearchRunInitialEventData"
       },
+      "ResearchRunInitializationStatusData": {
+        "properties": {
+          "initialization_status": {
+            "type": "string",
+            "title": "Initialization Status",
+            "description": "Latest initialization status message for the run."
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp for the status update."
+          }
+        },
+        "type": "object",
+        "required": [
+          "initialization_status",
+          "updated_at"
+        ],
+        "title": "ResearchRunInitializationStatusData"
+      },
+      "ResearchRunInitializationStatusEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "initialization_status"
+            ],
+            "const": "initialization_status",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunInitializationStatusData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunInitializationStatusEvent"
+      },
       "ResearchRunListItem": {
         "properties": {
           "run_id": {
@@ -7788,6 +7898,11 @@
             "type": "string",
             "title": "Status",
             "description": "Current status of the run"
+          },
+          "initialization_status": {
+            "type": "string",
+            "title": "Initialization Status",
+            "description": "Initialization status message (pending/initializing/running)"
           },
           "idea_title": {
             "type": "string",
@@ -7902,6 +8017,7 @@
         "required": [
           "run_id",
           "status",
+          "initialization_status",
           "idea_title",
           "cost",
           "created_by_name",
@@ -8689,6 +8805,9 @@
             "$ref": "#/components/schemas/ResearchRunRunEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunInitializationStatusEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunTerminationStatusEvent"
           },
           {
@@ -8752,6 +8871,7 @@
             "hw_cost_actual": "#/components/schemas/ResearchRunHwCostActualEvent",
             "hw_cost_estimate": "#/components/schemas/ResearchRunHwCostEstimateEvent",
             "initial": "#/components/schemas/ResearchRunInitialEvent",
+            "initialization_status": "#/components/schemas/ResearchRunInitializationStatusEvent",
             "log": "#/components/schemas/ResearchRunLogEvent",
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "review_completed": "#/components/schemas/ResearchRunReviewCompletedEvent",

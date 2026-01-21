@@ -274,6 +274,19 @@ class ResearchRunRunEvent(BaseModel):
     data: ResearchRunEvent
 
 
+class ResearchRunInitializationStatusData(BaseModel):
+    initialization_status: str = Field(
+        ...,
+        description="Latest initialization status message for the run.",
+    )
+    updated_at: str = Field(..., description="ISO timestamp for the status update.")
+
+
+class ResearchRunInitializationStatusEvent(BaseModel):
+    type: Literal["initialization_status"]
+    data: ResearchRunInitializationStatusData
+
+
 class ResearchRunTerminationStatusData(BaseModel):
     status: Literal["none", "requested", "in_progress", "terminated", "failed"]
     last_error: Optional[str] = None
@@ -379,6 +392,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunCompleteEvent,
         ResearchRunStageProgressEvent,
         ResearchRunRunEvent,
+        ResearchRunInitializationStatusEvent,
         ResearchRunTerminationStatusEvent,
         ResearchRunLogEvent,
         ResearchRunArtifactEvent,

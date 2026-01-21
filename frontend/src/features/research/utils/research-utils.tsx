@@ -93,6 +93,8 @@ export function getStatusText(status: string, currentStage: string | null): stri
   switch (status) {
     case "completed":
       return "Completed";
+    case "initializing":
+      return "Initializing";
     case "running":
       if (currentStage) {
         return `Running ${formatResearchStageName(currentStage) ?? currentStage}`;
@@ -139,6 +141,15 @@ export function getStatusBadge(status: string, size: StatusBadgeSize = "sm") {
         >
           <CheckCircle2 className={sizeConfig.icon} />
           Completed
+        </span>
+      );
+    case "initializing":
+      return (
+        <span
+          className={`inline-flex items-center rounded-full bg-amber-500/15 font-medium text-amber-300 ${sizeConfig.container}`}
+        >
+          <Loader2 className={`animate-spin ${sizeConfig.icon}`} />
+          Initializing
         </span>
       );
     case "running":

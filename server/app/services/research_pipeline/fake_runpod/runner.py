@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 MIN_FAKE_RUNFILE_RUNNING_SECONDS = 15.0
 MIN_FAKE_CODEX_OUTLIVES_RUNFILE_SECONDS = 5.0
+FAKE_INITIALIZATION_STEP_DELAYS_SECONDS: list[tuple[str, float]] = [
+    ("Cloning repository", 6.0),
+    ("Installing OS packages", 8.0),
+    ("Installing Python dependencies", 10.0),
+    ("Configuring environment", 4.0),
+]
 
 
 class PodRecord(NamedTuple):
@@ -610,6 +616,7 @@ class FakeRunner:
         )
         self._persistence.start()
         logger.info("FakeRunner started for run_id=%s pod_id=%s", self._run_id, self._pod_id)
+        self._simulate_initialization()
         self._publish_run_started()
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop, name=f"heartbeat-{self._run_id}", daemon=True
@@ -640,6 +647,22 @@ class FakeRunner:
             self._persistence.stop()
             logger.info("FakeRunner stopped for run_id=%s", self._run_id)
             logger.info("[FakeRunner %s] Simulation complete", self._run_id[:8])
+
+    def _simulate_initialization(self) -> None:
+        if self._webhook_client is None:
+            total = sum(delay for _, delay in FAKE_INITIALIZATION_STEP_DELAYS_SECONDS)
+            time.sleep(total)
+            return
+        for message, delay_seconds in FAKE_INITIALIZATION_STEP_DELAYS_SECONDS:
+            try:
+                self._webhook_client.publish_initialization_progress(message=message)
+            except Exception:  # noqa: BLE001 - fake runner best-effort
+                logger.exception(
+                    "[FakeRunner %s] Failed to publish initialization progress (%s)",
+                    self._run_id[:8],
+                    message,
+                )
+            time.sleep(delay_seconds)
 
     def _heartbeat_loop(self) -> None:
         webhook_client = self._webhook_client

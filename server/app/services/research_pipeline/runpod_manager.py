@@ -12,13 +12,11 @@ import re
 import shlex
 import subprocess
 import tempfile
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, NamedTuple, Type, cast
 
 import httpx
-import runpod  # type: ignore
 from omegaconf import OmegaConf
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
@@ -438,102 +436,6 @@ def get_supported_gpu_types() -> list[str]:
     return list(RUNPOD_GPU_TYPES)
 
 
-_GPU_PRICE_CACHE_TTL_SECONDS = 15 * 60
-_gpu_price_cache: dict[str, float | None] | None = None
-_gpu_price_cache_updated_at_monotonic: float | None = None
-
-
-def _gpu_price_cache_age_seconds(*, now_monotonic: float) -> float | None:
-    if _gpu_price_cache_updated_at_monotonic is None:
-        return None
-    age_seconds = now_monotonic - _gpu_price_cache_updated_at_monotonic
-    return age_seconds if age_seconds >= 0 else None
-
-
-def _is_gpu_price_cache_valid(*, now_monotonic: float) -> bool:
-    if _gpu_price_cache is None or _gpu_price_cache_updated_at_monotonic is None:
-        return False
-    age_seconds = now_monotonic - _gpu_price_cache_updated_at_monotonic
-    return age_seconds >= 0 and age_seconds < _GPU_PRICE_CACHE_TTL_SECONDS
-
-
-async def get_supported_gpu_type_prices() -> dict[str, float | None]:
-    """
-    Return securePrice per supported GPU type (USD/hour), keyed by the full RunPod GPU type id.
-
-    If RUNPOD_API_KEY is not configured or RunPod lookup fails, values may be None.
-    """
-    now = time.monotonic()
-    if _is_gpu_price_cache_valid(now_monotonic=now):
-        age_seconds = _gpu_price_cache_age_seconds(now_monotonic=now)
-        logger.info(
-            "RunPod GPU price cache hit (age_s=%s ttl_s=%s)",
-            age_seconds,
-            _GPU_PRICE_CACHE_TTL_SECONDS,
-        )
-        return cast(dict[str, float | None], _gpu_price_cache)
-
-    age_seconds = _gpu_price_cache_age_seconds(now_monotonic=now)
-    logger.info(
-        "RunPod GPU price cache miss (age_s=%s ttl_s=%s); refreshing",
-        age_seconds,
-        _GPU_PRICE_CACHE_TTL_SECONDS,
-    )
-
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        prices_without_api: dict[str, float | None] = {
-            gpu_type: None for gpu_type in RUNPOD_GPU_TYPES
-        }
-        logger.info(
-            "RUNPOD_API_KEY missing; returning null securePrice for %s GPU types",
-            len(RUNPOD_GPU_TYPES),
-        )
-        _update_gpu_price_cache(prices=prices_without_api, now_monotonic=now)
-        return prices_without_api
-
-    prices = await _fetch_supported_gpu_secure_prices(runpod_api_key=runpod_api_key)
-    _update_gpu_price_cache(prices=prices, now_monotonic=now)
-    return prices
-
-
-def _update_gpu_price_cache(*, prices: dict[str, float | None], now_monotonic: float) -> None:
-    global _gpu_price_cache
-    global _gpu_price_cache_updated_at_monotonic
-    _gpu_price_cache = dict(prices)
-    _gpu_price_cache_updated_at_monotonic = now_monotonic
-    logger.info("Updated RunPod GPU price cache (count=%s)", len(prices))
-
-
-async def _fetch_supported_gpu_secure_prices(*, runpod_api_key: str) -> dict[str, float | None]:
-    def _fetch_sync() -> dict[str, float | None]:
-        runpod.api_key = runpod_api_key
-        prices: dict[str, float | None] = {}
-        for gpu_type in RUNPOD_GPU_TYPES:
-            try:
-                gpu_info = runpod.get_gpu(gpu_type)
-                logger.info("RunPod get_gpu gpu_type=%s response=%s", gpu_type, gpu_info)
-                secure_price = gpu_info.get("securePrice") if isinstance(gpu_info, dict) else None
-                if secure_price is None:
-                    prices[gpu_type] = None
-                    continue
-                try:
-                    prices[gpu_type] = float(secure_price)
-                except (TypeError, ValueError):
-                    prices[gpu_type] = None
-                logger.info(
-                    "RunPod securePrice gpu_type=%s securePrice=%s",
-                    gpu_type,
-                    prices[gpu_type],
-                )
-            except Exception:  # noqa: BLE001
-                logger.exception("Failed to fetch RunPod securePrice for gpu_type=%s", gpu_type)
-                prices[gpu_type] = None
-        return prices
-
-    return await asyncio.to_thread(_fetch_sync)
-
-
 def _sanitize_pod_user_component(*, value: str) -> str:
     trimmed = value.strip()
     if not trimmed:
@@ -689,7 +591,33 @@ def _build_remote_script(
     config_content_b64: str,
     run_id: str,
 ) -> str:
-    script_parts: list[str] = ["set -euo pipefail", ""]
+    telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
+    telemetry_token = shlex.quote(env.telemetry_webhook_token)
+    run_id_quoted = shlex.quote(run_id)
+    script_parts: list[str] = [
+        "set -euo pipefail",
+        "",
+        f"export RUN_ID={run_id_quoted}",
+        f"export TELEMETRY_WEBHOOK_URL={telemetry_url}",
+        f"export TELEMETRY_WEBHOOK_TOKEN={telemetry_token}",
+        "",
+        "send_init_status() {",
+        '  if [ -z "${TELEMETRY_WEBHOOK_URL:-}" ] || [ -z "${TELEMETRY_WEBHOOK_TOKEN:-}" ] || [ -z "${RUN_ID:-}" ]; then',
+        "    return 0",
+        "  fi",
+        "  if ! command -v curl >/dev/null 2>&1; then",
+        "    return 0",
+        "  fi",
+        '  msg="$1"',
+        '  msg="${msg//\\"/\\\\\\"}"',
+        '  payload="{\\"run_id\\":\\"${RUN_ID}\\",\\"message\\":\\"${msg}\\"}"',
+        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/initialization-progress" \\',
+        '    -H "Authorization: Bearer ${TELEMETRY_WEBHOOK_TOKEN}" \\',
+        '    -H "Content-Type: application/json" \\',
+        '    --data "${payload}" >/dev/null 2>&1 || true',
+        "}",
+        "",
+    ]
     hw_stats_paths = _resolve_disk_stats_paths()
     env_file_lines = [
         f"OPENAI_API_KEY={env.openai_api_key}",
@@ -712,11 +640,13 @@ def _build_remote_script(
         env_file_lines.append(f"SENTRY_ENVIRONMENT={env.sentry_environment}")
     script_parts += [
         "# === GPU Validation ===",
+        'send_init_status "Validating GPU"',
         'echo "Validating GPU..."',
         'nvidia-smi || { echo "❌ nvidia-smi failed"; exit 1; }',
         'echo "✅ GPU validated"',
         "",
     ]
+    script_parts += ['send_init_status "Cloning repository"', ""]
     script_parts += _repository_setup_commands()
     script_parts += _installation_commands()
     script_parts += _codex_installation_commands()

@@ -6,6 +6,7 @@ import {
   CostDetailsCard,
   FinalPdfBanner,
   ImportSourceCard,
+  InitializationStatusBanner,
   ResearchArtifactsList,
   ResearchLogsList,
   ResearchPipelineStages,
@@ -143,7 +144,8 @@ export default function ResearchRunDetailPage() {
   const codexExecution = code_executions?.codex_execution ?? null;
   const runfileExecution = code_executions?.runfile_execution ?? null;
   const canStopRun =
-    conversationId !== null && (run.status === "running" || run.status === "pending");
+    conversationId !== null &&
+    (run.status === "running" || run.status === "initializing" || run.status === "pending");
 
   const runNumber = (() => {
     if (!conversationId || !conversationRuns.length) return null;
@@ -178,6 +180,11 @@ export default function ResearchRunDetailPage() {
           stopPending={stopPending}
           stopError={stopError}
           onStopRun={handleStopRun}
+        />
+
+        <InitializationStatusBanner
+          status={run.status}
+          initializationStatus={run.initialization_status}
         />
 
         {run.error_message && <ResearchRunError message={run.error_message} />}

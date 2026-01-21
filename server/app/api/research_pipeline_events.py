@@ -37,6 +37,8 @@ from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedData
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
+from app.models.sse import ResearchRunInitializationStatusData
+from app.models.sse import ResearchRunInitializationStatusEvent as SSEInitializationStatusEvent
 from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
@@ -69,6 +71,7 @@ class ResearchRunStore(Protocol):
         *,
         run_id: str,
         status: Optional[str] = None,
+        initialization_status: Optional[str] = None,
         pod_update_info: Optional[PodUpdateInfo] = None,
         error_message: Optional[str] = None,
         last_heartbeat_at: Optional[datetime] = None,
@@ -153,6 +156,11 @@ class RunFinishedPayload(BaseModel):
     run_id: str
     success: bool
     message: Optional[str] = None
+
+
+class InitializationProgressPayload(BaseModel):
+    run_id: str
+    message: str
 
 
 class DiskUsagePartition(BaseModel):
@@ -898,6 +906,7 @@ async def ingest_run_started(
     await db.update_research_pipeline_run(
         run_id=payload.run_id,
         status="running",
+        initialization_status="running",
         last_heartbeat_at=now,
         heartbeat_failures=0,
         start_deadline_at=new_deadline,
@@ -947,6 +956,41 @@ async def ingest_run_started(
     )
 
     logger.info("RP run started: run=%s", payload.run_id)
+
+
+@router.post("/initialization-progress", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_initialization_progress(
+    payload: InitializationProgressPayload,
+    _: None = Depends(_verify_bearer_token),
+) -> None:
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    now = datetime.now(timezone.utc)
+    message = payload.message.strip()
+    await db.update_research_pipeline_run(
+        run_id=payload.run_id,
+        initialization_status=message,
+    )
+    await db.insert_research_pipeline_run_event(
+        run_id=payload.run_id,
+        event_type="initialization_progress",
+        metadata={"initialization_status": message},
+        occurred_at=now,
+    )
+    publish_stream_event(
+        payload.run_id,
+        SSEInitializationStatusEvent(
+            type="initialization_status",
+            data=ResearchRunInitializationStatusData(
+                initialization_status=message,
+                updated_at=now.isoformat(),
+            ),
+        ),
+    )
+    logger.info("RP initialization progress: run=%s status=%s", payload.run_id, message)
 
 
 @router.post("/run-finished", status_code=status.HTTP_204_NO_CONTENT)

@@ -11,7 +11,7 @@ from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_RUN_STATUSES = ("pending", "running", "failed", "completed")
+PIPELINE_RUN_STATUSES = ("pending", "initializing", "running", "failed", "completed")
 
 # Shared SQL CTE for calculating progress across pipeline runs.
 # Combines stage progress and paper generation events, then calculates overall progress
@@ -76,6 +76,7 @@ class ResearchPipelineRun(NamedTuple):
     idea_id: int
     idea_version_id: int
     status: str
+    initialization_status: str
     pod_id: Optional[str]
     pod_name: Optional[str]
     gpu_type: Optional[str]
@@ -202,6 +203,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         *,
         run_id: str,
         status: Optional[str] = None,
+        initialization_status: Optional[str] = None,
         pod_update_info: Optional[PodUpdateInfo] = None,
         error_message: Optional[str] = None,
         last_heartbeat_at: Optional[datetime] = None,
@@ -217,6 +219,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 raise ValueError(f"Invalid status '{status}'")
             fields.append("status = %s")
             values.append(status)
+        if initialization_status is not None:
+            fields.append("initialization_status = %s")
+            values.append(initialization_status[:500])
         if pod_update_info is not None:
             for column, value in pod_update_info._asdict().items():
                 if value is None:
@@ -342,7 +347,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 await cursor.execute(
                     """
                     SELECT * FROM research_pipeline_runs
-                    WHERE status IN ('pending', 'running')
+                    WHERE status IN ('pending', 'initializing', 'running')
                     """
                 )
                 rows = await cursor.fetchall() or []
@@ -419,6 +424,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             idea_id=row["idea_id"],
             idea_version_id=row["idea_version_id"],
             status=row["status"],
+            initialization_status=cast(str, row.get("initialization_status") or "pending"),
             pod_id=row.get("pod_id"),
             pod_name=row.get("pod_name"),
             gpu_type=row.get("gpu_type"),
@@ -451,6 +457,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             SELECT
                 r.run_id,
                 r.status,
+                r.initialization_status,
                 r.gpu_type,
                 r.error_message,
                 r.cost,
@@ -551,6 +558,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             SELECT
                 r.run_id,
                 r.status,
+                r.initialization_status,
                 r.gpu_type,
                 r.cost,
                 r.error_message,

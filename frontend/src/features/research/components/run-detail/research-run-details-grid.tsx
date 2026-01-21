@@ -31,7 +31,7 @@ export function ResearchRunDetailsGrid({ run, conversationId }: ResearchRunDetai
         <div>
           <dt className="text-xs text-slate-400">Completed at</dt>
           <dd className="text-sm text-white">
-            {run.status === "running" || run.status === "pending"
+            {run.status === "running" || run.status === "initializing" || run.status === "pending"
               ? "In Progress"
               : formatDateTime(run.updated_at)}
           </dd>
