@@ -14,22 +14,10 @@ import time
 from typing import NamedTuple, Sequence, cast
 
 import runpod  # type: ignore
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 _GPU_PRICE_CACHE_TTL_SECONDS = 15 * 60
-
-
-class RunPodGpuInfoSummary(BaseModel):
-    id: str | None
-    display_name: str | None
-    manufacturer: str | None
-    memory_gb: int | None
-    secure_price: float | None
-    community_price: float | None
-    secure_spot_price: float | None
-    community_spot_price: float | None
 
 
 class CachedGpuPrice(NamedTuple):
@@ -40,7 +28,6 @@ class CachedGpuPrice(NamedTuple):
 class FetchedGpuPrice(NamedTuple):
     gpu_type: str
     secure_price: float | None
-    summary: RunPodGpuInfoSummary
 
 
 _gpu_price_cache: list[CachedGpuPrice] = []
@@ -221,9 +208,9 @@ async def _refresh_cache(*, runpod_api_key: str) -> None:
             )
             for item in fetched:
                 logger.info(
-                    "RunPod get_gpu summary gpu_type=%s summary=%s",
+                    "RunPod get_gpu summary gpu_type=%s secure_price=%s",
                     item.gpu_type,
-                    item.summary.model_dump_json(),
+                    item.secure_price,
                 )
         except Exception:  # noqa: BLE001
             logger.exception("RunPod GPU price refresh failed (requested=%s)", len(pending))
@@ -239,40 +226,18 @@ async def _fetch_secure_prices(
     def _fetch_one_sync(gpu_type: str) -> FetchedGpuPrice:
         gpu_info = runpod.get_gpu(gpu_type)
         if not isinstance(gpu_info, dict):
-            summary = RunPodGpuInfoSummary(
-                id=None,
-                display_name=None,
-                manufacturer=None,
-                memory_gb=None,
-                secure_price=None,
-                community_price=None,
-                secure_spot_price=None,
-                community_spot_price=None,
-            )
-            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None, summary=summary)
-
-        summary = RunPodGpuInfoSummary(
-            id=cast(str | None, gpu_info.get("id")),
-            display_name=cast(str | None, gpu_info.get("displayName")),
-            manufacturer=cast(str | None, gpu_info.get("manufacturer")),
-            memory_gb=cast(int | None, gpu_info.get("memoryInGb")),
-            secure_price=cast(float | None, gpu_info.get("securePrice")),
-            community_price=cast(float | None, gpu_info.get("communityPrice")),
-            secure_spot_price=cast(float | None, gpu_info.get("secureSpotPrice")),
-            community_spot_price=cast(float | None, gpu_info.get("communitySpotPrice")),
-        )
+            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None)
 
         secure_price_raw = gpu_info.get("securePrice")
         if secure_price_raw is None:
-            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None, summary=summary)
+            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None)
         try:
             return FetchedGpuPrice(
                 gpu_type=gpu_type,
                 secure_price=float(secure_price_raw),
-                summary=summary,
             )
         except (TypeError, ValueError):
-            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None, summary=summary)
+            return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None)
 
     runpod.api_key = runpod_api_key
     tasks = [asyncio.to_thread(_fetch_one_sync, gpu_type) for gpu_type in gpu_types]
@@ -289,21 +254,6 @@ async def _fetch_secure_prices(
     for gpu_type in gpu_types:
         if gpu_type in fetched_types:
             continue
-        fetched.append(
-            FetchedGpuPrice(
-                gpu_type=gpu_type,
-                secure_price=None,
-                summary=RunPodGpuInfoSummary(
-                    id=None,
-                    display_name=None,
-                    manufacturer=None,
-                    memory_gb=None,
-                    secure_price=None,
-                    community_price=None,
-                    secure_spot_price=None,
-                    community_spot_price=None,
-                ),
-            )
-        )
+        fetched.append(FetchedGpuPrice(gpu_type=gpu_type, secure_price=None))
 
     return fetched
