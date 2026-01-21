@@ -22,6 +22,7 @@ class BaseLlmTokenUsage(NamedTuple):
     provider: str
     model: str
     input_tokens: int
+    cached_input_tokens: int
     output_tokens: int
     run_id: Optional[str] = None
 
@@ -43,6 +44,7 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
         provider: str,
         model: str,
         input_tokens: int,
+        cached_input_tokens: int,
         output_tokens: int,
         run_id: Optional[str] = None,
     ) -> int:
@@ -54,8 +56,8 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
                 await cursor.execute(
                     """
                     INSERT INTO llm_token_usages
-                    (conversation_id, run_id, provider, model, input_tokens, output_tokens, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (conversation_id, run_id, provider, model, input_tokens, cached_input_tokens, output_tokens, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """,
                     (
@@ -64,6 +66,7 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
                         provider,
                         model,
                         input_tokens,
+                        cached_input_tokens,
                         output_tokens,
                         now,
                         now,
@@ -92,7 +95,13 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    SELECT conversation_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
+                    SELECT
+                        conversation_id,
+                        provider,
+                        model,
+                        SUM(input_tokens) as input_tokens,
+                        SUM(cached_input_tokens) as cached_input_tokens,
+                        SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
                     WHERE conversation_id = %s
                     AND run_id IS NULL
@@ -112,7 +121,14 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    SELECT conversation_id, run_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
+                    SELECT
+                        conversation_id,
+                        run_id,
+                        provider,
+                        model,
+                        SUM(input_tokens) as input_tokens,
+                        SUM(cached_input_tokens) as cached_input_tokens,
+                        SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
                     WHERE conversation_id = %s
                     AND run_id IS NOT NULL
@@ -132,7 +148,14 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    SELECT conversation_id, run_id, provider, model, SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens
+                    SELECT
+                        conversation_id,
+                        run_id,
+                        provider,
+                        model,
+                        SUM(input_tokens) as input_tokens,
+                        SUM(cached_input_tokens) as cached_input_tokens,
+                        SUM(output_tokens) as output_tokens
                     FROM llm_token_usages
                     WHERE run_id = %s
                     GROUP BY conversation_id, run_id, provider, model

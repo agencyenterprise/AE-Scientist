@@ -4,7 +4,7 @@ import os
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import psycopg2
@@ -25,31 +25,43 @@ def _should_use_db_tracking(run_id: str | None) -> bool:
     return run_id is not None and pg_config is not None
 
 
+def _usage_value_to_int(*, value: object) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    try:
+        return int(cast(Any, value))
+    except Exception:
+        return 0
+
+
 def save_cost_track(
     model: str,
     *,
-    input_tokens: int | None = None,
-    output_tokens: int | None = None,
-    ai_message: AIMessage | None = None,
+    input_tokens: int,
+    cached_input_tokens: int,
+    output_tokens: int,
 ) -> None:
-    if (input_tokens is None or output_tokens is None) and ai_message is None:
-        raise ValueError("Either input_tokens and output_tokens or ai_message must be provided")
-    if ai_message:
-        usage_metadata = ai_message.usage_metadata
-        if input_tokens is None and usage_metadata:
-            input_tokens = int(usage_metadata.get("input_tokens", 0) or 0)
-        if output_tokens is None and usage_metadata:
-            output_tokens = int(usage_metadata.get("output_tokens", 0) or 0)
-
     run_id = RUN_ID
     model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
     if _should_use_db_tracking(run_id):
         save_db_cost_track(
-            run_id=run_id,
+            run_id=str(run_id),
             provider=provider,
             model_name=model_name,
             input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
             now=now,
         )
@@ -58,18 +70,21 @@ def save_cost_track(
             provider=provider,
             model_name=model_name,
             input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
             now=now,
         )
 
 
 def save_db_cost_track(
-    run_id: str | None,
-    provider: str | None,
-    model_name: str | None,
-    input_tokens: int | None,
-    output_tokens: int | None,
-    now: datetime | None,
+    *,
+    run_id: str,
+    provider: str,
+    model_name: str,
+    input_tokens: int,
+    cached_input_tokens: int,
+    output_tokens: int,
+    now: datetime,
 ) -> None:
     if pg_config is None:
         raise ValueError("Database configuration missing; cannot save cost track to DB")
@@ -83,6 +98,7 @@ def save_db_cost_track(
                     provider,
                     model,
                     input_tokens,
+                    cached_input_tokens,
                     output_tokens,
                     created_at,
                     updated_at
@@ -93,6 +109,7 @@ def save_db_cost_track(
                     %s AS provider,
                     %s AS model,
                     %s AS input_tokens,
+                    %s AS cached_input_tokens,
                     %s AS output_tokens,
                     %s AS created_at,
                     %s AS updated_at
@@ -107,6 +124,7 @@ def save_db_cost_track(
                     provider,
                     model_name,
                     input_tokens,
+                    cached_input_tokens,
                     output_tokens,
                     now,
                     now,
@@ -121,11 +139,12 @@ def save_db_cost_track(
 
 def save_file_cost_track(
     *,
-    provider: str | None,
-    model_name: str | None,
-    input_tokens: int | None,
-    output_tokens: int | None,
-    now: datetime | None,
+    provider: str,
+    model_name: str,
+    input_tokens: int,
+    cached_input_tokens: int,
+    output_tokens: int,
+    now: datetime,
 ) -> None:
     file_path = Path(os.environ.get("WORKSPACE_DIR") or "") / "cost_track.csv"
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,17 +152,25 @@ def save_file_cost_track(
         with file_path.open(mode="w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(
-                ["provider", "model_name", "input_tokens", "output_tokens", "created_at"]
+                [
+                    "provider",
+                    "model_name",
+                    "input_tokens",
+                    "cached_input_tokens",
+                    "output_tokens",
+                    "created_at",
+                ]
             )
     with file_path.open(mode="a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
             [
-                provider or "",
-                model_name or "",
-                input_tokens or "",
-                output_tokens or "",
-                now or "",
+                provider,
+                model_name,
+                input_tokens,
+                cached_input_tokens,
+                output_tokens,
+                now,
             ]
         )
 
@@ -178,9 +205,20 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                     raise ValueError(
                         "Model name not found in response metadata or provided in constructor"
                     )
+                usage_metadata_raw = message.usage_metadata
+                usage_metadata: dict[str, object] = (
+                    cast(dict[str, object], usage_metadata_raw) if usage_metadata_raw else {}
+                )
+                input_tokens = _usage_value_to_int(value=usage_metadata.get("input_tokens"))
+                cached_input_tokens = _usage_value_to_int(
+                    value=usage_metadata.get("cached_input_tokens")
+                )
+                output_tokens = _usage_value_to_int(value=usage_metadata.get("output_tokens"))
                 save_cost_track(
                     model=model_name,
-                    ai_message=message,
+                    input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
+                    output_tokens=output_tokens,
                 )
         except Exception:
             traceback.print_exc()

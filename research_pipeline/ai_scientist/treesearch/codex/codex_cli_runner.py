@@ -207,12 +207,14 @@ class CodexCliRunner:
                             usage = obj.get("usage")
                             if isinstance(usage, dict):
                                 input_tokens = usage.get("input_tokens")
+                                cached_input_tokens = usage.get("cached_input_tokens")
                                 output_tokens = usage.get("output_tokens")
                                 if input_tokens is not None and output_tokens is not None:
                                     try:
                                         save_cost_track(
-                                            self._model,
+                                            model=self._model,
                                             input_tokens=int(input_tokens),
+                                            cached_input_tokens=int(cached_input_tokens or 0),
                                             output_tokens=int(output_tokens),
                                         )
                                     except Exception:

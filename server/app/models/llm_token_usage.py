@@ -15,6 +15,10 @@ class LlmTokenUsage(BaseModel):
     provider: str = Field(..., description="LLM provider name")
     model: str = Field(..., description="LLM model name")
     input_tokens: int = Field(..., description="Number of input tokens")
+    cached_input_tokens: int = Field(
+        ...,
+        description="Number of cached input tokens (subset of input_tokens, when available)",
+    )
     output_tokens: int = Field(..., description="Number of output tokens")
 
 
