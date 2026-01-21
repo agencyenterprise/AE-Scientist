@@ -465,7 +465,7 @@ async def create_and_launch_research_run(
         await db.update_research_pipeline_run(
             run_id=run_id,
             status="initializing",
-            initialization_status="Pod allocated",
+            initialization_status="Downloading container image",
             pod_update_info=PodUpdateInfo(
                 pod_id=pod_info.pod_id,
                 pod_name=pod_info.pod_name,
