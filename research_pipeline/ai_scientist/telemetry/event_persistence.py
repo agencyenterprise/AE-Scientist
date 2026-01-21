@@ -244,12 +244,12 @@ class EventPersistenceManager:
         self._run_id = run_id
         self._webhook_client = webhook_client
         ctx = multiprocessing.get_context("spawn")
-        # Avoid spawning a multiprocessing.Manager(), which can be slow in containerized
-        # environments. A plain multiprocessing queue is sufficient: child processes can
-        # enqueue events, while the main process drains them in a single writer thread.
+        # Use a multiprocessing.Manager-backed queue so spawned worker processes can
+        # publish events safely without requiring queue inheritance.
+        self._manager = ctx.Manager()
         self._queue = cast(
             multiprocessing.queues.Queue[PersistableEvent | None],
-            ctx.Queue(maxsize=queue_maxsize),
+            self._manager.Queue(maxsize=queue_maxsize),
         )
         self._stop_sentinel: Optional[PersistableEvent] = None
         self._thread = threading.Thread(
@@ -278,6 +278,8 @@ class EventPersistenceManager:
         finally:
             self._started = False
         self._close_queue()
+        if self._manager is not None:
+            self._manager.shutdown()
 
     def _close_queue(self) -> None:
         def _invoke(obj: object, method_name: str) -> bool:
