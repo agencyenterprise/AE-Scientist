@@ -42,8 +42,18 @@ class LLMPricing:
 
         self._pricing_data = {}
         for models in pricing_data.values():
+            if not isinstance(models, dict):
+                continue
             for model_id, prices in models.items():
-                self._pricing_data[model_id] = prices
+                if not isinstance(prices, dict):
+                    continue
+                sanitized: Dict[str, int] = {}
+                for price_key, price_value in prices.items():
+                    try:
+                        sanitized[str(price_key)] = int(price_value)
+                    except (TypeError, ValueError):
+                        continue
+                self._pricing_data[str(model_id)] = sanitized
 
     def get_input_price(self, model_id: str) -> int:
         """
@@ -56,9 +66,23 @@ class LLMPricing:
             The price for the model in cents, for 1 million tokens, for input.
         """
         try:
-            return self._pricing_data[model_id]["input"]
+            return int(self._pricing_data[model_id]["input"])
         except KeyError:
             raise ValueError(f"Input price not found for model '{model_id}'.")
+
+    def get_cached_input_price(self, model_id: str) -> int:
+        """
+        Get the cached-input price for a specific model.
+
+        Falls back to the normal input price when cached-input pricing is not configured.
+        """
+        try:
+            cached = self._pricing_data[model_id].get("cached_input")
+        except KeyError:
+            raise ValueError(f"Pricing not found for model '{model_id}'.")
+        if cached is None:
+            return self.get_input_price(model_id=model_id)
+        return int(cached)
 
     def get_output_price(self, model_id: str) -> int:
         """
@@ -71,7 +95,7 @@ class LLMPricing:
             The price for the model in cents, for 1 million tokens, for output.
         """
         try:
-            return self._pricing_data[model_id]["output"]
+            return int(self._pricing_data[model_id]["output"])
         except KeyError:
             raise ValueError(f"Output price not found for model '{model_id}'.")
 

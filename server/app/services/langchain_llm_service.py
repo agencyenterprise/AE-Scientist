@@ -5,7 +5,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, AsyncGenerator, Dict, List, Sequence, Union
+from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import after_model
@@ -84,14 +84,16 @@ async def track_usage_middleware(
         if isinstance(message, AIMessage):
             metadata = message.usage_metadata
             if metadata:
-                input_tokens = metadata.get("input_tokens", 0)
-                output_tokens = metadata.get("output_tokens", 0)
+                input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
+                cached_input_tokens = int(cast(Any, metadata.get("cached_input_tokens", 0)) or 0)
+                output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
 
                 await db.create_llm_token_usage(
                     conversation_id=ctx.conversation_id,
                     provider=ctx.llm_provider,
                     model=ctx.llm_model,
                     input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
                     output_tokens=output_tokens,
                 )
     return None
@@ -359,13 +361,17 @@ class LangChainLLMService(BaseLLMService, ABC):
             if isinstance(chunk, AIMessage):
                 metadata = chunk.usage_metadata
                 if metadata:
-                    input_tokens = metadata.get("input_tokens", 0)
-                    output_tokens = metadata.get("output_tokens", 0)
+                    input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
+                    cached_input_tokens = int(
+                        cast(Any, metadata.get("cached_input_tokens", 0)) or 0
+                    )
+                    output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
                     await db.create_llm_token_usage(
                         conversation_id=conversation_id,
                         provider=self.provider_name,
                         model=llm_model,
                         input_tokens=input_tokens,
+                        cached_input_tokens=cached_input_tokens,
                         output_tokens=output_tokens,
                     )
             last_chunk_metadata = getattr(chunk, "response_metadata", None)
@@ -713,13 +719,17 @@ class LangChainChatWithIdeaStream:
                     )
                 metadata = response.usage_metadata
                 if metadata:
-                    input_tokens = metadata.get("input_tokens", 0)
-                    output_tokens = metadata.get("output_tokens", 0)
+                    input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
+                    cached_input_tokens = int(
+                        cast(Any, metadata.get("cached_input_tokens", 0)) or 0
+                    )
+                    output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
                     await self.db.create_llm_token_usage(
                         conversation_id=conversation_id,
                         provider=llm_model.provider,
                         model=llm_model.id,
                         input_tokens=input_tokens,
+                        cached_input_tokens=cached_input_tokens,
                         output_tokens=output_tokens,
                     )
                 tool_calls: List[Dict[str, Any]] = self._normalize_tool_calls(response=response)

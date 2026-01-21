@@ -53,8 +53,9 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
         metadata = response.usage_metadata
         if metadata is None:
             return
-        input_tokens = metadata.get("input_tokens", 0)
-        output_tokens = metadata.get("output_tokens", 0)
+        input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
+        cached_input_tokens = int(cast(Any, metadata.get("cached_input_tokens", 0)) or 0)
+        output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
         model_name, provider_name = extract_model_name_and_provider(self.model)
 
         db = DatabaseManager()
@@ -63,6 +64,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
             provider=provider_name,
             model=model_name,
             input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
         )
 
