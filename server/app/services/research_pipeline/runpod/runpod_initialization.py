@@ -182,7 +182,7 @@ def _download_parent_run_data_commands() -> list[str]:
         'if [ "${HAS_PREVIOUS_RUN:-false}" = "true" ] && [ -n "${PARENT_RUN_ID:-}" ]; then',
         '  echo "Downloading parent run data from ${PARENT_RUN_ID}..."',
         '  mkdir -p "${PREVIOUS_RUN_DATA_PATH}"',
-        '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/"',
+        '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/*"',
         f'  s5cmd sync "${{s3_uri}}" "${{PREVIOUS_RUN_DATA_PATH}}/" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
         '  echo "Started parent run data download in background (pid=$!)"',
         "else",
