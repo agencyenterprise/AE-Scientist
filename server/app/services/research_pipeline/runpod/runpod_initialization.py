@@ -14,8 +14,7 @@ from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
+CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
 RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 
@@ -40,8 +39,8 @@ def _sanitize_pod_user_component(*, value: str) -> str:
     return truncated.lower()
 
 
-def get_pod_name(*, user_name: str) -> str:
-    return f"{_POD_NAME_PREFIX}_{_sanitize_pod_user_component(value=user_name)}"
+def get_pod_name(*, user_name: str, run_id: str) -> str:
+    return f"{_POD_NAME_PREFIX}_{_sanitize_pod_user_component(value=user_name)}_{run_id}"
 
 
 @dataclass

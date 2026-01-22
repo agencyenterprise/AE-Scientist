@@ -27,7 +27,7 @@ class TerminationNotFoundError(TerminationRequestError):
     """Raised when the targeted execution_id cannot be found on the pod."""
 
 
-def _write_temp_key_file(raw_key: str) -> str:
+def write_temp_key_file(raw_key: str) -> str:
     key_material = raw_key.replace("\\n", "\n").strip() + "\n"
     fd, path = tempfile.mkstemp(prefix="runpod-key-", suffix=".pem")
     with os.fdopen(fd, "w") as handle:
@@ -48,7 +48,7 @@ def _perform_management_ssh_request(
 ) -> tuple[int, str]:
     payload_json = json.dumps(payload, ensure_ascii=False)
     payload_b64 = base64.b64encode(payload_json.encode("utf-8")).decode("utf-8")
-    key_path = _write_temp_key_file(private_key)
+    key_path = write_temp_key_file(private_key)
     remote_command = (
         f"PAYLOAD=$(printf '%s' '{payload_b64}' | base64 --decode); "
         "RESPONSE=$(curl -sS -w '\\n%{http_code}' "

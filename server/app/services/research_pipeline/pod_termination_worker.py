@@ -1,3 +1,15 @@
+"""
+Background worker that processes pending RunPod termination jobs.
+
+This module provides:
+- A lease-based queue worker (`PodTerminationWorker`) that claims termination rows from the
+  database, performs best-effort artifact upload over SSH, then terminates the RunPod pod.
+- A wakeup signal (`notify_termination_requested`, `get_termination_wakeup_event`) so API
+  handlers can prompt the worker to re-poll immediately.
+- SSE helpers (`publish_termination_status_event`) that emit termination status updates to
+  clients based on `ResearchPipelineRunTermination` state.
+"""
+
 import asyncio
 import logging
 import os
@@ -8,19 +20,65 @@ import sentry_sdk
 from app.api.research_pipeline_stream import publish_stream_event
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunTerminationStatusData, ResearchRunTerminationStatusEvent
 from app.services import get_database
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
-from app.services.research_pipeline import RunPodError, upload_runpod_artifacts_via_ssh
-from app.services.research_pipeline.runpod_manager import RunPodManager
-from app.services.research_pipeline.termination_dispatch_signal import get_termination_wakeup_event
-from app.services.research_pipeline.termination_workflow import publish_termination_status_event
+from app.services.research_pipeline.runpod import (
+    RunPodError,
+    RunPodManager,
+    upload_runpod_artifacts_via_ssh,
+)
 
 logger = logging.getLogger(__name__)
 
 _TERMINATION_MAX_UPLOAD_ATTEMPTS = 3
 _TERMINATION_LEASE_SECONDS = 50 * 60
 _TERMINATION_STUCK_SECONDS = 60 * 60
+
+_termination_wakeup_event = asyncio.Event()
+
+
+def notify_termination_requested() -> None:
+    _termination_wakeup_event.set()
+
+
+def get_termination_wakeup_event() -> asyncio.Event:
+    return _termination_wakeup_event
+
+
+def build_termination_status_payload(
+    *,
+    termination: ResearchPipelineRunTermination | None,
+) -> dict[str, object]:
+    if termination is None:
+        return {"status": "none", "last_error": None}
+
+    return {
+        "status": termination.status,
+        "last_error": termination.last_error,
+    }
+
+
+def publish_termination_status_event(
+    *,
+    run_id: str,
+    termination: ResearchPipelineRunTermination | None,
+) -> None:
+    data = build_termination_status_payload(termination=termination)
+    publish_stream_event(
+        run_id,
+        ResearchRunTerminationStatusEvent(
+            type="termination_status",
+            data=ResearchRunTerminationStatusData(
+                status=cast(
+                    Literal["none", "requested", "in_progress", "terminated", "failed"],
+                    data["status"],
+                ),
+                last_error=cast(str | None, data.get("last_error")),
+            ),
+        ),
+    )
 
 
 class PodTerminationStore(Protocol):
@@ -268,7 +326,7 @@ class PodTerminationWorker:
                         run_id=run_id,
                     )
                     logger.info("Artifacts upload succeeded (run_id=%s).", run_id)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
                     logger.exception(
                         "Artifacts upload failed (run_id=%s attempt=%s/%s).",
                         run_id,

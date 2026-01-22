@@ -12,7 +12,7 @@ from typing import Any, Dict, NamedTuple, cast
 
 import httpx
 
-from app.services.research_pipeline.runpod_initialization import (
+from .runpod_initialization import (
     CONTAINER_DISK_GB,
     WORKSPACE_DISK_GB,
     build_remote_script,
@@ -427,7 +427,7 @@ async def launch_research_pipeline_run(
     }
     if not gpu_types:
         raise ValueError("At least one GPU type must be provided when launching a pod.")
-    pod_name = get_pod_name(user_name=requested_by_first_name)
+    pod_name = get_pod_name(user_name=requested_by_first_name, run_id=run_id)
     pod = await creator.create_pod(
         name=pod_name,
         image="newtonsander/runpod_pytorch_texdeps:v1.1",

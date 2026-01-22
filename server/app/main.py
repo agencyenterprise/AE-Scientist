@@ -13,8 +13,7 @@ from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.database import DatabaseManager
 from app.services.research_pipeline.monitor import pipeline_monitor
-from app.services.research_pipeline.runpod_gpu_pricing import warm_gpu_price_cache
-from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
+from app.services.research_pipeline.runpod import get_supported_gpu_types, warm_gpu_price_cache
 from app.validation import validate_configuration
 
 # Initialize Sentry (must be done before FastAPI app is created)

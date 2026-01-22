@@ -38,7 +38,11 @@ from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
-from app.services.research_pipeline import (
+from app.services.research_pipeline.pod_termination_worker import (
+    notify_termination_requested,
+    publish_termination_status_event,
+)
+from app.services.research_pipeline.runpod import (
     CONTAINER_DISK_GB,
     POD_READY_POLL_INTERVAL_SECONDS,
     WORKSPACE_DISK_GB,
@@ -49,6 +53,7 @@ from app.services.research_pipeline import (
     TerminationRequestError,
     fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
+    get_gpu_type_prices,
     get_pipeline_startup_grace_seconds,
     get_supported_gpu_types,
     launch_research_pipeline_run,
@@ -56,9 +61,6 @@ from app.services.research_pipeline import (
     send_execution_feedback_via_ssh,
     upload_runpod_artifacts_via_ssh,
 )
-from app.services.research_pipeline.runpod_gpu_pricing import get_gpu_type_prices
-from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
-from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 from app.services.s3_service import get_s3_service
 
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])

@@ -53,14 +53,16 @@ from app.services.database.research_pipeline_run_termination import ResearchPipe
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.narrator.narrator_service import ingest_narration_event
-from app.services.research_pipeline import (
+from app.services.research_pipeline.pod_termination_worker import (
+    notify_termination_requested,
+    publish_termination_status_event,
+)
+from app.services.research_pipeline.runpod import (
     RunPodError,
     fetch_pod_billing_summary,
+    get_supported_gpu_types,
     upload_runpod_artifacts_via_ssh,
 )
-from app.services.research_pipeline.runpod_manager import get_supported_gpu_types
-from app.services.research_pipeline.termination_dispatch_signal import notify_termination_requested
-from app.services.research_pipeline.termination_workflow import publish_termination_status_event
 
 
 class ResearchRunStore(Protocol):
