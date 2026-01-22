@@ -24,6 +24,11 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.prompts.render import render_text
+from ai_scientist.treesearch.codex.codex_cli_runner import (
+    CodexCliRunner,
+    build_codex_env,
+    ensure_codex_venv,
+)
 from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 from ai_scientist.writeup_artifacts import (
     SUMMARY_KEYS_TO_STRIP,
@@ -47,6 +52,7 @@ class _WriteupPromptContext(NamedTuple):
     plot_list: str
     plot_descriptions: str
     latex_writeup: str
+    previous_run_context: str
 
 
 class _WriteupReflectionPromptContext(NamedTuple):
@@ -371,6 +377,122 @@ def update_references_block(writeup_path: Path, citations_text: str) -> None:
     writeup_path.write_text(updated_content, encoding="utf-8")
 
 
+def extract_previous_run_context(
+    *,
+    idea_text: str,
+    summaries_str: str,
+    model: str,
+    workspace_dir: Path,
+    event_callback: Optional[Callable[[BaseEvent], None]] = None,
+    run_id: Optional[str] = None,
+) -> str | None:
+    """
+    Use Codex to extract relevant context from previous run data.
+
+    Returns markdown string containing analysis of the previous run, or None if:
+    - HAS_PREVIOUS_RUN is not set to "true"
+    - Previous run data directory doesn't exist
+    - Codex execution fails
+    """
+    # Check if previous run exists
+    has_previous = os.environ.get("HAS_PREVIOUS_RUN", "").strip().lower() == "true"
+    if not has_previous:
+        logger.info("HAS_PREVIOUS_RUN not set; skipping previous run context extraction.")
+        return None
+
+    previous_run_path = Path("/workspace/previous_run_data")
+    if not previous_run_path.exists():
+        logger.warning(
+            "Previous run data directory not found at %s; skipping context extraction.",
+            previous_run_path,
+        )
+        return None
+
+    logger.info("Extracting context from previous research run at %s", previous_run_path)
+
+    # Emit event: starting previous run context extraction
+    if event_callback and run_id:
+        event_callback(
+            PaperGenerationProgressEvent(
+                run_id=run_id,
+                step="paper_writeup",
+                substep="Extracting previous run context...",
+                progress=0.25,
+                step_progress=0.0,
+            )
+        )
+
+    try:
+        # Build Codex task prompt
+        codex_prompt = render_text(
+            template_name="writeup/extract_previous_run_context.md.j2",
+            context={
+                "current_idea_text": idea_text,
+                "current_summaries": summaries_str,
+                "previous_run_path": str(previous_run_path),
+            },
+        )
+
+        # Write task file
+        task_file = workspace_dir / "extract_previous_context_task.md"
+        task_file.write_text(codex_prompt, encoding="utf-8")
+
+        # Ensure Codex venv exists
+        research_pipeline_root = Path(__file__).resolve().parents[1]
+        venv_dir = ensure_codex_venv(
+            workspace_dir=workspace_dir,
+            research_pipeline_root=research_pipeline_root,
+        )
+
+        # Build Codex environment
+        codex_env = build_codex_env(venv_dir=venv_dir)
+
+        # Run Codex CLI
+        runner = CodexCliRunner(
+            workspace_dir=workspace_dir,
+            session_log_name="previous_context_extraction.log",
+            events_log_name="previous_context_extraction_events.jsonl",
+            timeout_seconds=1800,  # 30 minutes
+            model=model,
+            env=codex_env,
+            event_callback=event_callback if event_callback else lambda _: None,
+        )
+
+        logger.info("Running Codex to extract previous run context (timeout: 30min)...")
+        _term_out, exec_time, exc_type, _exc_info = runner.run(
+            task_file=task_file,
+            stage="paper_writeup",
+            node=0,
+            pid_callback=None,
+            termination_checker=None,
+        )
+
+        logger.info(
+            "Codex context extraction completed in %.1fs (exc_type=%s)", exec_time, exc_type
+        )
+
+        # Read the output file
+        output_file = workspace_dir / "previous_run_context.md"
+        if not output_file.exists():
+            logger.warning(
+                "Codex did not create expected output file at %s; skipping previous context.",
+                output_file,
+            )
+            return None
+
+        context_text = output_file.read_text(encoding="utf-8").strip()
+        if not context_text:
+            logger.warning("Previous run context file is empty; skipping.")
+            return None
+
+        logger.info("Successfully extracted previous run context (%s chars)", len(context_text))
+        return context_text
+
+    except Exception:
+        logger.exception("Failed to extract previous run context; proceeding without it.")
+        return None
+
+
 def perform_writeup(
     base_folder: str,
     model: str,
@@ -488,6 +610,23 @@ def perform_writeup(
         if citations_text:
             update_references_block(writeup_path=writeup_file, citations_text=citations_text)
 
+        # Extract context from previous run if available
+        previous_run_context: str | None = None
+        if os.environ.get("HAS_PREVIOUS_RUN", "").strip().lower() == "true":
+            logger.info("Previous run detected; extracting context for paper writing...")
+            previous_run_context = extract_previous_run_context(
+                idea_text=idea_text,
+                summaries_str=combined_summaries_str,
+                model=model,
+                workspace_dir=Path("/workspace"),
+                event_callback=event_callback,
+                run_id=run_id,
+            )
+            if previous_run_context:
+                logger.info("Previous run context successfully extracted for paper writing.")
+            else:
+                logger.info("Previous run context extraction did not produce usable output.")
+
         try:
             vlm_started_at = time.monotonic()
             desc_map: Dict[str, str] = {}
@@ -552,6 +691,7 @@ def perform_writeup(
                 plot_list=", ".join(plot_names),
                 plot_descriptions=plot_descriptions_str,
                 latex_writeup=writeup_text,
+                previous_run_context=previous_run_context or "",
             )._asdict(),
         )
 
