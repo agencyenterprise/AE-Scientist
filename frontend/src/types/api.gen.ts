@@ -316,6 +316,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/seed-new-idea": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seed Idea From Run
+         * @description Seed a new idea from a completed research run.
+         *
+         *     Creates a new conversation and idea by copying the idea version data
+         *     from the specified run. The new conversation is linked to the parent run via
+         *     parent_run_id.
+         *
+         *     Args:
+         *         conversation_id: ID of the conversation containing the source idea
+         *         run_id: ID of the research run to seed from
+         *         request: FastAPI request object
+         *         response: FastAPI response object
+         *
+         *     Returns:
+         *         SeedFromRunResponse with new conversation_id and idea_id
+         *
+         *     Raises:
+         *         404: If conversation, run, or idea not found
+         *         403: If user doesn't own the conversation
+         *         400: If run is not completed
+         */
+        post: operations["seed_idea_from_run_api_conversations__conversation_id__idea_research_run__run_id__seed_new_idea_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations": {
         parameters: {
             query?: never;
@@ -4730,6 +4768,27 @@ export interface components {
             run_id: string;
             event: components["schemas"]["RunningCodeEventPayload"];
         };
+        /**
+         * SeedFromRunResponse
+         * @description Response when seeding a new idea from a run.
+         */
+        SeedFromRunResponse: {
+            /**
+             * Conversation Id
+             * @description ID of the new conversation
+             */
+            conversation_id: number;
+            /**
+             * Idea Id
+             * @description ID of the new idea
+             */
+            idea_id: number;
+            /**
+             * Message
+             * @description Success message
+             */
+            message: string;
+        };
         /** SkipStageRequest */
         SkipStageRequest: {
             /** Stage */
@@ -5560,6 +5619,38 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationImportStreamEvent"];
                     "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    seed_idea_from_run_api_conversations__conversation_id__idea_research_run__run_id__seed_new_idea_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedFromRunResponse"];
                 };
             };
             /** @description Validation Error */

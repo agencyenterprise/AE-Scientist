@@ -50,6 +50,9 @@ export default function ResearchRunDetailPage() {
     stageSkipState,
     skipPendingStage,
     handleSkipStage,
+    seedPending,
+    seedError,
+    handleSeedNewIdea,
   } = useResearchRunDetails({
     runId,
     onReviewCompleted: newReview => setReview(newReview),
@@ -180,6 +183,10 @@ export default function ResearchRunDetailPage() {
           stopPending={stopPending}
           stopError={stopError}
           onStopRun={handleStopRun}
+          conversationId={conversationId}
+          onSeedNewIdea={handleSeedNewIdea}
+          seedPending={seedPending}
+          seedError={seedError}
         />
 
         <InitializationStatusBanner

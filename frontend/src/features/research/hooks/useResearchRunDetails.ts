@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/shared/lib/api-client";
 import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type {
@@ -44,6 +45,9 @@ interface UseResearchRunDetailsReturn {
   stageSkipState: StageSkipStateMap;
   skipPendingStage: string | null;
   handleSkipStage: (stageSlug: string) => Promise<void>;
+  seedPending: boolean;
+  seedError: string | null;
+  handleSeedNewIdea: () => Promise<void>;
 }
 
 interface CodeExecutionCompletionPayload {
@@ -79,6 +83,9 @@ export function useResearchRunDetails({
   const [stopError, setStopError] = useState<string | null>(null);
   const [stageSkipState, setStageSkipState] = useState<StageSkipStateMap>({});
   const [skipPendingStage, setSkipPendingStage] = useState<string | null>(null);
+  const [seedPending, setSeedPending] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
+  const router = useRouter();
 
   // SSE callback handlers
   const syncStageSkipState = useCallback((windows: StageSkipWindow[] | undefined) => {
@@ -547,6 +554,28 @@ export function useResearchRunDetails({
     [conversationId, runId]
   );
 
+  const handleSeedNewIdea = useCallback(async () => {
+    if (!conversationId || seedPending) {
+      return;
+    }
+
+    try {
+      setSeedError(null);
+      setSeedPending(true);
+
+      const response = await apiFetch<{ conversation_id: number; idea_id: number }>(
+        `/conversations/${conversationId}/idea/research-run/${runId}/seed-new-idea`,
+        { method: "POST" }
+      );
+
+      router.push(`/conversations/${response.conversation_id}`);
+    } catch (err) {
+      setSeedError(err instanceof Error ? err.message : "Failed to seed new idea from this run");
+    } finally {
+      setSeedPending(false);
+    }
+  }, [conversationId, runId, seedPending, router]);
+
   return {
     details,
     loading,
@@ -561,5 +590,8 @@ export function useResearchRunDetails({
     stageSkipState,
     skipPendingStage,
     handleSkipStage,
+    seedPending,
+    seedError,
+    handleSeedNewIdea,
   };
 }

@@ -1271,7 +1271,7 @@ async def _retry_run_after_gpu_shortage(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
             gpu_types=retry_gpu_types,
-            conversation_id=idea_version.conversation_id or -1,
+            conversation_id=idea_version.conversation_id,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",
