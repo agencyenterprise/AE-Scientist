@@ -1,0 +1,327 @@
+"""
+Builds the initialization scripts and configuration injected into a freshly launched RunPod pod.
+"""
+
+import base64
+import logging
+import os
+import re
+import shlex
+from dataclasses import dataclass
+from pathlib import Path
+
+from omegaconf import OmegaConf
+
+logger = logging.getLogger(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent / "bfts_config_template.yaml"
+RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
+RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
+
+CONTAINER_DISK_GB = 100
+WORKSPACE_DISK_GB = 200
+_POD_NAME_PREFIX = "aescientist"
+_POD_USER_FALLBACK = "Scientist"
+_POD_USER_MAX_LEN = 24
+
+DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
+DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
+
+
+def _sanitize_pod_user_component(*, value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed:
+        return _POD_USER_FALLBACK
+    sanitized = re.sub(pattern=r"[^A-Za-z0-9]", repl="", string=trimmed)
+    if not sanitized:
+        return _POD_USER_FALLBACK
+    truncated = sanitized[:_POD_USER_MAX_LEN]
+    return truncated.lower()
+
+
+def get_pod_name(*, user_name: str) -> str:
+    return f"{_POD_NAME_PREFIX}_{_sanitize_pod_user_component(value=user_name)}"
+
+
+@dataclass
+class RunPodEnvironment:
+    git_deploy_key: str
+    openai_api_key: str
+    hf_token: str
+    database_public_url: str
+    telemetry_webhook_url: str
+    telemetry_webhook_token: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_region: str
+    aws_s3_bucket_name: str
+    sentry_dsn: str
+    sentry_environment: str
+
+
+def load_runpod_environment() -> RunPodEnvironment:
+    def _require(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise RuntimeError(f"Environment variable {name} is required to launch RunPod.")
+        return value
+
+    def _optional(name: str) -> str:
+        value = os.environ.get(name)
+        return value or ""
+
+    return RunPodEnvironment(
+        git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
+        openai_api_key=_require("OPENAI_API_KEY"),
+        hf_token=_require("HF_TOKEN"),
+        database_public_url=_require("DATABASE_PUBLIC_URL"),
+        telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
+        telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
+        aws_access_key_id=_require("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
+        aws_region=_require("AWS_REGION"),
+        aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
+        sentry_dsn=_optional("SENTRY_DSN"),
+        sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
+    )
+
+
+def prepare_config_text(*, idea_filename: str, telemetry: dict[str, str]) -> str:
+    if not CONFIG_TEMPLATE_PATH.exists():
+        raise RuntimeError(
+            "Pipeline config template missing at "
+            f"{CONFIG_TEMPLATE_PATH}. Ensure the file exists."
+        )
+    config = OmegaConf.load(CONFIG_TEMPLATE_PATH)
+    logger.info(
+        "Preparing pipeline config from %s with desc_file=%s",
+        CONFIG_TEMPLATE_PATH,
+        idea_filename,
+    )
+    config.desc_file = idea_filename
+    if telemetry:
+        config.telemetry = telemetry
+    else:
+        config.telemetry = None
+    config_yaml = OmegaConf.to_yaml(config)
+    if not config_yaml.endswith("\n"):
+        config_yaml += "\n"
+    return config_yaml
+
+
+def encode_multiline(value: str) -> str:
+    return base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+
+def _load_repo_setup_script() -> str:
+    if not RUNPOD_SETUP_SCRIPT_PATH.exists():
+        raise RuntimeError(
+            f"RunPod setup script missing at {RUNPOD_SETUP_SCRIPT_PATH}. "
+            "Ensure server/app/services/research_pipeline/runpod_repo_setup.sh exists."
+        )
+    return RUNPOD_SETUP_SCRIPT_PATH.read_text(encoding="utf-8").strip()
+
+
+def _repository_setup_commands() -> list[str]:
+    script_text = _load_repo_setup_script()
+    return [
+        "# === Repository Setup ===",
+        "cat <<'RUNPOD_SETUP' | bash",
+        script_text,
+        "RUNPOD_SETUP",
+        "",
+    ]
+
+
+def _load_install_script() -> str:
+    if not RUNPOD_INSTALL_SCRIPT_PATH.exists():
+        raise RuntimeError(
+            f"RunPod install script missing at {RUNPOD_INSTALL_SCRIPT_PATH}. "
+            "Ensure server/app/services/research_pipeline/install_run_pod.sh exists."
+        )
+    return RUNPOD_INSTALL_SCRIPT_PATH.read_text(encoding="utf-8").strip()
+
+
+def _installation_commands() -> list[str]:
+    script_text = _load_install_script()
+    return [
+        "# === Installation ===",
+        'echo "Running installation script..."',
+        "cd /workspace/AE-Scientist",
+        "cat <<'RUNPOD_INSTALL' | bash",
+        script_text,
+        "RUNPOD_INSTALL",
+        "",
+    ]
+
+
+def _codex_installation_commands() -> list[str]:
+    return [
+        "# === Codex CLI Installation ===",
+        'echo "Ensuring Codex CLI is installed..."',
+        "if ! command -v codex >/dev/null 2>&1; then",
+        "  if ! command -v npm >/dev/null 2>&1; then",
+        '    echo "npm not found; installing Node.js + npm..."',
+        "    apt-get update && apt-get install -y nodejs npm",
+        "  fi",
+        "  npm install -g @openai/codex",
+        "fi",
+        "codex --version || true",
+        "",
+    ]
+
+
+def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
+    return [
+        "# === AWS Credentials Setup ===",
+        'echo "Creating ~/.aws/credentials..."',
+        "mkdir -p ~/.aws",
+        "chmod 700 ~/.aws",
+        "cat > ~/.aws/credentials << 'EOF'",
+        "[default]",
+        f"aws_access_key_id={env.aws_access_key_id}",
+        f"aws_secret_access_key={env.aws_secret_access_key}",
+        "EOF",
+        "chmod 600 ~/.aws/credentials",
+        "",
+    ]
+
+
+def _resolve_disk_stats_paths() -> str:
+    raw = os.environ.get(DISK_STATS_ENV_NAME) or DEFAULT_COLLECT_DISK_STATS_PATHS
+    paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
+    sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
+    return sanitized
+
+
+def build_remote_script(
+    *,
+    env: RunPodEnvironment,
+    idea_filename: str,
+    idea_content_b64: str,
+    config_filename: str,
+    config_content_b64: str,
+    run_id: str,
+) -> str:
+    telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
+    telemetry_token = shlex.quote(env.telemetry_webhook_token)
+    run_id_quoted = shlex.quote(run_id)
+    script_parts: list[str] = [
+        "set -euo pipefail",
+        "",
+        f"export RUN_ID={run_id_quoted}",
+        f"export TELEMETRY_WEBHOOK_URL={telemetry_url}",
+        f"export TELEMETRY_WEBHOOK_TOKEN={telemetry_token}",
+        "",
+        "send_init_status() {",
+        '  if [ -z "${TELEMETRY_WEBHOOK_URL:-}" ] || [ -z "${TELEMETRY_WEBHOOK_TOKEN:-}" ] || [ -z "${RUN_ID:-}" ]; then',
+        "    return 0",
+        "  fi",
+        "  if ! command -v curl >/dev/null 2>&1; then",
+        "    return 0",
+        "  fi",
+        '  msg="$1"',
+        '  msg="${msg//\\"/\\\\\\"}"',
+        '  payload="{\\"run_id\\":\\"${RUN_ID}\\",\\"message\\":\\"${msg}\\"}"',
+        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/initialization-progress" \\',
+        '    -H "Authorization: Bearer ${TELEMETRY_WEBHOOK_TOKEN}" \\',
+        '    -H "Content-Type: application/json" \\',
+        '    --data "${payload}" >/dev/null 2>&1 || true',
+        "}",
+        "",
+    ]
+    hw_stats_paths = _resolve_disk_stats_paths()
+    env_file_lines = [
+        f"OPENAI_API_KEY={env.openai_api_key}",
+        f"HF_TOKEN={env.hf_token}",
+        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
+        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
+        f"AWS_REGION={env.aws_region}",
+        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
+        "DATASETS_AWS_FOLDER=datasets",
+        "DATASETS_LOCAL_DIR=/workspace/datasets",
+        f"RUN_ID={run_id}",
+        f"DATABASE_PUBLIC_URL={env.database_public_url}",
+        f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
+        f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
+        "PIPELINE_WORKSPACE_PATH=/workspace",
+    ]
+    if env.sentry_dsn:
+        env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
+    if env.sentry_environment:
+        env_file_lines.append(f"SENTRY_ENVIRONMENT={env.sentry_environment}")
+    script_parts += [
+        "# === GPU Validation ===",
+        'send_init_status "Validating GPU"',
+        'echo "Validating GPU..."',
+        'nvidia-smi || { echo "❌ nvidia-smi failed"; exit 1; }',
+        'echo "✅ GPU validated"',
+        "",
+    ]
+    script_parts += ['send_init_status "Cloning repository"', ""]
+    script_parts += _repository_setup_commands()
+    script_parts += ['send_init_status "Installing packages"', ""]
+    script_parts += _installation_commands()
+    script_parts += ['send_init_status "Installing Codex CLI"', ""]
+    script_parts += _codex_installation_commands()
+    script_parts += [
+        "# === Environment Setup ===",
+        'echo "Creating .env file..."',
+        "cd /workspace/AE-Scientist/research_pipeline",
+        "cat > .env << 'EOF'",
+    ]
+    script_parts += env_file_lines
+    script_parts += [
+        "EOF",
+        'echo "Exporting environment variables from .env..."',
+        "set -a",
+        "source .env",
+        "set +a",
+        "",
+    ]
+    script_parts += _aws_credentials_setup_commands(env=env)
+    script_parts += [
+        "# === Inject refined idea and config ===",
+        "cd /workspace/AE-Scientist/research_pipeline",
+        "python - <<'PY'",
+        "import base64, pathlib",
+        f"pathlib.Path('{idea_filename}').write_bytes(base64.b64decode('{idea_content_b64}'))",
+        f"pathlib.Path('{config_filename}').write_bytes(base64.b64decode('{config_content_b64}'))",
+        "PY",
+        "",
+        "source .venv/bin/activate",
+        'send_init_status "Initializing PyTorch"',
+        "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
+        "import torch",
+        "torch.cuda.set_device(0)",
+        "print('✅ PyTorch device initialized successfully')",
+        "PY",
+        "",
+        "scrubbed_config_path=/tmp/run_config.yaml",
+        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
+        'if [ -s "$scrubbed_config_path" ]; then',
+        '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config >/workspace/run_config_upload.log 2>&1 &',
+        '  echo "Started run_config upload (pid=$!)"',
+        "else",
+        "  echo 'Sanitized config is empty; skipping upload.'",
+        "fi",
+        "pipeline_exit_code=0",
+        "set +e",
+        "# === Starting Research Pipeline ===",
+        'echo "Launching research pipeline..."',
+        'send_init_status "Launching research pipeline"',
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        "pipeline_exit_code=$?",
+        "set -e",
+        'if [ "$pipeline_exit_code" -eq 0 ]; then',
+        '  echo "Research pipeline completed successfully. Check /workspace/research_pipeline.log for full output."',
+        "else",
+        '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
+        "fi",
+        "",
+        "# === Await External Cleanup ===",
+        'echo "Research pipeline finished; sleeping until server collects artifacts..."',
+        "while true; do sleep 3600; done",
+    ]
+    return "\n".join(script_parts).strip()
