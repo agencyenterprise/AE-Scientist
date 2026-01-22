@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 CONFIG_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "bfts_config_template.yaml"
 RUNPOD_SETUP_SCRIPT_PATH = Path(__file__).resolve().parent / "runpod_repo_setup.sh"
-RUNPOD_INSTALL_SCRIPT_PATH = Path(__file__).resolve().parent / "install_run_pod.sh"
 
 CONTAINER_DISK_GB = 100
 WORKSPACE_DISK_GB = 200
@@ -113,17 +112,13 @@ def encode_multiline(value: str) -> str:
     return base64.b64encode(value.encode("utf-8")).decode("utf-8")
 
 
-def _load_repo_setup_script() -> str:
+def _repository_setup_commands() -> list[str]:
     if not RUNPOD_SETUP_SCRIPT_PATH.exists():
         raise RuntimeError(
             f"RunPod setup script missing at {RUNPOD_SETUP_SCRIPT_PATH}. "
-            "Ensure server/app/services/research_pipeline/runpod_repo_setup.sh exists."
+            "Ensure server/app/services/research_pipeline/runpod/runpod_repo_setup.sh exists."
         )
-    return RUNPOD_SETUP_SCRIPT_PATH.read_text(encoding="utf-8").strip()
-
-
-def _repository_setup_commands() -> list[str]:
-    script_text = _load_repo_setup_script()
+    script_text = RUNPOD_SETUP_SCRIPT_PATH.read_text(encoding="utf-8").strip()
     return [
         "# === Repository Setup ===",
         "cat <<'RUNPOD_SETUP' | bash",
@@ -133,23 +128,16 @@ def _repository_setup_commands() -> list[str]:
     ]
 
 
-def _load_install_script() -> str:
-    if not RUNPOD_INSTALL_SCRIPT_PATH.exists():
-        raise RuntimeError(
-            f"RunPod install script missing at {RUNPOD_INSTALL_SCRIPT_PATH}. "
-            "Ensure server/app/services/research_pipeline/install_run_pod.sh exists."
-        )
-    return RUNPOD_INSTALL_SCRIPT_PATH.read_text(encoding="utf-8").strip()
-
-
-def _installation_commands() -> list[str]:
-    script_text = _load_install_script()
+def _python_packages_installation_commands() -> list[str]:
     return [
         "# === Installation ===",
         'echo "Running installation script..."',
         "cd /workspace/AE-Scientist",
         "cat <<'RUNPOD_INSTALL' | bash",
-        script_text,
+        "cd /workspace/AE-Scientist/research_pipeline/",
+        "uv venv --system-site-packages",
+        "source .venv/bin/activate",
+        "uv sync",
         "RUNPOD_INSTALL",
         "",
     ]
@@ -184,6 +172,77 @@ def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
         "EOF",
         "chmod 600 ~/.aws/credentials",
         "",
+    ]
+
+
+def _inject_refined_idea_and_config_commands(
+    *,
+    idea_filename: str,
+    idea_content_b64: str,
+    config_filename: str,
+    config_content_b64: str,
+) -> list[str]:
+    return [
+        "# === Inject refined idea and config ===",
+        "cd /workspace/AE-Scientist/research_pipeline",
+        "python - <<'PY'",
+        "import base64, pathlib",
+        f"pathlib.Path('{idea_filename}').write_bytes(base64.b64decode('{idea_content_b64}'))",
+        f"pathlib.Path('{config_filename}').write_bytes(base64.b64decode('{config_content_b64}'))",
+        "PY",
+        "",
+    ]
+
+
+def _pytorch_cuda_test_command() -> list[str]:
+    return [
+        'send_init_status "Initializing PyTorch"',
+        "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
+        "import torch",
+        "torch.cuda.set_device(0)",
+        "print('✅ PyTorch device initialized successfully')",
+        "PY",
+        "",
+    ]
+
+
+def _upload_scrubbed_run_config_commands(*, config_filename: str) -> list[str]:
+    return [
+        "scrubbed_config_path=/tmp/run_config.yaml",
+        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
+        'if [ -s "$scrubbed_config_path" ]; then',
+        '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config >/workspace/run_config_upload.log 2>&1 &',
+        '  echo "Started run_config upload (pid=$!)"',
+        "else",
+        "  echo 'Sanitized config is empty; skipping upload.'",
+        "fi",
+    ]
+
+
+def _launch_research_pipeline_commands(*, config_filename: str) -> list[str]:
+    return [
+        "pipeline_exit_code=0",
+        "set +e",
+        "# === Starting Research Pipeline ===",
+        'echo "Launching research pipeline..."',
+        'send_init_status "Launching research pipeline"',
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        "pipeline_exit_code=$?",
+        "set -e",
+        'if [ "$pipeline_exit_code" -eq 0 ]; then',
+        '  echo "Research pipeline completed successfully. Check /workspace/research_pipeline.log for full output."',
+        "else",
+        '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
+        "fi",
+        "",
+    ]
+
+
+def _await_external_cleanup_commands() -> list[str]:
+    return [
+        "# === Await External Cleanup ===",
+        'echo "Research pipeline finished; sleeping until server collects artifacts..."',
+        "while true; do sleep 3600; done",
     ]
 
 
@@ -261,7 +320,7 @@ def build_remote_script(
     script_parts += ['send_init_status "Cloning repository"', ""]
     script_parts += _repository_setup_commands()
     script_parts += ['send_init_status "Installing packages"', ""]
-    script_parts += _installation_commands()
+    script_parts += _python_packages_installation_commands()
     script_parts += ['send_init_status "Installing Codex CLI"', ""]
     script_parts += _codex_installation_commands()
     script_parts += [
@@ -280,47 +339,15 @@ def build_remote_script(
         "",
     ]
     script_parts += _aws_credentials_setup_commands(env=env)
-    script_parts += [
-        "# === Inject refined idea and config ===",
-        "cd /workspace/AE-Scientist/research_pipeline",
-        "python - <<'PY'",
-        "import base64, pathlib",
-        f"pathlib.Path('{idea_filename}').write_bytes(base64.b64decode('{idea_content_b64}'))",
-        f"pathlib.Path('{config_filename}').write_bytes(base64.b64decode('{config_content_b64}'))",
-        "PY",
-        "",
-        "source .venv/bin/activate",
-        'send_init_status "Initializing PyTorch"',
-        "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
-        "import torch",
-        "torch.cuda.set_device(0)",
-        "print('✅ PyTorch device initialized successfully')",
-        "PY",
-        "",
-        "scrubbed_config_path=/tmp/run_config.yaml",
-        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
-        'if [ -s "$scrubbed_config_path" ]; then',
-        '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config >/workspace/run_config_upload.log 2>&1 &',
-        '  echo "Started run_config upload (pid=$!)"',
-        "else",
-        "  echo 'Sanitized config is empty; skipping upload.'",
-        "fi",
-        "pipeline_exit_code=0",
-        "set +e",
-        "# === Starting Research Pipeline ===",
-        'echo "Launching research pipeline..."',
-        'send_init_status "Launching research pipeline"',
-        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
-        "pipeline_exit_code=$?",
-        "set -e",
-        'if [ "$pipeline_exit_code" -eq 0 ]; then',
-        '  echo "Research pipeline completed successfully. Check /workspace/research_pipeline.log for full output."',
-        "else",
-        '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
-        "fi",
-        "",
-        "# === Await External Cleanup ===",
-        'echo "Research pipeline finished; sleeping until server collects artifacts..."',
-        "while true; do sleep 3600; done",
-    ]
+    script_parts += _inject_refined_idea_and_config_commands(
+        idea_filename=idea_filename,
+        idea_content_b64=idea_content_b64,
+        config_filename=config_filename,
+        config_content_b64=config_content_b64,
+    )
+    script_parts += ["source .venv/bin/activate", ""]
+    script_parts += _pytorch_cuda_test_command()
+    script_parts += _upload_scrubbed_run_config_commands(config_filename=config_filename)
+    script_parts += _launch_research_pipeline_commands(config_filename=config_filename)
+    script_parts += _await_external_cleanup_commands()
     return "\n".join(script_parts).strip()
