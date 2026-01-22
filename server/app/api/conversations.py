@@ -57,6 +57,7 @@ from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES, 
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
+from app.services.prompts import format_review_feedback_message
 from app.services.scraper.errors import ChatNotFound
 
 router = APIRouter(prefix="/conversations")
@@ -1095,6 +1096,25 @@ async def seed_idea_from_run(
                 created_by_user_id=user.id,
             ),
         )
+
+        # Fetch LLM review for this run and create initial improvement message
+        review_data = await db.get_review_by_run_id(run_id=run_id)
+        if review_data:
+            # Format the review feedback into a user message
+            improvement_message = format_review_feedback_message(review_data=review_data)
+
+            # Create initial chat message asking LLM to help improve the idea
+            await db.create_chat_message(
+                idea_id=new_idea_id,
+                role="user",
+                content=improvement_message,
+                sent_by_user_id=user.id,
+            )
+
+            logger.info(
+                f"Created initial improvement message for seeded idea {new_idea_id} "
+                f"based on review from run {run_id}. Frontend will auto-trigger streaming response."
+            )
 
         logger.info(
             f"User {user.id} seeded new idea {new_idea_id} from run {run_id} "

@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 
 import { useConversationContext } from "@/features/conversation/context/ConversationContext";
-import type { Idea, FileMetadata } from "@/types";
+import type { Idea, FileMetadata, ConversationDetail } from "@/types";
 import { useAuth } from "@/shared/hooks/useAuth";
 
 import { isIdeaGenerating } from "../utils/versionUtils";
@@ -17,6 +17,7 @@ import { ChatGeneratingState } from "./ChatGeneratingState";
 
 interface ProjectDraftConversationProps {
   conversationId: number;
+  conversation: ConversationDetail;
   isLocked: boolean;
   currentProjectDraft?: Idea | null;
   onProjectDraftUpdate?: (updatedDraft: Idea) => void;
@@ -31,6 +32,7 @@ interface ProjectDraftConversationProps {
 
 export function ProjectDraftConversation({
   conversationId,
+  conversation,
   isLocked,
   currentProjectDraft,
   onProjectDraftUpdate,
@@ -48,6 +50,7 @@ export function ProjectDraftConversation({
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputMessage, setInputMessage] = useState("");
+  const hasAutoTriggeredRef = useRef(false);
 
   // Check if project draft is currently being generated
   const isGenerating = isIdeaGenerating(currentProjectDraft || null);
@@ -118,6 +121,47 @@ export function ProjectDraftConversation({
   useEffect(() => {
     setIsStreaming(isStreaming);
   }, [isStreaming, setIsStreaming]);
+
+  // Auto-trigger streaming for seeded conversations with unanswered review feedback
+  useEffect(() => {
+    // Check if already triggered
+    if (hasAutoTriggeredRef.current) return;
+
+    // Check if conversation is seeded from a research run
+    const isSeededFromRun = conversation.url.startsWith("seeded://run/");
+    if (!isSeededFromRun) return;
+
+    // Wait for messages to load
+    if (isLoadingHistory) return;
+
+    // Check if there are messages
+    if (messages.length === 0) return;
+
+    // Check if last message is from user (unanswered)
+    const lastMessage = messages[messages.length - 1];
+    const hasUnansweredUserMessage = lastMessage && lastMessage.role === "user";
+    if (!hasUnansweredUserMessage) return;
+
+    // Check if model is ready
+    if (!currentModel || !currentProvider) return;
+
+    // Check if not already streaming
+    if (isStreaming) return;
+
+    // Mark as triggered and auto-send the last user message
+    hasAutoTriggeredRef.current = true;
+
+    // Auto-trigger streaming response to the user's message
+    sendMessage(lastMessage.content);
+  }, [
+    conversation.url,
+    isLoadingHistory,
+    messages,
+    currentModel,
+    currentProvider,
+    isStreaming,
+    sendMessage,
+  ]);
 
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && pendingFiles.length === 0) return;
