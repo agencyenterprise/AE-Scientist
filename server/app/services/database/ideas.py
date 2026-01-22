@@ -54,6 +54,14 @@ class IdeaData(NamedTuple):
     updated_at: datetime
 
 
+class IdeaCreationFromRunParams(NamedTuple):
+    """Parameters for creating an idea from a parent run."""
+
+    conversation_id: int
+    source_version_id: int
+    created_by_user_id: int
+
+
 class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
     """Database operations for ideas."""
 
@@ -496,3 +504,119 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 )
 
                 return new_version_id
+
+    async def create_idea_from_run(
+        self,
+        params: IdeaCreationFromRunParams,
+    ) -> int:
+        """Create a new idea by copying data from an existing idea version.
+
+        This is used when seeding a new idea from a completed research run.
+        The new idea preserves all content from the source version but is
+        linked to a new conversation.
+
+        Args:
+            params: IdeaCreationFromRunParams with all required fields
+
+        Returns:
+            The new idea_id
+
+        Raises:
+            ValueError: If source version not found or conversation already has an idea
+        """
+        now = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                # Check if conversation already has an idea
+                await cursor.execute(
+                    "SELECT id FROM ideas WHERE conversation_id = %s",
+                    (params.conversation_id,),
+                )
+                existing = await cursor.fetchone()
+                if existing:
+                    raise ValueError(f"Conversation {params.conversation_id} already has an idea")
+
+                # Fetch source version data
+                await cursor.execute(
+                    """SELECT title, short_hypothesis, related_work, abstract,
+                              experiments, expected_outcome, risk_factors_and_limitations
+                       FROM idea_versions
+                       WHERE id = %s""",
+                    (params.source_version_id,),
+                )
+                source_row = await cursor.fetchone()
+
+                if not source_row:
+                    raise ValueError(f"Source idea version {params.source_version_id} not found")
+
+                # Create new idea
+                await cursor.execute(
+                    """
+                    INSERT INTO ideas (
+                        conversation_id,
+                        created_at,
+                        updated_at,
+                        created_by_user_id
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        params.conversation_id,
+                        now,
+                        now,
+                        params.created_by_user_id,
+                    ),
+                )
+                idea_row = await cursor.fetchone()
+                if not idea_row:
+                    raise ValueError("Failed to create idea (missing id).")
+                idea_id: int = int(idea_row["id"])
+
+                # Create initial version from source data
+                await cursor.execute(
+                    """
+                    INSERT INTO idea_versions (
+                        idea_id,
+                        title,
+                        short_hypothesis,
+                        related_work,
+                        abstract,
+                        experiments,
+                        expected_outcome,
+                        risk_factors_and_limitations,
+                        is_manual_edit,
+                        version_number,
+                        created_at,
+                        created_by_user_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        idea_id,
+                        source_row["title"],
+                        source_row["short_hypothesis"],
+                        source_row["related_work"],
+                        source_row["abstract"],
+                        Jsonb(source_row["experiments"]),
+                        source_row["expected_outcome"],
+                        Jsonb(source_row["risk_factors_and_limitations"]),
+                        False,
+                        1,
+                        now,
+                        params.created_by_user_id,
+                    ),
+                )
+                version_row = await cursor.fetchone()
+                if not version_row:
+                    raise ValueError("Failed to create idea version (missing id).")
+                version_id: int = int(version_row["id"])
+
+                # Set active version
+                await cursor.execute(
+                    "UPDATE ideas SET active_idea_version_id = %s, updated_at = %s WHERE id = %s",
+                    (version_id, now, idea_id),
+                )
+
+                return idea_id

@@ -50,6 +50,7 @@ export function ProjectDraftTab({
         <div className="w-full md:w-1/2 h-full overflow-y-auto md:border-r md:border-slate-800 md:pr-4">
           <ProjectDraftConversation
             conversationId={conversation.id}
+            conversation={conversation}
             isLocked={false}
             currentProjectDraft={projectDraftState.projectDraft}
             onProjectDraftUpdate={handleProjectDraftUpdate}

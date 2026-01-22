@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
-from .codex.codex_cli_runner import CodexCliRunner
+from .codex.codex_cli_runner import CodexCliRunner, build_codex_env
 from .codex.codex_task_types import EvaluationMetricSpec
 from .config import Config as AppConfig
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
@@ -114,7 +114,7 @@ def _datasets_from_metric_response(*, response: dict[str, object]) -> list[str]:
 def generate_and_assign_metrics(
     *,
     cfg: AppConfig,
-    codex_env: dict[str, str],
+    research_pipeline_root: Path,
     codex_timeout_seconds: int,
     venv_dir: Path,
     workspace_dir: Path,
@@ -191,12 +191,13 @@ def generate_and_assign_metrics(
 
         metrics_runner = CodexCliRunner(
             workspace_dir=metrics_workspace_dir,
+            research_pipeline_root=research_pipeline_root,
             session_log_name="codex_session__metrics.log",
             events_log_name="codex_events__metrics.jsonl",
             timeout_seconds=codex_timeout_seconds,
             model=cfg.agent.code.model,
-            env=codex_env,
             event_callback=event_callback,
+            venv_dir=venv_dir,
         )
 
         event_callback(
@@ -221,6 +222,7 @@ def generate_and_assign_metrics(
             node=node_index,
             pid_callback=None,
             termination_checker=None,
+            json_event_callback=None,
         )
         completed_at = datetime.now(timezone.utc)
         event_callback(
@@ -245,6 +247,9 @@ def generate_and_assign_metrics(
             return metrics_workspace_dir
 
         node.parse_metrics_code = parse_metrics_path.read_text(encoding="utf-8", errors="replace")
+
+    # Build Codex environment for script execution
+    codex_env = build_codex_env(venv_dir=venv_dir)
 
     python_executable = venv_dir / "bin" / "python"
     parse_result = run_python_script(

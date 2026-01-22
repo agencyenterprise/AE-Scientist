@@ -25,6 +25,7 @@ from research_pipeline.ai_scientist.telemetry.event_persistence import (  # type
 
 from app.services.research_pipeline.fake_runpod.persistence import FakeRunPodPersistence
 from app.services.research_pipeline.fake_runpod.webhooks import FakeRunPodWebhookPublisher
+from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ def _build_pod_response(record: PodRecord) -> Dict[str, object]:
         "volumeInGb": 70,
         "name": record.name,
         "id": record.id,
-        "volumeMountPath": "/workspace",
+        "volumeMountPath": WORKSPACE_PATH,
         "desiredStatus": record.desired_status,
         "publicIp": record.public_ip,
         "portMappings": record.port_mappings,

@@ -239,3 +239,54 @@ async def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> s
     result = result.replace("{{memories_context}}", "")
 
     return result
+
+
+def format_review_feedback_message(review_data: dict) -> str:
+    """
+    Format LLM review data into a user message for idea improvement.
+
+    Args:
+        review_data: Dictionary containing review fields from rp_llm_reviews table
+
+    Returns:
+        Formatted message asking the LLM to improve the idea based on review feedback
+    """
+    summary = review_data.get("summary", "")
+    weaknesses = review_data.get("weaknesses", [])
+    strengths = review_data.get("strengths", [])
+    decision = review_data.get("decision", "")
+    overall_score = review_data.get("overall", 0)
+
+    # Format weaknesses as bullet points
+    weaknesses_text = "\n".join([f"- {w}" for w in weaknesses])
+
+    # Format strengths as bullet points
+    strengths_text = "\n".join([f"- {s}" for s in strengths])
+
+    message = (
+        "I ran this research idea through our AI research pipeline and received detailed feedback from an LLM reviewer. "
+        "The review process evaluated the idea as a potential research paper.\n\n"
+    )
+
+    message += f"**Review Decision:** {decision}\n"
+    message += f"**Overall Score:** {overall_score}/10\n\n"
+
+    message += f"**Summary:**\n{summary}\n\n"
+
+    if strengths:
+        message += f"**Strengths:**\n{strengths_text}\n\n"
+
+    if weaknesses:
+        message += (
+            f"**Weaknesses Identified:**\n{weaknesses_text}\n\n"
+            "Please help me strengthen this research idea by addressing these weaknesses. "
+            "Suggest specific improvements to the hypothesis, experimental design, or methodology that would make this a stronger research proposal. "
+            "Focus on the most critical issues first."
+        )
+    else:
+        message += (
+            "The review didn't identify specific weaknesses, but please help me further strengthen and refine this research idea. "
+            "Suggest improvements to make it even more rigorous and impactful."
+        )
+
+    return message

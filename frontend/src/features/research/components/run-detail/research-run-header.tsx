@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Loader2, StopCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, Loader2, Sprout, StopCircle } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
@@ -15,6 +15,10 @@ interface ResearchRunHeaderProps {
   stopPending: boolean;
   stopError: string | null;
   onStopRun: () => void;
+  conversationId: number | null;
+  onSeedNewIdea?: () => void;
+  seedPending?: boolean;
+  seedError?: string | null;
 }
 
 /**
@@ -30,10 +34,16 @@ export function ResearchRunHeader({
   stopPending,
   stopError,
   onStopRun,
+  conversationId,
+  onSeedNewIdea,
+  seedPending = false,
+  seedError = null,
 }: ResearchRunHeaderProps) {
   const router = useRouter();
   const params = useParams();
   const runId = params?.runId as string;
+
+  const canSeedIdea = status === "completed" && conversationId !== null;
 
   return (
     <div className="flex items-center gap-4">
@@ -72,6 +82,26 @@ export function ResearchRunHeader({
               BETA
             </span>
           </button>
+          {canSeedIdea && onSeedNewIdea && (
+            <button
+              onClick={onSeedNewIdea}
+              disabled={seedPending}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              title="Create a new idea based on this run"
+            >
+              {seedPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Seeding...
+                </>
+              ) : (
+                <>
+                  <Sprout className="h-4 w-4" />
+                  Seed New Idea
+                </>
+              )}
+            </button>
+          )}
           {canStopRun && (
             <button
               onClick={onStopRun}
@@ -100,6 +130,11 @@ export function ResearchRunHeader({
         {stopError && (
           <p className="mt-2 text-sm text-red-400" role="alert">
             {stopError}
+          </p>
+        )}
+        {seedError && (
+          <p className="mt-2 text-sm text-red-400" role="alert">
+            {seedError}
           </p>
         )}
       </div>

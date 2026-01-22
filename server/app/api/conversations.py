@@ -52,10 +52,12 @@ from app.services.database.conversations import DashboardConversation as DBDashb
 from app.services.database.conversations import FullConversation as DBFullConversation
 from app.services.database.conversations import ImportedChatMessage as DBImportedChatMessage
 from app.services.database.conversations import UrlConversationBrief as DBUrlConversationBrief
+from app.services.database.ideas import IdeaCreationFromRunParams
 from app.services.database.research_pipeline_runs import PIPELINE_RUN_STATUSES, ResearchPipelineRun
 from app.services.database.users import UserData
 from app.services.langchain_llm_service import LangChainLLMService
 from app.services.parser_router import ParserRouterService
+from app.services.prompts import format_review_feedback_message
 from app.services.scraper.errors import ChatNotFound
 
 router = APIRouter(prefix="/conversations")
@@ -210,6 +212,14 @@ class SummaryResponse(BaseModel):
     """Response for summary operations."""
 
     summary: str = Field(..., description="Generated or updated summary")
+
+
+class SeedFromRunResponse(BaseModel):
+    """Response when seeding a new idea from a run."""
+
+    conversation_id: int = Field(..., description="ID of the new conversation")
+    idea_id: int = Field(..., description="ID of the new idea")
+    message: str = Field(..., description="Success message")
 
 
 def convert_db_to_api_response(
@@ -996,6 +1006,141 @@ async def import_manual_seed(
             "Content-Type": "text/event-stream",
         },
     )
+
+
+@router.post(
+    "/{conversation_id}/idea/research-run/{run_id}/seed-new-idea",
+    response_model=SeedFromRunResponse,
+)
+async def seed_idea_from_run(
+    conversation_id: int,
+    run_id: str,
+    request: Request,
+    response: Response,
+) -> Union[SeedFromRunResponse, ErrorResponse]:
+    """
+    Seed a new idea from a completed research run.
+
+    Creates a new conversation and idea by copying the idea version data
+    from the specified run. The new conversation is linked to the parent run via
+    parent_run_id.
+
+    Args:
+        conversation_id: ID of the conversation containing the source idea
+        run_id: ID of the research run to seed from
+        request: FastAPI request object
+        response: FastAPI response object
+
+    Returns:
+        SeedFromRunResponse with new conversation_id and idea_id
+
+    Raises:
+        404: If conversation, run, or idea not found
+        403: If user doesn't own the conversation
+        400: If run is not completed
+    """
+    user = get_current_user(request)
+    db = get_database()
+
+    # Validate conversation exists and user owns it
+    conversation = await db.get_conversation_by_id(conversation_id)
+    if not conversation:
+        response.status_code = 404
+        return ErrorResponse(
+            error="Conversation not found",
+            detail=f"No conversation found with ID {conversation_id}",
+        )
+
+    if conversation.user_id != user.id:
+        response.status_code = 403
+        return ErrorResponse(
+            error="Forbidden",
+            detail="You don't have permission to seed from this conversation",
+        )
+
+    # Validate run exists and belongs to this conversation
+    run = await db.get_run_for_conversation(
+        run_id=run_id,
+        conversation_id=conversation_id,
+    )
+    if not run:
+        response.status_code = 404
+        return ErrorResponse(
+            error="Run not found",
+            detail=f"No run found with ID {run_id} for conversation {conversation_id}",
+        )
+
+    # Validate run is completed
+    if run.status != "completed":
+        response.status_code = 400
+        return ErrorResponse(
+            error="Invalid run status",
+            detail=f"Can only seed from completed runs. Run status is '{run.status}'",
+        )
+
+    # Get the idea version used in this run
+    source_version_id = run.idea_version_id
+
+    try:
+        # Create new conversation
+        new_conversation_id = await db.create_seeded_conversation(
+            parent_run_id=run_id,
+            imported_by_user_id=user.id,
+        )
+
+        # Create new idea from run's version
+        new_idea_id = await db.create_idea_from_run(
+            params=IdeaCreationFromRunParams(
+                conversation_id=new_conversation_id,
+                source_version_id=source_version_id,
+                created_by_user_id=user.id,
+            ),
+        )
+
+        # Fetch LLM review for this run and create initial improvement message
+        review_data = await db.get_review_by_run_id(run_id=run_id)
+        if review_data:
+            # Format the review feedback into a user message
+            improvement_message = format_review_feedback_message(review_data=review_data)
+
+            # Create initial chat message asking LLM to help improve the idea
+            await db.create_chat_message(
+                idea_id=new_idea_id,
+                role="user",
+                content=improvement_message,
+                sent_by_user_id=user.id,
+            )
+
+            logger.info(
+                f"Created initial improvement message for seeded idea {new_idea_id} "
+                f"based on review from run {run_id}. Frontend will auto-trigger streaming response."
+            )
+
+        logger.info(
+            f"User {user.id} seeded new idea {new_idea_id} from run {run_id} "
+            f"(conversation {new_conversation_id})"
+        )
+
+        return SeedFromRunResponse(
+            conversation_id=new_conversation_id,
+            idea_id=new_idea_id,
+            message=f"Successfully seeded new idea from run {run_id}",
+        )
+
+    except ValueError as exc:
+        logger.exception(f"Failed to seed idea from run {run_id}: {exc}")
+        response.status_code = 400
+        return ErrorResponse(
+            error="Seed failed",
+            detail=str(exc),
+        )
+    except Exception as exc:
+        logger.exception(f"Unexpected error seeding from run {run_id}: {exc}")
+        response.status_code = 500
+        return ErrorResponse(
+            error="Internal server error",
+            detail="Failed to seed new idea. Please try again.",
+        )
 
 
 @router.get("")

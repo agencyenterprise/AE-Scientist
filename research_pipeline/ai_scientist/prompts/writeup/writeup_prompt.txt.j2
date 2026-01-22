@@ -4,6 +4,23 @@ Your goal is to write up the following idea:
 {{ idea_text }}
 ```
 
+{% if previous_run_context %}
+## Context from Previous Research Run
+
+This research builds upon a previous run. The following context has been extracted from that run:
+
+```markdown
+{{ previous_run_context }}
+```
+
+**Important**: Please incorporate these findings appropriately when writing the paper:
+- Reference previous results as baselines or prior work where relevant
+- Highlight how the current approach improves upon or differs from the previous work
+- Maintain continuity in the research narrative
+- You may cite the previous work in the Related Work section or throughout the paper as appropriate
+- Use the previous findings to provide context for the current experiments and results
+
+{% endif %}
 We have the following experiment summaries (JSON):
 ```json
 {{ summaries }}

@@ -500,6 +500,55 @@
         }
       }
     },
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/seed-new-idea": {
+      "post": {
+        "summary": "Seed Idea From Run",
+        "description": "Seed a new idea from a completed research run.\n\nCreates a new conversation and idea by copying the idea version data\nfrom the specified run. The new conversation is linked to the parent run via\nparent_run_id.\n\nArgs:\n    conversation_id: ID of the conversation containing the source idea\n    run_id: ID of the research run to seed from\n    request: FastAPI request object\n    response: FastAPI response object\n\nReturns:\n    SeedFromRunResponse with new conversation_id and idea_id\n\nRaises:\n    404: If conversation, run, or idea not found\n    403: If user doesn't own the conversation\n    400: If run is not completed",
+        "operationId": "seed_idea_from_run_api_conversations__conversation_id__idea_research_run__run_id__seed_new_idea_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedFromRunResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations": {
       "get": {
         "summary": "List Conversations",
@@ -9784,6 +9833,33 @@
           "event"
         ],
         "title": "RunningCodePayload"
+      },
+      "SeedFromRunResponse": {
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id",
+            "description": "ID of the new conversation"
+          },
+          "idea_id": {
+            "type": "integer",
+            "title": "Idea Id",
+            "description": "ID of the new idea"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Success message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "idea_id",
+          "message"
+        ],
+        "title": "SeedFromRunResponse",
+        "description": "Response when seeding a new idea from a run."
       },
       "SkipStageRequest": {
         "properties": {

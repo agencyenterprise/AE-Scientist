@@ -107,46 +107,40 @@ class CodexCliRunner:
         self,
         *,
         workspace_dir: Path,
+        research_pipeline_root: Path,
         session_log_name: str,
         events_log_name: str,
         timeout_seconds: int,
         model: str,
-        env: dict[str, str],
         event_callback: Callable[[BaseEvent], None],
+        venv_dir: Path | None = None,
+        env: dict[str, str] | None = None,
     ) -> None:
         self._workspace_dir = workspace_dir
         self._session_log_name = session_log_name
         self._events_log_name = events_log_name
         self._timeout_seconds = timeout_seconds
         self._model = model
-        self._env = dict(env)
         self._event_callback = event_callback
 
-    def run(
-        self,
-        *,
-        task_file: Path,
-        stage: str,
-        node: int,
-        pid_callback: Callable[[int], None] | None,
-        termination_checker: Callable[[], bool] | None,
-        json_event_callback: Callable[[str, dict[str, object]], None] | None = None,
-    ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
-        """
-        Run Codex CLI inside workspace_dir using a task file.
+        # Auto-setup venv and environment if not provided
+        if venv_dir is None:
+            self._venv_dir = ensure_codex_venv(
+                workspace_dir=workspace_dir,
+                research_pipeline_root=research_pipeline_root,
+            )
+        else:
+            self._venv_dir = venv_dir
 
-        This runner assumes Codex is invoked in a non-interactive mode. If Codex blocks
-        waiting for user input, it will consume the wall-clock timeout and be killed.
-        """
-        started_at = time.monotonic()
-        log_path = self._workspace_dir / self._session_log_name
-        events_path = self._workspace_dir / self._events_log_name
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if env is None:
+            self._env = build_codex_env(venv_dir=self._venv_dir)
+        else:
+            self._env = dict(env)
 
-        # Use non-interactive automation mode via `codex exec`.
-        # See docs: https://developers.openai.com/codex/noninteractive
+    def _build_argv(self, task_file: Path) -> list[str]:
+        """Build codex CLI command arguments."""
         prompt = task_file.read_text(encoding="utf-8", errors="replace")
-        argv = [
+        return [
             "codex",
             "exec",
             "--yolo",
@@ -156,8 +150,57 @@ class CodexCliRunner:
             self._model,
             prompt,
         ]
-        logger.info("Starting Codex CLI: %s (cwd=%s)", " ".join(argv), self._workspace_dir)
 
+    def _save_token_usage_from_jsonl(self, line: str) -> None:
+        """Extract and save token usage from Codex JSONL event for cost tracking."""
+        try:
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                return
+            if obj.get("type") == "turn.completed":
+                usage = obj.get("usage")
+                if isinstance(usage, dict):
+                    input_tokens = usage.get("input_tokens")
+                    cached_input_tokens = usage.get("cached_input_tokens")
+                    output_tokens = usage.get("output_tokens")
+                    if input_tokens is not None and output_tokens is not None:
+                        save_cost_track(
+                            model=self._model,
+                            input_tokens=int(input_tokens),
+                            cached_input_tokens=int(cached_input_tokens or 0),
+                            output_tokens=int(output_tokens),
+                        )
+        except Exception:
+            logger.exception("Failed to save token usage")
+
+    def _run_subprocess(
+        self,
+        *,
+        argv: list[str],
+        log_path: Path,
+        events_path: Path,
+        started_at: float,
+        on_process_started: Callable[[int], None] | None,
+        on_stderr_chunk: Callable[[bytes], None] | None,
+        on_stdout_jsonl: Callable[[str], None] | None,
+        check_termination: Callable[[], bool] | None,
+    ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
+        """
+        Run Codex subprocess and manage I/O.
+
+        Args:
+            argv: Command arguments
+            log_path: Path to write combined log
+            events_path: Path to write JSONL events
+            started_at: Timestamp when execution started
+            on_process_started: Callback with PID after process starts (or None)
+            on_stderr_chunk: Callback for stderr chunks (or None)
+            on_stdout_jsonl: Callback for each JSONL line (or None)
+            check_termination: Callback to check if should terminate early (or None)
+
+        Returns:
+            Tuple of (terminal_output, exec_time, exception_type, exception_info)
+        """
         proc: subprocess.Popen[bytes] | None = None
         try:
             with (
@@ -173,8 +216,9 @@ class CodexCliRunner:
                     start_new_session=True,
                     bufsize=0,
                 )
-                if pid_callback is not None:
-                    pid_callback(proc.pid)
+
+                if on_process_started is not None:
+                    on_process_started(proc.pid)
 
                 assert proc.stdout is not None
                 assert proc.stderr is not None
@@ -186,42 +230,8 @@ class CodexCliRunner:
                 sel.register(stderr_pipe, selectors.EVENT_READ, data="stderr")
                 stdout_buf = b""
 
-                def _maybe_emit_jsonl(line: str) -> None:
-                    # Emit only high-signal items to the outer UI.
-                    # Users can always inspect codex_events.jsonl for full detail.
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        return
-                    if not isinstance(obj, dict):
-                        return
-                    if json_event_callback is not None:
-                        json_event_callback(line, obj)
-                    typ = obj.get("type")
-                    if typ is not None:
-                        self._event_callback(
-                            CodexEvent(stage=stage, node=node, event_type=typ, event_content=line)
-                        )
-                        # Extract and save token usage for cost tracking on turn completion
-                        if typ == "turn.completed":
-                            usage = obj.get("usage")
-                            if isinstance(usage, dict):
-                                input_tokens = usage.get("input_tokens")
-                                cached_input_tokens = usage.get("cached_input_tokens")
-                                output_tokens = usage.get("output_tokens")
-                                if input_tokens is not None and output_tokens is not None:
-                                    try:
-                                        save_cost_track(
-                                            model=self._model,
-                                            input_tokens=int(input_tokens),
-                                            cached_input_tokens=int(cached_input_tokens or 0),
-                                            output_tokens=int(output_tokens),
-                                        )
-                                    except Exception:
-                                        logger.exception("Failed to save token usage")
-
                 while True:
-                    if termination_checker is not None and termination_checker():
+                    if check_termination is not None and check_termination():
                         logger.info("Codex run terminated by external request (pid=%s)", proc.pid)
                         terminate_process_group(pid=proc.pid, grace_seconds=1.0)
                         return self._build_result_from_log(
@@ -231,7 +241,6 @@ class CodexCliRunner:
                             exc_info={"reason": "terminated"},
                         )
 
-                    # Drain any available output without blocking indefinitely.
                     for key, _ in sel.select(timeout=0.1):
                         stream = cast(IO[bytes], key.fileobj)
                         chunk = stream.read(4096)
@@ -239,23 +248,13 @@ class CodexCliRunner:
                             continue
                         logf.write(chunk)
                         logf.flush()
+
                         if key.data == "stderr":
-                            # Codex progress lines are typically on stderr (human readable).
-                            try:
-                                decoded_chunk = chunk.decode("utf-8", errors="replace").rstrip()
-                                self._event_callback(
-                                    CodexEvent(
-                                        stage=stage,
-                                        node=node,
-                                        event_type="stderr",
-                                        event_content=decoded_chunk,
-                                    )
-                                )
-                            except (ValueError, TypeError):
-                                pass
+                            if on_stderr_chunk is not None:
+                                on_stderr_chunk(chunk)
                             continue
 
-                        # With `codex exec --json`, stdout is JSONL.
+                        # Process stdout JSONL
                         stdout_buf += chunk
                         while b"\n" in stdout_buf:
                             raw_line, stdout_buf = stdout_buf.split(b"\n", 1)
@@ -263,7 +262,9 @@ class CodexCliRunner:
                             eventsf.write(json_line)
                             eventsf.flush()
                             line_str = json_line.decode("utf-8", errors="replace").rstrip("\n")
-                            _maybe_emit_jsonl(line_str)
+                            self._save_token_usage_from_jsonl(line_str)
+                            if on_stdout_jsonl is not None:
+                                on_stdout_jsonl(line_str)
 
                     rc = proc.poll()
                     if rc is not None:
@@ -311,6 +312,141 @@ class CodexCliRunner:
             started_at=started_at,
             exc_type="CodexError",
             exc_info={"returncode": returncode},
+        )
+
+    def run_autonomous(
+        self,
+        *,
+        task_file: Path,
+    ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
+        """
+        Run Codex CLI for standalone tasks (e.g., paper writing, metrics generation).
+
+        Simplified interface without tree search context, callbacks, or termination checking.
+
+        Args:
+            task_file: Path to the task file containing the prompt
+
+        Returns:
+            Tuple of (terminal_output, exec_time, exception_type, exception_info)
+        """
+        started_at = time.monotonic()
+        log_path = self._workspace_dir / self._session_log_name
+        events_path = self._workspace_dir / self._events_log_name
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        argv = self._build_argv(task_file)
+        logger.info(
+            "Starting Codex CLI (autonomous): %s (cwd=%s)", " ".join(argv), self._workspace_dir
+        )
+
+        # Log stderr output in real-time for visibility
+        def on_stderr_chunk(chunk: bytes) -> None:
+            try:
+                decoded_chunk = chunk.decode("utf-8", errors="replace").rstrip()
+                if decoded_chunk:
+                    logger.info("Codex: %s", decoded_chunk)
+            except (ValueError, TypeError):
+                pass
+
+        # Log JSONL events in real-time for visibility
+        def on_stdout_jsonl(line: str) -> None:
+            try:
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    event_type = obj.get("type")
+                    if event_type:
+                        logger.debug("Codex event: %s", event_type)
+            except json.JSONDecodeError:
+                pass
+
+        return self._run_subprocess(
+            argv=argv,
+            log_path=log_path,
+            events_path=events_path,
+            started_at=started_at,
+            on_process_started=None,
+            on_stderr_chunk=on_stderr_chunk,
+            on_stdout_jsonl=on_stdout_jsonl,
+            check_termination=None,
+        )
+
+    def run(
+        self,
+        *,
+        task_file: Path,
+        stage: str,
+        node: int,
+        pid_callback: Callable[[int], None] | None,
+        termination_checker: Callable[[], bool] | None,
+        json_event_callback: Callable[[str, dict[str, object]], None] | None,
+    ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
+        """
+        Run Codex CLI inside workspace_dir using a task file (low-level interface).
+
+        This runner assumes Codex is invoked in a non-interactive mode. If Codex blocks
+        waiting for user input, it will consume the wall-clock timeout and be killed.
+
+        For standalone tasks (paper writing, metrics), prefer run_autonomous() instead.
+
+        Args:
+            task_file: Path to the task file containing the prompt
+            stage: Stage name for event emission (e.g., "paper_writeup", "stage1")
+            node: Node index for tree search contexts
+            pid_callback: Callback invoked with the process PID (or None)
+            termination_checker: Callback to check if execution should be terminated (or None)
+            json_event_callback: Callback for raw JSON events (or None)
+
+        Returns:
+            Tuple of (terminal_output, exec_time, exception_type, exception_info)
+        """
+        started_at = time.monotonic()
+        log_path = self._workspace_dir / self._session_log_name
+        events_path = self._workspace_dir / self._events_log_name
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        argv = self._build_argv(task_file)
+        logger.info("Starting Codex CLI: %s (cwd=%s)", " ".join(argv), self._workspace_dir)
+
+        # Define callbacks for event emission
+        def on_stderr_chunk(chunk: bytes) -> None:
+            try:
+                decoded_chunk = chunk.decode("utf-8", errors="replace").rstrip()
+                self._event_callback(
+                    CodexEvent(
+                        stage=stage,
+                        node=node,
+                        event_type="stderr",
+                        event_content=decoded_chunk,
+                    )
+                )
+            except (ValueError, TypeError):
+                pass
+
+        def on_stdout_jsonl(line: str) -> None:
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                return
+            if not isinstance(obj, dict):
+                return
+            if json_event_callback is not None:
+                json_event_callback(line, obj)
+            typ = obj.get("type")
+            if typ is not None:
+                self._event_callback(
+                    CodexEvent(stage=stage, node=node, event_type=typ, event_content=line)
+                )
+
+        return self._run_subprocess(
+            argv=argv,
+            log_path=log_path,
+            events_path=events_path,
+            started_at=started_at,
+            on_process_started=pid_callback,
+            on_stderr_chunk=on_stderr_chunk,
+            on_stdout_jsonl=on_stdout_jsonl,
+            check_termination=termination_checker,
         )
 
     def _build_result_from_log(

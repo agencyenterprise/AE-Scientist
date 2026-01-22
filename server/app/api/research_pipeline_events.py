@@ -63,6 +63,7 @@ from app.services.research_pipeline.runpod import (
     get_supported_gpu_types,
     upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
 
 class ResearchRunStore(Protocol):
@@ -104,6 +105,8 @@ class ResearchRunStore(Protocol):
     async def get_user_by_id(self, user_id: int) -> Optional[UserData]: ...
 
     async def get_idea_version_by_id(self, idea_version_id: int) -> Optional[IdeaVersionData]: ...
+
+    async def get_conversation_parent_run_id(self, conversation_id: int) -> Optional[str]: ...
 
 
 router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
@@ -199,7 +202,7 @@ def _resolve_partition_capacity_bytes(
         normalized = "/"
     if normalized == "/":
         capacity_gb = run.container_disk_gb
-    elif normalized == "/workspace":
+    elif normalized == WORKSPACE_PATH:
         capacity_gb = run.volume_disk_gb
     else:
         return None
@@ -1266,12 +1269,16 @@ async def _retry_run_after_gpu_shortage(
         failed_run_gpu_type=failed_run.gpu_type, run_id=failed_run.run_id
     )
 
+    # Get parent run ID if this conversation is seeded from a previous run
+    parent_run_id = await db.get_conversation_parent_run_id(idea_version.conversation_id)
+
     try:
         new_run_id, _pod_info = await create_and_launch_research_run(
             idea_data=idea_payload,
             requested_by_first_name=requester_first_name,
             gpu_types=retry_gpu_types,
-            conversation_id=idea_version.conversation_id or -1,
+            conversation_id=idea_version.conversation_id,
+            parent_run_id=parent_run_id,
         )
         logger.info(
             "Scheduled retry run %s after GPU shortage on run %s.",

@@ -381,6 +381,7 @@ async def launch_research_pipeline_run(
     run_id: str,
     requested_by_first_name: str,
     gpu_types: list[str],
+    parent_run_id: str | None,
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -425,6 +426,9 @@ async def launch_research_pipeline_run(
         "REPO_ORG": "agencyenterprise",
         "REPO_BRANCH": runpod_repo_branch,
     }
+    if parent_run_id:
+        pod_env["HAS_PREVIOUS_RUN"] = "true"
+        pod_env["PARENT_RUN_ID"] = parent_run_id
     if not gpu_types:
         raise ValueError("At least one GPU type must be provided when launching a pod.")
     pod_name = get_pod_name(user_name=requested_by_first_name, run_id=run_id)

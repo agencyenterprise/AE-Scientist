@@ -201,6 +201,25 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
 
         return int(row["id"])
 
+    async def get_conversation_parent_run_id(self, conversation_id: int) -> Optional[str]:
+        """Get the parent_run_id for a conversation if it exists."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT parent_run_id
+                    FROM conversations
+                    WHERE id = %s
+                """,
+                    (conversation_id,),
+                )
+                row = await cursor.fetchone()
+
+        if not row:
+            return None
+
+        return row.get("parent_run_id")
+
     async def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
         """List conversations with the same URL, newest first, for conflict resolution UI."""
 
@@ -404,6 +423,51 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to create manual conversation: no ID returned")
+                return int(result["id"])
+
+    async def create_seeded_conversation(
+        self,
+        *,
+        parent_run_id: str,
+        imported_by_user_id: int,
+    ) -> int:
+        """Create a conversation originating from a parent research run.
+
+        Args:
+            parent_run_id: The run_id that this conversation is seeded from
+            imported_by_user_id: User creating the seeded conversation
+
+        Returns:
+            The new conversation ID
+        """
+        now = datetime.now()
+        seeded_url = f"seeded://run/{parent_run_id}/{uuid.uuid4()}"
+        title = f"Seeded from Run {parent_run_id}"
+
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO conversations
+                        (url, title, import_date, imported_chat, created_at, updated_at,
+                         imported_by_user_id, parent_run_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        seeded_url,
+                        title,
+                        now,
+                        Jsonb([]),
+                        now,
+                        now,
+                        imported_by_user_id,
+                        parent_run_id,
+                    ),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to create seeded conversation: no ID returned")
                 return int(result["id"])
 
     async def delete_conversation(self, conversation_id: int) -> bool:
