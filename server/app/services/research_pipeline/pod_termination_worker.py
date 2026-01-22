@@ -175,6 +175,12 @@ class PodTerminationWorker:
                 for task in pending:
                     task.cancel()
 
+                # If we race between stop and queue.get(), avoid dropping the dequeued job.
+                if stop_task in done and get_task in done:
+                    termination = get_task.result()
+                    self._queue.put_nowait(termination)
+                    break
+
                 if stop_task in done:
                     break
 
@@ -251,6 +257,14 @@ class PodTerminationWorker:
         async with self._semaphore:
             try:
                 db = cast("PodTerminationStore", get_database())
+            except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                logger.exception(
+                    "Failed to acquire database handle for termination job (run_id=%s).",
+                    run_id,
+                )
+                return
+
+            try:
                 logger.info(
                     "Starting termination job (run_id=%s status=%s attempts=%s artifacts_uploaded=%s pod_terminated=%s).",
                     run_id,
@@ -260,8 +274,50 @@ class PodTerminationWorker:
                     bool(termination.pod_terminated_at),
                 )
                 await self._process_termination(db=db, termination=termination)
+            except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                logger.exception("Unhandled termination worker error (run_id=%s).", run_id)
+                try:
+                    await self._handle_job_exception(
+                        db=db,
+                        termination=termination,
+                        exc=exc,
+                    )
+                except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                    logger.exception(
+                        "Failed to handle termination worker error (run_id=%s).",
+                        run_id,
+                    )
             finally:
                 self._inflight.discard(run_id)
+
+    async def _handle_job_exception(
+        self,
+        *,
+        db: PodTerminationStore,
+        termination: ResearchPipelineRunTermination,
+        exc: Exception,
+    ) -> None:
+        run_id = termination.run_id
+        attempt_number = int(termination.attempts or 0) + 1
+        error_message = f"Unhandled termination worker error for run {run_id}: {exc}"
+        if attempt_number < _TERMINATION_MAX_UPLOAD_ATTEMPTS:
+            await db.reschedule_research_pipeline_run_termination(
+                run_id=run_id,
+                attempts=attempt_number,
+                error=error_message,
+            )
+            updated = await db.get_research_pipeline_run_termination(run_id=run_id)
+            publish_termination_status_event(run_id=run_id, termination=updated)
+            return
+
+        sentry_sdk.capture_message(error_message, level="error")
+        await db.mark_research_pipeline_run_termination_failed(
+            run_id=run_id,
+            attempts=attempt_number,
+            error=error_message,
+        )
+        updated = await db.get_research_pipeline_run_termination(run_id=run_id)
+        publish_termination_status_event(run_id=run_id, termination=updated)
 
     async def _process_termination(
         self,
@@ -284,7 +340,7 @@ class PodTerminationWorker:
             )
             await db.mark_research_pipeline_run_termination_failed(
                 run_id=run_id,
-                attempts=termination.attempts,
+                attempts=int(termination.attempts or 0) + 1,
                 error=f"Run {run_id} not found while processing termination.",
             )
             updated = await db.get_research_pipeline_run_termination(run_id=run_id)
@@ -386,6 +442,12 @@ class PodTerminationWorker:
                     run.pod_id,
                 )
             except RunPodError as exc:
+                logger.exception(
+                    "RunPod pod termination threw an exception (run_id=%s pod_id=%s status=%s).",
+                    run_id,
+                    run.pod_id,
+                    exc.status,
+                )
                 if exc.status == 404:
                     logger.info(
                         "Pod already gone (404); treating as terminated (run_id=%s pod_id=%s).",
