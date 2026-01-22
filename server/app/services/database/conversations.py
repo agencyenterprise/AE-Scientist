@@ -201,6 +201,25 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
 
         return int(row["id"])
 
+    async def get_conversation_parent_run_id(self, conversation_id: int) -> Optional[str]:
+        """Get the parent_run_id for a conversation if it exists."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT parent_run_id
+                    FROM conversations
+                    WHERE id = %s
+                """,
+                    (conversation_id,),
+                )
+                row = await cursor.fetchone()
+
+        if not row:
+            return None
+
+        return row.get("parent_run_id")
+
     async def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
         """List conversations with the same URL, newest first, for conflict resolution UI."""
 

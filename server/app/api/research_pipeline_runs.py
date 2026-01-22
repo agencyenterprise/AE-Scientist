@@ -415,6 +415,7 @@ async def create_and_launch_research_run(
     requested_by_first_name: str,
     gpu_types: list[str],
     conversation_id: int,
+    parent_run_id: str | None,
 ) -> tuple[str, PodLaunchInfo]:
     db = get_database()
     if not gpu_types:
@@ -463,6 +464,7 @@ async def create_and_launch_research_run(
             run_id=run_id,
             requested_by_first_name=requested_by_first_name,
             gpu_types=gpu_types,
+            parent_run_id=parent_run_id,
         )
         await db.update_research_pipeline_run(
             run_id=run_id,
@@ -523,6 +525,9 @@ async def submit_idea_for_research(
     if conversation.user_id != user.id:
         raise HTTPException(status_code=403, detail="You do not own this conversation")
 
+    # Get parent run ID if this conversation is seeded from a previous run
+    parent_run_id = await db.get_conversation_parent_run_id(conversation_id)
+
     idea_data = await db.get_idea_by_conversation_id(conversation_id)
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
@@ -543,6 +548,7 @@ async def submit_idea_for_research(
             requested_by_first_name=requester_first_name,
             gpu_types=[payload.gpu_type],
             conversation_id=conversation_id,
+            parent_run_id=parent_run_id,
         )
         return ResearchRunAcceptedResponse(
             run_id=run_id,

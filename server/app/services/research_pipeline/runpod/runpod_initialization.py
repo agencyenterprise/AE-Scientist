@@ -175,6 +175,22 @@ def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
     ]
 
 
+def _download_parent_run_data_commands() -> list[str]:
+    return [
+        "# === Download Parent Run Data ===",
+        'if [ "${HAS_PREVIOUS_RUN:-false}" = "true" ] && [ -n "${PARENT_RUN_ID:-}" ]; then',
+        '  echo "Downloading parent run data from ${PARENT_RUN_ID}..."',
+        "  mkdir -p /workspace/previous_run_data",
+        '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/"',
+        '  s5cmd sync "${s3_uri}" /workspace/previous_run_data/ >/workspace/parent_run_download.log 2>&1 &',
+        '  echo "Started parent run data download in background (pid=$!)"',
+        "else",
+        '  echo "No parent run data to download"',
+        "fi",
+        "",
+    ]
+
+
 def _inject_refined_idea_and_config_commands(
     *,
     idea_filename: str,
@@ -347,6 +363,7 @@ def build_remote_script(
     )
     script_parts += ["source .venv/bin/activate", ""]
     script_parts += _pytorch_cuda_test_command()
+    script_parts += _download_parent_run_data_commands()
     script_parts += _upload_scrubbed_run_config_commands(config_filename=config_filename)
     script_parts += _launch_research_pipeline_commands(config_filename=config_filename)
     script_parts += _await_external_cleanup_commands()
