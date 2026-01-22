@@ -24,11 +24,7 @@ from ai_scientist.perform_vlm_review import (
     perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.prompts.render import render_text
-from ai_scientist.treesearch.codex.codex_cli_runner import (
-    CodexCliRunner,
-    build_codex_env,
-    ensure_codex_venv,
-)
+from ai_scientist.treesearch.codex.codex_cli_runner import CodexCliRunner
 from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 from ai_scientist.writeup_artifacts import (
     SUMMARY_KEYS_TO_STRIP,
@@ -437,34 +433,21 @@ def extract_previous_run_context(
         task_file = workspace_dir / "extract_previous_context_task.md"
         task_file.write_text(codex_prompt, encoding="utf-8")
 
-        # Ensure Codex venv exists
+        # Run Codex CLI (venv and environment setup handled automatically)
         research_pipeline_root = Path(__file__).resolve().parents[1]
-        venv_dir = ensure_codex_venv(
-            workspace_dir=workspace_dir,
-            research_pipeline_root=research_pipeline_root,
-        )
-
-        # Build Codex environment
-        codex_env = build_codex_env(venv_dir=venv_dir)
-
-        # Run Codex CLI
         runner = CodexCliRunner(
             workspace_dir=workspace_dir,
+            research_pipeline_root=research_pipeline_root,
             session_log_name="previous_context_extraction.log",
             events_log_name="previous_context_extraction_events.jsonl",
             timeout_seconds=1800,  # 30 minutes
             model=model,
-            env=codex_env,
             event_callback=event_callback if event_callback else lambda _: None,
         )
 
         logger.info("Running Codex to extract previous run context (timeout: 30min)...")
-        _term_out, exec_time, exc_type, _exc_info = runner.run(
+        _term_out, exec_time, exc_type, _exc_info = runner.run_autonomous(
             task_file=task_file,
-            stage="paper_writeup",
-            node=0,
-            pid_callback=None,
-            termination_checker=None,
         )
 
         logger.info(

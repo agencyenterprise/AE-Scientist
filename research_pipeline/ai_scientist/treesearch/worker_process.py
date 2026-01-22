@@ -252,7 +252,6 @@ def _process_seed_eval_reuse(
     workspace_dir: Path,
     working_dir: Path,
     venv_dir: Path,
-    codex_env: dict[str, str],
     execution_id: str,
     seed_eval: bool,
     seed_value: int,
@@ -281,6 +280,9 @@ def _process_seed_eval_reuse(
         _build_seed_eval_script_text(seed_value=seed_value, parent_code=parent_code),
         encoding="utf-8",
     )
+
+    # Build Codex environment for script execution
+    codex_env = build_codex_env(venv_dir=venv_dir)
 
     python_executable = venv_dir / "bin" / "python"
     exec_result = run_python_script(
@@ -342,7 +344,7 @@ def _process_seed_eval_reuse(
 
     metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
-        codex_env=codex_env,
+        research_pipeline_root=RESEARCH_PIPELINE_ROOT,
         codex_timeout_seconds=int(cfg.exec.timeout),
         venv_dir=venv_dir,
         workspace_dir=workspace_dir,
@@ -911,19 +913,20 @@ def _run_codex_cli(
     execution_id: str,
     stage_name: str,
     cfg: AppConfig,
-    codex_env: dict[str, str],
+    venv_dir: Path,
     task_file: Path,
     event_callback: Callable[[BaseEvent], None],
     node: int,
 ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
+        research_pipeline_root=RESEARCH_PIPELINE_ROOT,
         session_log_name="codex_session.log",
         events_log_name="codex_events.jsonl",
         timeout_seconds=cfg.exec.timeout,
         model=cfg.agent.code.model,
-        env=codex_env,
         event_callback=event_callback,
+        venv_dir=venv_dir,
     )
 
     codex_task_content = _read_text_or_empty(path=task_file)
@@ -1125,7 +1128,6 @@ def process_node(
         workspace_dir=workspace_dir,
         research_pipeline_root=RESEARCH_PIPELINE_ROOT,
     )
-    codex_env = build_codex_env(venv_dir=venv_dir)
 
     parent_node = _load_parent_node(node_data=node_data)
     logger.debug(
@@ -1165,7 +1167,6 @@ def process_node(
             workspace_dir=workspace_dir,
             working_dir=working_dir,
             venv_dir=venv_dir,
-            codex_env=codex_env,
             execution_id=execution_id,
             seed_eval=seed_eval,
             seed_value=seed_value,
@@ -1199,7 +1200,7 @@ def process_node(
         execution_id=execution_id,
         stage_name=stage_name,
         cfg=cfg,
-        codex_env=codex_env,
+        venv_dir=venv_dir,
         task_file=task_file,
         event_callback=event_callback,
         node=node_index,
@@ -1432,7 +1433,7 @@ def process_node(
 
     metrics_workspace_dir = generate_and_assign_metrics(
         cfg=cfg,
-        codex_env=codex_env,
+        research_pipeline_root=RESEARCH_PIPELINE_ROOT,
         codex_timeout_seconds=int(cfg.exec.timeout),
         venv_dir=venv_dir,
         workspace_dir=workspace_dir,
