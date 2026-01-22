@@ -396,7 +396,8 @@ def extract_previous_run_context(
         logger.info("HAS_PREVIOUS_RUN not set; skipping previous run context extraction.")
         return None
 
-    previous_run_path = Path("/workspace/previous_run_data")
+    previous_run_path_str = os.environ.get("PREVIOUS_RUN_DATA_PATH", "/workspace/previous_run_data")
+    previous_run_path = Path(previous_run_path_str)
     if not previous_run_path.exists():
         logger.warning(
             "Previous run data directory not found at %s; skipping context extraction.",

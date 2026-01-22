@@ -23,7 +23,8 @@ _POD_NAME_PREFIX = "aescientist"
 _POD_USER_FALLBACK = "Scientist"
 _POD_USER_MAX_LEN = 24
 
-DEFAULT_COLLECT_DISK_STATS_PATHS = "/,/workspace"
+WORKSPACE_PATH = "/workspace"
+DEFAULT_COLLECT_DISK_STATS_PATHS = f"/,{WORKSPACE_PATH}"
 DISK_STATS_ENV_NAME = "COLLECT_DISK_STATS_PATHS"
 
 
@@ -132,9 +133,9 @@ def _python_packages_installation_commands() -> list[str]:
     return [
         "# === Installation ===",
         'echo "Running installation script..."',
-        "cd /workspace/AE-Scientist",
+        f"cd {WORKSPACE_PATH}/AE-Scientist",
         "cat <<'RUNPOD_INSTALL' | bash",
-        "cd /workspace/AE-Scientist/research_pipeline/",
+        f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline/",
         "uv venv --system-site-packages",
         "source .venv/bin/activate",
         "uv sync",
@@ -180,9 +181,9 @@ def _download_parent_run_data_commands() -> list[str]:
         "# === Download Parent Run Data ===",
         'if [ "${HAS_PREVIOUS_RUN:-false}" = "true" ] && [ -n "${PARENT_RUN_ID:-}" ]; then',
         '  echo "Downloading parent run data from ${PARENT_RUN_ID}..."',
-        "  mkdir -p /workspace/previous_run_data",
+        '  mkdir -p "${PREVIOUS_RUN_DATA_PATH}"',
         '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/"',
-        '  s5cmd sync "${s3_uri}" /workspace/previous_run_data/ >/workspace/parent_run_download.log 2>&1 &',
+        f'  s5cmd sync "${{s3_uri}}" "${{PREVIOUS_RUN_DATA_PATH}}/" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
         '  echo "Started parent run data download in background (pid=$!)"',
         "else",
         '  echo "No parent run data to download"',
@@ -200,7 +201,7 @@ def _inject_refined_idea_and_config_commands(
 ) -> list[str]:
     return [
         "# === Inject refined idea and config ===",
-        "cd /workspace/AE-Scientist/research_pipeline",
+        f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline",
         "python - <<'PY'",
         "import base64, pathlib",
         f"pathlib.Path('{idea_filename}').write_bytes(base64.b64decode('{idea_content_b64}'))",
@@ -225,9 +226,9 @@ def _pytorch_cuda_test_command() -> list[str]:
 def _upload_scrubbed_run_config_commands(*, config_filename: str) -> list[str]:
     return [
         "scrubbed_config_path=/tmp/run_config.yaml",
-        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '/workspace/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
+        f"yq eval 'del(.telemetry.database_url, .telemetry.webhook_token)' '{WORKSPACE_PATH}/AE-Scientist/research_pipeline/{config_filename}' > \"$scrubbed_config_path\"",
         'if [ -s "$scrubbed_config_path" ]; then',
-        '  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config >/workspace/run_config_upload.log 2>&1 &',
+        f'  python upload_file.py --file-path "$scrubbed_config_path" --artifact-type run_config >{WORKSPACE_PATH}/run_config_upload.log 2>&1 &',
         '  echo "Started run_config upload (pid=$!)"',
         "else",
         "  echo 'Sanitized config is empty; skipping upload.'",
@@ -242,13 +243,13 @@ def _launch_research_pipeline_commands(*, config_filename: str) -> list[str]:
         "# === Starting Research Pipeline ===",
         'echo "Launching research pipeline..."',
         'send_init_status "Launching research pipeline"',
-        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a /workspace/research_pipeline.log",
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a {WORKSPACE_PATH}/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
         'if [ "$pipeline_exit_code" -eq 0 ]; then',
-        '  echo "Research pipeline completed successfully. Check /workspace/research_pipeline.log for full output."',
+        f'  echo "Research pipeline completed successfully. Check {WORKSPACE_PATH}/research_pipeline.log for full output."',
         "else",
-        '  echo "Research pipeline failed. Check /workspace/research_pipeline.log for details."',
+        f'  echo "Research pipeline failed. Check {WORKSPACE_PATH}/research_pipeline.log for details."',
         "fi",
         "",
     ]
@@ -314,12 +315,13 @@ def build_remote_script(
         f"AWS_REGION={env.aws_region}",
         f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
         "DATASETS_AWS_FOLDER=datasets",
-        "DATASETS_LOCAL_DIR=/workspace/datasets",
+        f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
         f"RUN_ID={run_id}",
         f"DATABASE_PUBLIC_URL={env.database_public_url}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
-        "PIPELINE_WORKSPACE_PATH=/workspace",
+        f"PIPELINE_WORKSPACE_PATH={WORKSPACE_PATH}",
+        f"PREVIOUS_RUN_DATA_PATH={WORKSPACE_PATH}/previous_run_data",
     ]
     if env.sentry_dsn:
         env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
@@ -342,7 +344,7 @@ def build_remote_script(
     script_parts += [
         "# === Environment Setup ===",
         'echo "Creating .env file..."',
-        "cd /workspace/AE-Scientist/research_pipeline",
+        f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline",
         "cat > .env << 'EOF'",
     ]
     script_parts += env_file_lines

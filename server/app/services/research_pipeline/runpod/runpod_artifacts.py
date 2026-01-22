@@ -11,6 +11,7 @@ from pathlib import Path
 
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .runpod_initialization import WORKSPACE_PATH
 from .runpod_ssh import write_temp_key_file
 
 logger = logging.getLogger(__name__)
@@ -115,11 +116,11 @@ def _upload_runpod_artifacts_via_ssh_sync(
     key_path = write_temp_key_file(private_key)
     remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
     remote_command = (
-        "cd /workspace/AE-Scientist/research_pipeline && "
+        f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline && "
         f"{remote_env} .venv/bin/python upload_file.py "
-        "--file-path /workspace/research_pipeline.log --artifact-type run_log || true && "
+        f"--file-path {WORKSPACE_PATH}/research_pipeline.log --artifact-type run_log || true && "
         f"{remote_env} .venv/bin/python upload_folder.py "
-        "--folder-path /workspace/AE-Scientist/research_pipeline/workspaces/0-run "
+        f"--folder-path {WORKSPACE_PATH}/AE-Scientist/research_pipeline/workspaces/0-run "
         "--artifact-type workspace_archive "
         "--archive-name 0-run-workspace.zip"
     )

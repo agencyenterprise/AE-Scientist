@@ -63,6 +63,7 @@ from app.services.research_pipeline.runpod import (
     get_supported_gpu_types,
     upload_runpod_artifacts_via_ssh,
 )
+from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
 
 class ResearchRunStore(Protocol):
@@ -201,7 +202,7 @@ def _resolve_partition_capacity_bytes(
         normalized = "/"
     if normalized == "/":
         capacity_gb = run.container_disk_gb
-    elif normalized == "/workspace":
+    elif normalized == WORKSPACE_PATH:
         capacity_gb = run.volume_disk_gb
     else:
         return None
