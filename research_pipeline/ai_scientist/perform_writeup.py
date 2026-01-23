@@ -934,6 +934,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
+        def _noop_artifact_callback(_: ArtifactSpec) -> None:
+            return
+
         success = perform_writeup(
             base_folder=args.folder,
             no_writing=args.no_writing,
@@ -942,6 +945,7 @@ if __name__ == "__main__":
             n_writeup_reflections=args.writeup_reflections,
             page_limit=args.page_limit,
             temperature=args.temperature,
+            artifact_callback=_noop_artifact_callback,
         )
         if not success:
             logger.error("Writeup process did not complete successfully.")
