@@ -343,7 +343,7 @@ class ResearchRunCodeExecution(BaseModel):
         ...,
         description="Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command).",
     )
-    code: str = Field(..., description="Python source code submitted for execution")
+    code: Optional[str] = Field(None, description="Python source code submitted for execution")
     status: str = Field(..., description="Execution status reported by the worker")
     started_at: str = Field(..., description="ISO timestamp when execution began")
     completed_at: Optional[str] = Field(None, description="ISO timestamp when execution ended")

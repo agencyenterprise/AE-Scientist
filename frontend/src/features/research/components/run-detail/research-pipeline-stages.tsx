@@ -770,7 +770,7 @@ function ActiveExecutionCard({
             Running for <span className="font-semibold">{formattedCodexDuration}</span>
           </p>
         </div>
-        {codexExecution && (
+        {codexExecution && codexExecution.code && (
           <details className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
             <summary className="cursor-pointer text-xs font-semibold text-slate-200">
               <div className="flex items-center justify-between gap-2">
@@ -793,7 +793,7 @@ function ActiveExecutionCard({
           </details>
         )}
 
-        {runfileExecution && (
+        {runfileExecution && runfileExecution.code && (
           <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
             <div className="mb-2 flex items-start justify-between gap-3">
               <div className="flex flex-col">
