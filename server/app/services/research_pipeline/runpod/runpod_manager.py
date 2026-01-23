@@ -391,7 +391,6 @@ async def launch_research_pipeline_run(
     idea_filename = f"{run_id}_idea.json"
     config_filename = config_name
     telemetry_block: dict[str, str] = {
-        "database_url": env.database_public_url,
         "run_id": run_id,
         "webhook_url": env.telemetry_webhook_url,
         "webhook_token": env.telemetry_webhook_token,

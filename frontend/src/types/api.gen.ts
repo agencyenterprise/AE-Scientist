@@ -1043,6 +1043,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/token-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Token Usage */
+        post: operations["ingest_token_usage_api_research_pipeline_events_token_usage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/figure-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Figure Reviews */
+        post: operations["ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
         parameters: {
             query?: never;
@@ -1562,8 +1596,6 @@ export interface components {
         };
         /** ArtifactUploadedEvent */
         ArtifactUploadedEvent: {
-            /** Artifact Id */
-            artifact_id: number;
             /** Artifact Type */
             artifact_type: string;
             /** Filename */
@@ -2176,6 +2208,28 @@ export interface components {
              * @description Additional error details
              */
             detail?: string | null;
+        };
+        /** FigureReviewEvent */
+        FigureReviewEvent: {
+            /** Figure Name */
+            figure_name: string;
+            /** Img Description */
+            img_description: string;
+            /** Img Review */
+            img_review: string;
+            /** Caption Review */
+            caption_review: string;
+            /** Figrefs Review */
+            figrefs_review: string;
+            /** Source Path */
+            source_path?: string | null;
+        };
+        /** FigureReviewsPayload */
+        FigureReviewsPayload: {
+            /** Run Id */
+            run_id: string;
+            /** Reviews */
+            reviews: components["schemas"]["FigureReviewEvent"][];
         };
         /**
          * FileAttachment
@@ -4501,8 +4555,6 @@ export interface components {
         };
         /** ReviewCompletedEvent */
         ReviewCompletedEvent: {
-            /** Review Id */
-            review_id: number;
             /** Summary */
             summary: string;
             /** Strengths */
@@ -5127,6 +5179,25 @@ export interface components {
              */
             status: "terminating";
         };
+        /** TokenUsageEvent */
+        TokenUsageEvent: {
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Input Tokens */
+            cached_input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+        };
+        /** TokenUsagePayload */
+        TokenUsagePayload: {
+            /** Run Id */
+            run_id: string;
+            event: components["schemas"]["TokenUsageEvent"];
+        };
         /**
          * TreeVizItem
          * @description Stored tree visualization payload for a run stage.
@@ -5172,10 +5243,10 @@ export interface components {
         TreeVizStoredEvent: {
             /** Stage Id */
             stage_id: string;
-            /** Tree Viz Id */
-            tree_viz_id: number;
             /** Version */
             version: number;
+            /** Viz */
+            viz: Record<string, never>;
         };
         /** TreeVizStoredPayload */
         TreeVizStoredPayload: {
@@ -6960,6 +7031,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GPUShortagePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_token_usage_api_research_pipeline_events_token_usage_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenUsagePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FigureReviewsPayload"];
             };
         };
         responses: {

@@ -48,7 +48,6 @@ class RunPodEnvironment:
     git_deploy_key: str
     openai_api_key: str
     hf_token: str
-    database_public_url: str
     telemetry_webhook_url: str
     telemetry_webhook_token: str
     aws_access_key_id: str
@@ -74,7 +73,6 @@ def load_runpod_environment() -> RunPodEnvironment:
         git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
         hf_token=_require("HF_TOKEN"),
-        database_public_url=_require("DATABASE_PUBLIC_URL"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
         telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
         aws_access_key_id=_require("AWS_ACCESS_KEY_ID"),
@@ -317,7 +315,6 @@ def build_remote_script(
         "DATASETS_AWS_FOLDER=datasets",
         f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
         f"RUN_ID={run_id}",
-        f"DATABASE_PUBLIC_URL={env.database_public_url}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
         f"PIPELINE_WORKSPACE_PATH={WORKSPACE_PATH}",

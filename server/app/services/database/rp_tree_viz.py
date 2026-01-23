@@ -21,7 +21,38 @@ class TreeVizRecord(NamedTuple):
 
 
 class ResearchPipelineTreeVizMixin(ConnectionProvider):
-    """Helpers to read tree visualization payloads."""
+    """Helpers to read and write tree visualization payloads."""
+
+    async def upsert_tree_viz(
+        self,
+        *,
+        run_id: str,
+        stage_id: str,
+        viz: dict,
+        version: int = 1,
+    ) -> int:
+        """Insert or update a tree visualization record and return its ID."""
+        now = datetime.now()
+
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_tree_viz (run_id, stage_id, viz, version, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (run_id, stage_id)
+                    DO UPDATE SET
+                        viz = EXCLUDED.viz,
+                        version = EXCLUDED.version,
+                        updated_at = EXCLUDED.updated_at
+                    RETURNING id
+                    """,
+                    (run_id, stage_id, viz, version, now, now),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to upsert tree visualization")
+                return int(result["id"])
 
     async def list_tree_viz_for_run(self, run_id: str) -> List[TreeVizRecord]:
         query = """

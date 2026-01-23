@@ -23,7 +23,6 @@ from research_pipeline.ai_scientist.telemetry.event_persistence import (  # type
     WebhookClient,
 )
 
-from app.services.research_pipeline.fake_runpod.persistence import FakeRunPodPersistence
 from app.services.research_pipeline.fake_runpod.webhooks import FakeRunPodWebhookPublisher
 from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
@@ -229,7 +228,6 @@ def _start_fake_runner(
     record: PodRecord,
     webhook_url: str,
     webhook_token: str,
-    db_url: str,
     aws_access_key_id: str,
     aws_secret_access_key: str,
     aws_region: str,
@@ -240,7 +238,6 @@ def _start_fake_runner(
         pod_id=record.id,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
-        database_url=db_url,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         aws_region=aws_region,
@@ -295,12 +292,10 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     _schedule_ready_transition(record, delay_seconds=1)
     webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
     webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
-    db_url = _require_env("DATABASE_PUBLIC_URL")
     runner = _start_fake_runner(
         record=record,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
-        db_url=db_url,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         aws_region=aws_region,
@@ -492,7 +487,6 @@ class FakeRunner:
         pod_id: str,
         webhook_url: str,
         webhook_token: str,
-        database_url: str,
         aws_access_key_id: str,
         aws_secret_access_key: str,
         aws_region: str,
@@ -502,7 +496,6 @@ class FakeRunner:
         self._pod_id = pod_id
         self._webhook_url = webhook_url
         self._webhook_token = webhook_token
-        self._database_url = database_url
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
         self._aws_region = aws_region
@@ -521,18 +514,11 @@ class FakeRunner:
             token=self._webhook_token,
             run_id=self._run_id,
         )
-        self._persistence: EventPersistenceManager | LocalPersistence
-        try:
-            self._persistence = EventPersistenceManager(
-                database_url=self._database_url,
-                run_id=self._run_id,
-                webhook_client=webhook_client,
-                queue_maxsize=1024,
-            )
-        except Exception:
-            logger.exception("Falling back to local persistence for run %s", self._run_id)
-            self._persistence = LocalPersistence(webhook_client)
-        self._webhook_client: Any = getattr(self._persistence, "_webhook_client", None)
+        # Fake runner uses LocalPersistence (webhook-only, no database)
+        self._persistence: EventPersistenceManager | LocalPersistence = LocalPersistence(
+            webhook_client
+        )
+        self._webhook_client: Any = webhook_client
         self._heartbeat_stop = threading.Event()
         self._log_stop = threading.Event()
         self._log_thread: Optional[threading.Thread] = None
@@ -541,7 +527,6 @@ class FakeRunner:
         self._random_exec_time_seconds = 12.0
         self._code_event_delay_seconds = 12.0
         self._stage_skip_windows: Dict[str, Tuple[str, str]] = {}
-        self._db = FakeRunPodPersistence(database_url=self._database_url, run_id=self._run_id)
         self._webhooks = FakeRunPodWebhookPublisher(
             client=self._webhook_client, run_id=self._run_id
         )
@@ -590,18 +575,21 @@ class FakeRunner:
                 "level": "warn",
             },
         )
+        # Publish termination webhook
         try:
-            self._db.record_code_execution_completion(
-                execution_id=execution_id,
-                stage_name=record.stage_name,
-                completed_at=now,
-                exec_time=exec_time,
-                status="failed",
-                run_type=record.run_type,
+            self._webhooks.publish_run_completed(
+                {
+                    "execution_id": execution_id,
+                    "stage_name": record.stage_name,
+                    "run_type": record.run_type,
+                    "status": "failed",
+                    "exec_time": exec_time,
+                    "completed_at": now.isoformat(),
+                }
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception(
-                "Failed to persist terminated execution completion for %s (stage=%s)",
+                "Failed to publish terminated execution webhook for %s (stage=%s)",
                 execution_id,
                 record.stage_name,
             )
@@ -712,17 +700,6 @@ class FakeRunner:
             stage_name,
         )
         try:
-            self._db.record_stage_skip_window(
-                stage_name=stage_name, state=state, timestamp=timestamp, reason=reason
-            )
-        except Exception:  # noqa: BLE001 - fake runner best-effort
-            logger.exception(
-                "[FakeRunner %s] Failed to persist stage skip window (stage=%s state=%s)",
-                self._run_id[:8],
-                stage_name,
-                state,
-            )
-        try:
             self._persistence.queue.put(
                 PersistableEvent(
                     kind="stage_skip_window",
@@ -777,18 +754,6 @@ class FakeRunner:
                 started_at=started_at,
                 status="running",
             )
-        self._db.record_code_execution_start(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            code=fake_task_markdown,
-            started_at=started_at,
-            run_type=codex_run_type,
-        )
-        logger.debug(
-            "[FakeRunner %s] Published running_code (codex_execution) execution_id=%s",
-            self._run_id[:8],
-            execution_id,
-        )
         self._webhooks.publish_running_code(
             {
                 "execution_id": execution_id,
@@ -805,13 +770,6 @@ class FakeRunner:
         # Simulate the moment when Codex starts executing the runfile.
         time.sleep(1)
         runfile_started_at = datetime.now(timezone.utc)
-        self._db.record_code_execution_start(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            code=fake_runfile_code,
-            started_at=runfile_started_at,
-            run_type=runfile_run_type,
-        )
         self._webhooks.publish_running_code(
             {
                 "execution_id": execution_id,
@@ -841,14 +799,6 @@ class FakeRunner:
             execution_id,
             runfile_completed_at.isoformat(),
         )
-        self._db.record_code_execution_completion(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            completed_at=runfile_completed_at,
-            exec_time=runfile_exec_time,
-            status="success",
-            run_type=runfile_run_type,
-        )
         self._webhooks.publish_run_completed(
             {
                 "execution_id": execution_id,
@@ -869,14 +819,6 @@ class FakeRunner:
             self._run_id[:8],
             execution_id,
             completed_at.isoformat(),
-        )
-        self._db.record_code_execution_completion(
-            execution_id=execution_id,
-            stage_name=stage_name,
-            completed_at=completed_at,
-            exec_time=exec_time,
-            status="success",
-            run_type=codex_run_type,
         )
         self._webhooks.publish_run_completed(
             {
@@ -1069,12 +1011,6 @@ class FakeRunner:
                     },
                 )
                 try:
-                    self._db.insert_substage_summary(stage_name=stage_name, summary=summary)
-                except Exception:  # noqa: BLE001 - fake runner best-effort
-                    logger.exception(
-                        "Failed to store skipped-stage summary for stage %s", stage_name
-                    )
-                try:
                     self._enqueue_event(
                         kind="substage_summary",
                         data={
@@ -1113,10 +1049,6 @@ class FakeRunner:
                     "summary": summary,
                 },
             )
-            try:
-                self._db.insert_substage_summary(stage_name=stage_name, summary=summary)
-            except Exception:  # noqa: BLE001 - fake runner best-effort
-                logger.exception("Failed to store fake substage summary for stage %s", stage_name)
             try:
                 self._enqueue_event(
                     kind="substage_summary",
@@ -1268,44 +1200,10 @@ class FakeRunner:
         decision = "Accept"
         ethical_concerns = False
         source_path = None
+        created_at = datetime.now(timezone.utc)
 
-        # Insert review into database first
-        try:
-            review_id, created_at = self._db.insert_review(
-                summary=summary,
-                strengths=strengths,
-                weaknesses=weaknesses,
-                originality=originality,
-                quality=quality,
-                clarity=clarity,
-                significance=significance,
-                questions=questions,
-                limitations=limitations,
-                ethical_concerns=ethical_concerns,
-                soundness=soundness,
-                presentation=presentation,
-                contribution=contribution,
-                overall=overall,
-                confidence=confidence,
-                decision=decision,
-                source_path=source_path,
-            )
-            logger.info(
-                "[FakeRunner %s] Inserted fake review into database: id=%s decision=%s overall=%.1f",
-                self._run_id[:8],
-                review_id,
-                decision,
-                overall,
-            )
-        except Exception:
-            logger.exception(
-                "[FakeRunner %s] Failed to insert fake review into database", self._run_id[:8]
-            )
-            return
-
-        # Now publish the webhook with the database ID and timestamp
+        # Publish the webhook (server will generate the ID and persist to database)
         webhook_payload = {
-            "review_id": review_id,
             "summary": summary,
             "strengths": strengths,
             "weaknesses": weaknesses,
@@ -1345,7 +1243,6 @@ class FakeRunner:
             aws_secret_access_key=self._aws_secret_access_key,
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
-            database_url=self._database_url,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
@@ -1379,7 +1276,6 @@ class FakeRunner:
             aws_secret_access_key=self._aws_secret_access_key,
             aws_region=self._aws_region,
             aws_s3_bucket_name=self._aws_s3_bucket_name,
-            database_url=self._database_url,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
@@ -1467,34 +1363,19 @@ class FakeRunner:
                     stage_id,
                 )
 
-        try:
-            tree_viz_id = self._db.insert_tree_viz(
-                stage_id=stage_id,
-                payload=payload,
-                version=version,
-            )
-        except Exception:  # noqa: BLE001 - fake runner best-effort
-            logger.exception(
-                "Failed to store tree viz for run=%s stage=%s",
-                self._run_id,
-                stage_id,
-            )
-            return
-
-        # Publish tree_viz_stored event via webhook
+        # Publish tree_viz_stored event via webhook (server will generate ID and persist to DB)
         try:
             self._webhooks.publish_tree_viz_stored(
                 {
                     "stage_id": stage_id,
-                    "tree_viz_id": tree_viz_id,
                     "version": version,
+                    "viz": payload,  # Include full viz data in webhook
                 }
             )
             logger.info(
-                "Posted tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
+                "Posted tree_viz_stored webhook: run=%s stage=%s",
                 self._run_id,
                 stage_id,
-                tree_viz_id,
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception(
@@ -1508,12 +1389,6 @@ class FakeRunner:
         reasoning = (
             f"Selected synthetic best node for {stage_name} after stage index {stage_index + 1}."
         )
-        try:
-            self._db.insert_best_node_reasoning(
-                stage_name=stage_name, node_id=node_id, reasoning=reasoning
-            )
-        except Exception:  # noqa: BLE001 - fake runner best-effort
-            logger.exception("Failed to store fake best node reasoning for stage %s", stage_name)
         try:
             self._persistence.queue.put(
                 PersistableEvent(

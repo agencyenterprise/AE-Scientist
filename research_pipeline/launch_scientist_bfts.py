@@ -268,7 +268,6 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         logger.debug("Telemetry config missing run_id; skipping external sinks.")
         return TelemetryHooks(event_callback=event_callback, persistence=None, webhook=None)
 
-    db_url = telemetry_cfg.database_url.strip()
     webhook_client: WebhookClient | None = None
     webhook_url = (telemetry_cfg.webhook_url or "").strip()
     webhook_token = (telemetry_cfg.webhook_token or "").strip()
@@ -283,18 +282,17 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
     elif webhook_url or webhook_token:
         logger.warning("Telemetry webhook config incomplete; skipping webhook publishing.")
 
-    if not db_url and webhook_client is None:
-        logger.debug("No telemetry sinks configured; using in-process logging only.")
+    if webhook_client is None:
+        logger.debug("No webhook configured; using in-process logging only.")
         return TelemetryHooks(
             event_callback=event_callback,
             persistence=None,
-            webhook=webhook_client,
+            webhook=None,
         )
 
     try:
         persistence_started = time.monotonic()
         event_persistence = EventPersistenceManager(
-            database_url=db_url or None,
             run_id=run_identifier,
             webhook_client=webhook_client,
         )
@@ -313,7 +311,7 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
             start_ms,
             total_ms,
         )
-        logger.info("Telemetry sinks enabled for run_id=%s", run_identifier)
+        logger.info("Telemetry webhook enabled for run_id=%s", run_identifier)
         return TelemetryHooks(
             event_callback=EventQueueEmitter(queue=event_persistence.queue, fallback=on_event),
             persistence=event_persistence,
@@ -321,7 +319,7 @@ def setup_event_pipeline(*, telemetry_cfg: TelemetryConfig | None) -> TelemetryH
         )
     except Exception:
         logger.exception(
-            "Failed to initialize telemetry sinks; continuing without external logging."
+            "Failed to initialize telemetry webhook; continuing without external logging."
         )
         return TelemetryHooks(
             event_callback=event_callback, persistence=None, webhook=webhook_client
@@ -389,7 +387,6 @@ def setup_artifact_publisher(
         aws_secret_access_key=aws_secret_access_key,
         aws_region=aws_region,
         aws_s3_bucket_name=aws_s3_bucket_name,
-        database_url=telemetry_cfg.database_url,
         webhook_client=webhook_client,
     )
 
@@ -873,24 +870,23 @@ def run_review_stage(
     except Exception:
         logger.exception("Failed to upload review JSON artifact: %s", review_json_path)
 
-    if telemetry_cfg and telemetry_cfg.database_url:
+    if telemetry_cfg and webhook_client:
         try:
-            recorder = ReviewResponseRecorder.from_database_url(
-                database_url=telemetry_cfg.database_url,
+            recorder = ReviewResponseRecorder.from_webhook_client(
                 run_id=telemetry_cfg.run_id,
                 webhook_client=webhook_client,
             )
             recorder.insert_review(review=review, source_path=review_json_path)
-            figure_recorder = FigureReviewRecorder.from_database_url(
-                database_url=telemetry_cfg.database_url,
+            figure_recorder = FigureReviewRecorder.from_webhook_client(
                 run_id=telemetry_cfg.run_id,
+                webhook_client=webhook_client,
             )
             figure_recorder.insert_reviews(
                 reviews=review_img_cap_ref,
                 source_path=review_img_path,
             )
         except Exception:
-            logger.exception("Failed to persist review data to database.")
+            logger.exception("Failed to publish review data via webhook.")
     logger.info("Paper review completed.")
 
 

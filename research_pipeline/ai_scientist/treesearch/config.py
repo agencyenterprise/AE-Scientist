@@ -168,7 +168,6 @@ class ReviewConfig:
 
 @dataclass
 class TelemetryConfig:
-    database_url: str
     run_id: str
     webhook_url: Optional[str] = None
     webhook_token: Optional[str] = None

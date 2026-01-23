@@ -7,22 +7,28 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
-import psycopg2
 from langchain.chat_models import BaseChatModel
 from langchain.chat_models.base import _parse_model
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from ai_scientist.telemetry.event_persistence import _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient
 
-database_url = os.environ.get("DATABASE_PUBLIC_URL")
 RUN_ID = os.environ.get("RUN_ID")
-pg_config = _parse_database_url(database_url) if database_url else None
+WEBHOOK_URL = os.environ.get("TELEMETRY_WEBHOOK_URL")
+WEBHOOK_TOKEN = os.environ.get("TELEMETRY_WEBHOOK_TOKEN")
 
 
-def _should_use_db_tracking(run_id: str | None) -> bool:
-    return run_id is not None and pg_config is not None
+def _get_webhook_client() -> WebhookClient | None:
+    """Get webhook client if configured."""
+    if WEBHOOK_URL and WEBHOOK_TOKEN and RUN_ID:
+        return WebhookClient(base_url=WEBHOOK_URL, token=WEBHOOK_TOKEN, run_id=RUN_ID)
+    return None
+
+
+def _should_use_webhook_tracking(run_id: str | None) -> bool:
+    return run_id is not None and WEBHOOK_URL is not None and WEBHOOK_TOKEN is not None
 
 
 def _usage_value_to_int(*, value: object) -> int:
@@ -55,15 +61,13 @@ def save_cost_track(
     run_id = RUN_ID
     model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
-    if _should_use_db_tracking(run_id):
-        save_db_cost_track(
-            run_id=str(run_id),
+    if _should_use_webhook_tracking(run_id):
+        save_webhook_cost_track(
             provider=provider,
             model_name=model_name,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
-            now=now,
         )
     else:
         save_file_cost_track(
@@ -76,65 +80,34 @@ def save_cost_track(
         )
 
 
-def save_db_cost_track(
+def save_webhook_cost_track(
     *,
-    run_id: str,
     provider: str,
     model_name: str,
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
-    now: datetime,
 ) -> None:
-    if pg_config is None:
-        raise ValueError("Database configuration missing; cannot save cost track to DB")
-    with psycopg2.connect(**pg_config) as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO llm_token_usages (
-                    conversation_id,
-                    run_id,
-                    provider,
-                    model,
-                    input_tokens,
-                    cached_input_tokens,
-                    output_tokens,
-                    created_at,
-                    updated_at
-                )
-                SELECT
-                    i.conversation_id, 
-                    rpr.run_id,
-                    %s AS provider,
-                    %s AS model,
-                    %s AS input_tokens,
-                    %s AS cached_input_tokens,
-                    %s AS output_tokens,
-                    %s AS created_at,
-                    %s AS updated_at
-                FROM research_pipeline_runs rpr 
-                INNER JOIN ideas i 
-                    ON i.id=rpr.idea_id 
-                WHERE rpr.run_id = %s 
-                LIMIT 1
-                RETURNING id
-                """,
-                (
-                    provider,
-                    model_name,
-                    input_tokens,
-                    cached_input_tokens,
-                    output_tokens,
-                    now,
-                    now,
-                    run_id,
-                ),
-            )
-            result = cursor.fetchone()
-            if not result:
-                raise ValueError("Failed to save cost track to database")
-            conn.commit()
+    """Publish token usage via webhook. Server will look up conversation_id from run_id."""
+    webhook_client = _get_webhook_client()
+    if webhook_client is None:
+        logging.warning("Webhook client not configured; skipping token usage tracking")
+        return
+
+    try:
+        # Note: Server will look up conversation_id from run_id
+        webhook_client.publish(
+            kind="token_usage",
+            payload={
+                "provider": provider,
+                "model": model_name,
+                "input_tokens": input_tokens,
+                "cached_input_tokens": cached_input_tokens,
+                "output_tokens": output_tokens,
+            },
+        )
+    except Exception:
+        logging.exception("Failed to publish token usage webhook (non-fatal)")
 
 
 def save_file_cost_track(
