@@ -295,7 +295,7 @@ export interface ResearchRunCodeExecution {
   execution_id: string;
   stage_name: string;
   run_type: RunType;
-  code: string;
+  code: string | null;
   status: string;
   started_at: string;
   completed_at?: string | null;

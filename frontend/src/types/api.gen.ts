@@ -3518,7 +3518,7 @@ export interface components {
              * Code
              * @description Python source code submitted for execution
              */
-            code: string;
+            code?: string | null;
             /**
              * Status
              * @description Execution status reported by the worker

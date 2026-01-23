@@ -7178,7 +7178,14 @@
             "description": "Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
           },
           "code": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Code",
             "description": "Python source code submitted for execution"
           },
@@ -7222,7 +7229,6 @@
           "execution_id",
           "stage_name",
           "run_type",
-          "code",
           "status",
           "started_at"
         ],

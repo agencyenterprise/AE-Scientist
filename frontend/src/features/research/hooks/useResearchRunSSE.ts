@@ -152,7 +152,7 @@ function normalizeCodeExecution(
     execution_id: snapshot.execution_id,
     stage_name: snapshot.stage_name,
     run_type: snapshot.run_type as ResearchRunCodeExecution["run_type"],
-    code: snapshot.code,
+    code: snapshot.code ?? null,
     status: snapshot.status,
     started_at: snapshot.started_at,
     completed_at: snapshot.completed_at ?? null,
