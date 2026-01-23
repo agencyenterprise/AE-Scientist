@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, NamedTuple, Optional
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -77,14 +78,14 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
                     (
                         run_id,
                         summary,
-                        strengths,
-                        weaknesses,
+                        Jsonb(strengths),
+                        Jsonb(weaknesses),
                         originality,
                         quality,
                         clarity,
                         significance,
-                        questions,
-                        limitations,
+                        Jsonb(questions),
+                        Jsonb(limitations),
                         ethical_concerns,
                         soundness,
                         presentation,
