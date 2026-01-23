@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, cast
 
 from pydantic import BaseModel, Field
 
+from ai_scientist.artifact_manager import ArtifactSpec
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import get_structured_response_from_llm
 from ai_scientist.perform_citations import gather_citations
@@ -379,6 +380,7 @@ def extract_previous_run_context(
     summaries_str: str,
     model: str,
     workspace_dir: Path,
+    artifact_callback: Callable[[ArtifactSpec], None],
     event_callback: Optional[Callable[[BaseEvent], None]] = None,
     run_id: Optional[str] = None,
 ) -> str | None:
@@ -469,6 +471,25 @@ def extract_previous_run_context(
             logger.warning("Previous run context file is empty; skipping.")
             return None
 
+        if run_id is None:
+            logger.warning(
+                "run_id is not set; skipping upload + artifact webhook for %s",
+                output_file,
+            )
+        else:
+            try:
+                artifact_callback(
+                    ArtifactSpec(
+                        artifact_type="previous_run_context",
+                        path=output_file,
+                        packaging="file",
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to upload previous run context artifact + webhook (non-fatal)."
+                )
+
         logger.info("Successfully extracted previous run context (%s chars)", len(context_text))
         return context_text
 
@@ -481,6 +502,7 @@ def perform_writeup(
     base_folder: str,
     model: str,
     temperature: float,
+    artifact_callback: Callable[[ArtifactSpec], None],
     no_writing: bool = False,
     num_cite_rounds: int = 20,
     n_writeup_reflections: int = 3,
@@ -603,6 +625,7 @@ def perform_writeup(
                 summaries_str=combined_summaries_str,
                 model=model,
                 workspace_dir=Path("/workspace"),
+                artifact_callback=artifact_callback,
                 event_callback=event_callback,
                 run_id=run_id,
             )

@@ -748,6 +748,7 @@ def run_writeup_stage(
                 citations_text=citations_text,
                 run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                 temperature=writeup_cfg.temperature,
+                artifact_callback=artifact_callback,
                 event_callback=event_callback,
                 run_id=run_id,
             )
