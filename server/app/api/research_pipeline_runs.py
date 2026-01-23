@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from app.api.research_pipeline_event_stream import usd_to_cents
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
@@ -36,7 +35,7 @@ from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_credits
 from app.services.database import DatabaseManager
-from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.database.research_pipeline_runs import PodUpdateInfo
 from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
 from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
@@ -51,7 +50,6 @@ from app.services.research_pipeline.runpod import (
     TerminationConflictError,
     TerminationNotFoundError,
     TerminationRequestError,
-    fetch_pod_billing_summary,
     fetch_pod_ready_metadata,
     get_gpu_type_prices,
     get_pipeline_startup_grace_seconds,
@@ -59,7 +57,6 @@ from app.services.research_pipeline.runpod import (
     launch_research_pipeline_run,
     request_stage_skip_via_ssh,
     send_execution_feedback_via_ssh,
-    upload_runpod_artifacts_via_ssh,
 )
 from app.services.s3_service import get_s3_service
 
@@ -174,81 +171,6 @@ def extract_user_first_name(*, full_name: str) -> str:
     if not alnum_only:
         return REQUESTER_NAME_FALLBACK
     return f"{alnum_only[0].upper()}{alnum_only[1:]}"
-
-
-async def _record_pod_billing_event(
-    db: DatabaseManager,
-    *,
-    run_id: str,
-    pod_id: str,
-    context: str,
-) -> None:
-    try:
-        summary = await fetch_pod_billing_summary(pod_id=pod_id)
-    except (RuntimeError, RunPodError):
-        logger.exception("Failed to fetch billing summary for pod %s", pod_id)
-        return
-    if summary is None:
-        return
-    metadata = summary._asdict()
-    metadata["records"] = [record._asdict() for record in summary.records]
-    metadata["context"] = context
-    actual_cost_cents: int | None = None
-    total_amount = summary.total_amount_usd
-
-    try:
-        actual_cost_cents = usd_to_cents(value_usd=float(total_amount))
-    except (TypeError, ValueError):
-        pass
-    if actual_cost_cents is not None:
-        metadata["actual_cost_cents"] = actual_cost_cents
-    now = datetime.now(timezone.utc)
-    await db.insert_research_pipeline_run_event(
-        run_id=run_id,
-        event_type="pod_billing_summary",
-        metadata=metadata,
-        occurred_at=now,
-    )
-    run_event = ResearchRunEvent(
-        id=int(now.timestamp() * 1000),
-        run_id=run_id,
-        event_type="pod_billing_summary",
-        metadata=metadata,
-        occurred_at=now.isoformat(),
-    )
-    publish_stream_event(
-        run_id,
-        SSERunEvent(
-            type="run_event",
-            data=run_event,
-        ),
-    )
-
-
-async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun, *, trigger: str) -> None:
-    host = run.public_ip
-    port = run.ssh_port
-    if not host or not port:
-        logger.info(
-            "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
-            run.run_id,
-            trigger,
-        )
-        return
-    logger.info(
-        "Triggering pod artifacts upload for run %s (trigger=%s, pod_id=%s, host=%s, port=%s).",
-        run.run_id,
-        trigger,
-        run.pod_id,
-        host,
-        port,
-    )
-    await upload_runpod_artifacts_via_ssh(
-        host=host,
-        port=port,
-        run_id=run.run_id,
-        trigger=trigger,
-    )
 
 
 def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:

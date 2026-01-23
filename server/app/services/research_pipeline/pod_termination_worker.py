@@ -13,20 +13,25 @@ This module provides:
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Literal, Optional, Protocol, cast
 
 import sentry_sdk
 
+from app.api.research_pipeline_event_stream import usd_to_cents
 from app.api.research_pipeline_stream import publish_stream_event
+from app.models.research_pipeline import ResearchRunEvent
 from app.models.sse import ResearchRunCompleteData
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
+from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunTerminationStatusData, ResearchRunTerminationStatusEvent
-from app.services import get_database
+from app.services import DatabaseManager, get_database
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.research_pipeline.runpod import (
     RunPodError,
     RunPodManager,
+    fetch_pod_billing_summary,
     upload_runpod_artifacts_via_ssh,
 )
 
@@ -45,6 +50,55 @@ def notify_termination_requested() -> None:
 
 def get_termination_wakeup_event() -> asyncio.Event:
     return _termination_wakeup_event
+
+
+async def _record_pod_billing_event(
+    db: DatabaseManager,
+    *,
+    run_id: str,
+    pod_id: str,
+    context: str,
+) -> None:
+    try:
+        summary = await fetch_pod_billing_summary(pod_id=pod_id)
+    except (RuntimeError, RunPodError):
+        logger.exception("Failed to fetch billing summary for pod %s", pod_id)
+        return
+    if summary is None:
+        return
+    metadata = summary._asdict()
+    metadata["records"] = [record._asdict() for record in summary.records]
+    metadata["context"] = context
+    actual_cost_cents: int | None = None
+    total_amount = summary.total_amount_usd
+
+    try:
+        actual_cost_cents = usd_to_cents(value_usd=float(total_amount))
+    except (TypeError, ValueError):
+        pass
+    if actual_cost_cents is not None:
+        metadata["actual_cost_cents"] = actual_cost_cents
+    now = datetime.now(timezone.utc)
+    await db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type="pod_billing_summary",
+        metadata=metadata,
+        occurred_at=now,
+    )
+    run_event = ResearchRunEvent(
+        id=int(now.timestamp() * 1000),
+        run_id=run_id,
+        event_type="pod_billing_summary",
+        metadata=metadata,
+        occurred_at=now.isoformat(),
+    )
+    publish_stream_event(
+        run_id,
+        SSERunEvent(
+            type="run_event",
+            data=run_event,
+        ),
+    )
 
 
 def build_termination_status_payload(
@@ -525,6 +579,31 @@ class PodTerminationWorker:
         )
         updated = await db.get_research_pipeline_run_termination(run_id=run_id)
         publish_termination_status_event(run_id=run_id, termination=updated)
+
+        # Record pod billing summary now that termination is complete
+        if run.pod_id:
+            billing_context = termination.last_trigger or "termination_worker"
+            logger.info(
+                "Recording pod billing summary (run_id=%s pod_id=%s context=%s).",
+                run_id,
+                run.pod_id,
+                billing_context,
+            )
+            try:
+                # Cast db to DatabaseManager for billing function
+                await _record_pod_billing_event(
+                    cast(DatabaseManager, db),
+                    run_id=run_id,
+                    pod_id=run.pod_id,
+                    context=billing_context,
+                )
+            except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+                # Best-effort billing recording - don't fail termination if it fails
+                logger.exception(
+                    "Failed to record pod billing summary (run_id=%s pod_id=%s).",
+                    run_id,
+                    run.pod_id,
+                )
 
         if upload_failed_error is not None and attempt_number >= _TERMINATION_MAX_UPLOAD_ATTEMPTS:
             sentry_sdk.capture_message(
