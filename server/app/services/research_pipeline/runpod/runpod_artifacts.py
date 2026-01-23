@@ -114,9 +114,9 @@ def _upload_runpod_artifacts_via_ssh_sync(
         f"{remote_env} .venv/bin/python upload_file.py "
         f"--file-path {WORKSPACE_PATH}/research_pipeline.log --artifact-type run_log || true && "
         f"{remote_env} .venv/bin/python upload_folder.py "
-        f"--folder-path {WORKSPACE_PATH}/AE-Scientist/research_pipeline/workspaces/0-run "
+        f"--folder-path {WORKSPACE_PATH}/AE-Scientist/research_pipeline/workspaces "
         "--artifact-type workspace_archive "
-        "--archive-name 0-run-workspace.zip"
+        "--archive-name workspace.zip"
     )
     ssh_command = [
         "ssh",
