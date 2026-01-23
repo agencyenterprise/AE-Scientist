@@ -932,6 +932,16 @@ def _run_codex_cli(
     codex_task_content = _read_text_or_empty(path=task_file)
     started_at = datetime.now(timezone.utc)
     event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
+
+    # Warn if code is empty - this should never happen
+    if not codex_task_content or not codex_task_content.strip():
+        logger.warning(
+            "Emitting RunningCodeEvent with empty/missing code (execution_id=%s, stage=%s, run_type=CODEX_EXECUTION, task_file=%s)",
+            execution_id,
+            stage_name,
+            task_file,
+        )
+
     event_callback(
         RunningCodeEvent(
             execution_id=execution_id,

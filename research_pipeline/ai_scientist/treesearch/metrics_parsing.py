@@ -207,6 +207,15 @@ def generate_and_assign_metrics(
             )
         )
         started_at = datetime.now(timezone.utc)
+
+        # Warn if code is empty - this should never happen
+        if not task_text or not task_text.strip():
+            logger.warning(
+                "Emitting RunningCodeEvent with empty/missing code (execution_id=%s_metrics, stage=%s, run_type=CODEX_EXECUTION, context=metrics_parsing)",
+                node.id,
+                stage_identifier.prefixed_name,
+            )
+
         event_callback(
             RunningCodeEvent(
                 execution_id=f"{node.id}_metrics",
