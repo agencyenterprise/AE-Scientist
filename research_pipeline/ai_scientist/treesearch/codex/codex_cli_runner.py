@@ -355,14 +355,7 @@ class CodexCliRunner:
 
         # Log JSONL events in real-time for visibility
         def on_stdout_jsonl(line: str) -> None:
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict):
-                    event_type = obj.get("type")
-                    if event_type:
-                        logger.debug("Codex event: %s", event_type)
-            except json.JSONDecodeError:
-                pass
+            logger.debug("Codex execution %s", line)
 
         return self._run_subprocess(
             argv=argv,

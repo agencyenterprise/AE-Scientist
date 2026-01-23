@@ -276,7 +276,7 @@ def build_remote_script(
     config_filename: str,
     config_content_b64: str,
     run_id: str,
-    has_previous_run: bool
+    has_previous_run: bool,
 ) -> str:
     telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
     telemetry_token = shlex.quote(env.telemetry_webhook_token)
