@@ -137,9 +137,8 @@ class CodexCliRunner:
         else:
             self._env = dict(env)
 
-    def _build_argv(self, task_file: Path) -> list[str]:
+    def _build_argv(self) -> list[str]:
         """Build codex CLI command arguments."""
-        prompt = task_file.read_text(encoding="utf-8", errors="replace")
         return [
             "codex",
             "exec",
@@ -148,7 +147,9 @@ class CodexCliRunner:
             "--json",
             "--model",
             self._model,
-            prompt,
+            # Provide the prompt via stdin to avoid OS argv limits (E2BIG).
+            # Codex treats "-" as "read instructions from stdin".
+            "-",
         ]
 
     def _save_token_usage_from_jsonl(self, line: str) -> None:
@@ -177,6 +178,7 @@ class CodexCliRunner:
         self,
         *,
         argv: list[str],
+        stdin_path: Path,
         log_path: Path,
         events_path: Path,
         started_at: float,
@@ -204,6 +206,7 @@ class CodexCliRunner:
         proc: subprocess.Popen[bytes] | None = None
         try:
             with (
+                open(stdin_path, "rb") as stdin_file,
                 open(log_path, "ab") as logf,
                 open(events_path, "ab") as eventsf,
             ):
@@ -211,6 +214,7 @@ class CodexCliRunner:
                     args=argv,
                     cwd=str(self._workspace_dir),
                     env=self._env,
+                    stdin=stdin_file,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     start_new_session=True,
@@ -335,7 +339,7 @@ class CodexCliRunner:
         events_path = self._workspace_dir / self._events_log_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        argv = self._build_argv(task_file)
+        argv = self._build_argv()
         logger.info(
             "Starting Codex CLI (autonomous): %s (cwd=%s)", " ".join(argv), self._workspace_dir
         )
@@ -362,6 +366,7 @@ class CodexCliRunner:
 
         return self._run_subprocess(
             argv=argv,
+            stdin_path=task_file,
             log_path=log_path,
             events_path=events_path,
             started_at=started_at,
@@ -405,7 +410,7 @@ class CodexCliRunner:
         events_path = self._workspace_dir / self._events_log_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        argv = self._build_argv(task_file)
+        argv = self._build_argv()
         logger.info("Starting Codex CLI: %s (cwd=%s)", " ".join(argv), self._workspace_dir)
 
         # Define callbacks for event emission
@@ -440,6 +445,7 @@ class CodexCliRunner:
 
         return self._run_subprocess(
             argv=argv,
+            stdin_path=task_file,
             log_path=log_path,
             events_path=events_path,
             started_at=started_at,
