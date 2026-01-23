@@ -281,10 +281,7 @@ class RunPodManager:
         return response
 
     async def delete_pod(self, pod_id: str) -> None:
-        # await self._make_request(endpoint=f"/pods/{pod_id}", method="DELETE", data=None)
-        # Disable terminate for a test. TODO: revert this
-        print("Will not terminate", pod_id)
-        return None
+        await self._make_request(endpoint=f"/pods/{pod_id}", method="DELETE", data=None)
 
     async def get_pod_billing_summary(self, pod_id: str) -> PodBillingSummary | None:
         params = {"podId": pod_id, "grouping": "podId"}
@@ -417,6 +414,7 @@ async def launch_research_pipeline_run(
         config_filename=config_filename,
         config_content_b64=config_b64,
         run_id=run_id,
+        has_previous_run=True if parent_run_id else False,
     )
 
     creator = RunPodManager(api_key=runpod_api_key)

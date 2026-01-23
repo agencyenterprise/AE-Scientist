@@ -610,6 +610,8 @@ def perform_writeup(
                 logger.info("Previous run context successfully extracted for paper writing.")
             else:
                 logger.info("Previous run context extraction did not produce usable output.")
+        else:
+            logger.info("No previous run detected")
 
         try:
             vlm_started_at = time.monotonic()

@@ -276,6 +276,7 @@ def build_remote_script(
     config_filename: str,
     config_content_b64: str,
     run_id: str,
+    has_previous_run: bool
 ) -> str:
     telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
     telemetry_token = shlex.quote(env.telemetry_webhook_token)
@@ -318,8 +319,10 @@ def build_remote_script(
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
         f"PIPELINE_WORKSPACE_PATH={WORKSPACE_PATH}",
-        f"PREVIOUS_RUN_DATA_PATH={WORKSPACE_PATH}/previous_run_data",
     ]
+    if has_previous_run:
+        env_file_lines.append('HAS_PREVIOUS_RUN="true"')
+        env_file_lines.append(f"PREVIOUS_RUN_DATA_PATH={WORKSPACE_PATH}/previous_run_data")
     if env.sentry_dsn:
         env_file_lines.append(f"SENTRY_DSN={env.sentry_dsn}")
     if env.sentry_environment:
