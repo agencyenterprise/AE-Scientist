@@ -544,21 +544,28 @@ class PodTerminationWorker:
                         run_id,
                         run.status,
                     )
+                    # Map status to valid SSE status values
+                    early_sse_status: Literal[
+                        "pending", "running", "completed", "failed", "cancelled"
+                    ]
+                    if run.status == "initializing":
+                        # If terminated during initialization, treat as cancelled
+                        early_sse_status = "cancelled"
+                    elif run.status in ("pending", "running", "completed", "failed", "cancelled"):
+                        early_sse_status = cast(
+                            Literal["pending", "running", "completed", "failed", "cancelled"],
+                            run.status,
+                        )
+                    else:
+                        # Unknown status, default to failed
+                        early_sse_status = "failed"
+
                     publish_stream_event(
                         run_id,
                         SSECompleteEvent(
                             type="complete",
                             data=ResearchRunCompleteData(
-                                status=cast(
-                                    Literal[
-                                        "pending",
-                                        "running",
-                                        "completed",
-                                        "failed",
-                                        "cancelled",
-                                    ],
-                                    run.status,
-                                ),
+                                status=early_sse_status,
                                 success=run.status == "completed",
                                 message=run.error_message,
                             ),
@@ -620,15 +627,26 @@ class PodTerminationWorker:
             run_id,
             run.status,
         )
+        # Map status to valid SSE status values
+        sse_status: Literal["pending", "running", "completed", "failed", "cancelled"]
+        if run.status == "initializing":
+            # If terminated during initialization, treat as cancelled
+            sse_status = "cancelled"
+        elif run.status in ("pending", "running", "completed", "failed", "cancelled"):
+            sse_status = cast(
+                Literal["pending", "running", "completed", "failed", "cancelled"],
+                run.status,
+            )
+        else:
+            # Unknown status, default to failed
+            sse_status = "failed"
+
         publish_stream_event(
             run_id,
             SSECompleteEvent(
                 type="complete",
                 data=ResearchRunCompleteData(
-                    status=cast(
-                        Literal["pending", "running", "completed", "failed", "cancelled"],
-                        run.status,
-                    ),
+                    status=sse_status,
                     success=run.status == "completed",
                     message=run.error_message,
                 ),
