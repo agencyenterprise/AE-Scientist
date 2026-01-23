@@ -27,7 +27,7 @@ lint-frontend:
 	cd frontend && npx tsc --noEmit
 
 # Development servers
-dev-frontend: gen-api-types
+dev-frontend:
 	@echo "🚀 Starting frontend development server..."
 	cd frontend && npm run dev
 

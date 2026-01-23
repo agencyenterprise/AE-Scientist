@@ -355,7 +355,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                         (run_id, execution_id, stage_name, run_type, code, status,
                          started_at, completed_at, exec_time, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (run_id, execution_id)
+                    ON CONFLICT (run_id, execution_id, run_type)
                     DO UPDATE SET
                         status = EXCLUDED.status,
                         completed_at = EXCLUDED.completed_at,
