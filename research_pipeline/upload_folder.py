@@ -7,6 +7,7 @@ from typing import Sequence
 from dotenv import load_dotenv
 
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
+from ai_scientist.telemetry.event_persistence import WebhookClient
 
 PROJECT_DIR = Path(__file__).resolve().parent
 load_dotenv(PROJECT_DIR / ".env")
@@ -35,13 +36,22 @@ def upload_folder(
         return
 
     run_id = _require_env("RUN_ID")
+
+    # Note: This script only uploads to S3. Database persistence happens via webhooks.
+    # If you need webhook support, set TELEMETRY_WEBHOOK_URL and TELEMETRY_WEBHOOK_TOKEN.
+    webhook_url = os.environ.get("TELEMETRY_WEBHOOK_URL")
+    webhook_token = os.environ.get("TELEMETRY_WEBHOOK_TOKEN")
+    webhook_client = None
+    if webhook_url and webhook_token:
+        webhook_client = WebhookClient(base_url=webhook_url, token=webhook_token, run_id=run_id)
+
     publisher = ArtifactPublisher(
         run_id=run_id,
         aws_access_key_id=_require_env("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=_require_env("AWS_SECRET_ACCESS_KEY"),
         aws_region=_require_env("AWS_REGION"),
         aws_s3_bucket_name=_require_env("AWS_S3_BUCKET_NAME"),
-        database_url=_require_env("DATABASE_PUBLIC_URL"),
+        webhook_client=webhook_client,
     )
 
     try:

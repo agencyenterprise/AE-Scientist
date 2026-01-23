@@ -486,31 +486,6 @@ class ResearchPipelineMonitor:
                 "insufficient_credits",
             )
 
-    async def _record_pod_billing_event(
-        self,
-        db: "ResearchRunStore",
-        *,
-        run_id: str,
-        pod_id: str,
-        context: str,
-    ) -> None:
-        try:
-            summary = await self._runpod_manager.get_pod_billing_summary(pod_id=pod_id)
-        except RunPodError as exc:
-            logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
-            return
-        if summary is None:
-            return
-        metadata = summary._asdict()
-        metadata["records"] = [record._asdict() for record in summary.records]
-        metadata["context"] = context
-        await db.insert_research_pipeline_run_event(
-            run_id=run_id,
-            event_type="pod_billing_summary",
-            metadata=metadata,
-            occurred_at=datetime.now(timezone.utc),
-        )
-
     async def _maybe_backfill_ssh_info(
         self,
         db: "ResearchRunStore",

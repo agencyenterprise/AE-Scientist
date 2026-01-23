@@ -6,15 +6,15 @@ import logging
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import boto3
 import magic
-import psycopg2
 
-from ai_scientist.telemetry.event_persistence import WebhookClient, _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
 
@@ -100,62 +100,8 @@ class S3ArtifactUploader:
             return normalized or "n/a"
 
 
-class ArtifactRepository:
-    def __init__(self, *, database_url: str) -> None:
-        self._pg_config = _parse_database_url(database_url)
-
-    def insert(
-        self,
-        *,
-        run_id: str,
-        artifact_type: str,
-        filename: str,
-        file_size: int,
-        file_type: str,
-        s3_key: str,
-        source_path: str,
-    ) -> tuple[int, str]:
-        """Insert artifact and return (artifact_id, created_at)."""
-        with psycopg2.connect(**self._pg_config) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO rp_artifacts (
-                        run_id,
-                        artifact_type,
-                        filename,
-                        file_size,
-                        file_type,
-                        s3_key,
-                        source_path
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (s3_key) DO UPDATE SET
-                        file_size = EXCLUDED.file_size,
-                        source_path = EXCLUDED.source_path,
-                        created_at = NOW()
-                    RETURNING id, created_at
-                    """,
-                    (
-                        run_id,
-                        artifact_type,
-                        filename,
-                        file_size,
-                        file_type,
-                        s3_key,
-                        source_path,
-                    ),
-                )
-                result = cursor.fetchone()
-                conn.commit()
-                if result is None:
-                    raise ValueError("Failed to insert artifact")
-                artifact_id, created_at = result
-                return (int(artifact_id), created_at.isoformat())
-
-
 class ArtifactPublisher:
-    """Uploads artifacts to S3 and stores metadata in Postgres."""
+    """Uploads artifacts to S3 and publishes metadata via webhooks."""
 
     def __init__(
         self,
@@ -165,7 +111,6 @@ class ArtifactPublisher:
         aws_secret_access_key: str,
         aws_region: str,
         aws_s3_bucket_name: str,
-        database_url: str,
         webhook_client: WebhookClient | None = None,
     ) -> None:
         self._run_id = run_id
@@ -176,7 +121,6 @@ class ArtifactPublisher:
             aws_access_key_id=aws_access_key_id,
             aws_secret_access_key=aws_secret_access_key,
         )
-        self._repository = ArtifactRepository(database_url=database_url)
         self._webhook_client = webhook_client
 
     def publish(self, *, spec: ArtifactSpec) -> None:
@@ -188,17 +132,10 @@ class ArtifactPublisher:
                 spec.path,
             )
             return
+
         logger.info("Uploading %s artifact from %s", spec.artifact_type, spec.path)
         s3_key, file_type, file_size = self._uploader.upload(request=request, run_id=self._run_id)
-        artifact_id, created_at = self._repository.insert(
-            run_id=self._run_id,
-            artifact_type=spec.artifact_type,
-            filename=request.filename,
-            file_size=file_size,
-            file_type=file_type,
-            s3_key=s3_key,
-            source_path=str(request.source_path),
-        )
+        created_at = datetime.now(timezone.utc).isoformat()
 
         # Emit SSE event via webhook if available
         if self._webhook_client is not None:
@@ -206,7 +143,6 @@ class ArtifactPublisher:
                 self._webhook_client.publish(
                     kind="artifact_uploaded",
                     payload={
-                        "artifact_id": artifact_id,
                         "artifact_type": spec.artifact_type,
                         "filename": request.filename,
                         "file_size": file_size,
@@ -219,8 +155,7 @@ class ArtifactPublisher:
                 logger.exception("Failed to emit artifact SSE event (non-fatal)")
         else:
             logger.warning(
-                "No webhook client available to emit artifact SSE event for artifact_id=%s, artifact_type=%s, filename=%s, file_size=%s, file_type=%s",
-                artifact_id,
+                "No webhook client available to emit artifact SSE event for artifact_type=%s, filename=%s, file_size=%s, file_type=%s",
                 spec.artifact_type,
                 request.filename,
                 file_size,

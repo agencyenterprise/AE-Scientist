@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -99,8 +100,360 @@ class StageSkipWindowRecord(NamedTuple):
     updated_at: datetime
 
 
+class CodexEventRecord(NamedTuple):
+    id: int
+    run_id: str
+    stage: str
+    node: int
+    event_type: str
+    event_content: dict
+    created_at: datetime
+
+
 class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstract-method
-    """Methods to read pipeline telemetry events."""
+    """Methods to read and write pipeline telemetry events."""
+
+    # === INSERT METHODS ===
+
+    async def insert_stage_progress_event(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        iteration: int,
+        max_iterations: int,
+        progress: float,
+        total_nodes: int,
+        buggy_nodes: int,
+        good_nodes: int,
+        best_metric: Optional[str] = None,
+        eta_s: Optional[int] = None,
+        latest_iteration_time_s: Optional[int] = None,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a stage progress event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_run_stage_progress_events
+                        (run_id, stage, iteration, max_iterations, progress, total_nodes,
+                         buggy_nodes, good_nodes, best_metric, eta_s, latest_iteration_time_s,
+                         created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        run_id,
+                        stage,
+                        iteration,
+                        max_iterations,
+                        progress,
+                        total_nodes,
+                        buggy_nodes,
+                        good_nodes,
+                        best_metric,
+                        eta_s,
+                        latest_iteration_time_s,
+                        created_at,
+                    ),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert stage progress event")
+                return int(result["id"])
+
+    async def insert_run_log_event(
+        self,
+        *,
+        run_id: str,
+        message: str,
+        level: str = "info",
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a run log event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_run_log_events (run_id, message, level, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, message, level, created_at),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert run log event")
+                return int(result["id"])
+
+    async def insert_substage_completed_event(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        summary: dict,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a substage completed event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_substage_completed_events (run_id, stage, summary, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, stage, Jsonb(summary), created_at),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert substage completed event")
+                return int(result["id"])
+
+    async def insert_substage_summary_event(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        summary: dict,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a substage summary event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_substage_summary_events (run_id, stage, summary, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, stage, Jsonb(summary), created_at),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert substage summary event")
+                return int(result["id"])
+
+    async def insert_paper_generation_event(
+        self,
+        *,
+        run_id: str,
+        step: str,
+        substep: Optional[str],
+        progress: float,
+        step_progress: float,
+        details: Optional[Dict[str, Any]] = None,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a paper generation event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_paper_generation_events
+                        (run_id, step, substep, progress, step_progress, details, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        run_id,
+                        step,
+                        substep,
+                        progress,
+                        step_progress,
+                        Jsonb(details) if details is not None else None,
+                        created_at,
+                    ),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert paper generation event")
+                return int(result["id"])
+
+    async def insert_best_node_reasoning_event(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        node_id: str,
+        reasoning: str,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a best node reasoning event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_best_node_reasoning_events
+                        (run_id, stage, node_id, reasoning, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, stage, node_id, reasoning, created_at),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert best node reasoning event")
+                return int(result["id"])
+
+    async def insert_codex_event(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        node: int,
+        event_type: str,
+        event_content: dict,
+        created_at: Optional[datetime] = None,
+    ) -> int:
+        """Insert a codex event and return its ID."""
+        if created_at is None:
+            created_at = datetime.now()
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_codex_events
+                        (run_id, stage, node, event_type, event_content, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (run_id, stage, node, event_type, Jsonb(event_content), created_at),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to insert codex event")
+                return int(result["id"])
+
+    async def upsert_code_execution_event(
+        self,
+        *,
+        run_id: str,
+        execution_id: str,
+        stage_name: str,
+        run_type: str,
+        code: Optional[str] = None,
+        status: str = "running",
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+        exec_time: Optional[float] = None,
+    ) -> int:
+        """Insert or update a code execution event and return its ID."""
+        now = datetime.now()
+        if started_at is None:
+            started_at = now
+
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO rp_code_execution_events
+                        (run_id, execution_id, stage_name, run_type, code, status,
+                         started_at, completed_at, exec_time, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (run_id, execution_id, run_type)
+                    DO UPDATE SET
+                        status = EXCLUDED.status,
+                        completed_at = EXCLUDED.completed_at,
+                        exec_time = EXCLUDED.exec_time,
+                        updated_at = EXCLUDED.updated_at
+                    RETURNING id
+                    """,
+                    (
+                        run_id,
+                        execution_id,
+                        stage_name,
+                        run_type,
+                        code,
+                        status,
+                        started_at,
+                        completed_at,
+                        exec_time,
+                        now,
+                        now,
+                    ),
+                )
+                result = await cursor.fetchone()
+                if not result:
+                    raise ValueError("Failed to upsert code execution event")
+                return int(result["id"])
+
+    async def upsert_stage_skip_window(
+        self,
+        *,
+        run_id: str,
+        stage: str,
+        state: str,
+        timestamp: datetime,
+        reason: Optional[str] = None,
+    ) -> int:
+        """Insert or update a stage skip window record and return its ID."""
+        now = datetime.now()
+
+        if state == "opened":
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        INSERT INTO rp_stage_skip_windows
+                            (run_id, stage, opened_at, opened_reason, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (run_id, stage)
+                        DO UPDATE SET
+                            opened_at = EXCLUDED.opened_at,
+                            opened_reason = EXCLUDED.opened_reason,
+                            updated_at = EXCLUDED.updated_at
+                        RETURNING id
+                        """,
+                        (run_id, stage, timestamp, reason, now, now),
+                    )
+                    result = await cursor.fetchone()
+                    if not result:
+                        raise ValueError("Failed to upsert stage skip window (opened)")
+                    return int(result["id"])
+        else:  # state == "closed"
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        UPDATE rp_stage_skip_windows
+                        SET closed_at = %s, closed_reason = %s, updated_at = %s
+                        WHERE run_id = %s AND stage = %s
+                        RETURNING id
+                        """,
+                        (timestamp, reason, now, run_id, stage),
+                    )
+                    result = await cursor.fetchone()
+                    if not result:
+                        # Window doesn't exist yet, create it as closed
+                        await cursor.execute(
+                            """
+                            INSERT INTO rp_stage_skip_windows
+                                (run_id, stage, closed_at, closed_reason, created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            RETURNING id
+                            """,
+                            (run_id, stage, timestamp, reason, now, now),
+                        )
+                        result = await cursor.fetchone()
+                        if not result:
+                            raise ValueError("Failed to insert stage skip window (closed)")
+                    return int(result["id"])
+
+    # === READ METHODS ===
 
     async def list_stage_progress_events(self, run_id: str) -> List[StageProgressEvent]:
         query = """

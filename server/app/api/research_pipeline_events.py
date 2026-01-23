@@ -57,12 +57,7 @@ from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
     publish_termination_status_event,
 )
-from app.services.research_pipeline.runpod import (
-    RunPodError,
-    fetch_pod_billing_summary,
-    get_supported_gpu_types,
-    upload_runpod_artifacts_via_ssh,
-)
+from app.services.research_pipeline.runpod import get_supported_gpu_types
 from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
 
@@ -232,7 +227,6 @@ class PaperGenerationProgressPayload(BaseModel):
 
 
 class ArtifactUploadedEvent(BaseModel):
-    artifact_id: int
     artifact_type: str
     filename: str
     file_size: int
@@ -246,7 +240,6 @@ class ArtifactUploadedPayload(BaseModel):
 
 
 class ReviewCompletedEvent(BaseModel):
-    review_id: int
     summary: str
     strengths: List[str]
     weaknesses: List[str]
@@ -297,8 +290,8 @@ class StageSkipWindowPayload(BaseModel):
 
 class TreeVizStoredEvent(BaseModel):
     stage_id: str
-    tree_viz_id: int
     version: int
+    viz: Dict[str, Any]
 
 
 class TreeVizStoredPayload(BaseModel):
@@ -348,6 +341,33 @@ class RunCompletedPayload(BaseModel):
     event: RunCompletedEventPayload
 
 
+class TokenUsageEvent(BaseModel):
+    provider: str
+    model: str
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+
+
+class TokenUsagePayload(BaseModel):
+    run_id: str
+    event: TokenUsageEvent
+
+
+class FigureReviewEvent(BaseModel):
+    figure_name: str
+    img_description: str
+    img_review: str
+    caption_review: str
+    figrefs_review: str
+    source_path: Optional[str] = None
+
+
+class FigureReviewsPayload(BaseModel):
+    run_id: str
+    reviews: List[FigureReviewEvent]
+
+
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
     expected_token = settings.TELEMETRY_WEBHOOK_TOKEN
     if not expected_token:
@@ -361,57 +381,6 @@ def _verify_bearer_token(authorization: str = Header(...)) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token.",
         )
-
-
-async def _record_pod_billing_event(
-    db: "ResearchRunStore",
-    *,
-    run_id: str,
-    pod_id: str,
-    context: str,
-) -> None:
-    try:
-        summary = await fetch_pod_billing_summary(pod_id=pod_id)
-    except (RuntimeError, RunPodError) as exc:
-        logger.warning("Failed to fetch billing summary for pod %s: %s", pod_id, exc)
-        return
-    if summary is None:
-        return
-    metadata = summary._asdict()
-    metadata["records"] = [record._asdict() for record in summary.records]
-    metadata["context"] = context
-    await db.insert_research_pipeline_run_event(
-        run_id=run_id,
-        event_type="pod_billing_summary",
-        metadata=metadata,
-        occurred_at=datetime.now(timezone.utc),
-    )
-
-
-async def _upload_pod_artifacts_if_possible(run: ResearchPipelineRun, *, trigger: str) -> None:
-    host = run.public_ip
-    port = run.ssh_port
-    if not host or not port:
-        logger.info(
-            "Run %s missing SSH info; skipping pod artifacts upload (trigger=%s).",
-            run.run_id,
-            trigger,
-        )
-        return
-    logger.info(
-        "Triggering pod artifacts upload for run %s (trigger=%s, pod_id=%s, host=%s, port=%s).",
-        run.run_id,
-        trigger,
-        run.pod_id,
-        host,
-        port,
-    )
-    await upload_runpod_artifacts_via_ssh(
-        host=host,
-        port=port,
-        run_id=run.run_id,
-        trigger=trigger,
-    )
 
 
 async def _resolve_run_owner_first_name(*, db: "ResearchRunStore", run_id: str) -> str:
@@ -473,6 +442,21 @@ async def ingest_stage_progress(
         event_data=event.model_dump(),
     )
 
+    # Persist to database
+    await db.insert_stage_progress_event(
+        run_id=payload.run_id,
+        stage=event.stage,
+        iteration=event.iteration,
+        max_iterations=event.max_iterations,
+        progress=event.progress,
+        total_nodes=event.total_nodes,
+        buggy_nodes=event.buggy_nodes,
+        good_nodes=event.good_nodes,
+        best_metric=event.best_metric,
+        eta_s=event.eta_s,
+        latest_iteration_time_s=event.latest_iteration_time_s,
+    )
+
 
 @router.post("/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_substage_completed(
@@ -515,6 +499,13 @@ async def ingest_substage_completed(
         run_id=payload.run_id,
         event_type="substage_completed",
         event_data=event.model_dump(),
+    )
+
+    # Persist to database (summary already contains main_stage_number and reason)
+    await db.insert_substage_completed_event(
+        run_id=payload.run_id,
+        stage=event.stage,
+        summary=summary,
     )
 
 
@@ -560,13 +551,40 @@ async def ingest_paper_generation_progress(
         event_data=event.model_dump(),
     )
 
+    # Persist to database
+    await db.insert_paper_generation_event(
+        run_id=payload.run_id,
+        step=event.step,
+        substep=event.substep,
+        progress=event.progress,
+        step_progress=event.step_progress,
+        details=event.details,
+    )
+
 
 @router.post("/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_artifact_uploaded(
     payload: ArtifactUploadedPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
+
+    # Reconstruct s3_key (same pattern as in artifact_manager.py)
+    s3_key = f"research-pipeline/{payload.run_id}/{event.artifact_type}/{event.filename}"
+
+    # Persist to database (upsert based on s3_key)
+    created_at_dt = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))
+    artifact_id, db_created_at = await db.upsert_artifact(
+        run_id=payload.run_id,
+        artifact_type=event.artifact_type,
+        filename=event.filename,
+        file_size=event.file_size,
+        file_type=event.file_type,
+        s3_key=s3_key,
+        source_path=None,  # Not included in webhook payload
+        created_at=created_at_dt,
+    )
 
     logger.info(
         "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
@@ -574,10 +592,11 @@ async def ingest_artifact_uploaded(
         event.artifact_type,
         event.filename,
         event.file_size,
-        event.artifact_id,
+        artifact_id,
     )
+
     artifact_metadata = ResearchRunArtifactMetadata(
-        id=event.artifact_id,
+        id=artifact_id,
         artifact_type=event.artifact_type,
         filename=event.filename,
         file_size=event.file_size,
@@ -599,6 +618,7 @@ async def ingest_artifact_uploaded(
 async def ingest_review_completed(
     payload: ReviewCompletedPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
 
@@ -609,9 +629,32 @@ async def ingest_review_completed(
         event.overall,
     )
 
-    # Create LlmReviewResponse for SSE
+    # Persist to database first to get the database-generated review_id
+    review_id = await db.insert_llm_review(
+        run_id=payload.run_id,
+        summary=event.summary,
+        strengths=event.strengths,
+        weaknesses=event.weaknesses,
+        originality=event.originality,
+        quality=event.quality,
+        clarity=event.clarity,
+        significance=event.significance,
+        questions=event.questions,
+        limitations=event.limitations,
+        ethical_concerns=event.ethical_concerns,
+        soundness=event.soundness,
+        presentation=event.presentation,
+        contribution=event.contribution,
+        overall=event.overall,
+        confidence=event.confidence,
+        decision=event.decision,
+        source_path=event.source_path,
+        created_at=datetime.fromisoformat(event.created_at.replace("Z", "+00:00")),
+    )
+
+    # Create LlmReviewResponse for SSE using database-generated review_id
     review_data = LlmReviewResponse(
-        id=event.review_id,
+        id=review_id,
         run_id=payload.run_id,
         summary=event.summary,
         strengths=event.strengths,
@@ -646,6 +689,7 @@ async def ingest_review_completed(
 async def ingest_substage_summary(
     payload: SubstageSummaryPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
@@ -653,7 +697,8 @@ async def ingest_substage_summary(
         payload.run_id,
         event.stage,
     )
-    created_at = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    created_at = now.isoformat()
     summary_model = ResearchRunSubstageSummary(
         id=_next_stream_event_id(),
         stage=event.stage,
@@ -666,6 +711,14 @@ async def ingest_substage_summary(
             type="substage_summary",
             data=summary_model,
         ),
+    )
+
+    # Persist to database
+    await db.insert_substage_summary_event(
+        run_id=payload.run_id,
+        stage=event.stage,
+        summary=event.summary,
+        created_at=now,
     )
 
 
@@ -710,6 +763,14 @@ async def ingest_best_node_selection(
         event_data=event.model_dump(),
     )
 
+    # Persist to database
+    await db.insert_best_node_reasoning_event(
+        run_id=payload.run_id,
+        stage=event.stage,
+        node_id=event.node_id,
+        reasoning=event.reasoning,
+    )
+
 
 @router.post("/stage-skip-window", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_stage_skip_window(
@@ -745,18 +806,37 @@ async def ingest_stage_skip_window(
         ),
     )
 
+    # Persist to database
+    await cast(DatabaseManager, db).upsert_stage_skip_window(
+        run_id=payload.run_id,
+        stage=event.stage,
+        state=event.state,
+        timestamp=datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
+        reason=event.reason,
+    )
+
 
 @router.post("/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_tree_viz_stored(
     payload: "TreeVizStoredPayload",
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
+
+    # Persist to database
+    tree_viz_id = await db.upsert_tree_viz(
+        run_id=payload.run_id,
+        stage_id=event.stage_id,
+        viz=event.viz,
+        version=event.version,
+    )
+
     logger.info(
         "Tree viz stored: run=%s stage=%s tree_viz_id=%s version=%s",
         payload.run_id,
         event.stage_id,
-        event.tree_viz_id,
+        tree_viz_id,
         event.version,
     )
     created_at = datetime.now(timezone.utc).isoformat()
@@ -768,7 +848,7 @@ async def ingest_tree_viz_stored(
         event_type="tree_viz_stored",
         metadata={
             "stage_id": event.stage_id,
-            "tree_viz_id": event.tree_viz_id,
+            "tree_viz_id": tree_viz_id,
             "version": event.version,
         },
         occurred_at=created_at,
@@ -800,6 +880,7 @@ async def ingest_run_log(
         payload.event.level,
         payload.event.message,
     )
+    now = datetime.now(timezone.utc)
     publish_stream_event(
         run_id=payload.run_id,
         event=SSELogEvent(
@@ -808,9 +889,17 @@ async def ingest_run_log(
                 id=_next_stream_event_id(),
                 level=payload.event.level,
                 message=payload.event.message,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=now.isoformat(),
             ),
         ),
+    )
+
+    # Persist to database
+    await cast(DatabaseManager, db).insert_run_log_event(
+        run_id=payload.run_id,
+        level=payload.event.level,
+        message=payload.event.message,
+        created_at=now,
     )
 
 
@@ -818,8 +907,19 @@ async def ingest_run_log(
 async def ingest_codex_event(
     payload: CodexEventPayload,
     _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
     logger.info("RP codex event received: run=%s event=%s", payload.run_id, payload.event)
+
+    # Persist to database
+    event_data = payload.event
+    await db.insert_codex_event(
+        run_id=payload.run_id,
+        stage=event_data.get("stage", ""),
+        node=event_data.get("node", 0),
+        event_type=event_data.get("event_type", ""),
+        event_content=event_data,
+    )
 
 
 @router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
@@ -858,6 +958,16 @@ async def ingest_running_code(
         event_data=event.model_dump(),
     )
 
+    # Persist to database (status defaults to "running")
+    await cast(DatabaseManager, db).upsert_code_execution_event(
+        run_id=payload.run_id,
+        execution_id=event.execution_id,
+        stage_name=event.stage_name,
+        run_type=event.run_type,
+        code=event.code,
+        started_at=datetime.fromisoformat(event.started_at.replace("Z", "+00:00")),
+    )
+
 
 @router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_completed(
@@ -894,6 +1004,17 @@ async def ingest_run_completed(
         run_id=payload.run_id,
         event_type="run_completed",
         event_data=event.model_dump(),
+    )
+
+    # Persist to database (updates the existing record with completion data)
+    await cast(DatabaseManager, db).upsert_code_execution_event(
+        run_id=payload.run_id,
+        execution_id=event.execution_id,
+        stage_name=event.stage_name,
+        run_type=event.run_type,
+        status=event.status,
+        exec_time=event.exec_time,
+        completed_at=datetime.fromisoformat(event.completed_at.replace("Z", "+00:00")),
     )
 
 
@@ -1198,6 +1319,83 @@ async def ingest_gpu_shortage(
     publish_termination_status_event(run_id=payload.run_id, termination=termination)
     notify_termination_requested()
     await _retry_run_after_gpu_shortage(db=db, failed_run=run)
+
+
+@router.post("/token-usage", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_token_usage(
+    payload: TokenUsagePayload,
+    _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
+) -> None:
+    event = payload.event
+    logger.debug(
+        "Token usage: run=%s model=%s input=%s output=%s",
+        payload.run_id,
+        event.model,
+        event.input_tokens,
+        event.output_tokens,
+    )
+
+    # Look up conversation_id from run_id
+    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    if run is None:
+        logger.warning(
+            "Cannot track token usage: run_id=%s not found",
+            payload.run_id,
+        )
+        return
+    # Get conversation_id via idea_id
+    idea_version = await db.get_idea_version_by_id(run.idea_version_id)
+    if idea_version is None:
+        logger.warning(
+            "Cannot track token usage: idea_version_id=%s not found",
+            run.idea_version_id,
+        )
+        return
+    conversation_id = idea_version.conversation_id
+
+    # Insert into database
+    await db.create_llm_token_usage(
+        conversation_id=conversation_id,
+        provider=event.provider,
+        model=event.model,
+        input_tokens=event.input_tokens,
+        cached_input_tokens=event.cached_input_tokens,
+        output_tokens=event.output_tokens,
+        run_id=payload.run_id,
+    )
+
+
+@router.post("/figure-reviews", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_figure_reviews(
+    payload: FigureReviewsPayload,
+    _: None = Depends(_verify_bearer_token),
+    db: DatabaseManager = Depends(get_database),
+) -> None:
+    logger.info(
+        "Figure reviews: run=%s count=%s",
+        payload.run_id,
+        len(payload.reviews),
+    )
+
+    # Convert pydantic models to dicts for database insertion
+    reviews_data = [
+        {
+            "figure_name": review.figure_name,
+            "img_description": review.img_description,
+            "img_review": review.img_review,
+            "caption_review": review.caption_review,
+            "figrefs_review": review.figrefs_review,
+            "source_path": review.source_path,
+        }
+        for review in payload.reviews
+    ]
+
+    # Insert into database
+    await db.insert_vlm_figure_reviews(
+        run_id=payload.run_id,
+        reviews=reviews_data,
+    )
 
 
 async def _record_disk_usage_event(

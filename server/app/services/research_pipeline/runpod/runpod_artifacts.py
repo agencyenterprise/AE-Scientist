@@ -53,12 +53,6 @@ def _gather_log_env(run_id: str) -> dict[str, str] | None:
             missing.append(name)
         else:
             env_values[name] = value
-    database_public = os.environ.get("DATABASE_PUBLIC_URL")
-    if not database_public:
-        missing.append("DATABASE_PUBLIC_URL")
-    else:
-        env_values["DATABASE_PUBLIC_URL"] = database_public
-        env_values["DATABASE_URL"] = os.environ.get("DATABASE_URL", database_public)
     if missing:
         logger.info("Missing env vars for pod log upload: %s", ", ".join(sorted(set(missing))))
         return None

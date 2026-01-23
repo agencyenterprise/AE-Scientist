@@ -6,17 +6,13 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import psycopg2
-import psycopg2.extras
-
-from ai_scientist.telemetry.event_persistence import WebhookClient, _parse_database_url
+from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class TreeVizStore:
-    database_url: str
     webhook_url: str | None = None
     webhook_token: str | None = None
     run_id: str | None = None
@@ -38,81 +34,39 @@ class TreeVizStore:
         stage_id: str,
         viz: dict[str, Any],
         version: int,
-    ) -> int:
+    ) -> None:
         """
-        Insert or update a tree visualization payload for a given run/stage.
+        Publish tree visualization payload via webhook.
 
-        Returns the stored rp_tree_viz.id.
+        Database persistence is handled by the server webhook handler.
         """
-        pg_config = _parse_database_url(self.database_url)
-        upsert_query = """
-            INSERT INTO rp_tree_viz (run_id, stage_id, viz, version)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (run_id, stage_id)
-            DO UPDATE SET
-                viz = EXCLUDED.viz,
-                version = EXCLUDED.version,
-                updated_at = now()
-            RETURNING id
-        """
-        event_query = """
-            INSERT INTO research_pipeline_run_events (run_id, event_type, metadata, occurred_at)
-            VALUES (%s, %s, %s, now())
-        """
-        try:
-            with psycopg2.connect(**pg_config) as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        upsert_query, (run_id, stage_id, psycopg2.extras.Json(viz), version)
-                    )
-                    row = cursor.fetchone()
-                    if row is None:
-                        raise RuntimeError("No id returned when upserting rp_tree_viz")
-                    tree_viz_id = int(row[0])
-                    cursor.execute(
-                        event_query,
-                        (
-                            run_id,
-                            "tree_viz_stored",
-                            psycopg2.extras.Json(
-                                {
-                                    "stage_id": stage_id,
-                                    "tree_viz_id": tree_viz_id,
-                                    "version": version,
-                                }
-                            ),
-                        ),
-                    )
-                conn.commit()
-
-            # Publish webhook event using WebhookClient if configured
-            webhook_client = self._get_webhook_client()
-            if webhook_client is not None:
-                try:
-                    webhook_client.publish(
-                        kind="tree_viz_stored",
-                        payload={
-                            "stage_id": stage_id,
-                            "tree_viz_id": tree_viz_id,
-                            "version": version,
-                        },
-                    )
-                    logger.info(
-                        "Published tree_viz_stored webhook: run=%s stage=%s tree_viz_id=%s",
-                        run_id,
-                        stage_id,
-                        tree_viz_id,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to publish tree_viz_stored webhook for run=%s stage=%s",
-                        run_id,
-                        stage_id,
-                    )
-
-            return tree_viz_id
-        except Exception:
-            logger.exception(
-                "Failed to upsert tree viz for run_id=%s stage_id=%s", run_id, stage_id
+        # Publish webhook event using WebhookClient if configured
+        webhook_client = self._get_webhook_client()
+        if webhook_client is not None:
+            try:
+                webhook_client.publish(
+                    kind="tree_viz_stored",
+                    payload={
+                        "stage_id": stage_id,
+                        "version": version,
+                        "viz": viz,
+                    },
+                )
+                logger.info(
+                    "Published tree_viz_stored webhook: run=%s stage=%s",
+                    run_id,
+                    stage_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to publish tree_viz_stored webhook for run=%s stage=%s",
+                    run_id,
+                    stage_id,
+                )
+                raise
+        else:
+            logger.warning(
+                "No webhook client configured for tree viz storage: run=%s stage=%s",
+                run_id,
+                stage_id,
             )
-            raise

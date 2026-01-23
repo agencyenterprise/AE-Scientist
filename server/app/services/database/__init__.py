@@ -23,6 +23,7 @@ from .rp_artifacts import ResearchPipelineArtifactsMixin
 from .rp_events import ResearchPipelineEventsMixin
 from .rp_llm_reviews import ResearchPipelineLlmReviewsMixin
 from .rp_tree_viz import ResearchPipelineTreeVizMixin
+from .rp_vlm_figure_reviews import ResearchPipelineVlmFigureReviewsMixin
 from .users import UsersDatabaseMixin
 
 
@@ -44,6 +45,7 @@ class DatabaseManager(
     ResearchPipelineEventsMixin,
     ResearchPipelineLlmReviewsMixin,
     ResearchPipelineTreeVizMixin,
+    ResearchPipelineVlmFigureReviewsMixin,
     BillingDatabaseMixin,
     NarratorMixin,
 ):

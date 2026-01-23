@@ -2504,6 +2504,96 @@
         }
       }
     },
+    "/api/research-pipeline/events/token-usage": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Token Usage",
+        "operationId": "ingest_token_usage_api_research_pipeline_events_token_usage_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenUsagePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/figure-reviews": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Figure Reviews",
+        "operationId": "ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FigureReviewsPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation_id}/idea/research-run/{run_id}/events": {
       "get": {
         "tags": [
@@ -3643,10 +3733,6 @@
       },
       "ArtifactUploadedEvent": {
         "properties": {
-          "artifact_id": {
-            "type": "integer",
-            "title": "Artifact Id"
-          },
           "artifact_type": {
             "type": "string",
             "title": "Artifact Type"
@@ -3670,7 +3756,6 @@
         },
         "type": "object",
         "required": [
-          "artifact_id",
           "artifact_type",
           "filename",
           "file_size",
@@ -5024,6 +5109,71 @@
         ],
         "title": "ErrorResponse",
         "description": "Standard error response schema."
+      },
+      "FigureReviewEvent": {
+        "properties": {
+          "figure_name": {
+            "type": "string",
+            "title": "Figure Name"
+          },
+          "img_description": {
+            "type": "string",
+            "title": "Img Description"
+          },
+          "img_review": {
+            "type": "string",
+            "title": "Img Review"
+          },
+          "caption_review": {
+            "type": "string",
+            "title": "Caption Review"
+          },
+          "figrefs_review": {
+            "type": "string",
+            "title": "Figrefs Review"
+          },
+          "source_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "figure_name",
+          "img_description",
+          "img_review",
+          "caption_review",
+          "figrefs_review"
+        ],
+        "title": "FigureReviewEvent"
+      },
+      "FigureReviewsPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/FigureReviewEvent"
+            },
+            "type": "array",
+            "title": "Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "reviews"
+        ],
+        "title": "FigureReviewsPayload"
       },
       "FileAttachment": {
         "properties": {
@@ -9280,10 +9430,6 @@
       },
       "ReviewCompletedEvent": {
         "properties": {
-          "review_id": {
-            "type": "integer",
-            "title": "Review Id"
-          },
           "summary": {
             "type": "string",
             "title": "Summary"
@@ -9378,7 +9524,6 @@
         },
         "type": "object",
         "required": [
-          "review_id",
           "summary",
           "strengths",
           "weaknesses",
@@ -10536,6 +10681,56 @@
         ],
         "title": "TerminateExecutionResponse"
       },
+      "TokenUsageEvent": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "cached_input_tokens": {
+            "type": "integer",
+            "title": "Cached Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "model",
+          "input_tokens",
+          "cached_input_tokens",
+          "output_tokens"
+        ],
+        "title": "TokenUsageEvent"
+      },
+      "TokenUsagePayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/TokenUsageEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
+        ],
+        "title": "TokenUsagePayload"
+      },
       "TreeVizItem": {
         "properties": {
           "id": {
@@ -10593,20 +10788,20 @@
             "type": "string",
             "title": "Stage Id"
           },
-          "tree_viz_id": {
-            "type": "integer",
-            "title": "Tree Viz Id"
-          },
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "viz": {
+            "type": "object",
+            "title": "Viz"
           }
         },
         "type": "object",
         "required": [
           "stage_id",
-          "tree_viz_id",
-          "version"
+          "version",
+          "viz"
         ],
         "title": "TreeVizStoredEvent"
       },

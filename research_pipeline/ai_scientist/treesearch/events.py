@@ -25,6 +25,8 @@ EventKind = Literal[
     "artifact_uploaded",
     "review_completed",
     "codex_event",
+    "token_usage",
+    "figure_reviews",
 ]
 PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
 
