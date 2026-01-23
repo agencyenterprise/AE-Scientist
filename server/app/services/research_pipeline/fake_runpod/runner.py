@@ -469,15 +469,38 @@ def list_telemetry() -> List[Dict[str, object]]:
 
 
 class LocalPersistence:
-    def __init__(self, webhook_client: object) -> None:
+    def __init__(self, webhook_client: WebhookClient) -> None:
         self.queue: "queue.SimpleQueue[PersistableEvent | None]" = queue.SimpleQueue()
         self._webhook_client = webhook_client
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
 
     def start(self) -> None:
-        return
+        self._thread = threading.Thread(
+            target=self._drain_queue,
+            name="LocalPersistenceWorker",
+            daemon=True,
+        )
+        self._thread.start()
 
     def stop(self) -> None:
-        return
+        self._stop_event.set()
+        if self._thread is not None:
+            self.queue.put(None)  # Sentinel to wake up the thread
+            self._thread.join(timeout=5)
+
+    def _drain_queue(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                item = self.queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if item is None:
+                break
+            try:
+                self._webhook_client.publish(kind=item.kind, payload=item.data)
+            except Exception:
+                logger.exception("Failed to publish event via webhook; dropping event.")
 
 
 class FakeRunner:

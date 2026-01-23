@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -105,7 +106,7 @@ class CodexEventRecord(NamedTuple):
     stage: str
     node: int
     event_type: str
-    event_metadata: dict
+    event_content: dict
     created_at: datetime
 
 
@@ -209,7 +210,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, stage, summary, created_at),
+                    (run_id, stage, Jsonb(summary), created_at),
                 )
                 result = await cursor.fetchone()
                 if not result:
@@ -235,7 +236,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, stage, summary, created_at),
+                    (run_id, stage, Jsonb(summary), created_at),
                 )
                 result = await cursor.fetchone()
                 if not result:
@@ -265,7 +266,15 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, step, substep, progress, step_progress, details, created_at),
+                    (
+                        run_id,
+                        step,
+                        substep,
+                        progress,
+                        step_progress,
+                        Jsonb(details) if details is not None else None,
+                        created_at,
+                    ),
                 )
                 result = await cursor.fetchone()
                 if not result:
@@ -307,7 +316,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         stage: str,
         node: int,
         event_type: str,
-        event_metadata: dict,
+        event_content: dict,
         created_at: Optional[datetime] = None,
     ) -> int:
         """Insert a codex event and return its ID."""
@@ -318,11 +327,11 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(
                     """
                     INSERT INTO rp_codex_events
-                        (run_id, stage, node, event_type, event_metadata, created_at)
+                        (run_id, stage, node, event_type, event_content, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, stage, node, event_type, event_metadata, created_at),
+                    (run_id, stage, node, event_type, Jsonb(event_content), created_at),
                 )
                 result = await cursor.fetchone()
                 if not result:

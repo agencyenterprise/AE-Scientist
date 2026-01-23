@@ -918,7 +918,7 @@ async def ingest_codex_event(
         stage=event_data.get("stage", ""),
         node=event_data.get("node", 0),
         event_type=event_data.get("event_type", ""),
-        event_metadata=event_data,
+        event_content=event_data,
     )
 
 

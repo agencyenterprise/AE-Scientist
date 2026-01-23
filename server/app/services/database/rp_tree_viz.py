@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -47,7 +48,7 @@ class ResearchPipelineTreeVizMixin(ConnectionProvider):
                         updated_at = EXCLUDED.updated_at
                     RETURNING id
                     """,
-                    (run_id, stage_id, viz, version, now, now),
+                    (run_id, stage_id, Jsonb(viz), version, now, now),
                 )
                 result = await cursor.fetchone()
                 if not result:
