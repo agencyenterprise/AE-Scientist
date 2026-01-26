@@ -406,7 +406,7 @@ export function ResearchPipelineStages({
       paperGenerationStarted
     ) {
       status = "completed";
-    } else if (latestProgress.progress > 0) {
+    } else if (latestProgress.progress > 0 || latestProgress.iteration > 0) {
       status = "in_progress";
     } else {
       status = "pending";
