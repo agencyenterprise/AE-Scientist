@@ -112,7 +112,7 @@ def perform_experiments_bfts(
 
         stage_completed = manager.has_stage_completed(stage.name)
         previous_iteration = last_reported_iteration_by_stage.get(stage.name)
-        stage_complete = stage.max_iterations > 0 and attempt_iteration >= stage.max_iterations
+        stage_complete = stage.max_iterations > 0 and attempt_iteration > stage.max_iterations
         iteration_increased = previous_iteration is None or iteration_display > previous_iteration
         needs_final_event = (
             stage_complete
@@ -123,7 +123,12 @@ def perform_experiments_bfts(
         if should_emit and not stage_completed:
             last_reported_iteration_by_stage[stage.name] = iteration_display
             final_iteration = iteration_display
-            final_progress = min(iteration_display / stage.max_iterations, 1.0)
+            # Report progress based on completed iterations, not started iterations
+            # When iteration N starts, N-1 iterations have completed
+            completed_iterations = max(iteration_display - 1, 0)
+            final_progress = (
+                completed_iterations / stage.max_iterations if stage.max_iterations > 0 else 0.0
+            )
             if stage_complete:
                 final_progress = 1.0
 
