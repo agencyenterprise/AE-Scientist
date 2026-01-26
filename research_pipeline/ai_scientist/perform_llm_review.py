@@ -109,14 +109,6 @@ class ReviewResponseModel(BaseModel):
 
 REVIEW_RESPONSE_SCHEMA = ReviewResponseModel
 
-reviewer_system_prompt_base = render_text(
-    template_name="llm_review/reviewer_system_prompt_base.txt.j2",
-    context={},
-)
-reviewer_system_prompt_strict = render_text(
-    template_name="llm_review/reviewer_system_prompt_strict.txt.j2",
-    context={},
-)
 reviewer_system_prompt_balanced = render_text(
     template_name="llm_review/reviewer_system_prompt_balanced.txt.j2",
     context={},
