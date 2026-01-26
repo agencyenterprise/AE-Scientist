@@ -8,7 +8,7 @@ export interface ResearchBoardCardProps {
   runId: string;
   displayRunId: string;
   ideaTitle: string;
-  ideaHypothesis: string | null;
+  ideaMarkdown: string | null; // Full idea content in markdown format
   status: string;
   currentStage: string | null;
   progress: number | null;
@@ -23,7 +23,7 @@ export function ResearchBoardCard({
   runId,
   displayRunId,
   ideaTitle,
-  ideaHypothesis,
+  ideaMarkdown,
   status,
   currentStage,
   progress,
@@ -38,7 +38,7 @@ export function ResearchBoardCard({
       <ResearchBoardCardHeader displayRunId={displayRunId} status={status} />
       <ResearchBoardCardBody
         ideaTitle={ideaTitle}
-        ideaHypothesis={ideaHypothesis}
+        ideaMarkdown={ideaMarkdown}
         status={status}
         errorMessage={errorMessage}
         currentStage={currentStage}

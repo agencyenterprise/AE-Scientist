@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { Clock } from "lucide-react";
 import type { ResearchRun } from "@/types/research";
+import { Markdown } from "@/shared/components/Markdown";
 import { formatResearchStageName } from "../utils/research-utils";
 
 interface ResearchHistoryCardProps {
@@ -58,14 +59,14 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
             </div>
 
             {/* Ideation Highlight section */}
-            {research.ideaHypothesis && (
+            {research.ideaMarkdown && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
                   Ideation highlight
                 </p>
-                <p className="line-clamp-4 whitespace-pre-line text-xs leading-relaxed text-slate-300">
-                  {research.ideaHypothesis}
-                </p>
+                <div className="line-clamp-4 text-xs leading-relaxed text-slate-300 prose-sm prose-invert max-w-none [&_p]:my-0.5 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-0.5 [&_ol]:my-0.5 [&_li]:my-0">
+                  <Markdown>{research.ideaMarkdown}</Markdown>
+                </div>
               </div>
             )}
 

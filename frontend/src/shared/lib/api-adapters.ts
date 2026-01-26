@@ -36,7 +36,7 @@ export interface Conversation {
   userName: string;
   userEmail: string;
   ideaTitle?: string | null;
-  ideaAbstract?: string | null;
+  ideaMarkdown?: string | null; // Full idea content in markdown format
   lastUserMessageContent?: string | null;
   lastAssistantMessageContent?: string | null;
   conversationStatus?: "draft" | "with_research";
@@ -60,7 +60,7 @@ export function convertApiConversation(apiConversation: ConversationListItem): C
     userName: apiConversation.user_name,
     userEmail: apiConversation.user_email,
     ideaTitle: apiConversation.idea_title ?? null,
-    ideaAbstract: apiConversation.idea_content ?? null,
+    ideaMarkdown: apiConversation.idea_content ?? null,
     lastUserMessageContent: apiConversation.last_user_message_content ?? null,
     lastAssistantMessageContent: apiConversation.last_assistant_message_content ?? null,
     conversationStatus:
@@ -179,7 +179,7 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     status: apiRun.status,
     initializationStatus: apiRun.initialization_status,
     ideaTitle: apiRun.idea_title,
-    ideaHypothesis: apiRun.idea_hypothesis,
+    ideaMarkdown: apiRun.idea_hypothesis, // Backend uses 'idea_hypothesis' but it's actually full markdown
     currentStage: apiRun.current_stage,
     progress: apiRun.progress,
     gpuType: apiRun.gpu_type,

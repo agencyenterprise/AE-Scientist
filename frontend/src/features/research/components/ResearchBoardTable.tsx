@@ -17,7 +17,7 @@ export function ResearchBoardTable({ researchRuns }: ResearchBoardTableProps) {
       runId: run.runId,
       displayRunId: truncateRunId(run.runId),
       ideaTitle: run.ideaTitle || "Untitled",
-      ideaHypothesis: run.ideaHypothesis,
+      ideaMarkdown: run.ideaMarkdown,
       status: run.status,
       currentStage: run.currentStage,
       progress: run.progress,

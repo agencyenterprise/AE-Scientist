@@ -68,7 +68,7 @@ export function ConversationCard({
     () => getRelativeTime(conversation.importDate),
     [conversation.importDate]
   );
-  const abstractPreview = (conversation.ideaAbstract ?? "").slice(0, 500);
+  const markdownPreview = (conversation.ideaMarkdown ?? "").slice(0, 500);
   const lastUser = (conversation.lastUserMessageContent ?? "").slice(0, 120);
   const lastAssistant = (conversation.lastAssistantMessageContent ?? "").slice(0, 120);
   const isGrid = false;
@@ -148,7 +148,7 @@ export function ConversationCard({
 
           {/* Idea preview - always visible when present or when there's a match */}
           {(conversation.ideaTitle ||
-            conversation.ideaAbstract ||
+            conversation.ideaMarkdown ||
             projectDraftMatch ||
             (searchMatch && searchMatch.contentType === "project_draft")) && (
             <div className="mt-3 bg-muted/60 border border-border rounded p-3">
@@ -188,10 +188,10 @@ export function ConversationCard({
                   </ReactMarkdown>
                 </div>
               ) : (
-                conversation.ideaAbstract && (
+                conversation.ideaMarkdown && (
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-4">
-                    {abstractPreview}
-                    {conversation.ideaAbstract.length > 500 ? "…" : ""}
+                    {markdownPreview}
+                    {conversation.ideaMarkdown.length > 500 ? "…" : ""}
                   </p>
                 )
               )}

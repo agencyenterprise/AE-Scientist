@@ -8,7 +8,7 @@ export interface ResearchRunListItemApi {
   status: string;
   initialization_status: string;
   idea_title: string;
-  idea_hypothesis: string | null;
+  idea_hypothesis: string | null; // Backend field name (contains full markdown)
   current_stage: string | null;
   progress: number | null;
   gpu_type: string | null;
@@ -33,7 +33,7 @@ export interface ResearchRun {
   status: string;
   initializationStatus: string;
   ideaTitle: string;
-  ideaHypothesis: string | null;
+  ideaMarkdown: string | null; // Full idea content in markdown format
   currentStage: string | null;
   progress: number | null;
   gpuType: string | null;

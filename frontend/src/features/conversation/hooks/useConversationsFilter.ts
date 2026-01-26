@@ -43,14 +43,14 @@ export function useConversationsFilter(
       filtered = filtered.filter(conversation => {
         const title = conversation.title?.toLowerCase() || "";
         const ideaTitle = conversation.ideaTitle?.toLowerCase() || "";
-        const ideaAbstract = conversation.ideaAbstract?.toLowerCase() || "";
+        const ideaMarkdown = conversation.ideaMarkdown?.toLowerCase() || "";
         const userName = conversation.userName?.toLowerCase() || "";
         const userEmail = conversation.userEmail?.toLowerCase() || "";
 
         return (
           title.includes(lowerSearch) ||
           ideaTitle.includes(lowerSearch) ||
-          ideaAbstract.includes(lowerSearch) ||
+          ideaMarkdown.includes(lowerSearch) ||
           userName.includes(lowerSearch) ||
           userEmail.includes(lowerSearch)
         );

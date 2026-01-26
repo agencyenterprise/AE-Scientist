@@ -27,7 +27,7 @@ export function IdeationQueueList({
           key={conversation.id}
           id={conversation.id}
           title={conversation.ideaTitle || conversation.title || "Untitled Idea"}
-          abstract={conversation.ideaAbstract ?? null}
+          markdown={conversation.ideaMarkdown ?? null}
           status={deriveIdeaStatus(conversation)}
           conversationStatus={conversation.conversationStatus}
           createdAt={conversation.createdAt}
