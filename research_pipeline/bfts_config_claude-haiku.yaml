@@ -1,7 +1,8 @@
 # path to the task data directory
 log_level: "DEBUG"
 
-desc_file: idea_example.json
+title: "Insert your research title here"
+desc_file: idea_example.md
 workspace_dir: workspaces
 log_dir: "workspaces/logs"
 min_num_gpus: 1
@@ -11,7 +12,7 @@ telemetry: null
 exp_name: run # a random experiment name will be generated if not provided
 
 # settings for code execution
-exec: 
+exec:
   timeout: 7200
   agent_file_name: runfile.py
   format_tb_ipython: False
@@ -67,6 +68,6 @@ agent:
     temperature: 0.5
 
   search:
-    max_debug_depth: 5  # increased from 3 - try harder to debug
-    debug_prob: 0.7     # increased from 0.5 - debug more often
+    max_debug_depth: 5 # increased from 3 - try harder to debug
+    debug_prob: 0.7 # increased from 0.5 - debug more often
     num_drafts: 3

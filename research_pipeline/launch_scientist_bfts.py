@@ -105,12 +105,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Path to the YAML configuration file (e.g., bfts_config.yaml)",
     )
     parser.add_argument(
-        "--title",
-        type=str,
-        help="Title of the research idea",
-        required=True,
-    )
-    parser.add_argument(
         "--resume",
         type=str,
         metavar="RUN_NAME_OR_NUMBER",
@@ -992,7 +986,9 @@ def execute_launcher(args: argparse.Namespace) -> None:
             run_success = resume_outcome.success
             failure_message = resume_outcome.message
         else:
-            outcome = perform_experiments_bfts(base_config_path, event_callback, title=args.title)
+            outcome = perform_experiments_bfts(
+                base_config_path, event_callback, title=base_cfg.title
+            )
             run_success = outcome.success
             failure_message = outcome.message
 
@@ -1017,7 +1013,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
 
             try:
                 title_path = run_dir_path / "research_title.txt"
-                title_path.write_text(args.title, encoding="utf-8")
+                title_path.write_text(base_cfg.title, encoding="utf-8")
                 logger.info(f"Wrote research title to {title_path}")
             except Exception:
                 traceback.print_exc()

@@ -1,7 +1,8 @@
 # path to the task data directory
 log_level: "DEBUG"
 
-desc_file: idea_example.json
+title: "Insert your research title here"
+desc_file: idea_example.md
 workspace_dir: workspaces
 log_dir: "workspaces/logs"
 min_num_gpus: 0

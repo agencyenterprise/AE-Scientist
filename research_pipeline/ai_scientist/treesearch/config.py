@@ -157,6 +157,7 @@ class TelemetryConfig:
 
 @dataclass
 class Config(Hashable):
+    title: str
     desc_file: Path
     log_dir: Path
     workspace_dir: Path

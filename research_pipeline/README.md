@@ -121,6 +121,51 @@ SENTRY_ENVIRONMENT=production
 - `ANTHROPIC_API_KEY` is **only** required if you plan to use Claude models (e.g., `bfts_config_claude-haiku.yaml`).
 - `SENTRY_DSN` enables monitoring for every research pipeline entry point (launcher, worker processes, artifact upload helpers). Leave it unset to disable error reporting. When set, the pipeline automatically tags every Sentry event with the active `run_id` (from your telemetry config or `RUN_ID` env var) so crashes are traceable per run.
 
+## Research Idea Format
+
+Research ideas are defined using two components in the config file:
+
+1. **`title`**: The research project title (in the YAML config)
+2. **`desc_file`**: Path to a markdown file with the research idea description
+
+**Example config structure:**
+
+```yaml
+title: "Your Research Title"
+desc_file: idea_example.md
+```
+
+**Markdown file structure (`idea_example.md`):**
+
+```markdown
+## Hypothesis
+
+Your hypothesis here...
+
+## Related Work
+
+Literature review...
+
+## Methodology
+
+Your methodology...
+
+## Experiments
+
+1. Experiment 1
+2. Experiment 2
+
+## Expected Outcome
+
+Expected results...
+
+## Risk Factors and Limitations
+
+Limitations and risks...
+```
+
+See `idea_example.md` and `bfts_config.yaml` for complete examples.
+
 ## Running Experiments
 
 **Available config files:**
@@ -138,6 +183,8 @@ python launch_scientist_bfts.py <config_file>
 
 **Required Argument:**
 - `<config_file>`: Path to the YAML configuration file (e.g., `bfts_config.yaml`)
+
+**Note:** The research title is now specified in the config file itself via the `title` field.
 
 **Review Configuration:**
 - Define the review model and temperature directly in your YAML config:
@@ -199,7 +246,7 @@ python launch_scientist_bfts.py bfts_config_gpt-5.yaml --resume 1
 ```
 
 **What the Full Pipeline Does:**
-1. **Loads research idea** from the JSON file specified in config's `desc_file`
+1. **Loads research idea** from the markdown file specified in config's `desc_file` (e.g., `idea_example.md`)
 2. **Runs all BFTS stages** via AgentManager using directories from the provided config:
    - Stage 1: Initial implementation
    - Stage 2: Baseline tuning
