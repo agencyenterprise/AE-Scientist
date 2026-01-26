@@ -43,7 +43,7 @@ def perform_experiments_bfts(
 
     # Prepare a clean agent workspace for the run
     logger.info("Preparing agent workspace (copying and extracting files) ...")
-    prep_agent_workspace(cfg=cfg)
+    prep_agent_workspace(cfg=cfg, config_path=config_path)
 
     # Define the global evaluation metric spec once for this run.
     try:

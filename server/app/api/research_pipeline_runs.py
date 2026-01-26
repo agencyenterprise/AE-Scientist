@@ -838,7 +838,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
     notify_termination_requested()
 
     # Idempotent stop: if already terminal, do not error—just return and (best-effort) push SSE so UI updates.
-    if run.status not in ("pending", "running"):
+    if run.status not in ("pending", "initializing", "running"):
         message = run.error_message or f"Research run is already {run.status}."
         return ResearchRunStopResponse(
             run_id=run_id,

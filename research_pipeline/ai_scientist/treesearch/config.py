@@ -261,7 +261,7 @@ def load_task_desc(cfg: Config) -> str:
     return desc_path.read_text(encoding="utf-8")
 
 
-def prep_agent_workspace(*, cfg: Config) -> None:
+def prep_agent_workspace(*, cfg: Config, config_path: Path) -> None:
     """Setup the agent's workspace and preprocess data if necessary."""
     (cfg.workspace_dir / "input").mkdir(parents=True, exist_ok=True)
     (cfg.workspace_dir / "working").mkdir(parents=True, exist_ok=True)
@@ -269,11 +269,20 @@ def prep_agent_workspace(*, cfg: Config) -> None:
     # Persist the original idea file alongside inputs for traceability
     try:
         idea_src = Path(cfg.desc_file)
-        idea_dst = cfg.workspace_dir / "input" / "original_idea.json"
+        idea_dst = cfg.workspace_dir / "input" / "original_idea.md"
         if idea_src.exists():
             shutil.copy2(idea_src, idea_dst)
     except Exception as e:
         logger.warning(f"Warning: failed to copy original idea file: {e}")
+
+    # Persist the original config file alongside inputs for traceability
+    try:
+        config_src = Path(config_path)
+        config_dst = cfg.workspace_dir / "input" / "original_config.yaml"
+        if config_src.exists():
+            shutil.copy2(config_src, config_dst)
+    except Exception as e:
+        logger.warning(f"Warning: failed to copy original config file: {e}")
 
 
 def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
