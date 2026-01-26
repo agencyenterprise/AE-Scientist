@@ -84,7 +84,7 @@ def load_runpod_environment() -> RunPodEnvironment:
     )
 
 
-def prepare_config_text(*, idea_filename: str, telemetry: dict[str, str]) -> str:
+def prepare_config_text(*, title: str, idea_filename: str, telemetry: dict[str, str]) -> str:
     if not CONFIG_TEMPLATE_PATH.exists():
         raise RuntimeError(
             "Pipeline config template missing at "
@@ -92,10 +92,12 @@ def prepare_config_text(*, idea_filename: str, telemetry: dict[str, str]) -> str
         )
     config = OmegaConf.load(CONFIG_TEMPLATE_PATH)
     logger.info(
-        "Preparing pipeline config from %s with desc_file=%s",
+        "Preparing pipeline config from %s with title=%s, desc_file=%s",
         CONFIG_TEMPLATE_PATH,
+        title,
         idea_filename,
     )
+    config.title = title
     config.desc_file = idea_filename
     if telemetry:
         config.telemetry = telemetry
@@ -234,15 +236,14 @@ def _upload_scrubbed_run_config_commands(*, config_filename: str) -> list[str]:
     ]
 
 
-def _launch_research_pipeline_commands(*, config_filename: str, title: str) -> list[str]:
-    title_quoted = shlex.quote(title)
+def _launch_research_pipeline_commands(*, config_filename: str) -> list[str]:
     return [
         "pipeline_exit_code=0",
         "set +e",
         "# === Starting Research Pipeline ===",
         'echo "Launching research pipeline..."',
         'send_init_status "Launching research pipeline"',
-        f"python -u launch_scientist_bfts.py '{config_filename}' --title {title_quoted} 2>&1 | tee -a {WORKSPACE_PATH}/research_pipeline.log",
+        f"python -u launch_scientist_bfts.py '{config_filename}' 2>&1 | tee -a {WORKSPACE_PATH}/research_pipeline.log",
         "pipeline_exit_code=$?",
         "set -e",
         'if [ "$pipeline_exit_code" -eq 0 ]; then',
@@ -272,7 +273,6 @@ def _resolve_disk_stats_paths() -> str:
 def build_remote_script(
     *,
     env: RunPodEnvironment,
-    title: str,
     idea_filename: str,
     idea_content_b64: str,
     config_filename: str,
@@ -369,6 +369,6 @@ def build_remote_script(
     script_parts += _pytorch_cuda_test_command()
     script_parts += _download_parent_run_data_commands()
     script_parts += _upload_scrubbed_run_config_commands(config_filename=config_filename)
-    script_parts += _launch_research_pipeline_commands(config_filename=config_filename, title=title)
+    script_parts += _launch_research_pipeline_commands(config_filename=config_filename)
     script_parts += _await_external_cleanup_commands()
     return "\n".join(script_parts).strip()

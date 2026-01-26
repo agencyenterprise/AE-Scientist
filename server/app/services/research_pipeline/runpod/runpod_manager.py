@@ -403,13 +403,14 @@ async def launch_research_pipeline_run(
     )
 
     idea_text = idea
-    config_text = prepare_config_text(idea_filename=idea_filename, telemetry=telemetry_block)
+    config_text = prepare_config_text(
+        title=title, idea_filename=idea_filename, telemetry=telemetry_block
+    )
     idea_b64 = encode_multiline(idea_text)
     config_b64 = encode_multiline(config_text)
 
     docker_cmd = build_remote_script(
         env=env,
-        title=title,
         idea_filename=idea_filename,
         idea_content_b64=idea_b64,
         config_filename=config_filename,
