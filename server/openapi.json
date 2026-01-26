@@ -5181,12 +5181,8 @@
         ],
         "title": "FigureReviewEvent"
       },
-      "FigureReviewsPayload": {
+      "FigureReviewsEvent": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "reviews": {
             "items": {
               "$ref": "#/components/schemas/FigureReviewEvent"
@@ -5197,8 +5193,25 @@
         },
         "type": "object",
         "required": [
-          "run_id",
           "reviews"
+        ],
+        "title": "FigureReviewsEvent",
+        "description": "Event containing multiple figure reviews."
+      },
+      "FigureReviewsPayload": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "event": {
+            "$ref": "#/components/schemas/FigureReviewsEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "event"
         ],
         "title": "FigureReviewsPayload"
       },

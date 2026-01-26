@@ -2237,12 +2237,19 @@ export interface components {
             /** Source Path */
             source_path?: string | null;
         };
+        /**
+         * FigureReviewsEvent
+         * @description Event containing multiple figure reviews.
+         */
+        FigureReviewsEvent: {
+            /** Reviews */
+            reviews: components["schemas"]["FigureReviewEvent"][];
+        };
         /** FigureReviewsPayload */
         FigureReviewsPayload: {
             /** Run Id */
             run_id: string;
-            /** Reviews */
-            reviews: components["schemas"]["FigureReviewEvent"][];
+            event: components["schemas"]["FigureReviewsEvent"];
         };
         /**
          * FileAttachment
