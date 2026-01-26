@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
 
@@ -23,12 +22,7 @@ class IdeaVersionData(NamedTuple):
     version_id: int
     conversation_id: int
     title: str
-    short_hypothesis: str
-    related_work: str
-    abstract: str
-    experiments: List[str]
-    expected_outcome: str
-    risk_factors_and_limitations: List[str]
+    idea_markdown: str
     is_manual_edit: bool
     version_number: int
     created_at: datetime
@@ -41,12 +35,7 @@ class IdeaData(NamedTuple):
     conversation_id: int
     version_id: int
     title: str
-    short_hypothesis: str
-    related_work: str
-    abstract: str
-    experiments: List[str]
-    expected_outcome: str
-    risk_factors_and_limitations: List[str]
+    idea_markdown: str
     version_number: int
     is_manual_edit: bool
     version_created_at: datetime
@@ -69,12 +58,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
         self,
         conversation_id: int,
         title: str,
-        short_hypothesis: str,
-        related_work: str,
-        abstract: str,
-        experiments: List[str],
-        expected_outcome: str,
-        risk_factors_and_limitations: List[str],
+        idea_markdown: str,
         created_by_user_id: int,
     ) -> int:
         """Create a new idea with initial version. Returns idea_id."""
@@ -97,19 +81,14 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 await cursor.execute(
                     """
                     INSERT INTO idea_versions
-                    (idea_id, title, short_hypothesis, related_work, abstract, experiments, expected_outcome, risk_factors_and_limitations, is_manual_edit, version_number, created_at, created_by_user_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (idea_id, title, idea_markdown, is_manual_edit, version_number, created_at, created_by_user_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """,
                     (
                         idea_id,
                         title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        Jsonb(experiments),
-                        expected_outcome,
-                        Jsonb(risk_factors_and_limitations),
+                        idea_markdown,
                         False,
                         1,
                         now,
@@ -139,12 +118,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         i.conversation_id,
                         iv.id as version_id,
                         iv.title,
-                        iv.short_hypothesis,
-                        iv.related_work,
-                        iv.abstract,
-                        iv.experiments,
-                        iv.expected_outcome,
-                        iv.risk_factors_and_limitations,
+                        iv.idea_markdown,
                         iv.version_number,
                         iv.is_manual_edit,
                         iv.created_at as version_created_at,
@@ -163,12 +137,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 conversation_id=result["conversation_id"],
                 version_id=result["version_id"],
                 title=result["title"],
-                short_hypothesis=result["short_hypothesis"],
-                related_work=result["related_work"],
-                abstract=result["abstract"],
-                experiments=result["experiments"],
-                expected_outcome=result["expected_outcome"],
-                risk_factors_and_limitations=result["risk_factors_and_limitations"],
+                idea_markdown=result["idea_markdown"],
                 version_number=result["version_number"],
                 is_manual_edit=result["is_manual_edit"],
                 version_created_at=result["version_created_at"],
@@ -182,35 +151,20 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
         idea_id: int,
         version_id: int,
         title: str,
-        short_hypothesis: str,
-        related_work: str,
-        abstract: str,
-        experiments: List[str],
-        expected_outcome: str,
-        risk_factors_and_limitations: List[str],
+        idea_markdown: str,
         is_manual_edit: bool,
     ) -> bool:
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    """UPDATE idea_versions SET 
-                       title = %s, 
-                       short_hypothesis = %s, 
-                       related_work = %s, 
-                       abstract = %s, 
-                       experiments = %s, 
-                       expected_outcome = %s, 
-                       risk_factors_and_limitations = %s, 
-                       is_manual_edit = %s 
+                    """UPDATE idea_versions SET
+                       title = %s,
+                       idea_markdown = %s,
+                       is_manual_edit = %s
                        WHERE id = %s AND idea_id = %s""",
                     (
                         title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        Jsonb(experiments),
-                        expected_outcome,
-                        Jsonb(risk_factors_and_limitations),
+                        idea_markdown,
                         is_manual_edit,
                         version_id,
                         idea_id,
@@ -222,12 +176,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
         self,
         idea_id: int,
         title: str,
-        short_hypothesis: str,
-        related_work: str,
-        abstract: str,
-        experiments: List[str],
-        expected_outcome: str,
-        risk_factors_and_limitations: List[str],
+        idea_markdown: str,
         is_manual_edit: bool,
         created_by_user_id: int,
     ) -> int:
@@ -247,19 +196,14 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 await cursor.execute(
                     """
                     INSERT INTO idea_versions
-                    (idea_id, title, short_hypothesis, related_work, abstract, experiments, expected_outcome, risk_factors_and_limitations, is_manual_edit, version_number, created_at, created_by_user_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (idea_id, title, idea_markdown, is_manual_edit, version_number, created_at, created_by_user_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """,
                     (
                         idea_id,
                         title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        Jsonb(experiments),
-                        expected_outcome,
-                        Jsonb(risk_factors_and_limitations),
+                        idea_markdown,
                         is_manual_edit,
                         next_version,
                         now,
@@ -289,12 +233,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         i.conversation_id,
                         iv.id as version_id,
                         iv.title,
-                        iv.short_hypothesis,
-                        iv.related_work,
-                        iv.abstract,
-                        iv.experiments,
-                        iv.expected_outcome,
-                        iv.risk_factors_and_limitations,
+                        iv.idea_markdown,
                         iv.is_manual_edit,
                         iv.version_number,
                         iv.created_at
@@ -312,12 +251,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 conversation_id=row["conversation_id"],
                 version_id=row["version_id"],
                 title=row["title"],
-                short_hypothesis=row["short_hypothesis"],
-                related_work=row["related_work"],
-                abstract=row["abstract"],
-                experiments=row["experiments"],
-                expected_outcome=row["expected_outcome"],
-                risk_factors_and_limitations=row["risk_factors_and_limitations"],
+                idea_markdown=row["idea_markdown"],
                 is_manual_edit=row["is_manual_edit"],
                 version_number=row["version_number"],
                 created_at=row["created_at"],
@@ -336,12 +270,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         i.conversation_id,
                         iv.id as version_id,
                         iv.title,
-                        iv.short_hypothesis,
-                        iv.related_work,
-                        iv.abstract,
-                        iv.experiments,
-                        iv.expected_outcome,
-                        iv.risk_factors_and_limitations,
+                        iv.idea_markdown,
                         iv.is_manual_edit,
                         iv.version_number,
                         iv.created_at
@@ -359,12 +288,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
             conversation_id=row["conversation_id"],
             version_id=row["version_id"],
             title=row["title"],
-            short_hypothesis=row["short_hypothesis"],
-            related_work=row["related_work"],
-            abstract=row["abstract"],
-            experiments=row["experiments"],
-            expected_outcome=row["expected_outcome"],
-            risk_factors_and_limitations=row["risk_factors_and_limitations"],
+            idea_markdown=row["idea_markdown"],
             is_manual_edit=row["is_manual_edit"],
             version_number=row["version_number"],
             created_at=row["created_at"],
@@ -381,12 +305,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         i.conversation_id,
                         iv.id as version_id,
                         iv.title,
-                        iv.short_hypothesis,
-                        iv.related_work,
-                        iv.abstract,
-                        iv.experiments,
-                        iv.expected_outcome,
-                        iv.risk_factors_and_limitations,
+                        iv.idea_markdown,
                         iv.version_number,
                         iv.is_manual_edit,
                         iv.created_at as version_created_at,
@@ -405,12 +324,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 conversation_id=result["conversation_id"],
                 version_id=result["version_id"],
                 title=result["title"],
-                short_hypothesis=result["short_hypothesis"],
-                related_work=result["related_work"],
-                abstract=result["abstract"],
-                experiments=result["experiments"],
-                expected_outcome=result["expected_outcome"],
-                risk_factors_and_limitations=result["risk_factors_and_limitations"],
+                idea_markdown=result["idea_markdown"],
                 version_number=result["version_number"],
                 is_manual_edit=result["is_manual_edit"],
                 version_created_at=result["version_created_at"],
@@ -444,7 +358,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
-                    """SELECT title, short_hypothesis, related_work, abstract, experiments, expected_outcome, risk_factors_and_limitations, is_manual_edit
+                    """SELECT title, idea_markdown, is_manual_edit
                        FROM idea_versions
                        WHERE id = %s AND idea_id = %s""",
                     (source_version_id, idea_id),
@@ -454,16 +368,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 if not source_version:
                     return None
 
-                (
-                    title,
-                    short_hypothesis,
-                    related_work,
-                    abstract,
-                    experiments,
-                    expected_outcome,
-                    risk_factors_and_limitations,
-                    is_manual_edit,
-                ) = source_version
+                title, idea_markdown, is_manual_edit = source_version
 
                 await cursor.execute(
                     "SELECT COALESCE(MAX(version_number), 0) + 1 FROM idea_versions WHERE idea_id = %s",
@@ -476,17 +381,12 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
 
                 await cursor.execute(
                     """INSERT INTO idea_versions
-                       (idea_id, title, short_hypothesis, related_work, abstract, experiments, expected_outcome, risk_factors_and_limitations, is_manual_edit, version_number, created_at, created_by_user_id)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                       (idea_id, title, idea_markdown, is_manual_edit, version_number, created_at, created_by_user_id)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                     (
                         idea_id,
                         title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        Jsonb(experiments),
-                        expected_outcome,
-                        Jsonb(risk_factors_and_limitations),
+                        idea_markdown,
                         is_manual_edit,
                         next_version_number,
                         now,
@@ -538,8 +438,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
 
                 # Fetch source version data
                 await cursor.execute(
-                    """SELECT title, short_hypothesis, related_work, abstract,
-                              experiments, expected_outcome, risk_factors_and_limitations
+                    """SELECT title, idea_markdown
                        FROM idea_versions
                        WHERE id = %s""",
                     (params.source_version_id,),
@@ -579,29 +478,19 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     INSERT INTO idea_versions (
                         idea_id,
                         title,
-                        short_hypothesis,
-                        related_work,
-                        abstract,
-                        experiments,
-                        expected_outcome,
-                        risk_factors_and_limitations,
+                        idea_markdown,
                         is_manual_edit,
                         version_number,
                         created_at,
                         created_by_user_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         idea_id,
                         source_row["title"],
-                        source_row["short_hypothesis"],
-                        source_row["related_work"],
-                        source_row["abstract"],
-                        Jsonb(source_row["experiments"]),
-                        source_row["expected_outcome"],
-                        Jsonb(source_row["risk_factors_and_limitations"]),
+                        source_row["idea_markdown"],
                         False,
                         1,
                         now,

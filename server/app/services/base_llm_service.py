@@ -10,8 +10,6 @@ from datetime import datetime
 from logging import getLogger
 from typing import AsyncGenerator, List, NamedTuple, Optional
 
-from pydantic import BaseModel, Field
-
 from app.models import ChatMessageData
 from app.models.llm_prompts import LLMModel
 from app.services.chat_models import (
@@ -38,20 +36,6 @@ class FileAttachmentData(NamedTuple):
     created_at: datetime
 
 
-class LLMIdeaGeneration(BaseModel):
-    """LLM structured output model for idea generation."""
-
-    title: str = Field(..., description="Generated idea title")
-    short_hypothesis: str = Field(..., description="Generated short hypothesis")
-    related_work: str = Field(..., description="Generated related work section")
-    abstract: str = Field(..., description="Generated abstract")
-    experiments: List[str] = Field(..., description="Generated list of experiments")
-    expected_outcome: str = Field(..., description="Generated expected outcome")
-    risk_factors_and_limitations: List[str] = Field(
-        ..., description="Generated risk factors and limitations"
-    )
-
-
 class BaseLLMService(ABC):
     """
     Abstract base class for LLM services.
@@ -65,7 +49,7 @@ class BaseLLMService(ABC):
         self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
         """
-        Generate a research idea by streaming structured events.
+        Generate a research idea by streaming markdown content.
 
         Args:
             llm_model: The LLM model to use for generation
@@ -74,27 +58,11 @@ class BaseLLMService(ABC):
             conversation_id: the conversation id
 
         Yields:
-            str: JSON-encoded events. Partial events describe section updates,
-                 and the final event includes the complete structured payload.
+            str: JSON-encoded events. Partial events describe markdown chunks,
+                 and the final event includes the complete markdown payload.
 
         Raises:
             Exception: If the LLM API call fails
-        """
-        pass
-
-    @abstractmethod
-    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
-        """
-        Parse the idea response from the LLM.
-
-        Args:
-            content: The raw string content from the LLM
-
-        Returns:
-            LLMIdeaGeneration: Parsed idea with all fields
-
-        Raises:
-            ValueError: If the response format is invalid
         """
         pass
 

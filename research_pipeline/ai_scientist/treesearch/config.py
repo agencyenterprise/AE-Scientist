@@ -1,17 +1,15 @@
 """configuration and setup"""
 
-import json
 import logging
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Hashable, List, Optional, cast
+from typing import Hashable, Optional, cast
 
 import coolname  # type: ignore[import-untyped]
 import shutup  # type: ignore[import-untyped]
 from dataclasses_json import DataClassJsonMixin
 from omegaconf import OmegaConf
-from pydantic import BaseModel, ConfigDict, Field
 
 from .journal import Journal
 from .stage_identifiers import StageIdentifier
@@ -73,22 +71,6 @@ def apply_log_level(*, level_name: str) -> None:
             lgr.propagate = False
     except Exception:
         pass
-
-
-class TaskDescription(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    name: str = Field(alias="Name")
-    title: str = Field(alias="Title")
-    short_hypothesis: str = Field(alias="Short Hypothesis")
-    related_work: str = Field(alias="Related Work")
-    abstract: str = Field(alias="Abstract")
-    code: str | None = Field(default=None, alias="Code")
-    experiments: str | List[str] | List[Dict[str, str]] = Field(alias="Experiments")
-    risk_factors_and_limitations: str | List[str] = Field(alias="Risk Factors and Limitations")
-
-    def as_dict_with_aliases(self) -> Dict[str, object]:
-        return self.model_dump(by_alias=True)
 
 
 @dataclass
@@ -269,20 +251,13 @@ def print_cfg(cfg: Config) -> None:
         logger.info(str(cfg))
 
 
-def load_task_desc(cfg: Config) -> TaskDescription:
-    """Load task description JSON and return a dict with aliased keys."""
-
+def load_task_desc(cfg: Config) -> str:
+    """Load task description markdown and return as string."""
     desc_path = Path(cfg.desc_file)
     if not desc_path.exists():
         raise FileNotFoundError(str(desc_path))
 
-    raw = desc_path.read_text()
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        raise ValueError("Task description JSON must be an object")
-
-    model = TaskDescription.model_validate(data)
-    return model
+    return desc_path.read_text(encoding="utf-8")
 
 
 def prep_agent_workspace(*, cfg: Config) -> None:

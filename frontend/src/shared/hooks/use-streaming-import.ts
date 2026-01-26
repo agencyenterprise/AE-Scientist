@@ -1,21 +1,11 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { apiStream, ApiError } from "@/shared/lib/api-client";
 import { ImportState } from "@/features/conversation-import/types/types";
 import type { SSEEvent } from "@/features/conversation-import/types/types";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
-
-// Order of sections as streamed from the backend
-const SECTION_ORDER = [
-  "title",
-  "short_hypothesis",
-  "related_work",
-  "abstract",
-  "experiments",
-  "expected_outcome",
-  "risk_factors_and_limitations",
-] as const;
 
 /**
  * Options for the streaming import hook.
@@ -37,8 +27,6 @@ export interface StreamingImportOptions {
  * State returned by the streaming import hook.
  */
 export interface StreamingImportState {
-  /** Accumulated content organized by section */
-  sections: Record<string, string>;
   /** Current import state/phase */
   currentState: ImportState | "";
   /** Summary progress percentage (0-100) */
@@ -47,7 +35,7 @@ export interface StreamingImportState {
   isUpdateMode: boolean;
   /** Whether currently streaming */
   isStreaming: boolean;
-  /** Computed streaming content from sections in order */
+  /** Streaming markdown content */
   streamingContent: string;
 }
 
@@ -155,7 +143,7 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sections, setSections] = useState<Record<string, string>>({});
+  const [streamingContent, setStreamingContent] = useState<string>("");
   const [currentState, setCurrentState] = useState<ImportState | "">("");
   const [summaryProgress, setSummaryProgress] = useState<number | null>(null);
   const [isUpdateMode, setIsUpdateMode] = useState(false);
@@ -164,18 +152,13 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
   const streamingRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Compute streaming content from sections in correct order
-  const streamingContent = SECTION_ORDER.filter(key => sections[key])
-    .map(key => sections[key])
-    .join("\n");
-
   // Reset all streaming state
   const reset = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    setSections({});
+    setStreamingContent("");
     setCurrentState("");
     setSummaryProgress(null);
     setIsUpdateMode(false);
@@ -195,7 +178,7 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
       } = params;
 
       // Reset state for new stream
-      setSections({});
+      setStreamingContent("");
       setCurrentState("");
       setSummaryProgress(null);
       setIsStreaming(true);
@@ -256,11 +239,13 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
             }
 
             switch (eventData.type) {
-              case "section_update": {
-                const { field, data } = eventData;
-                setSections(prev => ({ ...prev, [field]: data }));
-                if (streamingRef.current) {
-                  streamingRef.current.scrollTop = streamingRef.current.scrollHeight;
+              case "markdown_delta": {
+                const chunk = eventData.data;
+                if (typeof chunk === "string") {
+                  setStreamingContent(prev => prev + chunk);
+                  if (streamingRef.current) {
+                    streamingRef.current.scrollTop = streamingRef.current.scrollHeight;
+                  }
                 }
                 break;
               }
@@ -319,6 +304,18 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
                 };
               }
               case "done": {
+                // Validate that data is an object with expected shape
+                if (
+                  typeof eventData.data !== "object" ||
+                  eventData.data === null ||
+                  !("conversation" in eventData.data || "error" in eventData.data)
+                ) {
+                  // Malformed "done" event - throw error so Sentry captures it
+                  throw new Error(
+                    `Malformed "done" event: expected object with conversation/error, got ${typeof eventData.data}`
+                  );
+                }
+
                 const { conversation, error } = eventData.data;
                 if (conversation && typeof conversation.id === "number") {
                   setIsStreaming(false);
@@ -380,6 +377,19 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
           };
         }
 
+        // Report unexpected errors to Sentry
+        Sentry.captureException(error, {
+          tags: {
+            feature: "conversation-import",
+            stream_phase: "streaming",
+          },
+          extra: {
+            url,
+            model,
+            provider,
+          },
+        });
+
         const errorMessage =
           error instanceof Error ? error.message : "Failed to import conversation";
         setIsStreaming(false);
@@ -396,7 +406,6 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
 
   return {
     state: {
-      sections,
       currentState,
       summaryProgress,
       isUpdateMode,

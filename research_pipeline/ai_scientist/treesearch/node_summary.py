@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 from ai_scientist.llm import structured_query_with_schema
 
-from .config import TaskDescription
 from .journal import Node
 from .utils.response import wrap_code
 
@@ -40,7 +39,7 @@ def generate_node_summary(
     temperature: float,
     stage_name: str,
     node: Node,
-    task_desc: TaskDescription | None,
+    task_desc: str,
 ) -> dict[str, Any]:
     global _node_summary_seq  # noqa: PLW0603
     _node_summary_seq += 1
@@ -68,6 +67,7 @@ def generate_node_summary(
         )
 
     summary_prompt: dict[str, Any] = {
+        "Research idea": task_desc,
         "Introduction": (
             "You are an AI researcher analyzing experimental results. "
             "Please summarize the findings from this experiment iteration."
@@ -88,8 +88,7 @@ def generate_node_summary(
         "Plot Analyses": node.plot_analyses,
         "VLM Feedback": node.vlm_feedback_summary,
     }
-    if task_desc is not None:
-        summary_prompt["Research idea"] = task_desc.model_dump(by_alias=True)
+
     logger.debug(
         "llm.node_summary.request seq=%s purpose=%s node=%s stage=%s model=%s temperature=%s schema=%s payload=%s",
         seq,

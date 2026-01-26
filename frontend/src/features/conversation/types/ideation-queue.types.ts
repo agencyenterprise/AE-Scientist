@@ -13,7 +13,7 @@ export type ConversationStatus = "draft" | "with_research";
  * Ordered by workflow progression for sorting
  */
 export type IdeaStatus =
-  | "no_idea" // No ideaTitle/ideaAbstract present
+  | "no_idea" // No ideaTitle/ideaMarkdown present
   | "pending_launch" // Has idea but no research run (MVP: default if has idea)
   | "in_research" // Active research run (future: from backend)
   | "completed" // Research completed (future: from backend)
@@ -54,7 +54,7 @@ export type IdeationSortKey = "newest" | "oldest" | "title_asc" | "title_desc" |
 export interface IdeationQueueCardProps {
   id: number;
   title: string;
-  abstract: string | null;
+  markdown: string | null; // Full idea content in markdown format
   status: IdeaStatus;
   conversationStatus?: ConversationStatus;
   createdAt: string;

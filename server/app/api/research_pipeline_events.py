@@ -1455,12 +1455,7 @@ async def _retry_run_after_gpu_shortage(
         version_id=idea_version.version_id,
         version_number=idea_version.version_number,
         title=idea_version.title,
-        short_hypothesis=idea_version.short_hypothesis,
-        related_work=idea_version.related_work,
-        abstract=idea_version.abstract,
-        experiments=_coerce_list(idea_version.experiments),
-        expected_outcome=idea_version.expected_outcome,
-        risk_factors_and_limitations=_coerce_list(idea_version.risk_factors_and_limitations),
+        idea_markdown=idea_version.idea_markdown,
     )
     requester_first_name = await _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
     retry_gpu_types = _build_retry_gpu_preferences(
@@ -1539,12 +1534,7 @@ class RetryIdeaPayload(IdeaPayloadSource):
     version_id: int
     version_number: int
     title: str
-    short_hypothesis: str
-    related_work: str
-    abstract: str
-    experiments: Sequence[Any]
-    expected_outcome: str
-    risk_factors_and_limitations: Sequence[Any]
+    idea_markdown: str
 
 
 def _coerce_list(value: object) -> List[object]:

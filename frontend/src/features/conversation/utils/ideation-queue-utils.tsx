@@ -64,12 +64,12 @@ export const STATUS_FILTER_CONFIG: Record<StatusFilterOption, StatusFilterConfig
 
 /**
  * Derives idea status from Conversation fields
- * MVP: Based on ideaTitle/ideaAbstract presence
+ * MVP: Based on ideaTitle/ideaMarkdown presence
  * Future: Will use backend-provided status
  */
 export function deriveIdeaStatus(conversation: Conversation): IdeaStatus {
   // Check if conversation has an idea
-  if (!conversation.ideaTitle && !conversation.ideaAbstract) {
+  if (!conversation.ideaTitle && !conversation.ideaMarkdown) {
     return "no_idea";
   }
 

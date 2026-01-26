@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, List, NamedTuple, Optional, cast
 
-from psycopg import AsyncCursor
+from psycopg import AsyncConnection, AsyncCursor
 from psycopg.rows import dict_row
 from psycopg.sql import SQL, Composable, Composed
 from psycopg.types.json import Jsonb
@@ -417,6 +417,50 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             return None
         return int(result["created_by_user_id"])
 
+    async def get_run_idea_data(
+        self, run_id: str, conn: Optional[AsyncConnection[Any]] = None
+    ) -> Optional[dict]:
+        """
+        Get idea data for a research run.
+
+        Args:
+            run_id: Research run ID
+            conn: Optional database connection (for use within existing transaction)
+
+        Returns a dict with:
+        - idea_id: The idea ID
+        - conversation_id: The conversation ID
+        - title: The idea title from idea_versions
+        - idea_markdown: The idea markdown content from idea_versions
+
+        Returns None if the run doesn't exist.
+        """
+        query = """
+            SELECT
+                rpr.idea_id,
+                i.conversation_id,
+                iv.title,
+                iv.idea_markdown
+            FROM research_pipeline_runs rpr
+            JOIN ideas i ON i.id = rpr.idea_id
+            JOIN idea_versions iv ON iv.id = rpr.idea_version_id
+            WHERE rpr.run_id = %s
+        """
+        if conn is not None:
+            # Use provided connection (within existing transaction)
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                result = await cursor.fetchone()
+        else:
+            # Create new connection
+            async with self.aget_connection() as new_conn:
+                async with new_conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(query, (run_id,))
+                    result = await cursor.fetchone()
+        if not result:
+            return None
+        return dict(result)
+
     def _row_to_run(self, row: dict) -> ResearchPipelineRun:
         return ResearchPipelineRun(
             id=row["id"],
@@ -463,8 +507,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 r.cost,
                 r.created_at,
                 r.updated_at,
-                iv.title AS idea_title,
-                iv.short_hypothesis AS idea_hypothesis,
+                iv.title,
+                iv.idea_markdown,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
                 pc.stage AS current_stage,
@@ -531,13 +575,12 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                     """
                     (r.run_id ILIKE %s
                     OR iv.title ILIKE %s
-                    OR iv.short_hypothesis ILIKE %s
                     OR u.name ILIKE %s)
                 """
                 )
             )
             search_pattern = f"%{search}%"
-            params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+            params.extend([search_pattern, search_pattern, search_pattern])
 
         if status:
             where_clauses.append(SQL("r.status = %s"))
@@ -564,8 +607,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 r.error_message,
                 r.created_at,
                 r.updated_at,
-                iv.title AS idea_title,
-                iv.short_hypothesis AS idea_hypothesis,
+                iv.title,
+                iv.idea_markdown,
                 u.name AS created_by_name,
                 u.id AS created_by_user_id,
                 pc.stage AS current_stage,

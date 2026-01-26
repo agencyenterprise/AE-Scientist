@@ -31,7 +31,7 @@ export function CreateHypothesisForm() {
 
   // Conversation import hook for ChatGPT URL
   const importState = useConversationImport({
-    autoRedirect: true,
+    autoRedirect: false,
     onSuccess: id => {
       router.push(`/conversations/${id}`);
       router.refresh();
@@ -40,7 +40,7 @@ export function CreateHypothesisForm() {
 
   // Manual idea import hook
   const manualImportState = useManualIdeaImport({
-    autoRedirect: true,
+    autoRedirect: false,
     onSuccess: id => {
       setTitle("");
       setIdea("");

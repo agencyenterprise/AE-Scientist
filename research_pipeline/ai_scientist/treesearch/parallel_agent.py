@@ -31,7 +31,7 @@ from .codex.codex_task_types import (
     SeedNodeSummary,
     StageIdea,
 )
-from .config import Config, TaskDescription
+from .config import Config
 from .events import BaseEvent, GpuShortageEvent, RunLogEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
@@ -67,7 +67,8 @@ def _safe_pickle_test(obj: object, name: str = "object") -> bool:
 class ParallelAgent:
     def __init__(
         self,
-        task_desc: TaskDescription,
+        title: str,
+        task_desc: str,
         stage_goals: str,
         evaluation_metric_spec: EvaluationMetricSpec,
         cfg: Config,
@@ -79,6 +80,7 @@ class ParallelAgent:
         event_callback: Callable[[BaseEvent], None],
     ) -> None:
         # Store run context (idea, configuration, journal, stage)
+        self.title = title
         self.task_desc = task_desc
         self.stage_goals = stage_goals
         self.evaluation_metric_spec = evaluation_metric_spec
@@ -251,6 +253,7 @@ class ParallelAgent:
             )
             task: NodeTask = {
                 "node_data": node_data,
+                "title": self.title,
                 "task_desc": self.task_desc,
                 "stage_goals": self.stage_goals,
                 "evaluation_metric_spec": self.evaluation_metric_spec,
@@ -352,6 +355,7 @@ class ParallelAgent:
                 agg_node_index = len(self.journal.nodes)
                 agg_task: NodeTask = {
                     "node_data": node_data,
+                    "title": self.title,
                     "task_desc": self.task_desc,
                     "stage_goals": self.stage_goals,
                     "evaluation_metric_spec": self.evaluation_metric_spec,
@@ -795,6 +799,7 @@ class ParallelAgent:
                     )
                 task: NodeTask = {
                     "node_data": node_data,
+                    "title": self.title,
                     "task_desc": self.task_desc,
                     "stage_goals": self.stage_goals,
                     "evaluation_metric_spec": self.evaluation_metric_spec,

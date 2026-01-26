@@ -32,7 +32,7 @@ from ai_scientist.treesearch.events import (
 
 from . import stage_control
 from .codex.codex_task_types import EvaluationMetricSpec
-from .config import Config, TaskDescription
+from .config import Config
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .parallel_agent import ParallelAgent
@@ -85,7 +85,8 @@ class StageTransition:
 class AgentManager:
     def __init__(
         self,
-        task_desc: TaskDescription,
+        title: str,
+        task_desc: str,
         cfg: Config,
         workspace_dir: Path,
         event_callback: Callable[[BaseEvent], None],
@@ -97,6 +98,7 @@ class AgentManager:
         self.cfg = cfg
         self.workspace_dir = workspace_dir
         self.event_callback = event_callback
+        self.title = title
         self.task_desc = task_desc
         # Stage bookkeeping and experiment state
         self.stages: List[StageMeta] = []
@@ -353,6 +355,7 @@ class AgentManager:
 
         # Construct the worker agent for this substage
         return ParallelAgent(
+            title=self.title,
             task_desc=self.task_desc,
             stage_goals=stage.goals,
             evaluation_metric_spec=self.evaluation_metric_spec,

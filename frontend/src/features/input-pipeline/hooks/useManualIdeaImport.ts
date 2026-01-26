@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 import { ImportState } from "@/features/conversation-import/types/types";
 import type { SSEEvent } from "@/features/conversation-import/types/types";
@@ -31,16 +32,6 @@ export interface UseManualIdeaImportReturn {
   };
   streamingRef: React.RefObject<HTMLTextAreaElement | null>;
 }
-
-const SECTION_ORDER = [
-  "title",
-  "short_hypothesis",
-  "related_work",
-  "abstract",
-  "experiments",
-  "expected_outcome",
-  "risk_factors_and_limitations",
-] as const;
 
 export function useManualIdeaImport(
   options: UseManualIdeaImportOptions = {}
@@ -113,15 +104,6 @@ export function useManualIdeaImport(
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = "";
-        const sectionMap: Record<string, string> = {};
-        const buildSectionContent = () =>
-          SECTION_ORDER.filter(key => sectionMap[key])
-            .map(key => sectionMap[key])
-            .join("\n");
-        const updateStreamingContent = () => {
-          const sectionContent = buildSectionContent();
-          setStreamingContent(sectionContent || accumulatedContent);
-        };
         let buffer = "";
 
         while (true) {
@@ -145,15 +127,10 @@ export function useManualIdeaImport(
             }
 
             switch (eventData.type) {
-              case "content": {
+              case "markdown_delta": {
+                // Accumulate markdown chunks as they stream in
                 accumulatedContent += eventData.data;
-                updateStreamingContent();
-                break;
-              }
-              case "section_update": {
-                const { field, data } = eventData;
-                sectionMap[field] = data;
-                updateStreamingContent();
+                setStreamingContent(accumulatedContent);
                 break;
               }
               case "state": {
@@ -180,6 +157,18 @@ export function useManualIdeaImport(
                 return;
               }
               case "done": {
+                // Validate that data is an object with expected shape
+                if (
+                  typeof eventData.data !== "object" ||
+                  eventData.data === null ||
+                  !("conversation" in eventData.data || "error" in eventData.data)
+                ) {
+                  // Malformed "done" event - throw error so Sentry captures it
+                  throw new Error(
+                    `Malformed "done" event: expected object with conversation/error, got ${typeof eventData.data}`
+                  );
+                }
+
                 const conversation = eventData.data.conversation;
                 if (conversation && typeof conversation.id === "number") {
                   setIsStreaming(false);
@@ -200,6 +189,19 @@ export function useManualIdeaImport(
           }
         }
       } catch (err) {
+        // Report unexpected errors to Sentry
+        Sentry.captureException(err, {
+          tags: {
+            feature: "manual-idea-import",
+            stream_phase: "streaming",
+          },
+          extra: {
+            title,
+            model,
+            provider,
+          },
+        });
+
         const errorMessage = err instanceof Error ? err.message : "Failed to generate idea";
         setError(errorMessage);
         setIsStreaming(false);

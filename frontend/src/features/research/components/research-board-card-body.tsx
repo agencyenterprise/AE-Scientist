@@ -2,11 +2,12 @@
 
 import { AlertCircle, Cpu } from "lucide-react";
 import { ProgressBar } from "@/shared/components/ui/progress-bar";
+import { Markdown } from "@/shared/components/Markdown";
 import { getStageBadge } from "../utils/research-utils";
 
 export interface ResearchBoardCardBodyProps {
   ideaTitle: string;
-  ideaHypothesis: string | null;
+  ideaMarkdown: string | null; // Full idea content in markdown format
   status: string;
   errorMessage: string | null;
   currentStage: string | null;
@@ -14,23 +15,47 @@ export interface ResearchBoardCardBodyProps {
   gpuType: string | null;
 }
 
+/**
+ * Truncate text to a maximum length, ensuring we don't cut in the middle of a word
+ */
+function truncateText(text: string, maxLength: number = 500): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  // Find the last space before maxLength
+  const truncated = text.slice(0, maxLength);
+  const lastSpaceIndex = truncated.lastIndexOf(" ");
+
+  if (lastSpaceIndex > 0) {
+    return truncated.slice(0, lastSpaceIndex) + "...";
+  }
+
+  return truncated + "...";
+}
+
 export function ResearchBoardCardBody({
   ideaTitle,
-  ideaHypothesis,
+  ideaMarkdown,
   status,
   errorMessage,
   currentStage,
   progress,
   gpuType,
 }: ResearchBoardCardBodyProps) {
+  // Truncate the markdown for card display
+  const truncatedMarkdown = ideaMarkdown ? truncateText(ideaMarkdown, 500) : null;
+
   return (
     <div className="p-5">
       {/* Title */}
       <h3 className="text-lg font-semibold text-white">{ideaTitle}</h3>
 
-      {/* Hypothesis */}
-      {ideaHypothesis && (
-        <p className="mt-2 text-sm leading-relaxed text-slate-400">{ideaHypothesis}</p>
+      {/* Markdown Content */}
+      {truncatedMarkdown && (
+        <div className="mt-2 text-sm leading-relaxed text-slate-400 prose-sm prose-invert max-w-none [&_p]:my-1 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+          <Markdown>{truncatedMarkdown}</Markdown>
+        </div>
       )}
 
       {/* Error Message for Failed Runs */}

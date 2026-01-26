@@ -1935,6 +1935,19 @@ export interface components {
             /** Code */
             code?: string | null;
         };
+        /**
+         * ConversationImportMarkdownDeltaEvent
+         * @description Event emitted during streaming idea generation with markdown chunks.
+         */
+        ConversationImportMarkdownDeltaEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "markdown_delta";
+            /** Data */
+            data: string;
+        };
         /** ConversationImportModelLimitData */
         ConversationImportModelLimitData: {
             /** Message */
@@ -1998,7 +2011,7 @@ export interface components {
          * ConversationImportStreamEvent
          * @description Root model for conversation import SSE stream events.
          */
-        ConversationImportStreamEvent: components["schemas"]["ConversationImportSectionUpdateEvent"] | components["schemas"]["ConversationImportStateEvent"] | components["schemas"]["ConversationImportProgressEvent"] | components["schemas"]["ConversationImportConflictEvent"] | components["schemas"]["ConversationImportModelLimitEvent"] | components["schemas"]["ConversationImportErrorEvent"] | components["schemas"]["ConversationImportDoneEvent"] | components["schemas"]["ConversationImportContentEvent"];
+        ConversationImportStreamEvent: components["schemas"]["ConversationImportSectionUpdateEvent"] | components["schemas"]["ConversationImportStateEvent"] | components["schemas"]["ConversationImportProgressEvent"] | components["schemas"]["ConversationImportConflictEvent"] | components["schemas"]["ConversationImportModelLimitEvent"] | components["schemas"]["ConversationImportErrorEvent"] | components["schemas"]["ConversationImportDoneEvent"] | components["schemas"]["ConversationImportContentEvent"] | components["schemas"]["ConversationImportMarkdownDeltaEvent"];
         /**
          * ConversationListItem
          * @description Response model for dashboard list view.
@@ -2024,8 +2037,8 @@ export interface components {
             user_email: string;
             /** Idea Title */
             idea_title?: string | null;
-            /** Idea Abstract */
-            idea_abstract?: string | null;
+            /** Idea Content */
+            idea_content?: string | null;
             /** Last User Message Content */
             last_user_message_content?: string | null;
             /** Last Assistant Message Content */
@@ -2419,39 +2432,14 @@ export interface components {
         IdeaRefinementRequest: {
             /**
              * Title
-             * @description Idea title
+             * @description Title of the research idea
              */
             title: string;
             /**
-             * Short Hypothesis
-             * @description Short hypothesis of the idea
+             * Idea Markdown
+             * @description Research idea in markdown format
              */
-            short_hypothesis: string;
-            /**
-             * Related Work
-             * @description Related work or background
-             */
-            related_work: string;
-            /**
-             * Abstract
-             * @description Abstract of the idea
-             */
-            abstract: string;
-            /**
-             * Experiments
-             * @description List of experiments
-             */
-            experiments: string[];
-            /**
-             * Expected Outcome
-             * @description Expected outcome of the experiments
-             */
-            expected_outcome: string;
-            /**
-             * Risk Factors And Limitations
-             * @description Risk factors and limitations
-             */
-            risk_factors_and_limitations: string[];
+            idea_markdown: string;
         };
         /**
          * IdeaUpdateResponse
@@ -2473,39 +2461,14 @@ export interface components {
             version_id: number;
             /**
              * Title
-             * @description Research idea title
+             * @description Title of the research idea
              */
             title: string;
             /**
-             * Short Hypothesis
-             * @description Short hypothesis statement
+             * Idea Markdown
+             * @description Research idea in markdown format
              */
-            short_hypothesis: string;
-            /**
-             * Related Work
-             * @description Related work and background
-             */
-            related_work: string;
-            /**
-             * Abstract
-             * @description Detailed abstract of the idea
-             */
-            abstract: string;
-            /**
-             * Experiments
-             * @description List of proposed experiments
-             */
-            experiments: string[];
-            /**
-             * Expected Outcome
-             * @description Expected outcome of the research
-             */
-            expected_outcome: string;
-            /**
-             * Risk Factors And Limitations
-             * @description Risk factors and limitations
-             */
-            risk_factors_and_limitations: string[];
+            idea_markdown: string;
             /**
              * Is Manual Edit
              * @description Whether this version was manually edited by user
@@ -4291,10 +4254,10 @@ export interface components {
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
             /** Conversation Id */
             conversation_id: number;
-            /** Overall Goal */
-            overall_goal?: string | null;
-            /** Hypothesis */
-            hypothesis?: string | null;
+            /** Idea Title */
+            idea_title?: string | null;
+            /** Idea Markdown */
+            idea_markdown?: string | null;
             /** Stages */
             stages?: components["schemas"]["StageGoal"][];
             /** Current Stage */

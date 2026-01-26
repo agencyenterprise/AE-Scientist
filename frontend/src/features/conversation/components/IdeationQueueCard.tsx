@@ -6,6 +6,7 @@ import { Clock, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/components/ui/button";
+import { Markdown } from "@/shared/components/Markdown";
 import type { IdeationQueueCardProps } from "@/features/conversation";
 import { ConversationStatusBadge } from "./ConversationStatusBadge";
 import { IdeationQueueRunsList } from "./IdeationQueueRunsList";
@@ -20,7 +21,7 @@ import { LaunchResearchButton } from "./LaunchResearchButton";
 function IdeationQueueCardComponent({
   id,
   title,
-  abstract,
+  markdown,
   status,
   createdAt,
   updatedAt,
@@ -76,9 +77,11 @@ function IdeationQueueCardComponent({
           </Button>
         </div>
 
-        {/* Body: Abstract preview */}
-        {abstract && (
-          <p className="mb-3 line-clamp-3 text-xs leading-relaxed text-slate-400">{abstract}</p>
+        {/* Body: Markdown preview */}
+        {markdown && (
+          <div className="mb-3 line-clamp-3 text-xs leading-relaxed text-slate-400 prose-sm prose-invert max-w-none [&_p]:my-0 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-0 [&_ol]:my-0 [&_li]:my-0">
+            <Markdown>{markdown}</Markdown>
+          </div>
         )}
 
         {/* Footer: Status + Toggle */}

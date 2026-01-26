@@ -69,7 +69,7 @@ class DashboardConversation(NamedTuple):
     user_name: str
     user_email: str
     idea_title: Optional[str]
-    idea_abstract: Optional[str]
+    idea_markdown: Optional[str]
     last_user_message_content: Optional[str]
     last_assistant_message_content: Optional[str]
     manual_title: Optional[str]
@@ -309,7 +309,7 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         u.name AS user_name,
                         u.email AS user_email,
                         iv.title AS idea_title,
-                        iv.abstract AS idea_abstract,
+                        iv.idea_markdown,
                         (
                             SELECT cm.content
                             FROM chat_messages cm
@@ -378,7 +378,7 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 user_name=row["user_name"],
                 user_email=row["user_email"],
                 idea_title=row.get("idea_title"),
-                idea_abstract=row.get("idea_abstract"),
+                idea_markdown=row.get("idea_markdown"),
                 last_user_message_content=row.get("last_user_message_content"),
                 last_assistant_message_content=row.get("last_assistant_message_content"),
                 manual_title=row.get("manual_title"),

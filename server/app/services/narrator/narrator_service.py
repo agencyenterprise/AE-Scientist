@@ -23,7 +23,6 @@ import logging
 from typing import Any, Dict, Optional
 
 from psycopg import AsyncConnection
-from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 from app.api.narrator_stream import publish_narrator_event
@@ -356,36 +355,23 @@ async def _get_or_create_state_locked(
         # First event for this run - create initial state
         logger.info("Narrator: Creating initial state for run=%s (fallback path)", run_id)
 
-        # Get conversation_id and idea info from research_pipeline_runs + ideas tables
-        # TODO: move this somewhere else or throw if we don't need to recover in case the state gets deleted mid-run
-        async with conn.cursor(row_factory=dict_row) as cursor:
-            await cursor.execute(
-                """
-                SELECT 
-                    rpr.idea_id,
-                    i.conversation_id,
-                    i.short_hypothesis
-                FROM research_pipeline_runs rpr
-                JOIN ideas i ON i.id = rpr.idea_id
-                WHERE rpr.run_id = %s
-                """,
-                (run_id,),
-            )
-            row = await cursor.fetchone()
+        # Get conversation_id and idea info from research_pipeline_runs + idea_versions tables
+        run_idea_data = await db.get_run_idea_data(run_id, conn=conn)
 
-        if row is None:
+        if run_idea_data is None:
             logger.error("Narrator: Cannot create state for unknown run=%s", run_id)
             raise ValueError(f"Research run not found: {run_id}")
 
-        conversation_id = row["conversation_id"]
-        short_hypothesis = row["short_hypothesis"]
+        conversation_id = run_idea_data["conversation_id"]
+        idea_title = run_idea_data["title"]
+        idea_markdown = run_idea_data["idea_markdown"]
 
         current_state = create_initial_state(
             run_id=run_id,
             conversation_id=conversation_id,
             status="running",
-            overall_goal=short_hypothesis,
-            hypothesis=short_hypothesis,
+            idea_markdown=idea_markdown,
+            idea_title=idea_title,
         )
 
         # Persist initial state (using the same connection/transaction)
@@ -404,8 +390,8 @@ async def initialize_run_state(
     *,
     run_id: str,
     conversation_id: int,
-    overall_goal: Optional[str] = None,
-    hypothesis: Optional[str] = None,
+    idea_markdown: Optional[str] = None,
+    idea_title: Optional[str] = None,
     gpu_type: Optional[str] = None,
     cost_per_hour_cents: Optional[int] = None,
 ) -> ResearchRunState:
@@ -418,8 +404,8 @@ async def initialize_run_state(
         db: Database manager
         run_id: Research run ID
         conversation_id: Associated conversation ID
-        overall_goal: Optional research objective
-        hypothesis: Optional hypothesis being tested
+        idea_markdown: Optional research idea content
+        idea_title: Optional research idea title
         gpu_type: Optional GPU type
         cost_per_hour_cents: Optional cost per hour in cents
 
@@ -431,8 +417,8 @@ async def initialize_run_state(
         run_id=run_id,
         conversation_id=conversation_id,
         status="pending",
-        overall_goal=overall_goal,
-        hypothesis=hypothesis,
+        idea_markdown=idea_markdown,
+        idea_title=idea_title,
     )
 
     # Add cost information

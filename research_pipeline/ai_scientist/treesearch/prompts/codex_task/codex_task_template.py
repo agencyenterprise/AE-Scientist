@@ -1,6 +1,5 @@
 from typing import NamedTuple
 
-from ai_scientist.treesearch.config import TaskDescription
 from ai_scientist.treesearch.prompts.render import render_text
 
 
@@ -10,7 +9,8 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
     stage_name: str
     timeout_seconds: int
 
-    task_desc: TaskDescription
+    task_title: str
+    task_desc: str
     stage_goals: str
     memory_summary: str
 
@@ -50,6 +50,7 @@ class CodexTaskMarkdownRenderContext(NamedTuple):
             "stage_identifier_name": self.stage_identifier_name,
             "stage_name": self.stage_name,
             "timeout_seconds": self.timeout_seconds,
+            "task_title": self.task_title,
             "task_desc": self.task_desc,
             "stage_goals": self.stage_goals,
             "memory_summary": self.memory_summary,

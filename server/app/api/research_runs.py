@@ -25,12 +25,17 @@ class ResearchRunCostResponse(BaseModel):
 
 def _row_to_list_item(row: dict) -> ResearchRunListItem:
     """Convert a database row to a ResearchRunListItem."""
+    idea_title = row.get("title") or "Untitled"
+    idea_markdown = row.get("idea_markdown", "")
+    # Pass full markdown, frontend handles preview
+    idea_hypothesis = idea_markdown if idea_markdown else None
+
     return ResearchRunListItem(
         run_id=row["run_id"],
         status=row["status"],
         initialization_status=row.get("initialization_status") or "pending",
-        idea_title=row["idea_title"] or "Untitled",
-        idea_hypothesis=row.get("idea_hypothesis"),
+        idea_title=idea_title,
+        idea_hypothesis=idea_hypothesis,
         current_stage=row.get("current_stage"),
         progress=row.get("progress"),
         gpu_type=row.get("gpu_type"),
