@@ -934,6 +934,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
+
         def _noop_artifact_callback(_: ArtifactSpec) -> None:
             return
 

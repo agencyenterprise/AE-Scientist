@@ -363,9 +363,15 @@ class FigureReviewEvent(BaseModel):
     source_path: Optional[str] = None
 
 
+class FigureReviewsEvent(BaseModel):
+    """Event containing multiple figure reviews."""
+
+    reviews: List[FigureReviewEvent]
+
+
 class FigureReviewsPayload(BaseModel):
     run_id: str
-    reviews: List[FigureReviewEvent]
+    event: FigureReviewsEvent
 
 
 def _verify_bearer_token(authorization: str = Header(...)) -> None:
@@ -1375,7 +1381,7 @@ async def ingest_figure_reviews(
     logger.info(
         "Figure reviews: run=%s count=%s",
         payload.run_id,
-        len(payload.reviews),
+        len(payload.event.reviews),
     )
 
     # Convert pydantic models to dicts for database insertion
@@ -1388,7 +1394,7 @@ async def ingest_figure_reviews(
             "figrefs_review": review.figrefs_review,
             "source_path": review.source_path,
         }
-        for review in payload.reviews
+        for review in payload.event.reviews
     ]
 
     # Insert into database
