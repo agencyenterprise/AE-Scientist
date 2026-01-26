@@ -14,13 +14,8 @@ class IdeaVersion(BaseModel):
     """Represents a single version of a research idea."""
 
     version_id: int = Field(..., description="Version ID")
-    title: str = Field(..., description="Research idea title")
-    short_hypothesis: str = Field(..., description="Short hypothesis statement")
-    related_work: str = Field(..., description="Related work and background")
-    abstract: str = Field(..., description="Detailed abstract of the idea")
-    experiments: List[str] = Field(..., description="List of proposed experiments")
-    expected_outcome: str = Field(..., description="Expected outcome of the research")
-    risk_factors_and_limitations: List[str] = Field(..., description="Risk factors and limitations")
+    title: str = Field(..., description="Title of the research idea")
+    idea_markdown: str = Field(..., description="Research idea in markdown format")
     is_manual_edit: bool = Field(
         ..., description="Whether this version was manually edited by user"
     )
@@ -41,15 +36,7 @@ class Idea(BaseModel):
 class IdeaCreateRequest(BaseModel):
     """Request model for manually creating/updating an idea."""
 
-    title: str = Field(..., description="Research idea title", min_length=1)
-    short_hypothesis: str = Field(..., description="Short hypothesis statement", min_length=1)
-    related_work: str = Field(..., description="Related work and background", min_length=1)
-    abstract: str = Field(..., description="Detailed abstract of the idea", min_length=1)
-    experiments: List[str] = Field(..., description="List of proposed experiments", min_length=1)
-    expected_outcome: str = Field(..., description="Expected outcome of the research", min_length=1)
-    risk_factors_and_limitations: List[str] = Field(
-        ..., description="Risk factors and limitations", min_length=1
-    )
+    idea_markdown: str = Field(..., description="Research idea in markdown format", min_length=1)
     user_prompt: Optional[str] = Field(
         None, description="User prompt that generated this refinement"
     )
@@ -58,28 +45,8 @@ class IdeaCreateRequest(BaseModel):
 class IdeaRefinementRequest(BaseModel):
     """Request model for manually updating an idea with all fields."""
 
-    title: str = Field(..., description="Idea title")
-    short_hypothesis: str = Field(..., description="Short hypothesis of the idea")
-    related_work: str = Field(..., description="Related work or background")
-    abstract: str = Field(..., description="Abstract of the idea")
-    experiments: List[str] = Field(..., description="List of experiments")
-    expected_outcome: str = Field(..., description="Expected outcome of the experiments")
-    risk_factors_and_limitations: List[str] = Field(..., description="Risk factors and limitations")
-
-
-class IdeaRefinementSuggestion(BaseModel):
-    """LLM suggestion for idea refinement."""
-
-    title: str = Field(..., description="Suggested idea title")
-    short_hypothesis: str = Field(..., description="Suggested short hypothesis")
-    related_work: str = Field(..., description="Suggested related work")
-    abstract: str = Field(..., description="Suggested abstract")
-    experiments: List[str] = Field(..., description="Suggested experiments list")
-    expected_outcome: str = Field(..., description="Suggested expected outcome")
-    risk_factors_and_limitations: List[str] = Field(
-        ..., description="Suggested risk factors and limitations"
-    )
-    explanation: str = Field(..., description="Explanation of changes made")
+    title: str = Field(..., description="Title of the research idea")
+    idea_markdown: str = Field(..., description="Research idea in markdown format")
 
 
 class IdeaResponse(BaseModel):
@@ -102,7 +69,5 @@ class IdeaRefinementResponse(BaseModel):
     """Response model for idea refinement."""
 
     success: bool = Field(..., description="Whether the operation was successful")
-    suggestion: Optional[IdeaRefinementSuggestion] = Field(
-        None, description="LLM refinement suggestion"
-    )
+    suggestion: Optional[str] = Field(None, description="LLM-generated markdown suggestion")
     error: Optional[str] = Field(None, description="Error message if operation failed")

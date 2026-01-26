@@ -155,6 +155,13 @@ class ConversationImportContentEvent(BaseModel):
     data: str
 
 
+class ConversationImportMarkdownDeltaEvent(BaseModel):
+    """Event emitted during streaming idea generation with markdown chunks."""
+
+    type: Literal["markdown_delta"]
+    data: str
+
+
 ConversationImportEventUnion = Annotated[
     Union[
         ConversationImportSectionUpdateEvent,
@@ -165,6 +172,7 @@ ConversationImportEventUnion = Annotated[
         ConversationImportErrorEvent,
         ConversationImportDoneEvent,
         ConversationImportContentEvent,
+        ConversationImportMarkdownDeltaEvent,
     ],
     Field(discriminator="type"),
 ]

@@ -4,11 +4,10 @@ Launches the research pipeline on RunPod and injects refined ideas/configuration
 
 import asyncio
 import base64
-import json
 import logging
 import math
 import os
-from typing import Any, Dict, NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 import httpx
 
@@ -376,7 +375,8 @@ def get_supported_gpu_types() -> list[str]:
 
 async def launch_research_pipeline_run(
     *,
-    idea: Dict[str, Any],
+    title: str,
+    idea: str,
     config_name: str,
     run_id: str,
     requested_by_first_name: str,
@@ -388,7 +388,7 @@ async def launch_research_pipeline_run(
         raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     env = load_runpod_environment()
 
-    idea_filename = f"{run_id}_idea.json"
+    idea_filename = f"{run_id}_idea.txt"
     config_filename = config_name
     telemetry_block: dict[str, str] = {
         "run_id": run_id,
@@ -402,13 +402,14 @@ async def launch_research_pipeline_run(
         env.telemetry_webhook_url,
     )
 
-    idea_text = json.dumps(idea, indent=2)
+    idea_text = idea
     config_text = prepare_config_text(idea_filename=idea_filename, telemetry=telemetry_block)
     idea_b64 = encode_multiline(idea_text)
     config_b64 = encode_multiline(config_text)
 
     docker_cmd = build_remote_script(
         env=env,
+        title=title,
         idea_filename=idea_filename,
         idea_content_b64=idea_b64,
         config_filename=config_filename,

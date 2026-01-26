@@ -4475,6 +4475,29 @@
         ],
         "title": "ConversationImportErrorEvent"
       },
+      "ConversationImportMarkdownDeltaEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "markdown_delta"
+            ],
+            "const": "markdown_delta",
+            "title": "Type"
+          },
+          "data": {
+            "type": "string",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ConversationImportMarkdownDeltaEvent",
+        "description": "Event emitted during streaming idea generation with markdown chunks."
+      },
       "ConversationImportModelLimitData": {
         "properties": {
           "message": {
@@ -4644,6 +4667,9 @@
           },
           {
             "$ref": "#/components/schemas/ConversationImportContentEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConversationImportMarkdownDeltaEvent"
           }
         ],
         "title": "ConversationImportStreamEvent",
@@ -4655,6 +4681,7 @@
             "content": "#/components/schemas/ConversationImportContentEvent",
             "done": "#/components/schemas/ConversationImportDoneEvent",
             "error": "#/components/schemas/ConversationImportErrorEvent",
+            "markdown_delta": "#/components/schemas/ConversationImportMarkdownDeltaEvent",
             "model_limit_conflict": "#/components/schemas/ConversationImportModelLimitEvent",
             "progress": "#/components/schemas/ConversationImportProgressEvent",
             "section_update": "#/components/schemas/ConversationImportSectionUpdateEvent",
@@ -4711,7 +4738,7 @@
             ],
             "title": "Idea Title"
           },
-          "idea_abstract": {
+          "idea_content": {
             "anyOf": [
               {
                 "type": "string"
@@ -4720,7 +4747,7 @@
                 "type": "null"
               }
             ],
-            "title": "Idea Abstract"
+            "title": "Idea Content"
           },
           "last_user_message_content": {
             "anyOf": [
@@ -5501,54 +5528,18 @@
           "title": {
             "type": "string",
             "title": "Title",
-            "description": "Idea title"
+            "description": "Title of the research idea"
           },
-          "short_hypothesis": {
+          "idea_markdown": {
             "type": "string",
-            "title": "Short Hypothesis",
-            "description": "Short hypothesis of the idea"
-          },
-          "related_work": {
-            "type": "string",
-            "title": "Related Work",
-            "description": "Related work or background"
-          },
-          "abstract": {
-            "type": "string",
-            "title": "Abstract",
-            "description": "Abstract of the idea"
-          },
-          "experiments": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Experiments",
-            "description": "List of experiments"
-          },
-          "expected_outcome": {
-            "type": "string",
-            "title": "Expected Outcome",
-            "description": "Expected outcome of the experiments"
-          },
-          "risk_factors_and_limitations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Risk Factors And Limitations",
-            "description": "Risk factors and limitations"
+            "title": "Idea Markdown",
+            "description": "Research idea in markdown format"
           }
         },
         "type": "object",
         "required": [
           "title",
-          "short_hypothesis",
-          "related_work",
-          "abstract",
-          "experiments",
-          "expected_outcome",
-          "risk_factors_and_limitations"
+          "idea_markdown"
         ],
         "title": "IdeaRefinementRequest",
         "description": "Request model for manually updating an idea with all fields."
@@ -5577,43 +5568,12 @@
           "title": {
             "type": "string",
             "title": "Title",
-            "description": "Research idea title"
+            "description": "Title of the research idea"
           },
-          "short_hypothesis": {
+          "idea_markdown": {
             "type": "string",
-            "title": "Short Hypothesis",
-            "description": "Short hypothesis statement"
-          },
-          "related_work": {
-            "type": "string",
-            "title": "Related Work",
-            "description": "Related work and background"
-          },
-          "abstract": {
-            "type": "string",
-            "title": "Abstract",
-            "description": "Detailed abstract of the idea"
-          },
-          "experiments": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Experiments",
-            "description": "List of proposed experiments"
-          },
-          "expected_outcome": {
-            "type": "string",
-            "title": "Expected Outcome",
-            "description": "Expected outcome of the research"
-          },
-          "risk_factors_and_limitations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Risk Factors And Limitations",
-            "description": "Risk factors and limitations"
+            "title": "Idea Markdown",
+            "description": "Research idea in markdown format"
           },
           "is_manual_edit": {
             "type": "boolean",
@@ -5635,12 +5595,7 @@
         "required": [
           "version_id",
           "title",
-          "short_hypothesis",
-          "related_work",
-          "abstract",
-          "experiments",
-          "expected_outcome",
-          "risk_factors_and_limitations",
+          "idea_markdown",
           "is_manual_edit",
           "version_number",
           "created_at"
@@ -8696,7 +8651,7 @@
             "type": "integer",
             "title": "Conversation Id"
           },
-          "overall_goal": {
+          "idea_title": {
             "anyOf": [
               {
                 "type": "string"
@@ -8705,9 +8660,9 @@
                 "type": "null"
               }
             ],
-            "title": "Overall Goal"
+            "title": "Idea Title"
           },
-          "hypothesis": {
+          "idea_markdown": {
             "anyOf": [
               {
                 "type": "string"
@@ -8716,7 +8671,7 @@
                 "type": "null"
               }
             ],
-            "title": "Hypothesis"
+            "title": "Idea Markdown"
           },
           "stages": {
             "items": {

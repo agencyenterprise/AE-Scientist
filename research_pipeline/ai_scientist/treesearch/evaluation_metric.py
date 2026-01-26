@@ -1,18 +1,9 @@
-from typing import NamedTuple
-
 from pydantic import BaseModel, Field
 
 from ai_scientist.llm import get_structured_response_from_llm
 
 from .codex.codex_task_types import EvaluationMetricSpec
-from .config import TaskDescription
 from .prompts.render import render_text
-
-
-class _EvaluationMetricPromptContext(NamedTuple):
-    title: str
-    abstract: str
-    short_hypothesis: str
 
 
 class EvaluationMetricSpecResponse(BaseModel):
@@ -34,17 +25,14 @@ class EvaluationMetricSpecResponse(BaseModel):
 
 def define_evaluation_metric_spec_via_llm(
     *,
-    task_desc: TaskDescription,
+    title: str,
+    task_desc: str,
     model: str,
     temperature: float,
 ) -> EvaluationMetricSpec:
     prompt = render_text(
         template_name="agent_manager/evaluation_metric_spec_prompt.txt.j2",
-        context=_EvaluationMetricPromptContext(
-            title=task_desc.title,
-            abstract=task_desc.abstract,
-            short_hypothesis=task_desc.short_hypothesis,
-        )._asdict(),
+        context={"title": title, "task_desc": task_desc},
     )
 
     parsed, _ = get_structured_response_from_llm(

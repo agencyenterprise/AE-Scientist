@@ -78,15 +78,31 @@ async def stream_chat_with_idea(
         # Get idea
         idea_data = await db.get_idea_by_conversation_id(conversation_id)
         if not idea_data:
+            failure_title = "Failed to Generate Idea"
+            failure_markdown = """## Short Hypothesis
+Idea generation failed.
+
+## Related Work
+N/A
+
+## Abstract
+Idea generation failed.
+
+Please try regenerating the idea manually.
+
+## Experiments
+- N/A
+
+## Expected Outcome
+N/A
+
+## Risk Factors and Limitations
+- N/A
+"""
             idea_id = await db.create_idea(
                 conversation_id=conversation_id,
-                title="Failed to Generate Idea",
-                short_hypothesis="Idea generation failed.",
-                related_work="N/A",
-                abstract="Idea generation failed.\n\nPlease try regenerating the idea manually.",
-                experiments=["N/A"],
-                expected_outcome="N/A",
-                risk_factors_and_limitations=["N/A"],
+                title=failure_title,
+                idea_markdown=failure_markdown,
                 created_by_user_id=user.id,
             )
         else:

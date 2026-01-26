@@ -3,45 +3,14 @@
 ### Introduction
 {% include "fragments/stage_intro.md.j2" %}
 
-### Research idea
-**Title**: {{ task_desc.title }}
+### Research idea title
+{{ task_title }}
 
-**Abstract**:
-{{ task_desc.abstract }}
-
-**Short hypothesis**:
-{{ task_desc.short_hypothesis }}
-
-**Related work**:
-{{ task_desc.related_work }}
+### Research idea description
+{{ task_desc }}
 
 ### Stage goals
 {% if stage_goals %}{{ stage_goals }}{% else %}(empty){% endif %}
-
-
-### Experiment plan
-{% if task_desc.experiments is string %}
-{{ task_desc.experiments }}
-{% elif task_desc.experiments %}
-{% for exp in task_desc.experiments %}
-{% if exp is string %}
-- {{ exp }}
-{% else %}
-{% for k, v in exp.items() %}
-- {{ k }}: {{ v }}
-{% endfor %}
-{% endif %}
-{% endfor %}
-{% else %}(empty){% endif %}
-
-### Risk factors and limitations
-{% if task_desc.risk_factors_and_limitations is string %}
-{{ task_desc.risk_factors_and_limitations }}
-{% elif task_desc.risk_factors_and_limitations %}
-{% for item in task_desc.risk_factors_and_limitations %}
-- {{ item }}
-{% endfor %}
-{% else %}(empty){% endif %}
 
 ### Example code
 A starting code file is available at `./example_code.py`.

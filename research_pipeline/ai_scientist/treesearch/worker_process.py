@@ -35,7 +35,7 @@ from .codex.seed_aggregation import (
     codex_seed_aggregation_instructions_lines,
 )
 from .config import Config as AppConfig
-from .config import TaskDescription, apply_log_level
+from .config import apply_log_level
 from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
 from .executor import run_python_script
 from .gpu_manager import GPUSpec, get_gpu_specs
@@ -144,7 +144,8 @@ def _parent_node_summary_for_task_context(*, parent_node: Node) -> ParentNodeSum
 def _review_execution_with_llm(
     *,
     cfg: AppConfig,
-    task_desc: TaskDescription,
+    title: str,
+    task_desc: str,
     stage_goals: str,
     stage_identifier: StageIdentifier,
     code: str,
@@ -161,7 +162,8 @@ def _review_execution_with_llm(
             "the problems it might find. If the agent found and fixed a bug you should not say that there is a bug."
             "A bug is a problem that the agent wasn't able to fix or if the agent didn't manage to make it work."
         ),
-        "Research idea": task_desc.model_dump(by_alias=True),
+        "Research idea title": title,
+        "Research idea description": task_desc,
         "Stage": stage_identifier.name,
         "Stage goals": stage_goals,
         "Experiment plan": plan,
@@ -245,7 +247,8 @@ def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
 def _process_seed_eval_reuse(
     *,
     cfg: AppConfig,
-    task_desc: TaskDescription,
+    title: str,
+    task_desc: str,
     stage_goals: str,
     stage_identifier: StageIdentifier,
     evaluation_metric_spec: EvaluationMetricSpec,
@@ -326,6 +329,7 @@ def _process_seed_eval_reuse(
 
     llm_review = _review_execution_with_llm(
         cfg=cfg,
+        title=title,
         task_desc=task_desc,
         stage_goals=stage_goals,
         stage_identifier=stage_identifier,
@@ -391,7 +395,8 @@ def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
 
 class NodeTask(TypedDict):
     node_data: dict[str, object] | None
-    task_desc: TaskDescription
+    title: str
+    task_desc: str
     stage_goals: str
     evaluation_metric_spec: EvaluationMetricSpec
     cfg: AppConfig
@@ -438,7 +443,6 @@ def _prepare_workspace(
     *,
     cfg: AppConfig,
     stage_name: str,
-    task_desc: TaskDescription,
 ) -> tuple[Path, Path]:
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_workspace_dir = Path(cfg.workspace_dir)
@@ -461,10 +465,9 @@ def _prepare_workspace(
     working_dir_path = workspace_path / "working"
     working_dir_path.mkdir(parents=True, exist_ok=True)
 
-    example_code = task_desc.code
-    if example_code is None or not str(example_code).strip():
-        example_code_path = Path(__file__).resolve().parents[1] / "example_code.py"
-        example_code = example_code_path.read_text(encoding="utf-8")
+    # Copy default example_code.py to workspace
+    example_code_path = Path(__file__).resolve().parents[1] / "example_code.py"
+    example_code = example_code_path.read_text(encoding="utf-8")
     try:
         (workspace_path / "example_code.py").write_text(str(example_code), encoding="utf-8")
     except OSError:
@@ -595,6 +598,7 @@ def _write_codex_task_file(
         stage_identifier_name=stage_identifier.name,
         stage_name=stage_name,
         timeout_seconds=timeout_seconds,
+        task_title=task_context.task_title,
         task_desc=task_context.task_desc,
         stage_goals=task_context.stage_goals,
         memory_summary=memory_summary,
@@ -855,7 +859,8 @@ def _prepare_codex_task_file(
     stage_name: str,
     cfg: AppConfig,
     venv_dir: Path,
-    task_desc: TaskDescription,
+    title: str,
+    task_desc: str,
     stage_goals: str,
     evaluation_metric_spec: EvaluationMetricSpec,
     memory_summary: str,
@@ -885,6 +890,7 @@ def _prepare_codex_task_file(
         timeout_seconds=cfg.exec.timeout,
         parent_node=parent_node_summary,
         user_feedback_payload=user_feedback_payload,
+        task_title=title,
         task_desc=task_desc,
         stage_goals=stage_goals,
         evaluation_metric_spec=evaluation_metric_spec,
@@ -1099,7 +1105,8 @@ def _run_codex_cli(
 def process_node(
     *,
     node_data: dict[str, object] | None,
-    task_desc: TaskDescription,
+    title: str,
+    task_desc: str,
     stage_goals: str,
     evaluation_metric_spec: EvaluationMetricSpec,
     cfg: AppConfig,
@@ -1131,7 +1138,6 @@ def process_node(
     workspace_dir, working_dir = _prepare_workspace(
         cfg=cfg,
         stage_name=stage_name,
-        task_desc=task_desc,
     )
     gpu_spec = _configure_gpu_for_worker(gpu_id=gpu_id)
     venv_dir = ensure_codex_venv(
@@ -1170,6 +1176,7 @@ def process_node(
     if seed_eval and seed_aggregation is None and parent_node is not None:
         return _process_seed_eval_reuse(
             cfg=cfg,
+            title=title,
             task_desc=task_desc,
             stage_goals=stage_goals,
             stage_identifier=stage_identifier,
@@ -1192,6 +1199,7 @@ def process_node(
         stage_name=stage_name,
         cfg=cfg,
         venv_dir=venv_dir,
+        title=title,
         task_desc=task_desc,
         stage_goals=stage_goals,
         evaluation_metric_spec=evaluation_metric_spec,
@@ -1425,6 +1433,7 @@ def process_node(
         if not (has_analysis and has_bug_flag):
             llm_review = _review_execution_with_llm(
                 cfg=cfg,
+                title=title,
                 task_desc=task_desc,
                 stage_goals=stage_goals,
                 stage_identifier=stage_identifier,

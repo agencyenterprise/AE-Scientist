@@ -23,13 +23,12 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langchain_core.utils.json import parse_partial_json
 from langgraph.runtime import Runtime
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
 from app.services.base_llm_service import BaseLLMService
 from app.services.base_llm_service import FileAttachmentData as LLMFileAttachmentData
-from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.chat_models import (
     ChatStatus,
     StreamContentEvent,
@@ -54,16 +53,16 @@ from app.services.s3_service import S3Service, get_s3_service
 logger = logging.getLogger(__name__)
 
 THINKING_TAG_PATTERN = re.compile(r"<thinking>.*?</thinking>\s*", re.IGNORECASE | re.DOTALL)
-IDEA_STREAM_LIST_FIELDS = {"experiments", "risk_factors_and_limitations"}
-IDEA_STREAM_FIELD_ORDER = (
-    "title",
-    "short_hypothesis",
-    "related_work",
-    "abstract",
-    "experiments",
-    "expected_outcome",
-    "risk_factors_and_limitations",
-)
+
+
+class IdeaGenerationOutput(BaseModel):
+    """Structured output schema for idea generation."""
+
+    title: str = Field(..., description="The title of the research idea")
+    content: str = Field(
+        ...,
+        description="The research idea content in markdown format with sections: Short Hypothesis, Related Work, Abstract, Experiments, Expected Outcome, Risk Factors and Limitations",
+    )
 
 
 class TrackUsageSchema(BaseModel):
@@ -335,29 +334,29 @@ class LangChainLLMService(BaseLLMService, ABC):
         messages: List[BaseMessage],
         conversation_id: int,
     ) -> AsyncGenerator[str, None]:
+        """Generate idea using structured output with real-time streaming via tool calling."""
+
         base_model = self.get_or_create_model(llm_model=llm_model)
+        max_tokens = get_idea_max_completion_tokens(base_model)
+
+        # Use tool calling for streaming structured output
         tool_bound_model = base_model.bind_tools(
-            [LLMIdeaGeneration],
+            [IdeaGenerationOutput],
             tool_choice="any",
-            ls_structured_output_format={
-                "kwargs": {"method": "function_calling"},
-                "schema": LLMIdeaGeneration,
-            },
         )
-        # Use index as the grouping key for tool call chunks (per LangChain docs)
-        # The index field remains consistent across all chunks of a single tool call,
-        # while id may be None in subsequent chunks after the first one.
+
         accumulated_arguments: Dict[int, str] = defaultdict(str)
-        latest_emitted_fields: Dict[str, Union[str, List[str]]] = {}
+        latest_emitted_title: str = ""
+        latest_emitted_content: str = ""
         active_tool_index: int | None = None
         last_chunk_metadata: Dict[str, Any] | None = None
         db = get_database()
-        async for chunk in tool_bound_model.astream(
-            input=messages,
-            max_tokens=get_idea_max_completion_tokens(base_model),
-        ):
+
+        async for chunk in tool_bound_model.astream(input=messages, max_tokens=max_tokens):
             if not isinstance(chunk, AIMessageChunk):
                 continue
+
+            # Track token usage from final chunk
             if isinstance(chunk, AIMessage):
                 metadata = chunk.usage_metadata
                 if metadata:
@@ -374,15 +373,16 @@ class LangChainLLMService(BaseLLMService, ABC):
                         cached_input_tokens=cached_input_tokens,
                         output_tokens=output_tokens,
                     )
+
             last_chunk_metadata = getattr(chunk, "response_metadata", None)
 
             for tool_chunk in chunk.tool_call_chunks:
-                # Use index as grouping key (consistent across chunks)
-                # Default to 0 for providers that don't set index
+                # Use index as grouping key (default to 0 if not set)
                 tool_index = tool_chunk.get("index")
                 if tool_index is None:
                     tool_index = 0
 
+                # Accumulate arguments
                 append_value_raw: object = tool_chunk.get("args")
                 if isinstance(append_value_raw, dict):
                     append_value = json.dumps(append_value_raw)
@@ -390,117 +390,81 @@ class LangChainLLMService(BaseLLMService, ABC):
                     append_value = append_value_raw
                 else:
                     append_value = ""
+
                 if not append_value:
                     continue
 
                 accumulated_arguments[tool_index] += append_value
                 active_tool_index = tool_index
 
-                partial_fields = self._parse_partial_idea_fields(
-                    payload=accumulated_arguments[tool_index]
-                )
-                if not partial_fields:
-                    continue
+                # Parse partial JSON to extract title and content
+                try:
+                    partial = parse_partial_json(accumulated_arguments[tool_index])
+                    if not isinstance(partial, dict):
+                        continue
 
-                for field_name in IDEA_STREAM_FIELD_ORDER:
-                    if field_name not in partial_fields:
-                        continue
-                    normalized_value = self._normalize_partial_field_value(
-                        field=field_name,
-                        value=partial_fields[field_name],
-                    )
-                    if normalized_value is None:
-                        continue
-                    if latest_emitted_fields.get(field_name) == normalized_value:
-                        continue
-                    latest_emitted_fields[field_name] = normalized_value
-                    yield json.dumps(
-                        {
-                            "event": "section_delta",
-                            "field": field_name,
-                            "value": normalized_value,
-                        }
-                    )
+                    # Emit title updates
+                    if "title" in partial:
+                        title_value = partial["title"]
+                        if isinstance(title_value, str) and title_value != latest_emitted_title:
+                            latest_emitted_title = title_value
+                            # Yield markdown delta for title
+                            yield json.dumps(
+                                {"event": "markdown_delta", "data": f"# {title_value}\n\n"}
+                            )
+
+                    # Emit content updates
+                    if "content" in partial:
+                        content_value = partial["content"]
+                        if isinstance(content_value, str):
+                            # Only yield the new part of content
+                            if content_value.startswith(latest_emitted_content):
+                                new_content = content_value[len(latest_emitted_content) :]
+                                if new_content:
+                                    latest_emitted_content = content_value
+                                    yield json.dumps(
+                                        {"event": "markdown_delta", "data": new_content}
+                                    )
+                            elif content_value != latest_emitted_content:
+                                # Content changed non-incrementally, emit full content
+                                latest_emitted_content = content_value
+                                yield json.dumps({"event": "markdown_delta", "data": content_value})
+                except Exception:
+                    # Ignore parsing errors during streaming
+                    pass
 
         if active_tool_index is None:
             raise ValueError("LLM did not return structured idea payload.")
 
-        # Check if the response was truncated due to max_tokens limit
+        # Check for truncation
         finish_reason = ""
         if last_chunk_metadata:
             finish_reason = last_chunk_metadata.get("finish_reason", "")
-            logger.debug("Idea generation finished with reason: %s", finish_reason)
             if finish_reason == "length":
                 logger.warning("Idea generation response was truncated due to max_tokens limit")
                 raise ValueError(
-                    "Idea generation was truncated. The response exceeded the token limit. "
-                    "Try a shorter conversation or increase IDEA_MAX_COMPLETION_TOKENS."
+                    "Idea generation was truncated. The response exceeded the token limit."
                 )
 
+        # Parse final payload
         final_payload = accumulated_arguments[active_tool_index]
         if not final_payload.strip():
             raise ValueError("LLM returned empty structured idea payload.")
 
-        # Validate that the payload contains all required fields before yielding
         try:
-            partial = parse_partial_json(final_payload)
-            if isinstance(partial, dict):
-                required_fields = [
-                    "title",
-                    "short_hypothesis",
-                    "related_work",
-                    "abstract",
-                    "experiments",
-                    "expected_outcome",
-                    "risk_factors_and_limitations",
-                ]
-                missing = [f for f in required_fields if f not in partial]
-                if missing:
-                    logger.warning(
-                        "LLM generated incomplete idea. Missing fields: %s, "
-                        "finish_reason: %s, payload_length: %d",
-                        missing,
-                        finish_reason,
-                        len(final_payload),
-                    )
-        except Exception:
-            pass  # Let the downstream parser handle invalid JSON
+            final_data = json.loads(final_payload)
+            title = final_data.get("title", "")
+            content = final_data.get("content", "")
 
-        yield json.dumps({"event": "final_idea_payload", "data": final_payload})
+            if not title or not content:
+                raise ValueError("LLM did not provide valid title and content.")
 
-    def _parse_partial_idea_fields(self, *, payload: str) -> Dict[str, Any]:
-        try:
-            parsed = parse_partial_json(payload)
-        except Exception:
-            logger.debug("Failed to parse partial idea payload", exc_info=True)
-            return {}
-
-        if isinstance(parsed, dict):
-            return parsed
-        return {}
-
-    def _normalize_partial_field_value(
-        self,
-        *,
-        field: str,
-        value: object,
-    ) -> Union[str, List[str], None]:
-        if field in IDEA_STREAM_LIST_FIELDS:
-            if isinstance(value, list):
-                normalized = [
-                    str(item).strip() for item in value if isinstance(item, str) and item.strip()
-                ]
-            elif isinstance(value, str):
-                normalized = [item.strip() for item in value.split("\n") if item.strip()]
-            else:
-                return None
-            return normalized
-
-        if isinstance(value, str):
-            return value
-        if value is None:
-            return None
-        return str(value)
+            # Yield final structured data
+            yield json.dumps(
+                {"event": "structured_idea_data", "data": {"title": title, "content": content}}
+            )
+        except json.JSONDecodeError:
+            raise ValueError("LLM returned invalid JSON payload.")
 
     async def summarize_document(self, llm_model: LLMModel, content: str) -> str:
         return await self._summarize_document(llm_model=llm_model, content=content)
@@ -587,78 +551,16 @@ class LangChainLLMService(BaseLLMService, ABC):
         except json.JSONDecodeError:
             return content
 
-    def _parse_idea_response(self, content: str) -> LLMIdeaGeneration:
-        cleaned_content = self.strip_reasoning_tags(text=content)
-        extracted_json = self._extract_json_from_content(cleaned_content)
-
-        try:
-            return LLMIdeaGeneration.model_validate_json(extracted_json)
-        except (ValidationError, ValueError) as exc:
-            # Log detailed error info for debugging
-            content_len = len(cleaned_content)
-            extracted_len = len(extracted_json)
-            last_chars = cleaned_content[-200:] if content_len > 200 else cleaned_content
-
-            # Try to parse as dict to see which fields are present/missing
-            missing_fields: List[str] = []
-            present_fields: List[str] = []
-            try:
-                parsed_dict = json.loads(extracted_json)
-                if isinstance(parsed_dict, dict):
-                    required_fields = [
-                        "title",
-                        "short_hypothesis",
-                        "related_work",
-                        "abstract",
-                        "experiments",
-                        "expected_outcome",
-                        "risk_factors_and_limitations",
-                    ]
-                    for field in required_fields:
-                        if field in parsed_dict:
-                            present_fields.append(field)
-                        else:
-                            missing_fields.append(field)
-            except json.JSONDecodeError:
-                pass
-
-            logger.error(
-                "Failed to parse idea response for provider %s. "
-                "Content length: %d, Extracted JSON length: %d, "
-                "Present fields: %s, Missing fields: %s, "
-                "Last 200 chars of content: %s",
-                self.provider_name,
-                content_len,
-                extracted_len,
-                present_fields or "unknown",
-                missing_fields or "JSON parse failed",
-                last_chars,
-            )
-            # Provide actionable error message based on failure type
-            if missing_fields:
-                error_msg = (
-                    f"LLM generated incomplete idea - missing fields: {missing_fields}. "
-                    "This may be caused by: (1) model output being cut off, "
-                    "(2) conversation context being too long, or "
-                    "(3) model generating repetitive content. "
-                    "Try using a different model or shortening the input."
-                )
-            else:
-                error_msg = (
-                    "Failed to parse LLM response as valid JSON. "
-                    "The model may have returned malformed output."
-                )
-            raise ValueError(error_msg) from exc
-
 
 class UpdateIdeaInput(BaseModel):
-    title: str = Field(..., description="Updated idea title")
-    short_hypothesis: str = Field(..., description="Updated short hypothesis")
-    related_work: str = Field(..., description="Updated related work section")
-    abstract: str = Field(..., description="Updated abstract section")
-    experiments: List[str] = Field(..., description="Experiments list")
-    expected_outcome: str = Field(..., description="Expected outcome text")
-    risk_factors_and_limitations: List[str] = Field(..., description="Risk factors and limitations")
+    title: str = Field(
+        ...,
+        description="The title of the research idea",
+    )
+    idea_markdown: str = Field(
+        ...,
+        description="Complete idea content in markdown format with sections: Short Hypothesis, Related Work, Abstract, Experiments, Expected Outcome, Risk Factors and Limitations. Do NOT include the title as a header.",
+    )
 
 
 class LangChainChatWithIdeaStream:
@@ -884,28 +786,20 @@ class LangChainChatWithIdeaStream:
         async def update_idea_tool(
             *,
             title: str,
-            short_hypothesis: str,
-            related_work: str,
-            abstract: str,
-            experiments: List[str],
-            expected_outcome: str,
-            risk_factors_and_limitations: List[str],
+            idea_markdown: str,
         ) -> Dict[str, str]:
-            """Persist a new idea version using the provided structured fields."""
-            if not title.strip() or not short_hypothesis.strip() or not abstract.strip():
+            """Persist a new idea version using the provided title and markdown content."""
+            if not title.strip():
+                raise ValueError("update_idea requires a non-empty title")
+            if not idea_markdown.strip() or len(idea_markdown.strip()) < 50:
                 raise ValueError(
-                    "update_idea requires non-empty title, short_hypothesis, and abstract"
+                    "update_idea requires non-empty markdown content with at least 50 characters"
                 )
 
             await db.create_idea_version(
                 idea_id=idea_id,
                 title=title,
-                short_hypothesis=short_hypothesis,
-                related_work=related_work,
-                abstract=abstract,
-                experiments=experiments,
-                expected_outcome=expected_outcome,
-                risk_factors_and_limitations=risk_factors_and_limitations,
+                idea_markdown=idea_markdown,
                 is_manual_edit=False,
                 created_by_user_id=user_id,
             )

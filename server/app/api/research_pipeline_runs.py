@@ -3,7 +3,7 @@ import logging
 import math
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Literal, Protocol, Sequence, Union, cast
+from typing import Literal, Protocol, Union, cast
 from uuid import uuid4
 
 import httpx
@@ -153,12 +153,7 @@ class IdeaPayloadSource(Protocol):
     version_id: int
     version_number: int
     title: str
-    short_hypothesis: str
-    related_work: str
-    abstract: str
-    experiments: Sequence[Any]
-    expected_outcome: str
-    risk_factors_and_limitations: Sequence[Any]
+    idea_markdown: str
 
 
 def extract_user_first_name(*, full_name: str) -> str:
@@ -171,21 +166,6 @@ def extract_user_first_name(*, full_name: str) -> str:
     if not alnum_only:
         return REQUESTER_NAME_FALLBACK
     return f"{alnum_only[0].upper()}{alnum_only[1:]}"
-
-
-def _idea_version_to_payload(idea_data: IdeaPayloadSource) -> Dict[str, object]:
-    experiments = idea_data.experiments or []
-    risks = idea_data.risk_factors_and_limitations or []
-    return {
-        "Name": f"idea_{idea_data.idea_id}_v{idea_data.version_number}",
-        "Title": idea_data.title or "",
-        "Short Hypothesis": idea_data.short_hypothesis or "",
-        "Related Work": idea_data.related_work or "",
-        "Abstract": idea_data.abstract or "",
-        "Experiments": experiments if isinstance(experiments, list) else [],
-        "Expected Outcome": idea_data.expected_outcome or "",
-        "Risk Factors and Limitations": risks if isinstance(risks, list) else [],
-    }
 
 
 async def _notify_pod_ready_failure(
@@ -362,13 +342,11 @@ async def create_and_launch_research_run(
         db=db,
         run_id=run_id,
         conversation_id=conversation_id,
-        overall_goal=idea_data.short_hypothesis,
-        hypothesis=idea_data.short_hypothesis,
+        idea_markdown=idea_data.idea_markdown,
+        idea_title=idea_data.title,
         gpu_type=run.gpu_type if run else None,
         cost_per_hour_cents=int(run.cost * 100) if run and run.cost else None,
     )
-
-    idea_payload = _idea_version_to_payload(idea_data)
 
     config_name = f"{run_id}_config.yaml"
     try:
@@ -381,7 +359,8 @@ async def create_and_launch_research_run(
         )
 
         pod_info = await launch_research_pipeline_run(
-            idea=idea_payload,
+            title=idea_data.title,
+            idea=idea_data.idea_markdown,
             config_name=config_name,
             run_id=run_id,
             requested_by_first_name=requested_by_first_name,

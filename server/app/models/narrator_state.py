@@ -57,8 +57,8 @@ class ResearchRunState(BaseModel):
     run_id: str = Field(..., description="Unique run identifier")
     status: ResearchRunStatus
     conversation_id: int
-    overall_goal: Optional[str] = None
-    hypothesis: Optional[str] = None
+    idea_title: Optional[str] = None
+    idea_markdown: Optional[str] = None
     stages: List[StageGoal] = Field(default_factory=list)
     current_stage: Optional[str] = None
     current_stage_goal: Optional[StageGoal] = None
@@ -97,8 +97,8 @@ def create_initial_state(
     run_id: str,
     conversation_id: int,
     status: Literal["pending", "running", "completed", "failed", "cancelled"] = "pending",
-    overall_goal: Optional[str] = None,
-    hypothesis: Optional[str] = None,
+    idea_markdown: Optional[str] = None,
+    idea_title: Optional[str] = None,
 ) -> ResearchRunState:
     """Create initial state for a new research run."""
     now = datetime.now(timezone.utc)
@@ -175,8 +175,8 @@ def create_initial_state(
         run_id=run_id,
         status=status,
         conversation_id=conversation_id,
-        overall_goal=overall_goal,
-        hypothesis=hypothesis,
+        idea_markdown=idea_markdown,
+        idea_title=idea_title,
         stages=standard_stages,
         created_at=now,
         updated_at=now,

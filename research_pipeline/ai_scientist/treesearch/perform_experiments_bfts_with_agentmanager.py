@@ -30,7 +30,7 @@ logger = logging.getLogger("ai-scientist")
 
 
 def perform_experiments_bfts(
-    config_path: Path, event_callback: Callable[[BaseEvent], None]
+    config_path: Path, event_callback: Callable[[BaseEvent], None], title: str
 ) -> RunOutcome:
     # Load configuration for this run
     cfg = load_cfg(config_path)
@@ -54,6 +54,7 @@ def perform_experiments_bfts(
         logger.exception("Failed to emit run log event for metric definition.")
     stage_cfg = cfg.agent.feedback
     evaluation_metric_spec = define_evaluation_metric_spec_via_llm(
+        title=title,
         task_desc=task_desc,
         model=stage_cfg.model,
         temperature=stage_cfg.temperature,
@@ -61,6 +62,7 @@ def perform_experiments_bfts(
 
     # Initialize the AgentManager (orchestrates stages and substages)
     manager = AgentManager(
+        title=title,
         task_desc=task_desc,
         cfg=cfg,
         workspace_dir=Path(cfg.workspace_dir),
@@ -295,4 +297,8 @@ def perform_experiments_bfts(
 if __name__ == "__main__":
     cfg_path = Path("treesearch/utils/config.yaml")
     cfg = load_cfg(cfg_path)
-    perform_experiments_bfts(cfg_path, event_callback=lambda event: logger.info(event.to_dict()))
+    perform_experiments_bfts(
+        cfg_path,
+        event_callback=lambda event: logger.info(event.to_dict()),
+        title="Test Research Idea",
+    )

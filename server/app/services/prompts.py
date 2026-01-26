@@ -30,9 +30,22 @@ def get_default_idea_generation_prompt() -> str:
         "You are an AI research assistant specialized in transforming conversational ideas into structured research proposals for AGI research teams. "
         "Analyze the conversation and extract actionable research ideas that could be investigated by AGI researchers. "
         "Focus on novel hypotheses, experimental designs, theoretical frameworks, or innovative approaches discussed. "
-        "Always return a single JSON object that captures the complete research idea. "
-        "Do not include XML tags, Markdown, or commentary outside the JSON object. "
-        "Every string must use double quotes and arrays must be valid JSON arrays."
+        "\n\nYou must return a structured response with two fields:\n"
+        "1. 'title': A concise, descriptive title for the research idea\n"
+        "2. 'content': The research idea content in markdown format with the following sections:\n"
+        "   ## Short Hypothesis\n"
+        "   [2-3 sentences describing the core hypothesis]\n\n"
+        "   ## Related Work\n"
+        "   [Brief overview of relevant prior research]\n\n"
+        "   ## Abstract\n"
+        "   [Comprehensive description of the research idea]\n\n"
+        "   ## Experiments\n"
+        "   [Bulleted list of proposed experiments]\n\n"
+        "   ## Expected Outcome\n"
+        "   [Description of anticipated results]\n\n"
+        "   ## Risk Factors and Limitations\n"
+        "   [Bulleted list of potential risks and limitations]\n\n"
+        "IMPORTANT: The 'content' field should NOT include the title as a header. Only include the sections listed above."
     )
 
 
@@ -73,11 +86,26 @@ def get_default_manual_seed_prompt() -> str:
         "You are the AE Scientist assistant. Given a user-provided idea title and hypothesis, "
         "craft a detailed draft idea ready for evaluation. Maintain a professional but concise tone.\n\n"
         "Follow these steps:\n"
-        "1. Restate the title in a compelling single sentence.\n"
+        "1. Use the provided title as-is or refine it slightly for clarity.\n"
         "2. Expand the hypothesis into 2-3 short paragraphs that describe the opportunity, target users, and expected impact.\n"
         "3. List exactly three concrete next steps to validate or advance the idea.\n"
         "4. Highlight any key assumptions or risks as bullet points.\n\n"
-        "Always return a single JSON object that fits the LLMIdeaGeneration schema."
+        "You must return a structured response with two fields:\n"
+        "1. 'title': The research idea title (use the provided title or a refined version)\n"
+        "2. 'content': The research idea content in markdown format with the following sections:\n"
+        "   ## Short Hypothesis\n"
+        "   [2-3 sentences describing the core hypothesis]\n\n"
+        "   ## Related Work\n"
+        "   [Brief overview of relevant prior research]\n\n"
+        "   ## Abstract\n"
+        "   [Comprehensive description of the research idea]\n\n"
+        "   ## Experiments\n"
+        "[Bulleted list of proposed experiments]\n\n"
+        "## Expected Outcome\n"
+        "[Description of anticipated results]\n\n"
+        "## Risk Factors and Limitations\n"
+        "[Bulleted list of potential risks and limitations]\n\n"
+        "Return only the markdown content without any XML tags or additional commentary."
     )
 
 
@@ -111,7 +139,7 @@ def get_default_chat_system_prompt() -> str:
         "You are an AI research assistant specialized in helping AGI research teams refine and develop research ideas. "
         "You have access to tools that allow you to update the research idea with improvements. "
         "\n\nAvailable tools:\n"
-        "- update_idea: Update all fields of the research idea with improvements\n"
+        "- update_idea: Update the research idea with improvements\n"
         "\n\nKey Guidelines:\n"
         "- Be conversational and helpful - ask clarifying questions to understand user needs\n"
         "- Focus on practical improvements - suggest specific, actionable enhancements\n"
@@ -120,7 +148,7 @@ def get_default_chat_system_prompt() -> str:
         "- Break down complex research questions into manageable experiments\n"
         "- Consider technical feasibility and resource requirements\n"
         "- Ask clarifying questions when needed to better understand the research goals\n"
-        "- When updating experiments or risk factors, provide them as complete JSON arrays"
+        "- When updating the idea, provide complete markdown"
         "\n\nCurrent research idea you are working on:\n"
         "{{current_idea}}"
         "\n\nOriginal imported conversation that inspired this idea:\n"
@@ -201,19 +229,8 @@ async def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> s
     try:
         idea = await db.get_idea_by_conversation_id(conversation_id)
         if idea:
-            experiments_formatted = "\n".join([f"  - {exp}" for exp in idea.experiments])
-            risks_formatted = "\n".join(
-                [f"  - {risk}" for risk in idea.risk_factors_and_limitations]
-            )
-            current_idea_text = (
-                f"Title: {idea.title}\n\n"
-                f"Short Hypothesis: {idea.short_hypothesis}\n\n"
-                f"Related Work: {idea.related_work}\n\n"
-                f"Abstract: {idea.abstract}\n\n"
-                f"Experiments:\n{experiments_formatted}\n\n"
-                f"Expected Outcome: {idea.expected_outcome}\n\n"
-                f"Risk Factors and Limitations:\n{risks_formatted}"
-            )
+            # Include both title and markdown content so LLM knows the current title
+            current_idea_text = f"# {idea.title}\n\n{idea.idea_markdown}"
         else:
             current_idea_text = "No research idea found."
     except Exception as e:

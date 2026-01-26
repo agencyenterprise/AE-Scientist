@@ -1,7 +1,5 @@
 from typing import Any, NamedTuple
 
-from ..config import TaskDescription
-
 
 class EvaluationMetricSpec(NamedTuple):
     name: str
@@ -136,7 +134,8 @@ class CodexTaskContext(NamedTuple):
     timeout_seconds: int
     parent_node: ParentNodeSummary | None
     user_feedback_payload: str
-    task_desc: TaskDescription
+    task_title: str
+    task_desc: str
     stage_goals: str
     evaluation_metric_spec: EvaluationMetricSpec
     memory_summary: str

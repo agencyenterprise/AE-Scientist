@@ -96,9 +96,10 @@ export function getNextVersionNumber(
  * Check if a project draft is currently being generated
  */
 export function isIdeaGenerating(draft: Idea | null): boolean {
-  return !!(
-    draft?.active_version?.title === "Generating..." && draft?.active_version?.version_number === 1
-  );
+  if (!draft?.active_version?.title || draft?.active_version?.version_number !== 1) {
+    return false;
+  }
+  return draft.active_version.title === "Generating...";
 }
 
 /**

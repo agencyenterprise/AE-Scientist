@@ -60,7 +60,7 @@ export function convertApiConversation(apiConversation: ConversationListItem): C
     userName: apiConversation.user_name,
     userEmail: apiConversation.user_email,
     ideaTitle: apiConversation.idea_title ?? null,
-    ideaAbstract: apiConversation.idea_abstract ?? null,
+    ideaAbstract: apiConversation.idea_content ?? null,
     lastUserMessageContent: apiConversation.last_user_message_content ?? null,
     lastAssistantMessageContent: apiConversation.last_assistant_message_content ?? null,
     conversationStatus:

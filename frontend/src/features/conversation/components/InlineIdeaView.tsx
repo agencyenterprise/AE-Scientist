@@ -28,8 +28,9 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
     }
   };
 
-  // Determine if research can be launched (need both title and abstract)
-  const canLaunchResearch = idea?.active_version?.title && idea?.active_version?.abstract;
+  // Determine if research can be launched (need valid idea markdown)
+  const canLaunchResearch =
+    idea?.active_version?.idea_markdown && idea.active_version.title !== "Generating...";
 
   // Empty state - no selection
   if (conversationId === null) {

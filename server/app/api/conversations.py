@@ -42,7 +42,6 @@ from app.services import (
     SummarizerService,
     get_database,
 )
-from app.services.base_llm_service import LLMIdeaGeneration
 from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
 from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
@@ -69,19 +68,6 @@ anthropic_service = AnthropicService()
 grok_service = GrokService()
 
 logger = logging.getLogger(__name__)
-
-IDEA_SECTION_CONFIG: List[tuple[str, str, bool]] = [
-    ("title", "Title", False),
-    ("short_hypothesis", "Short Hypothesis", False),
-    ("related_work", "Related Work", False),
-    ("abstract", "Abstract", False),
-    ("experiments", "Experiments", True),
-    ("expected_outcome", "Expected Outcome", False),
-    ("risk_factors_and_limitations", "Risk Factors and Limitations", True),
-]
-IDEA_SECTION_META: Dict[str, tuple[str, bool]] = {
-    field: (label, expects_list) for field, label, expects_list in IDEA_SECTION_CONFIG
-}
 
 
 def _resolve_llm_service(llm_provider: str) -> LangChainLLMService:
@@ -169,7 +155,7 @@ class ConversationListItem(BaseModel):
     user_name: str
     user_email: str
     idea_title: Optional[str] = None
-    idea_abstract: Optional[str] = None
+    idea_content: Optional[str] = None
     last_user_message_content: Optional[str] = None
     last_assistant_message_content: Optional[str] = None
     manual_title: Optional[str] = None
@@ -297,55 +283,16 @@ def _imported_chat_messages_to_text(imported_chat_messages: List[ImportedChatMes
     return "\n\n".join(formatted_messages)
 
 
-def _format_section_value(*, value: object, expects_list: bool) -> str:
-    if expects_list:
-        entries: List[str] = []
-        if isinstance(value, list):
-            entries = [entry.strip() for entry in value if isinstance(entry, str) and entry.strip()]
-        elif isinstance(value, str):
-            entries = [entry.strip() for entry in value.split("\n") if entry.strip()]
-        if not entries:
-            return "No entries provided."
-        return "\n".join(f"- {entry}" for entry in entries)
-
-    if isinstance(value, str):
-        text_value = value.strip()
-    elif value is None:
-        text_value = ""
-    else:
-        text_value = str(value).strip()
-    return text_value if text_value else "Not provided."
-
-
-def _format_section_from_value(field: str, value: object) -> Optional[tuple[str, str]]:
-    meta = IDEA_SECTION_META.get(field)
-    if not meta:
-        return None
-    label, expects_list = meta
-    formatted_value = _format_section_value(value=value, expects_list=expects_list)
-    return field, f"{label}:\n{formatted_value}\n"
-
-
-def _iter_formatted_sections(idea: LLMIdeaGeneration) -> List[tuple[str, str]]:
-    sections: List[tuple[str, str]] = []
-    for field, _, _ in IDEA_SECTION_CONFIG:
-        formatted = _format_section_from_value(field, getattr(idea, field))
-        if formatted:
-            sections.append(formatted)
-    return sections
-
-
 async def _stream_structured_idea(
     *,
     db: DatabaseManager,
-    llm_service: LangChainLLMService,
     idea_stream: AsyncGenerator[str, None],
     conversation_id: int,
     user_id: int,
 ) -> AsyncGenerator[str, None]:
-    """Persist structured idea output and stream formatted sections."""
-    final_payload: Optional[str] = None
-    streamed_sections: Dict[str, str] = {}
+    """Persist structured idea output and stream content."""
+    title: Optional[str] = None
+    idea_markdown: Optional[str] = None
 
     async for content_chunk in idea_stream:
         try:
@@ -355,62 +302,45 @@ async def _stream_structured_idea(
             continue
 
         event_type = event.get("event")
-        if event_type == "section_delta":
-            field = event.get("field")
-            if not isinstance(field, str):
-                continue
-            formatted = _format_section_from_value(field, event.get("value"))
-            if not formatted:
-                continue
-            field_key, section_text = formatted
-            streamed_sections[field_key] = section_text
-            yield json.dumps(
-                {"type": "section_update", "field": field_key, "data": section_text}
-            ) + "\n"
-        elif event_type == "final_idea_payload":
-            payload = event.get("data")
-            if isinstance(payload, str):
-                final_payload = payload
+        if event_type == "markdown_delta":
+            # Stream markdown content chunks for UI feedback
+            markdown_chunk = event.get("data")
+            if markdown_chunk:
+                yield json.dumps({"type": "markdown_delta", "data": markdown_chunk}) + "\n"
+        elif event_type == "structured_idea_data":
+            # Structured output with separate title and content
+            data = event.get("data")
+            if isinstance(data, dict):
+                title = data.get("title", "")
+                idea_markdown = data.get("content", "")
         else:
             logger.debug("Ignoring unknown idea stream event: %s", event_type)
 
-    if not final_payload:
-        raise ValueError("LLM did not provide a final structured idea payload.")
+    # Validate we received structured data
+    if not title or not idea_markdown:
+        raise ValueError(
+            "LLM did not provide valid structured idea data (title and content required)."
+        )
 
-    llm_idea = llm_service._parse_idea_response(content=final_payload)
     existing_idea = await db.get_idea_by_conversation_id(conversation_id)
     if existing_idea is None:
         await db.create_idea(
             conversation_id=conversation_id,
-            title=llm_idea.title,
-            short_hypothesis=llm_idea.short_hypothesis,
-            related_work=llm_idea.related_work,
-            abstract=llm_idea.abstract,
-            experiments=llm_idea.experiments,
-            expected_outcome=llm_idea.expected_outcome,
-            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
+            title=title,
+            idea_markdown=idea_markdown,
             created_by_user_id=user_id,
         )
     else:
         await db.update_idea_version(
             idea_id=existing_idea.idea_id,
             version_id=existing_idea.version_id,
-            title=llm_idea.title,
-            short_hypothesis=llm_idea.short_hypothesis,
-            related_work=llm_idea.related_work,
-            abstract=llm_idea.abstract,
-            experiments=llm_idea.experiments,
-            expected_outcome=llm_idea.expected_outcome,
-            risk_factors_and_limitations=llm_idea.risk_factors_and_limitations,
+            title=title,
+            idea_markdown=idea_markdown,
             is_manual_edit=False,
         )
 
-    for field_key, section_text in _iter_formatted_sections(idea=llm_idea):
-        if streamed_sections.get(field_key) == section_text:
-            continue
-        yield json.dumps(
-            {"type": "section_update", "field": field_key, "data": section_text}
-        ) + "\n"
+    # Don't send "done" event here - it's sent by _generate_response_for_conversation
+    # which is called after this function in the import flow
 
 
 async def _generate_idea(
@@ -432,7 +362,6 @@ async def _generate_idea(
     )
     async for chunk in _stream_structured_idea(
         db=db,
-        llm_service=service,
         idea_stream=idea_stream,
         conversation_id=conversation_id,
         user_id=user_id,
@@ -467,7 +396,6 @@ async def _generate_manual_seed_idea(
     )
     async for chunk in _stream_structured_idea(
         db=db,
-        llm_service=service,
         idea_stream=idea_stream,
         conversation_id=conversation_id,
         user_id=user_id,
@@ -486,12 +414,7 @@ async def _generate_response_for_conversation(
     active_version = IdeaVersion(
         version_id=idea_data.version_id,
         title=idea_data.title,
-        short_hypothesis=idea_data.short_hypothesis,
-        related_work=idea_data.related_work,
-        abstract=idea_data.abstract,
-        experiments=idea_data.experiments,
-        expected_outcome=idea_data.expected_outcome,
-        risk_factors_and_limitations=idea_data.risk_factors_and_limitations,
+        idea_markdown=idea_data.idea_markdown,
         is_manual_edit=idea_data.is_manual_edit,
         version_number=idea_data.version_number,
         created_at=idea_data.version_created_at.isoformat(),
@@ -734,15 +657,31 @@ async def _create_failure_idea(
     db: DatabaseManager, conversation_id: int, user_id: int, error_message: str
 ) -> None:
     """Create a failure idea entry so the UI can show the error state."""
+    failure_title = "Failed to Generate Idea"
+    failure_markdown = f"""## Short Hypothesis
+Generation failed
+
+## Related Work
+(none)
+
+## Abstract
+Idea generation failed: {error_message}
+
+Please try regenerating the idea manually.
+
+## Experiments
+(none)
+
+## Expected Outcome
+(none)
+
+## Risk Factors and Limitations
+(none)
+"""
     await db.create_idea(
         conversation_id=conversation_id,
-        title="Failed to Generate Idea",
-        short_hypothesis="Generation failed",
-        related_work="",
-        abstract=f"Idea generation failed: {error_message}\n\nPlease try regenerating the idea manually.",
-        experiments=[],
-        expected_outcome="",
-        risk_factors_and_limitations=[],
+        title=failure_title,
+        idea_markdown=failure_markdown,
         created_by_user_id=user_id,
     )
 
@@ -1192,6 +1131,7 @@ async def list_conversations(
         conversation_status=conversation_status,
         run_status=run_status,
     )
+
     return ConversationListResponse(
         conversations=[
             ConversationListItem(
@@ -1205,7 +1145,7 @@ async def list_conversations(
                 user_name=conv.user_name,
                 user_email=conv.user_email,
                 idea_title=conv.idea_title,
-                idea_abstract=conv.idea_abstract,
+                idea_content=conv.idea_markdown,  # Pass full markdown, frontend handles preview
                 last_user_message_content=conv.last_user_message_content,
                 last_assistant_message_content=conv.last_assistant_message_content,
                 manual_title=conv.manual_title,

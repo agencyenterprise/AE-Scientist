@@ -100,7 +100,7 @@ export function ProjectDraftHeader({
           >
             {showDiffs && comparisonVersion && nextVersion && titleDiffContent
               ? titleDiffContent
-              : projectDraft.active_version?.title || ""}
+              : projectDraft.active_version?.title || "Research Idea"}
           </h3>
         </div>
         {/* Edit title button */}

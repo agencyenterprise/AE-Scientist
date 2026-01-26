@@ -46,7 +46,7 @@ export function DebugPanel({ state }: DebugPanelProps) {
     overallProgress: `${state.overall_progress * 100}%`,
     timelineEventCount: timeline.length || "N/A",
     stateVersion: state.version,
-    hypothesis: state.hypothesis ?? "N/A",
+    ideaTitle: state.idea_title ?? "N/A",
     startedRunningAt: state.started_running_at ?? "N/A",
     completedAt: state.completed_at ?? "N/A",
     gpuType: state.gpu_type ?? "N/A",

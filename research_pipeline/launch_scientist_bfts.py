@@ -18,6 +18,7 @@ import os
 import os.path as osp
 import pickle
 import re
+import shutil
 import sys
 import threading
 import time
@@ -46,7 +47,6 @@ from ai_scientist.telemetry import (
 )
 from ai_scientist.treesearch import stage_control
 from ai_scientist.treesearch.agent_manager import AgentManager
-from ai_scientist.treesearch.bfts_utils import idea_to_markdown
 from ai_scientist.treesearch.codex.codex_task_types import EvaluationMetricSpec
 from ai_scientist.treesearch.config import (
     Config,
@@ -103,6 +103,12 @@ def parse_arguments() -> argparse.Namespace:
         "config_file",
         type=str,
         help="Path to the YAML configuration file (e.g., bfts_config.yaml)",
+    )
+    parser.add_argument(
+        "--title",
+        type=str,
+        help="Title of the research idea",
+        required=True,
     )
     parser.add_argument(
         "--resume",
@@ -398,7 +404,6 @@ def setup_artifact_publisher(
 
 def resume_run(
     base_cfg: Config,
-    idea_json_path: str,
     resume_arg: str,
     event_callback: Callable[[BaseEvent], None],
 ) -> RunExecutionOutcome:
@@ -435,12 +440,23 @@ def resume_run(
         if next_stage is None:
             return RunExecutionOutcome(run_dir=run_dir, success=True, message="")
 
+        # Load task description from the run's research_idea.md file
         fake_config = copy.deepcopy(cfg_obj)
-        fake_config.desc_file = Path(idea_json_path)
+        idea_md_path = run_dir / "research_idea.md"
+        if not idea_md_path.exists():
+            raise FileNotFoundError(f"research_idea.md not found in run directory: {run_dir}")
+        fake_config.desc_file = idea_md_path
         task_desc = load_task_desc(cfg=fake_config)
+
+        # Load title from the run's research_title.txt file
+        title_path = run_dir / "research_title.txt"
+        if not title_path.exists():
+            raise FileNotFoundError(f"research_title.txt not found in run directory: {run_dir}")
+        title = title_path.read_text(encoding="utf-8").strip()
 
         evaluation_metric_spec = load_evaluation_metric_spec_from_checkpoint(run_dir=run_dir)
         manager = AgentManager(
+            title=title,
             task_desc=task_desc,
             cfg=cfg_obj,
             workspace_dir=Path(cfg_obj.workspace_dir),
@@ -610,23 +626,6 @@ def determine_run_directory(
     except Exception:
         traceback.print_exc()
         return None
-
-
-def write_research_idea_to_run(run_dir_path: Path | None, idea: dict[str, object]) -> None:
-    try:
-        if run_dir_path is not None:
-            md_output_path = run_dir_path / "research_idea.md"
-            idea_to_markdown(data=idea, output_path=str(md_output_path), load_code="")
-            logger.info(f"Wrote research idea markdown to {md_output_path}")
-        else:
-            logger.warning(
-                "Warning: run_dir_path is None; cannot write research_idea.md to a run-specific folder."
-            )
-    except Exception:
-        traceback.print_exc()
-        logger.warning(
-            "Failed to write research_idea.md into the run directory; continuing without it."
-        )
 
 
 def should_generate_reports(run_dir_path: Path | None) -> bool:
@@ -982,23 +981,17 @@ def execute_launcher(args: argparse.Namespace) -> None:
     run_success = True
     failure_message = ""
     try:
-        idea_json_path = str(base_cfg.desc_file)
-        with open(idea_json_path, "r") as f:
-            idea = json.load(f)
-            logger.info(f"Loaded idea from {idea_json_path}")
-
         resume_outcome: RunExecutionOutcome | None = None
         if args.resume is not None:
             resume_outcome = resume_run(
                 base_cfg=base_cfg,
-                idea_json_path=idea_json_path,
                 resume_arg=args.resume,
                 event_callback=event_callback,
             )
             run_success = resume_outcome.success
             failure_message = resume_outcome.message
         else:
-            outcome = perform_experiments_bfts(base_config_path, event_callback)
+            outcome = perform_experiments_bfts(base_config_path, event_callback, title=args.title)
             run_success = outcome.success
             failure_message = outcome.message
 
@@ -1007,7 +1000,29 @@ def execute_launcher(args: argparse.Namespace) -> None:
             existing_runs_before=existing_runs_before,
             resume_run_dir=resume_outcome.run_dir if resume_outcome is not None else None,
         )
-        write_research_idea_to_run(run_dir_path=run_dir_path, idea=idea)
+
+        # Copy the research idea markdown and title to the run directory
+        if run_dir_path is not None:
+            try:
+                source_idea_path = Path(base_cfg.desc_file)
+                dest_idea_path = run_dir_path / "research_idea.md"
+                shutil.copy2(source_idea_path, dest_idea_path)
+                logger.info(f"Copied research idea from {source_idea_path} to {dest_idea_path}")
+            except Exception:
+                traceback.print_exc()
+                logger.warning(
+                    "Failed to copy research_idea.md to run directory; continuing without it."
+                )
+
+            try:
+                title_path = run_dir_path / "research_title.txt"
+                title_path.write_text(args.title, encoding="utf-8")
+                logger.info(f"Wrote research title to {title_path}")
+            except Exception:
+                traceback.print_exc()
+                logger.warning(
+                    "Failed to write research_title.txt to run directory; continuing without it."
+                )
 
         run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
         if writeup_cfg is not None and run_dir_path is not None:

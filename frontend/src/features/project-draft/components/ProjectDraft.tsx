@@ -119,25 +119,30 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
 
     setIsTitleSaving(true);
     try {
-      const activeVersion = projectState.projectDraft.active_version;
-      await projectState.updateProjectDraft({
-        title: newTitle,
-        short_hypothesis: activeVersion.short_hypothesis,
-        related_work: activeVersion.related_work,
-        abstract: activeVersion.abstract,
-        experiments: activeVersion.experiments,
-        expected_outcome: activeVersion.expected_outcome,
-        risk_factors_and_limitations: activeVersion.risk_factors_and_limitations,
-      });
+      // Save the updated title and markdown separately
+      const response = await apiFetch<{ idea: IdeaType }>(
+        `/conversations/${conversation.id}/idea`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: newTitle,
+            idea_markdown: projectState.projectDraft.active_version.idea_markdown,
+          }),
+        }
+      );
 
-      // Trigger update animation and refresh diffs
-      animations.triggerUpdateAnimation();
-      const previousVersion = projectState.projectDraft.active_version.version_number;
-      await versionState.loadVersions();
-      versionState.setSelectedVersionForComparison(previousVersion);
-      versionState.setShowDiffs(true);
+      if (response.idea) {
+        projectState.setProjectDraft(response.idea);
 
-      setIsTitleEditOpen(false);
+        // Trigger update animation and refresh diffs
+        animations.triggerUpdateAnimation();
+        const previousVersion = projectState.projectDraft.active_version.version_number;
+        await versionState.loadVersions();
+        versionState.setSelectedVersionForComparison(previousVersion);
+        versionState.setShowDiffs(true);
+
+        setIsTitleEditOpen(false);
+      }
     } finally {
       setIsTitleSaving(false);
     }
@@ -214,7 +219,8 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
               projectDraft={projectState.projectDraft}
               conversationId={conversation.id.toString()}
               onUpdate={handleSectionUpdate}
-              sectionDiffs={diffState.sectionDiffs}
+              markdownDiffContent={diffState.markdownDiffContent}
+              showDiffs={versionState.showDiffs}
             />
 
             {/* Footer Section */}
@@ -243,14 +249,16 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
       />
 
       {/* Title Edit Modal */}
-      <SectionEditModal
-        isOpen={isTitleEditOpen}
-        onClose={() => setIsTitleEditOpen(false)}
-        title="Title"
-        content={projectState.projectDraft?.active_version?.title || ""}
-        onSave={handleTitleSave}
-        isSaving={isTitleSaving}
-      />
+      {projectState.projectDraft?.active_version?.title && (
+        <SectionEditModal
+          isOpen={isTitleEditOpen}
+          onClose={() => setIsTitleEditOpen(false)}
+          title="Title"
+          content={projectState.projectDraft.active_version.title}
+          onSave={handleTitleSave}
+          isSaving={isTitleSaving}
+        />
+      )}
     </>
   );
 }

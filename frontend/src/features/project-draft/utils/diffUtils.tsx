@@ -10,22 +10,6 @@ export interface DiffContent {
 }
 
 /**
- * Interface for all section diffs
- */
-export interface SectionDiffs {
-  title: ReactElement[] | null;
-  hypothesis: ReactElement[] | null;
-  relatedWork: ReactElement[] | null;
-  abstract: ReactElement[] | null;
-  expectedOutcome: ReactElement[] | null;
-  experiments: (ReactElement[] | null)[];
-  riskFactors: (ReactElement[] | null)[];
-  // Track deleted items (items in old version but not in new)
-  deletedExperiments: ReactElement[][];
-  deletedRiskFactors: ReactElement[][];
-}
-
-/**
  * Generate diff elements for a string comparison
  */
 export function generateStringDiff(
@@ -105,102 +89,21 @@ export function generateTitleDiff(
   fromVersion: IdeaVersion,
   toVersion: IdeaVersion
 ): ReactElement[] {
-  return generateStringDiff(fromVersion.title, toVersion.title, "title");
+  const oldTitle = fromVersion.title;
+  const newTitle = toVersion.title;
+  return generateStringDiff(oldTitle, newTitle, "title");
 }
 
 /**
- * Generate diff content for all sections between two versions
+ * Generate diff content for markdown comparison between two versions
  */
-export function generateSectionDiffs(
+export function generateMarkdownDiff(
   fromVersion: IdeaVersion,
   toVersion: IdeaVersion
-): SectionDiffs {
-  // String section diffs
-  const title = generateStringDiff(fromVersion.title, toVersion.title, "title");
-
-  const hypothesis = generateStringDiff(
-    fromVersion.short_hypothesis || "",
-    toVersion.short_hypothesis || "",
-    "hypothesis"
-  );
-
-  const relatedWork = generateStringDiff(
-    fromVersion.related_work || "",
-    toVersion.related_work || "",
-    "related-work"
-  );
-
-  const abstract = generateStringDiff(
-    fromVersion.abstract || "",
-    toVersion.abstract || "",
-    "abstract"
-  );
-
-  const expectedOutcome = generateStringDiff(
-    fromVersion.expected_outcome || "",
-    toVersion.expected_outcome || "",
-    "expected-outcome"
-  );
-
-  // Array section diffs - experiments
-  const oldExperiments = fromVersion.experiments || [];
-  const newExperiments = toVersion.experiments || [];
-  const maxExpLen = Math.max(oldExperiments.length, newExperiments.length);
-
-  const experiments: (ReactElement[] | null)[] = [];
-  const deletedExperiments: ReactElement[][] = [];
-
-  for (let i = 0; i < maxExpLen; i++) {
-    const oldExp = oldExperiments[i];
-    const newExp = newExperiments[i];
-
-    if (oldExp && newExp) {
-      // Both exist - show diff
-      experiments.push(generateStringDiff(oldExp, newExp, `exp-${i}`));
-    } else if (newExp && !oldExp) {
-      // New item added
-      experiments.push(generateAddedDiff(newExp, `exp-add-${i}`));
-    } else if (oldExp && !newExp) {
-      // Item deleted - track separately
-      deletedExperiments.push(generateDeletedDiff(oldExp, `exp-del-${i}`));
-    }
-  }
-
-  // Array section diffs - risk factors
-  const oldRisks = fromVersion.risk_factors_and_limitations || [];
-  const newRisks = toVersion.risk_factors_and_limitations || [];
-  const maxRiskLen = Math.max(oldRisks.length, newRisks.length);
-
-  const riskFactors: (ReactElement[] | null)[] = [];
-  const deletedRiskFactors: ReactElement[][] = [];
-
-  for (let i = 0; i < maxRiskLen; i++) {
-    const oldRisk = oldRisks[i];
-    const newRisk = newRisks[i];
-
-    if (oldRisk && newRisk) {
-      // Both exist - show diff
-      riskFactors.push(generateStringDiff(oldRisk, newRisk, `risk-${i}`));
-    } else if (newRisk && !oldRisk) {
-      // New item added
-      riskFactors.push(generateAddedDiff(newRisk, `risk-add-${i}`));
-    } else if (oldRisk && !newRisk) {
-      // Item deleted - track separately
-      deletedRiskFactors.push(generateDeletedDiff(oldRisk, `risk-del-${i}`));
-    }
-  }
-
-  return {
-    title,
-    hypothesis,
-    relatedWork,
-    abstract,
-    expectedOutcome,
-    experiments,
-    riskFactors,
-    deletedExperiments,
-    deletedRiskFactors,
-  };
+): ReactElement[] {
+  const oldMarkdown = fromVersion.idea_markdown || "";
+  const newMarkdown = toVersion.idea_markdown || "";
+  return generateStringDiff(oldMarkdown, newMarkdown, "markdown");
 }
 
 /**
