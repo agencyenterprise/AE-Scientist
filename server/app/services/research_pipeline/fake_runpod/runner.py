@@ -1212,11 +1212,11 @@ class FakeRunner:
         stages = ["1_initial_implementation", "2_baseline_tuning", "3_creative_research"]
         for stage in stages:
             payload = {
-                "stage": stage,
+                "provider": "openai",
                 "model": "gpt-4o",
                 "input_tokens": 15000 + hash(stage) % 5000,
                 "output_tokens": 3000 + hash(stage) % 1000,
-                "cached_tokens": 8000 + hash(stage) % 2000,
+                "cached_input_tokens": 8000 + hash(stage) % 2000,
             }
             try:
                 self._webhooks.publish_token_usage(payload)
