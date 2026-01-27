@@ -516,7 +516,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id,
-                c.url AS conversation_url
+                c.url AS conversation_url,
+                c.parent_run_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
@@ -616,7 +617,8 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 pc.best_metric,
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id,
-                c.url AS conversation_url
+                c.url AS conversation_url,
+                c.parent_run_id
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id

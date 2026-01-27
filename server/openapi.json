@@ -4255,6 +4255,39 @@
         ],
         "title": "CheckoutSessionCreateResponse"
       },
+      "ChildConversationInfo": {
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id",
+            "description": "Child conversation ID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Child conversation title"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when created"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Conversation status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "title",
+          "created_at",
+          "status"
+        ],
+        "title": "ChildConversationInfo",
+        "description": "Brief info about a child conversation seeded from a run."
+      },
       "CodexEventPayload": {
         "properties": {
           "run_id": {
@@ -4959,6 +4992,18 @@
             "type": "array",
             "title": "Research Runs",
             "description": "Research pipeline runs associated with the conversation"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id",
+            "description": "Run ID of the parent research run if this conversation was seeded from a run"
           }
         },
         "type": "object",
@@ -7492,6 +7537,14 @@
             "type": "array",
             "title": "Stage Skip Windows",
             "description": "Windows indicating when each stage became skippable."
+          },
+          "child_conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ChildConversationInfo"
+            },
+            "type": "array",
+            "title": "Child Conversations",
+            "description": "Conversations that were seeded from this run"
           }
         },
         "type": "object",
@@ -7865,6 +7918,18 @@
             ],
             "title": "Termination Last Error",
             "description": "Last termination workflow error, if any."
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id",
+            "description": "Parent run ID if this run's conversation was seeded from a previous run"
           }
         },
         "type": "object",
@@ -8007,6 +8072,14 @@
             "type": "object",
             "title": "Code Executions",
             "description": "Latest code execution snapshot per run_type for the run."
+          },
+          "child_conversations": {
+            "items": {
+              "$ref": "#/components/schemas/ChildConversationInfo"
+            },
+            "type": "array",
+            "title": "Child Conversations",
+            "description": "Conversations that were seeded from this run."
           }
         },
         "type": "object",
@@ -8189,6 +8262,18 @@
             "type": "integer",
             "title": "Conversation Id",
             "description": "ID of the associated conversation"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id",
+            "description": "Parent run ID if this run's conversation was seeded from a previous run"
           }
         },
         "type": "object",

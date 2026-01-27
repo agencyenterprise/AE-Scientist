@@ -118,6 +118,10 @@ class ConversationResponse(BaseModel):
         default_factory=list,
         description="Research pipeline runs associated with the conversation",
     )
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Run ID of the parent research run if this conversation was seeded from a run",
+    )
 
 
 class ParseSuccessResult(BaseModel):

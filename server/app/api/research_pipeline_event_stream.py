@@ -11,6 +11,7 @@ from fastapi.responses import ORJSONResponse, StreamingResponse
 from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
 from app.middleware.auth import get_current_user
 from app.models import (
+    ChildConversationInfo,
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
     ResearchRunCodeExecution,
@@ -361,9 +362,25 @@ async def _build_initial_stream_payload(
     ]
     termination = await db.get_research_pipeline_run_termination(run_id=run_id)
 
+    # Get conversation to retrieve parent_run_id
+    conversation = await db.get_conversation_by_id(conversation_id)
+    parent_run_id = conversation.parent_run_id if conversation else None
+
+    # Get child conversations seeded from this run
+    child_convs = await db.list_child_conversations_by_run_id(run_id=run_id)
+    child_conversations = [
+        ChildConversationInfo(
+            conversation_id=c.id,
+            title=c.title,
+            created_at=c.created_at.isoformat(),
+            status=c.status,
+        ).model_dump()
+        for c in child_convs
+    ]
+
     return {
         "run": ResearchRunInfo.from_db_record(
-            run=current_run, termination=termination
+            run=current_run, termination=termination, parent_run_id=parent_run_id
         ).model_dump(),
         "stage_progress": stage_events,
         "logs": log_events,
@@ -376,6 +393,7 @@ async def _build_initial_stream_payload(
         "best_node_selections": best_node_payload,
         "code_executions": code_executions_snapshot,
         "stage_skip_windows": stage_skip_windows,
+        "child_conversations": child_conversations,
         "hw_cost_estimate": _build_hw_cost_event_payload(
             started_running_at=current_run.started_running_at,
             cost_per_hour_cents=_run_cost_per_hour_cents(current_run),

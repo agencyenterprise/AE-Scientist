@@ -26,6 +26,7 @@ export function ResearchBoardTable({ researchRuns }: ResearchBoardTableProps) {
       createdAt: formatRelativeTime(run.createdAt),
       artifactsCount: run.artifactsCount,
       errorMessage: run.errorMessage,
+      parentRunId: run.parentRunId,
     }));
   }, [researchRuns]);
 

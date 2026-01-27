@@ -84,6 +84,10 @@ class ResearchRunListItem(BaseModel):
     artifacts_count: int = Field(0, description="Number of artifacts produced by this run")
     error_message: Optional[str] = Field(None, description="Error message if the run failed")
     conversation_id: int = Field(..., description="ID of the associated conversation")
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Parent run ID if this run's conversation was seeded from a previous run",
+    )
 
 
 class ResearchRunListResponse(BaseModel):
@@ -110,12 +114,17 @@ class ResearchRunInfo(ResearchRunSummary):
         None,
         description="Last termination workflow error, if any.",
     )
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Parent run ID if this run's conversation was seeded from a previous run",
+    )
 
     @staticmethod
     def from_db_record(
         *,
         run: ResearchPipelineRun,
         termination: ResearchPipelineRunTermination | None,
+        parent_run_id: Optional[str] = None,
     ) -> "ResearchRunInfo":
         termination_status: Literal["none", "requested", "in_progress", "terminated", "failed"] = (
             "none"
@@ -154,6 +163,7 @@ class ResearchRunInfo(ResearchRunSummary):
             start_deadline_at=run.start_deadline_at.isoformat() if run.start_deadline_at else None,
             termination_status=termination_status,
             termination_last_error=termination_last_error,
+            parent_run_id=parent_run_id,
         )
 
 
@@ -424,6 +434,15 @@ class TreeVizItem(BaseModel):
         )
 
 
+class ChildConversationInfo(BaseModel):
+    """Brief info about a child conversation seeded from a run."""
+
+    conversation_id: int = Field(..., description="Child conversation ID")
+    title: str = Field(..., description="Child conversation title")
+    created_at: str = Field(..., description="ISO timestamp when created")
+    status: str = Field(..., description="Conversation status")
+
+
 class ResearchRunDetailsResponse(BaseModel):
     run: ResearchRunInfo = Field(..., description="Metadata describing the run")
     stage_progress: List[ResearchRunStageProgress] = Field(
@@ -460,6 +479,10 @@ class ResearchRunDetailsResponse(BaseModel):
     stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
         default_factory=list,
         description="Windows indicating when each stage became skippable.",
+    )
+    child_conversations: List[ChildConversationInfo] = Field(
+        default_factory=list,
+        description="Conversations that were seeded from this run",
     )
 
 

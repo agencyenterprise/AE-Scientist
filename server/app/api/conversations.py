@@ -240,6 +240,7 @@ def convert_db_to_api_response(
         manual_title=db_conversation.manual_title,
         manual_hypothesis=db_conversation.manual_hypothesis,
         research_runs=research_runs or [],
+        parent_run_id=db_conversation.parent_run_id,
     )
 
 

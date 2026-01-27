@@ -54,6 +54,7 @@ class FullConversation(NamedTuple):
     manual_title: Optional[str]
     manual_hypothesis: Optional[str]
     status: str  # Conversation status: 'draft' or 'with_research'
+    parent_run_id: Optional[str]  # Run ID if this conversation was seeded from a run
 
 
 class DashboardConversation(NamedTuple):
@@ -82,6 +83,15 @@ class UrlConversationBrief(NamedTuple):
     title: str
     updated_at: datetime
     url: str
+
+
+class ChildConversationBrief(NamedTuple):
+    """Brief info about a child conversation seeded from a run."""
+
+    id: int
+    title: str
+    created_at: datetime
+    status: str
 
 
 class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
@@ -126,7 +136,7 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 await cursor.execute(
                     """
                     SELECT c.id, c.url, c.title, c.import_date, c.imported_chat,
-                           c.created_at, c.updated_at, c.status,
+                           c.created_at, c.updated_at, c.status, c.parent_run_id,
                            u.id as user_id, u.name as user_name, u.email as user_email,
                            EXISTS(
                                SELECT 1 FROM file_attachments fa
@@ -178,6 +188,7 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
             manual_title=row.get("manual_title"),
             manual_hypothesis=row.get("manual_hypothesis"),
             status=row["status"],
+            parent_run_id=row.get("parent_run_id"),
         )
 
     async def get_conversation_id_by_url(self, url: str) -> Optional[int]:
@@ -219,6 +230,31 @@ class ConversationsMixin(ConnectionProvider):  # pylint: disable=abstract-method
             return None
 
         return row.get("parent_run_id")
+
+    async def list_child_conversations_by_run_id(self, run_id: str) -> List[ChildConversationBrief]:
+        """List conversations that were seeded from the given run_id."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, title, created_at, status
+                    FROM conversations
+                    WHERE parent_run_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (run_id,),
+                )
+                rows = await cursor.fetchall() or []
+
+        return [
+            ChildConversationBrief(
+                id=row["id"],
+                title=row["title"],
+                created_at=row["created_at"],
+                status=row["status"],
+            )
+            for row in rows
+        ]
 
     async def list_conversations_by_url(self, url: str) -> List[UrlConversationBrief]:
         """List conversations with the same URL, newest first, for conflict resolution UI."""

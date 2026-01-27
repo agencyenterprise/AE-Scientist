@@ -4,7 +4,7 @@ import { ModelSelector } from "@/features/model-selector/components/ModelSelecto
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import { useState } from "react";
-import { DollarSign, Settings } from "lucide-react";
+import { DollarSign, GitBranch, Settings } from "lucide-react";
 
 import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
@@ -89,18 +89,32 @@ export function ConversationHeader({
 
   return (
     <div className="flex flex-row items-center justify-between gap-4 mb-4 md:mb-6">
-      <TitleEditor
-        title={conversation.title}
-        isEditing={isEditingTitle}
-        editValue={editTitle}
-        isUpdating={isUpdatingTitle}
-        isDeleting={isDeleting}
-        onEditValueChange={setEditTitle}
-        onStartEdit={handleStartEdit}
-        onSave={handleSaveTitle}
-        onCancel={handleCancelEdit}
-        onDelete={() => setShowDeleteConfirm(true)}
-      />
+      <div className="flex flex-col gap-1">
+        <TitleEditor
+          title={conversation.title}
+          isEditing={isEditingTitle}
+          editValue={editTitle}
+          isUpdating={isUpdatingTitle}
+          isDeleting={isDeleting}
+          onEditValueChange={setEditTitle}
+          onStartEdit={handleStartEdit}
+          onSave={handleSaveTitle}
+          onCancel={handleCancelEdit}
+          onDelete={() => setShowDeleteConfirm(true)}
+        />
+        {conversation.parent_run_id && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+            <GitBranch className="w-3 h-3" />
+            <span>Seeded from</span>
+            <a
+              href={`/research/${conversation.parent_run_id}`}
+              className="text-emerald-400 hover:text-emerald-300 hover:underline"
+            >
+              parent run
+            </a>
+          </div>
+        )}
+      </div>
 
       {/* Model Selector and AI Config */}
       <div className="flex items-center gap-2">

@@ -1862,6 +1862,32 @@ export interface components {
              */
             checkout_url: string;
         };
+        /**
+         * ChildConversationInfo
+         * @description Brief info about a child conversation seeded from a run.
+         */
+        ChildConversationInfo: {
+            /**
+             * Conversation Id
+             * @description Child conversation ID
+             */
+            conversation_id: number;
+            /**
+             * Title
+             * @description Child conversation title
+             */
+            title: string;
+            /**
+             * Created At
+             * @description ISO timestamp when created
+             */
+            created_at: string;
+            /**
+             * Status
+             * @description Conversation status
+             */
+            status: string;
+        };
         /** CodexEventPayload */
         CodexEventPayload: {
             /** Run Id */
@@ -2155,6 +2181,11 @@ export interface components {
              * @description Research pipeline runs associated with the conversation
              */
             research_runs?: components["schemas"]["ResearchRunSummary"][];
+            /**
+             * Parent Run Id
+             * @description Run ID of the parent research run if this conversation was seeded from a run
+             */
+            parent_run_id?: string | null;
         };
         /**
          * ConversationUpdate
@@ -3645,6 +3676,11 @@ export interface components {
              * @description Windows indicating when each stage became skippable.
              */
             stage_skip_windows?: components["schemas"]["ResearchRunStageSkipWindow"][];
+            /**
+             * Child Conversations
+             * @description Conversations that were seeded from this run
+             */
+            child_conversations?: components["schemas"]["ChildConversationInfo"][];
         };
         /** ResearchRunErrorEvent */
         ResearchRunErrorEvent: {
@@ -3852,6 +3888,11 @@ export interface components {
              * @description Last termination workflow error, if any.
              */
             termination_last_error?: string | null;
+            /**
+             * Parent Run Id
+             * @description Parent run ID if this run's conversation was seeded from a previous run
+             */
+            parent_run_id?: string | null;
         };
         /** ResearchRunInitialEvent */
         ResearchRunInitialEvent: {
@@ -3899,6 +3940,11 @@ export interface components {
             code_executions?: {
                 [key: string]: components["schemas"]["ResearchRunCodeExecution"];
             };
+            /**
+             * Child Conversations
+             * @description Conversations that were seeded from this run.
+             */
+            child_conversations?: components["schemas"]["ChildConversationInfo"][];
         };
         /** ResearchRunInitializationStatusData */
         ResearchRunInitializationStatusData: {
@@ -4008,6 +4054,11 @@ export interface components {
              * @description ID of the associated conversation
              */
             conversation_id: number;
+            /**
+             * Parent Run Id
+             * @description Parent run ID if this run's conversation was seeded from a previous run
+             */
+            parent_run_id?: string | null;
         };
         /**
          * ResearchRunListResponse

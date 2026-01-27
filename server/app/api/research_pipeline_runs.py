@@ -16,6 +16,7 @@ from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ArtifactPresignedUrlResponse,
+    ChildConversationInfo,
     LlmReviewNotFoundResponse,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
@@ -531,8 +532,22 @@ async def get_research_run_details(
     ]
     termination = await db.get_research_pipeline_run_termination(run_id=run_id)
 
+    # Get child conversations seeded from this run
+    child_convs = await db.list_child_conversations_by_run_id(run_id=run_id)
+    child_conversations = [
+        ChildConversationInfo(
+            conversation_id=c.id,
+            title=c.title,
+            created_at=c.created_at.isoformat(),
+            status=c.status,
+        )
+        for c in child_convs
+    ]
+
     return ResearchRunDetailsResponse(
-        run=ResearchRunInfo.from_db_record(run=run, termination=termination),
+        run=ResearchRunInfo.from_db_record(
+            run=run, termination=termination, parent_run_id=conversation.parent_run_id
+        ),
         stage_progress=stage_events,
         logs=log_events,
         substage_events=substage_events,
@@ -543,6 +558,7 @@ async def get_research_run_details(
         paper_generation_progress=paper_gen_events,
         tree_viz=tree_viz,
         stage_skip_windows=stage_skip_windows,
+        child_conversations=child_conversations,
     )
 
 

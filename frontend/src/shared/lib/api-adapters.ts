@@ -191,6 +191,7 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     errorMessage: apiRun.error_message,
     conversationId: apiRun.conversation_id,
     conversationUrl: apiRun.conversation_url,
+    parentRunId: apiRun.parent_run_id,
   };
 }
 

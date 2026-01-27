@@ -66,6 +66,7 @@ from app.models.llm_prompts import (
 from app.models.llm_token_usage import LlmTokenUsage, LLMTokenUsageCost
 from app.models.research_pipeline import (
     ArtifactPresignedUrlResponse,
+    ChildConversationInfo,
     LlmReviewNotFoundResponse,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
@@ -112,6 +113,7 @@ __all__ = [
     "ResearchRunDetailsResponse",
     "ResearchRunCodeExecution",
     "ResearchRunListItem",
+    "ChildConversationInfo",
     "ResearchRunListResponse",
     "TreeVizItem",
     "LlmReviewResponse",
