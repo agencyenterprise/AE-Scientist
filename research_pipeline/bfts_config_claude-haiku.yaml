@@ -31,6 +31,8 @@ writeup:
   temperature: 1.0
   writeup_retries: 3
   num_cite_rounds: 5
+  max_refinement_rounds: 3
+  page_limit: 8
 
 review:
   model: claude-haiku-4-5
