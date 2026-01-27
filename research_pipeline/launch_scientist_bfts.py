@@ -744,6 +744,7 @@ def run_writeup_stage(
                 max_refinement_rounds=writeup_cfg.max_refinement_rounds,
                 page_limit=writeup_cfg.page_limit,
                 codex_timeout_seconds=codex_timeout_seconds,
+                writeup_attempt=attempt,
                 citations_text=citations_text,
                 event_callback=event_callback,
                 run_id=run_id,

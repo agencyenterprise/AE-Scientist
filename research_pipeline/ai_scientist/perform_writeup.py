@@ -387,6 +387,7 @@ def perform_writeup(
     max_refinement_rounds: int,
     page_limit: int,
     codex_timeout_seconds: int,
+    writeup_attempt: int,
     citations_text: str | None = None,
     event_callback: Optional[Callable[[BaseEvent], None]] = None,
     run_id: Optional[str] = None,
@@ -406,6 +407,7 @@ def perform_writeup(
         max_refinement_rounds: Maximum number of VLM review + Codex refinement cycles
         page_limit: Target page limit for the paper
         codex_timeout_seconds: Timeout for each Codex run
+        writeup_attempt: Attempt number for unique log filenames (0-indexed)
         citations_text: Pre-gathered citations (optional)
         event_callback: Callback for emitting progress events
         run_id: Run ID for event tracking
@@ -580,8 +582,8 @@ def perform_writeup(
         runner = CodexCliRunner(
             workspace_dir=base_path,
             research_pipeline_root=research_pipeline_root,
-            session_log_name="codex_paper_writeup.log",
-            events_log_name="codex_paper_writeup_events.jsonl",
+            session_log_name=f"codex_paper_writeup_attempt_{writeup_attempt}.log",
+            events_log_name=f"codex_paper_writeup_attempt_{writeup_attempt}_events.jsonl",
             timeout_seconds=codex_timeout_seconds,
             model=model,
             event_callback=event_callback if event_callback else lambda _: None,
@@ -671,8 +673,8 @@ def perform_writeup(
             refinement_runner = CodexCliRunner(
                 workspace_dir=base_path,
                 research_pipeline_root=research_pipeline_root,
-                session_log_name=f"codex_paper_refinement_{version}.log",
-                events_log_name=f"codex_paper_refinement_{version}_events.jsonl",
+                session_log_name=f"codex_paper_refinement_attempt_{writeup_attempt}_v{version}.log",
+                events_log_name=f"codex_paper_refinement_attempt_{writeup_attempt}_v{version}_events.jsonl",
                 timeout_seconds=codex_timeout_seconds,
                 model=model,
                 event_callback=event_callback if event_callback else lambda _: None,
@@ -747,6 +749,12 @@ if __name__ == "__main__":
         default=3600,
         help="Timeout in seconds for each Codex run.",
     )
+    parser.add_argument(
+        "--writeup-attempt",
+        type=int,
+        default=0,
+        help="Attempt number for unique log filenames.",
+    )
     args = parser.parse_args()
 
     try:
@@ -759,6 +767,7 @@ if __name__ == "__main__":
             max_refinement_rounds=args.max_refinement_rounds,
             page_limit=args.page_limit,
             codex_timeout_seconds=args.codex_timeout,
+            writeup_attempt=args.writeup_attempt,
         )
         if not success:
             logger.error("Writeup process did not complete successfully.")
