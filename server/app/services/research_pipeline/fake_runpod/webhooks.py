@@ -42,3 +42,9 @@ class FakeRunPodWebhookPublisher:
 
     def publish_review_completed(self, payload: dict[str, Any]) -> None:
         self._publish("review_completed", payload)
+
+    def publish_figure_reviews(self, payload: dict[str, Any]) -> None:
+        self._publish("figure_reviews", payload)
+
+    def publish_token_usage(self, payload: dict[str, Any]) -> None:
+        self._publish("token_usage", payload)

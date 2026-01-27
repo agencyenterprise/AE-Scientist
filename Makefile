@@ -34,8 +34,10 @@ dev-frontend:
 dev-server:
 	$(MAKE) -C server dev
 
+# Usage: make fake-runpod [SPEED=N] where N is the speed multiplier (default: 1)
+SPEED ?= 1
 fake-runpod:
-	$(MAKE) -C server fake-runpod
+	$(MAKE) -C server fake-runpod SPEED=$(SPEED)
 
 # OpenAPI export and TS type generation
 export-openapi:
