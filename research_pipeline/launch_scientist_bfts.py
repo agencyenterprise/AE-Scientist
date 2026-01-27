@@ -707,8 +707,9 @@ def run_plot_aggregation(
 def run_writeup_stage(
     writeup_cfg: WriteupConfig,
     reports_base: str,
-    run_dir_path: Path | None,
+    run_dir_path: Path,
     artifact_callback: ArtifactCallback,
+    codex_timeout_seconds: int,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> None:
@@ -719,7 +720,7 @@ def run_writeup_stage(
     citation_model = writeup_cfg.citation_model or writeup_model
     base_path = Path(reports_base)
     logs_dir = base_path / "logs"
-    run_name = run_dir_path.name if run_dir_path is not None else None
+    run_dir_name = run_dir_path.name
 
     citations_text = gather_citations(
         base_path=base_path,
@@ -727,7 +728,7 @@ def run_writeup_stage(
         model=citation_model,
         temperature=writeup_cfg.temperature,
         num_cite_rounds=num_cite_rounds,
-        run_dir_name=run_name or "",
+        run_dir_name=run_dir_name,
     )
     writeup_success = False
     last_error: Exception | None = None
@@ -737,11 +738,14 @@ def run_writeup_stage(
             writeup_success = perform_writeup(
                 base_folder=reports_base,
                 model=writeup_model,
-                page_limit=8,
-                citations_text=citations_text,
-                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                 temperature=writeup_cfg.temperature,
-                artifact_callback=artifact_callback,
+                run_dir_name=run_dir_name,
+                num_cite_rounds=num_cite_rounds,
+                max_refinement_rounds=writeup_cfg.max_refinement_rounds,
+                page_limit=writeup_cfg.page_limit,
+                codex_timeout_seconds=codex_timeout_seconds,
+                writeup_attempt=attempt,
+                citations_text=citations_text,
                 event_callback=event_callback,
                 run_id=run_id,
             )
@@ -758,9 +762,6 @@ def run_writeup_stage(
         if last_error is not None:
             raise RuntimeError(error_message) from last_error
         raise RuntimeError(error_message)
-
-    if run_dir_path is None:
-        return
 
     run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
     latex_path = run_out_dir / "latex"
@@ -1050,6 +1051,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     reports_base=reports_base,
                     run_dir_path=run_dir_path,
                     artifact_callback=artifact_callback,
+                    codex_timeout_seconds=base_cfg.exec.timeout,
                     event_callback=event_callback,
                     run_id=run_id,
                 )
