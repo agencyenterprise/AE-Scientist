@@ -14,6 +14,7 @@ interface ChatMessageListProps {
   streamingContent: string;
   statusMessage: string;
   isVisible: boolean;
+  isPollingEmptyMessage: boolean;
 }
 
 export function ChatMessageList({
@@ -23,6 +24,7 @@ export function ChatMessageList({
   streamingContent,
   statusMessage,
   isVisible,
+  isPollingEmptyMessage,
 }: ChatMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +53,17 @@ export function ChatMessageList({
     };
   }, [isVisible]);
 
+  // Detect if last message is empty assistant message being polled
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const isLastMessageEmptyAssistant =
+    lastMessage &&
+    lastMessage.role === "assistant" &&
+    !lastMessage.content.trim() &&
+    isPollingEmptyMessage;
+
+  // Filter out empty assistant message if we're showing loading state for it
+  const messagesToRender = isLastMessageEmptyAssistant ? messages.slice(0, -1) : messages;
+
   return (
     <div
       className={`flex-1 overflow-y-auto px-4 py-4 ${messages.length > 0 || isStreaming ? "space-y-4" : ""} min-h-0 max-w-full overflow-x-hidden`}
@@ -60,9 +73,14 @@ export function ChatMessageList({
       ) : messages.length === 0 ? (
         <ChatEmptyState />
       ) : (
-        messages.map((message, index) => (
+        messagesToRender.map((message, index) => (
           <ChatMessage key={`${message.sequence_number}-${index}`} message={message} />
         ))
+      )}
+
+      {/* Show loading state for empty assistant message being polled */}
+      {isLastMessageEmptyAssistant && (
+        <ChatStreamingMessage statusMessage="Generating response..." streamingContent="" />
       )}
 
       {/* Streaming content */}

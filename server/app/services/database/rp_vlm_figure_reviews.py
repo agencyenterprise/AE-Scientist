@@ -53,12 +53,8 @@ class ResearchPipelineVlmFigureReviewsMixin(ConnectionProvider):
             async with conn.cursor(row_factory=dict_row) as cursor:
                 placeholders = []
                 flat_values = []
-                for i, review in enumerate(reviews):
-                    offset = i * 8
-                    placeholders.append(
-                        f"(${offset+1}, ${offset+2}, ${offset+3}, ${offset+4}, "
-                        f"${offset+5}, ${offset+6}, ${offset+7}, ${offset+8})"
-                    )
+                for review in reviews:
+                    placeholders.append("(%s, %s, %s, %s, %s, %s, %s, %s)")
                     flat_values.extend(
                         [
                             run_id,

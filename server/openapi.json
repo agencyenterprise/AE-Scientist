@@ -4000,7 +4000,6 @@
         "properties": {
           "message": {
             "type": "string",
-            "minLength": 1,
             "title": "Message",
             "description": "User message content"
           },
@@ -4023,6 +4022,12 @@
             "type": "array",
             "title": "Attachment Ids",
             "description": "List of file attachment IDs to include with this message"
+          },
+          "skip_user_message_creation": {
+            "type": "boolean",
+            "title": "Skip User Message Creation",
+            "description": "If True, skip creating a new user message (for auto-trigger of existing messages)",
+            "default": false
           }
         },
         "type": "object",

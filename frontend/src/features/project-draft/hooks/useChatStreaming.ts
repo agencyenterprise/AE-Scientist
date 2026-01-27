@@ -73,7 +73,8 @@ export function useChatStreaming({
 
   const sendMessage = useCallback(
     async (inputMessage: string): Promise<void> => {
-      if (!inputMessage.trim() || isStreaming) return;
+      // Allow empty message for auto-trigger, but not if already streaming
+      if (isStreaming) return;
 
       // Use the current model and provider (set by ModelSelector)
       if (!currentModel || !currentProvider) {
@@ -82,6 +83,8 @@ export function useChatStreaming({
       }
 
       const userMessage = inputMessage.trim();
+      const isAutoTrigger = !userMessage; // Empty message means auto-trigger for existing message
+
       // Consume pending files
       const currentFiles = consumePendingFiles();
       const attachmentIds: number[] = currentFiles.map(file => file.id);
@@ -89,7 +92,7 @@ export function useChatStreaming({
       setError(null);
       setIsStreaming(true);
       setStreamingContent("");
-      setStatusMessage("Sending message...");
+      setStatusMessage(isAutoTrigger ? "Generating response..." : "Sending message...");
 
       // Reset textarea height when sending message
       if (inputRef?.current) {
@@ -106,18 +109,20 @@ export function useChatStreaming({
         created_at: new Date().toISOString(),
       }));
 
-      // Optimistically add user message
-      const optimisticUserMessage: ChatMessage = {
-        role: "user",
-        content: userMessage,
-        sequence_number: messages.length + 1,
-        created_at: new Date().toISOString(),
-        sent_by_user_id: user.id,
-        sent_by_user_name: user.name,
-        sent_by_user_email: user.email,
-        attachments: messageAttachments,
-      };
-      setMessages(prev => [...prev, optimisticUserMessage]);
+      // Optimistically add user message (skip for auto-trigger since message already exists)
+      if (!isAutoTrigger) {
+        const optimisticUserMessage: ChatMessage = {
+          role: "user",
+          content: userMessage,
+          sequence_number: messages.length + 1,
+          created_at: new Date().toISOString(),
+          sent_by_user_id: user.id,
+          sent_by_user_name: user.name,
+          sent_by_user_email: user.email,
+          attachments: messageAttachments,
+        };
+        setMessages(prev => [...prev, optimisticUserMessage]);
+      }
 
       // Setup timeout for streaming connection
       const controller = new AbortController();
@@ -136,10 +141,11 @@ export function useChatStreaming({
               })
             ),
             body: JSON.stringify({
-              message: userMessage,
+              message: userMessage || "", // Empty string for auto-trigger
               llm_model: currentModel,
               llm_provider: currentProvider,
               attachment_ids: attachmentIds,
+              skip_user_message_creation: isAutoTrigger,
             } as ChatRequest),
             signal: controller.signal,
           }
@@ -263,9 +269,11 @@ export function useChatStreaming({
         // eslint-disable-next-line no-console
         console.error("Streaming error:", err);
 
-        // Remove optimistic message on error and restore files
-        setMessages(prev => prev.slice(0, -1));
-        restorePendingFiles(currentFiles);
+        // Remove optimistic message on error and restore files (skip if auto-trigger)
+        if (!isAutoTrigger) {
+          setMessages(prev => prev.slice(0, -1));
+          restorePendingFiles(currentFiles);
+        }
       } finally {
         // Always clear timeout
         clearTimeout(timeoutId);

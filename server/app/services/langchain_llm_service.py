@@ -169,10 +169,10 @@ class LangChainLLMService(BaseLLMService, ABC):
     def _text_content_block(text: str) -> List[Union[str, Dict[str, Any]]]:
         return [{"type": "text", "text": str(text)}]
 
-    def _message_to_text(self, *, message: AIMessage) -> str:
+    def _message_to_text(self, *, message: AIMessage, strip: bool = True) -> str:
         content: Any = message.content
         if isinstance(content, str):
-            return content.strip()
+            return content.strip() if strip else content
         if isinstance(content, list):
             parts: List[str] = []
             for item in content:
@@ -180,7 +180,8 @@ class LangChainLLMService(BaseLLMService, ABC):
                     text_value = item.get("text", "")
                     if isinstance(text_value, str):
                         parts.append(text_value)
-            return "".join(parts).strip()
+            joined = "".join(parts)
+            return joined.strip() if strip else joined
         return str(content)
 
     def _format_text_attachments(self, *, text_files: List[LLMFileAttachmentData]) -> str:
@@ -614,28 +615,70 @@ class LangChainChatWithIdeaStream:
         try:
             yield StreamStatusEvent("status", ChatStatus.ANALYZING_REQUEST.value)
             while True:
-                response = await model.ainvoke(input=messages)
-                if not isinstance(response, AIMessage):
-                    raise TypeError(
-                        f"chat model returned unsupported message type: {type(response).__name__}"
+                # Accumulate chunks to build complete response and check for tool calls
+                accumulated_message: BaseMessage | None = None
+                streamed_content_chunks: List[str] = []
+                has_started_streaming = False
+
+                async for chunk in model.astream(input=messages):
+                    if not isinstance(chunk, AIMessageChunk):
+                        continue
+
+                    # Accumulate the message
+                    if accumulated_message is None:
+                        accumulated_message = chunk
+                    else:
+                        accumulated_message = cast(BaseMessage, accumulated_message + chunk)
+
+                    # Track token usage from chunks with metadata
+                    if hasattr(chunk, "usage_metadata") and chunk.usage_metadata:
+                        metadata = chunk.usage_metadata
+                        input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
+                        cached_input_tokens = int(
+                            cast(Any, metadata.get("cached_input_tokens", 0)) or 0
+                        )
+                        output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
+                        if input_tokens > 0 or output_tokens > 0:
+                            await self.db.create_llm_token_usage(
+                                conversation_id=conversation_id,
+                                provider=llm_model.provider,
+                                model=llm_model.id,
+                                input_tokens=input_tokens,
+                                cached_input_tokens=cached_input_tokens,
+                                output_tokens=output_tokens,
+                            )
+
+                    # Check if we have tool calls - if so, don't stream content
+                    tool_calls: List[Dict[str, Any]] = self._normalize_tool_calls(
+                        response=accumulated_message
                     )
-                metadata = response.usage_metadata
-                if metadata:
-                    input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
-                    cached_input_tokens = int(
-                        cast(Any, metadata.get("cached_input_tokens", 0)) or 0
-                    )
-                    output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
-                    await self.db.create_llm_token_usage(
-                        conversation_id=conversation_id,
-                        provider=llm_model.provider,
-                        model=llm_model.id,
-                        input_tokens=input_tokens,
-                        cached_input_tokens=cached_input_tokens,
-                        output_tokens=output_tokens,
-                    )
-                tool_calls: List[Dict[str, Any]] = self._normalize_tool_calls(response=response)
+                    if tool_calls:
+                        # Tool calls detected, wait for full response and process tools
+                        continue
+
+                    # No tool calls - stream content as it arrives
+                    if chunk.content:
+                        # Don't strip individual chunks to preserve spaces between words
+                        content_text = self.service._message_to_text(message=chunk, strip=False)
+                        # Remove thinking tags but preserve whitespace
+                        content_text = THINKING_TAG_PATTERN.sub("", content_text)
+                        if content_text:
+                            if not has_started_streaming:
+                                yield StreamStatusEvent(
+                                    "status", ChatStatus.GENERATING_RESPONSE.value
+                                )
+                                has_started_streaming = True
+                            streamed_content_chunks.append(content_text)
+                            yield StreamContentEvent("content", content_text)
+
+                # Stream completed, check accumulated message
+                if accumulated_message is None:
+                    break
+
+                # Check for tool calls in final accumulated message
+                tool_calls = self._normalize_tool_calls(response=accumulated_message)
                 if tool_calls:
+                    # Process tool calls and continue loop
                     tool_messages: List[ToolMessage] = []
                     async for event in self._process_tool_calls(
                         tool_calls=tool_calls,
@@ -647,19 +690,16 @@ class LangChainChatWithIdeaStream:
                             tool_messages = event.tool_results
                         else:
                             yield event
-                    messages.append(response)
+                    messages.append(accumulated_message)
                     for tool_message in tool_messages:
                         messages.append(tool_message)
                     continue
 
-                final_message = response
-                final_text = self.service._message_to_text(message=final_message)
-                final_text = self.service.strip_reasoning_tags(text=final_text)
+                # No tool calls - final text response
+                final_text = "".join(streamed_content_chunks).strip()
                 if final_text:
                     assistant_response = final_text
-                    yield StreamStatusEvent("status", ChatStatus.GENERATING_RESPONSE.value)
-                    yield StreamContentEvent("content", final_text)
-                messages.append(final_message)
+                messages.append(accumulated_message)
                 break
 
             yield StreamStatusEvent("status", ChatStatus.DONE.value)

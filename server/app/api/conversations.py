@@ -1052,7 +1052,7 @@ async def seed_idea_from_run(
 
             logger.info(
                 f"Created initial improvement message for seeded idea {new_idea_id} "
-                f"based on review from run {run_id}. Frontend will auto-trigger streaming response."
+                f"based on review from run {run_id}. Frontend will auto-trigger SSE streaming."
             )
 
         logger.info(

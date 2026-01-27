@@ -1763,6 +1763,12 @@ export interface components {
              * @description List of file attachment IDs to include with this message
              */
             attachment_ids?: number[];
+            /**
+             * Skip User Message Creation
+             * @description If True, skip creating a new user message (for auto-trigger of existing messages)
+             * @default false
+             */
+            skip_user_message_creation: boolean;
         };
         /**
          * ChatStatus

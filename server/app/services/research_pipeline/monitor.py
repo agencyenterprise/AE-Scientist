@@ -231,6 +231,8 @@ class ResearchPipelineMonitor:
             for run in runs:
                 if run.status == "pending":
                     await self._handle_pending_run(db, run, now)
+                elif run.status == "initializing":
+                    await self._handle_pending_run(db, run, now)
                 elif run.status == "running":
                     await self._handle_running_run(db, run, now)
         except Exception as exc:  # noqa: BLE001

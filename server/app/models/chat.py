@@ -30,11 +30,15 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for sending a chat message."""
 
-    message: str = Field(..., description="User message content", min_length=1)
+    message: str = Field(..., description="User message content")
     llm_provider: str = Field(..., description="LLM provider to use", min_length=1)
     llm_model: str = Field(..., description="LLM model to use", min_length=1)
     attachment_ids: List[int] = Field(
         default_factory=list, description="List of file attachment IDs to include with this message"
+    )
+    skip_user_message_creation: bool = Field(
+        default=False,
+        description="If True, skip creating a new user message (for auto-trigger of existing messages)",
     )
 
 
