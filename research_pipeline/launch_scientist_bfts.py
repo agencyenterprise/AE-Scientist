@@ -1080,7 +1080,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     artifact_type="workspace_archive",
                     path=Path(base_cfg.workspace_dir),
                     packaging="zip",
-                    archive_name=f"{run_dir_path.name}-workspace.zip",
+                    archive_name="workspace.zip",
                     exclude_dir_names=(".ai_scientist_venv", ".venv"),
                 )
             )
