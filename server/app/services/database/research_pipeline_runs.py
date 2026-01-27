@@ -92,6 +92,7 @@ class ResearchPipelineRun(NamedTuple):
     last_heartbeat_at: Optional[datetime]
     heartbeat_failures: int
     last_billed_at: datetime
+    webhook_token_hash: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -118,6 +119,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         last_billed_at: datetime,
         container_disk_gb: int,
         volume_disk_gb: int,
+        webhook_token_hash: str,
         started_running_at: Optional[datetime] = None,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
@@ -138,10 +140,11 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         last_billed_at,
                         container_disk_gb,
                         volume_disk_gb,
+                        webhook_token_hash,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -154,6 +157,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         last_billed_at,
                         container_disk_gb,
                         volume_disk_gb,
+                        webhook_token_hash,
                         now,
                         now,
                     ),
@@ -417,6 +421,20 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             return None
         return int(result["created_by_user_id"])
 
+    async def get_run_webhook_token_hash(self, run_id: str) -> Optional[str]:
+        query = """
+            SELECT webhook_token_hash
+            FROM research_pipeline_runs
+            WHERE run_id = %s
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (run_id,))
+                result = await cursor.fetchone()
+        if not result:
+            return None
+        return result.get("webhook_token_hash")
+
     async def get_run_idea_data(
         self, run_id: str, conn: Optional[AsyncConnection[Any]] = None
     ) -> Optional[dict]:
@@ -484,6 +502,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             last_heartbeat_at=row.get("last_heartbeat_at"),
             heartbeat_failures=row.get("heartbeat_failures", 0),
             last_billed_at=row.get("last_billed_at") or row["created_at"],
+            webhook_token_hash=row.get("webhook_token_hash"),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

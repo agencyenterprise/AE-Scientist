@@ -13,6 +13,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
+from ai_scientist.api_types import TokenUsageEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 RUN_ID = os.environ.get("RUN_ID")
@@ -98,13 +99,13 @@ def save_webhook_cost_track(
         # Note: Server will look up conversation_id from run_id
         webhook_client.publish(
             kind="token_usage",
-            payload={
-                "provider": provider,
-                "model": model_name,
-                "input_tokens": input_tokens,
-                "cached_input_tokens": cached_input_tokens,
-                "output_tokens": output_tokens,
-            },
+            payload=TokenUsageEvent(
+                provider=provider,
+                model=model_name,
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
+            ),
         )
     except Exception:
         logging.exception("Failed to publish token usage webhook (non-fatal)")

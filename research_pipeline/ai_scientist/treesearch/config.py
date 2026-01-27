@@ -55,14 +55,8 @@ def apply_log_level(*, level_name: str) -> None:
             "urllib3.connectionpool",
             "fsspec",
             "fsspec.spec",
-            "s3fs",
-            "s3transfer",
-            "s3transfer.tasks",
-            "s3transfer.utils",
             "datasets",
             "huggingface_hub",
-            "boto3",
-            "botocore",
         ]
         for name in noisy_loggers:
             lgr = logging.getLogger(name)

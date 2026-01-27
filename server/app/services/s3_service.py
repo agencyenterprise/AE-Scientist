@@ -185,13 +185,13 @@ class S3Service:
             ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
             return ascii_only
 
-    def generate_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
+    def generate_download_url(self, s3_key: str, expires_in: int) -> str:
         """
         Generate a temporary signed URL for downloading a file.
 
         Args:
             s3_key: S3 key for the file
-            expires_in: URL expiration time in seconds (default: 1 hour)
+            expires_in: URL expiration time in seconds
 
         Returns:
             Temporary signed URL for file download
@@ -212,6 +212,76 @@ class S3Service:
         except ClientError as e:
             logger.error(f"Failed to generate download URL: {e}")
             raise Exception(f"Failed to generate download URL: {str(e)}") from e
+
+    def generate_upload_url(
+        self, s3_key: str, content_type: str, expires_in: int, metadata: dict[str, str]
+    ) -> str:
+        """
+        Generate a temporary signed URL for uploading a file.
+
+        Args:
+            s3_key: S3 key for the file
+            content_type: MIME type of the file to upload
+            expires_in: URL expiration time in seconds
+            metadata: Metadata to attach to the uploaded object
+
+        Returns:
+            Temporary signed URL for file upload
+
+        Raises:
+            Exception: If URL generation fails
+        """
+        try:
+            sanitized_metadata = {
+                key: self._sanitize_ascii(value) for key, value in metadata.items()
+            }
+            params = {
+                "Bucket": self.bucket_name,
+                "Key": s3_key,
+                "ContentType": content_type,
+                "Metadata": sanitized_metadata,
+            }
+
+            url = self.s3_client.generate_presigned_url(
+                "put_object",
+                Params=params,
+                ExpiresIn=expires_in,
+            )
+
+            logger.debug(f"Generated upload URL for: {s3_key}")
+            return str(url)
+
+        except ClientError as e:
+            logger.error(f"Failed to generate upload URL: {e}")
+            raise Exception(f"Failed to generate upload URL: {str(e)}") from e
+
+    def list_objects(self, prefix: str) -> list[dict[str, str | int]]:
+        """
+        List objects in S3 with a given prefix.
+
+        Args:
+            prefix: S3 key prefix to filter objects
+
+        Returns:
+            List of objects with key, size, and last_modified
+        """
+        try:
+            result = []
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    result.append(
+                        {
+                            "key": obj["Key"],
+                            "size": obj["Size"],
+                            "last_modified": obj["LastModified"].isoformat(),
+                        }
+                    )
+            return result
+
+        except ClientError as e:
+            logger.error(f"Failed to list objects: {e}")
+            raise Exception(f"Failed to list objects: {str(e)}") from e
 
     def delete_file(self, s3_key: str) -> None:
         """
@@ -289,7 +359,7 @@ class S3Service:
         """
         try:
             # Generate temporary download URL
-            download_url = self.generate_download_url(s3_key)
+            download_url = self.generate_download_url(s3_key, expires_in=3600)
 
             # Download file content
             response = requests.get(download_url, timeout=30)

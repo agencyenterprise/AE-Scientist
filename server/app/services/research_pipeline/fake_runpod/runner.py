@@ -232,20 +232,12 @@ def _start_fake_runner(
     record: PodRecord,
     webhook_url: str,
     webhook_token: str,
-    aws_access_key_id: str,
-    aws_secret_access_key: str,
-    aws_region: str,
-    aws_s3_bucket_name: str,
 ) -> "FakeRunner":
     runner = FakeRunner(
         run_id=record.run_id,
         pod_id=record.id,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
     )
     thread = threading.Thread(target=runner.run, name=f"fake-runner-{record.run_id}", daemon=True)
     thread.start()
@@ -265,17 +257,12 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     run_id = parsed_env.get("RUN_ID")
     if not run_id:
         raise HTTPException(status_code=400, detail="RUN_ID missing from dockerStartCmd .env")
-    aws_access_key_id = parsed_env.get("AWS_ACCESS_KEY_ID")
-    aws_secret_access_key = parsed_env.get("AWS_SECRET_ACCESS_KEY")
-    aws_region = parsed_env.get("AWS_REGION")
-    aws_s3_bucket_name = parsed_env.get("AWS_S3_BUCKET_NAME")
-    if (
-        not aws_access_key_id
-        or not aws_secret_access_key
-        or not aws_region
-        or not aws_s3_bucket_name
-    ):
-        raise HTTPException(status_code=400, detail="AWS_* missing from dockerStartCmd .env")
+    telemetry_webhook_url = parsed_env.get("TELEMETRY_WEBHOOK_URL")
+    telemetry_webhook_token = parsed_env.get("TELEMETRY_WEBHOOK_TOKEN")
+    if not telemetry_webhook_url or not telemetry_webhook_token:
+        raise HTTPException(
+            status_code=400, detail="TELEMETRY_WEBHOOK_* missing from dockerStartCmd .env"
+        )
     pod_id = f"fake-{uuid.uuid4()}"
     created_at = time.time()
     record = PodRecord(
@@ -294,16 +281,10 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
         _pods[pod_id] = record
     logger.info("Created fake pod %s for run %s", pod_id, run_id)
     _schedule_ready_transition(record, delay_seconds=1)
-    webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
-    webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
     runner = _start_fake_runner(
         record=record,
-        webhook_url=webhook_url,
-        webhook_token=webhook_token,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
+        webhook_url=telemetry_webhook_url,
+        webhook_token=telemetry_webhook_token,
     )
     with _lock:
         _runners_by_run_id[record.run_id] = runner
@@ -514,19 +495,11 @@ class FakeRunner:
         pod_id: str,
         webhook_url: str,
         webhook_token: str,
-        aws_access_key_id: str,
-        aws_secret_access_key: str,
-        aws_region: str,
-        aws_s3_bucket_name: str,
     ) -> None:
         self._run_id = run_id
         self._pod_id = pod_id
         self._webhook_url = webhook_url
         self._webhook_token = webhook_token
-        self._aws_access_key_id = aws_access_key_id
-        self._aws_secret_access_key = aws_secret_access_key
-        self._aws_region = aws_region
-        self._aws_s3_bucket_name = aws_s3_bucket_name
         self._iterations_per_stage = 3
         self._stage_plan: list[tuple[str, int]] = [
             ("1_initial_implementation", 10),
@@ -1363,10 +1336,8 @@ class FakeRunner:
         logger.info("Uploading fake artifact %s", artifact_path)
         publisher = ArtifactPublisher(
             run_id=self._run_id,
-            aws_access_key_id=self._aws_access_key_id,
-            aws_secret_access_key=self._aws_secret_access_key,
-            aws_region=self._aws_region,
-            aws_s3_bucket_name=self._aws_s3_bucket_name,
+            webhook_base_url=self._webhook_url,
+            webhook_token=self._webhook_token,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
@@ -1396,10 +1367,8 @@ class FakeRunner:
         logger.info("Uploading fake plot artifact %s", plot_path)
         publisher = ArtifactPublisher(
             run_id=self._run_id,
-            aws_access_key_id=self._aws_access_key_id,
-            aws_secret_access_key=self._aws_secret_access_key,
-            aws_region=self._aws_region,
-            aws_s3_bucket_name=self._aws_s3_bucket_name,
+            webhook_base_url=self._webhook_url,
+            webhook_token=self._webhook_token,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(

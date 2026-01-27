@@ -1649,14 +1649,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/stage-progress": {
+    "/api/research-pipeline/events/{run_id}/stage-progress": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Stage Progress",
-        "operationId": "ingest_stage_progress_api_research_pipeline_events_stage_progress_post",
+        "operationId": "ingest_stage_progress_api_research_pipeline_events__run_id__stage_progress_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1694,14 +1703,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/substage-completed": {
+    "/api/research-pipeline/events/{run_id}/substage-completed": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Substage Completed",
-        "operationId": "ingest_substage_completed_api_research_pipeline_events_substage_completed_post",
+        "operationId": "ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1739,14 +1757,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/paper-generation-progress": {
+    "/api/research-pipeline/events/{run_id}/paper-generation-progress": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Paper Generation Progress",
-        "operationId": "ingest_paper_generation_progress_api_research_pipeline_events_paper_generation_progress_post",
+        "operationId": "ingest_paper_generation_progress_api_research_pipeline_events__run_id__paper_generation_progress_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1784,14 +1811,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/artifact-uploaded": {
+    "/api/research-pipeline/events/{run_id}/artifact-uploaded": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Artifact Uploaded",
-        "operationId": "ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post",
+        "operationId": "ingest_artifact_uploaded_api_research_pipeline_events__run_id__artifact_uploaded_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1829,14 +1865,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/review-completed": {
+    "/api/research-pipeline/events/{run_id}/review-completed": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Review Completed",
-        "operationId": "ingest_review_completed_api_research_pipeline_events_review_completed_post",
+        "operationId": "ingest_review_completed_api_research_pipeline_events__run_id__review_completed_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1874,14 +1919,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/substage-summary": {
+    "/api/research-pipeline/events/{run_id}/substage-summary": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Substage Summary",
-        "operationId": "ingest_substage_summary_api_research_pipeline_events_substage_summary_post",
+        "operationId": "ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1919,14 +1973,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/best-node-selection": {
+    "/api/research-pipeline/events/{run_id}/best-node-selection": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Best Node Selection",
-        "operationId": "ingest_best_node_selection_api_research_pipeline_events_best_node_selection_post",
+        "operationId": "ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -1964,14 +2027,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/stage-skip-window": {
+    "/api/research-pipeline/events/{run_id}/stage-skip-window": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Stage Skip Window",
-        "operationId": "ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post",
+        "operationId": "ingest_stage_skip_window_api_research_pipeline_events__run_id__stage_skip_window_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2009,14 +2081,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/tree-viz-stored": {
+    "/api/research-pipeline/events/{run_id}/tree-viz-stored": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Tree Viz Stored",
-        "operationId": "ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post",
+        "operationId": "ingest_tree_viz_stored_api_research_pipeline_events__run_id__tree_viz_stored_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2054,14 +2135,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/run-log": {
+    "/api/research-pipeline/events/{run_id}/run-log": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Run Log",
-        "operationId": "ingest_run_log_api_research_pipeline_events_run_log_post",
+        "operationId": "ingest_run_log_api_research_pipeline_events__run_id__run_log_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2099,14 +2189,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/codex-event": {
+    "/api/research-pipeline/events/{run_id}/codex-event": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Codex Event",
-        "operationId": "ingest_codex_event_api_research_pipeline_events_codex_event_post",
+        "operationId": "ingest_codex_event_api_research_pipeline_events__run_id__codex_event_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2144,14 +2243,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/running-code": {
+    "/api/research-pipeline/events/{run_id}/running-code": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Running Code",
-        "operationId": "ingest_running_code_api_research_pipeline_events_running_code_post",
+        "operationId": "ingest_running_code_api_research_pipeline_events__run_id__running_code_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2189,14 +2297,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/run-completed": {
+    "/api/research-pipeline/events/{run_id}/run-completed": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Run Completed",
-        "operationId": "ingest_run_completed_api_research_pipeline_events_run_completed_post",
+        "operationId": "ingest_run_completed_api_research_pipeline_events__run_id__run_completed_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2234,14 +2351,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/run-started": {
+    "/api/research-pipeline/events/{run_id}/run-started": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Run Started",
-        "operationId": "ingest_run_started_api_research_pipeline_events_run_started_post",
+        "operationId": "ingest_run_started_api_research_pipeline_events__run_id__run_started_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2252,16 +2378,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunStartedPayload"
-              }
-            }
-          }
-        },
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -2279,14 +2395,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/initialization-progress": {
+    "/api/research-pipeline/events/{run_id}/initialization-progress": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Initialization Progress",
-        "operationId": "ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post",
+        "operationId": "ingest_initialization_progress_api_research_pipeline_events__run_id__initialization_progress_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2324,14 +2449,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/run-finished": {
+    "/api/research-pipeline/events/{run_id}/run-finished": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Run Finished",
-        "operationId": "ingest_run_finished_api_research_pipeline_events_run_finished_post",
+        "operationId": "ingest_run_finished_api_research_pipeline_events__run_id__run_finished_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2369,14 +2503,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/heartbeat": {
+    "/api/research-pipeline/events/{run_id}/heartbeat": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Heartbeat",
-        "operationId": "ingest_heartbeat_api_research_pipeline_events_heartbeat_post",
+        "operationId": "ingest_heartbeat_api_research_pipeline_events__run_id__heartbeat_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2387,16 +2530,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HeartbeatPayload"
-              }
-            }
-          }
-        },
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -2414,14 +2547,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/hw-stats": {
+    "/api/research-pipeline/events/{run_id}/hw-stats": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Hw Stats",
-        "operationId": "ingest_hw_stats_api_research_pipeline_events_hw_stats_post",
+        "operationId": "ingest_hw_stats_api_research_pipeline_events__run_id__hw_stats_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2459,14 +2601,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/gpu-shortage": {
+    "/api/research-pipeline/events/{run_id}/gpu-shortage": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Gpu Shortage",
-        "operationId": "ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post",
+        "operationId": "ingest_gpu_shortage_api_research_pipeline_events__run_id__gpu_shortage_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2504,14 +2655,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/token-usage": {
+    "/api/research-pipeline/events/{run_id}/token-usage": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Token Usage",
-        "operationId": "ingest_token_usage_api_research_pipeline_events_token_usage_post",
+        "operationId": "ingest_token_usage_api_research_pipeline_events__run_id__token_usage_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2549,14 +2709,23 @@
         }
       }
     },
-    "/api/research-pipeline/events/figure-reviews": {
+    "/api/research-pipeline/events/{run_id}/figure-reviews": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
         "summary": "Ingest Figure Reviews",
-        "operationId": "ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post",
+        "operationId": "ingest_figure_reviews_api_research_pipeline_events__run_id__figure_reviews_post",
         "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
           {
             "name": "authorization",
             "in": "header",
@@ -2580,6 +2749,254 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/{run_id}/presigned-upload-url": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Get Presigned Upload Url",
+        "description": "Generate a presigned URL for uploading an artifact to S3.",
+        "operationId": "get_presigned_upload_url_api_research_pipeline_events__run_id__presigned_upload_url_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignedUploadUrlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignedUploadUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/{run_id}/parent-run-files": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Get Parent Run Files",
+        "description": "List files from a parent run and return presigned download URLs.",
+        "operationId": "get_parent_run_files_api_research_pipeline_events__run_id__parent_run_files_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParentRunFilesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParentRunFilesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/{run_id}/list-datasets": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "List Datasets",
+        "description": "List files in a datasets folder and return presigned download URLs.",
+        "operationId": "list_datasets_api_research_pipeline_events__run_id__list_datasets_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListDatasetsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListDatasetsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/research-pipeline/events/{run_id}/dataset-upload-url": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Get Dataset Upload Url",
+        "description": "Generate a presigned URL for uploading a file to the datasets folder.",
+        "operationId": "get_dataset_upload_url_api_research_pipeline_events__run_id__dataset_upload_url_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetUploadUrlRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetUploadUrlResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3766,17 +4183,12 @@
       },
       "ArtifactUploadedPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/ArtifactUploadedEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "ArtifactUploadedPayload"
@@ -3859,17 +4271,12 @@
       },
       "BestNodeSelectionPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/BestNodeSelectionEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "BestNodeSelectionPayload"
@@ -4290,10 +4697,6 @@
       },
       "CodexEventPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "type": "object",
             "title": "Event"
@@ -4301,7 +4704,6 @@
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "CodexEventPayload"
@@ -5160,6 +5562,85 @@
         ],
         "title": "CreditTransactionModel"
       },
+      "DatasetFileInfo": {
+        "properties": {
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "relative_path": {
+            "type": "string",
+            "title": "Relative Path"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s3_key",
+          "relative_path",
+          "size",
+          "download_url"
+        ],
+        "title": "DatasetFileInfo"
+      },
+      "DatasetUploadUrlRequest": {
+        "properties": {
+          "datasets_folder": {
+            "type": "string",
+            "title": "Datasets Folder"
+          },
+          "relative_path": {
+            "type": "string",
+            "title": "Relative Path"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "datasets_folder",
+          "relative_path",
+          "content_type",
+          "file_size"
+        ],
+        "title": "DatasetUploadUrlRequest"
+      },
+      "DatasetUploadUrlResponse": {
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_url",
+          "s3_key",
+          "expires_in"
+        ],
+        "title": "DatasetUploadUrlResponse"
+      },
       "ErrorResponse": {
         "properties": {
           "error": {
@@ -5250,17 +5731,12 @@
       },
       "FigureReviewsPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/FigureReviewsEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "FigureReviewsPayload"
@@ -5401,10 +5877,6 @@
       },
       "GPUShortagePayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "required_gpus": {
             "type": "integer",
             "title": "Required Gpus"
@@ -5427,7 +5899,6 @@
         },
         "type": "object",
         "required": [
-          "run_id",
           "required_gpus",
           "available_gpus"
         ],
@@ -5497,10 +5968,6 @@
       },
       "HardwareStatsPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "partitions": {
             "items": {
               "$ref": "#/components/schemas/HardwareStatsPartition"
@@ -5510,23 +5977,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "run_id"
-        ],
         "title": "HardwareStatsPayload"
-      },
-      "HeartbeatPayload": {
-        "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "run_id"
-        ],
-        "title": "HeartbeatPayload"
       },
       "Idea": {
         "properties": {
@@ -5840,10 +6291,6 @@
       },
       "InitializationProgressPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "message": {
             "type": "string",
             "title": "Message"
@@ -5851,7 +6298,6 @@
         },
         "type": "object",
         "required": [
-          "run_id",
           "message"
         ],
         "title": "InitializationProgressPayload"
@@ -6073,6 +6519,40 @@
           "gpu_type"
         ],
         "title": "LaunchResearchRunRequest"
+      },
+      "ListDatasetsRequest": {
+        "properties": {
+          "datasets_folder": {
+            "type": "string",
+            "title": "Datasets Folder"
+          }
+        },
+        "type": "object",
+        "required": [
+          "datasets_folder"
+        ],
+        "title": "ListDatasetsRequest"
+      },
+      "ListDatasetsResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetFileInfo"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "expires_in"
+        ],
+        "title": "ListDatasetsResponse"
       },
       "LlmReviewNotFoundResponse": {
         "properties": {
@@ -6761,17 +7241,12 @@
       },
       "PaperGenerationProgressPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/PaperGenerationProgressEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "PaperGenerationProgressPayload"
@@ -6890,6 +7365,133 @@
         ],
         "title": "PaperGenerationStepEvent",
         "description": "Emitted during Stage 5 (paper generation).\n\nEmission Criteria:\n- Triggered by paper_generation_progress events\n- Shows current step and progress within paper generation\n- Emitted for each major paper generation step\n\nFrequency: 4-6 per paper generation stage"
+      },
+      "ParentRunFileInfo": {
+        "properties": {
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s3_key",
+          "filename",
+          "size",
+          "download_url"
+        ],
+        "title": "ParentRunFileInfo"
+      },
+      "ParentRunFilesRequest": {
+        "properties": {
+          "parent_run_id": {
+            "type": "string",
+            "title": "Parent Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_run_id"
+        ],
+        "title": "ParentRunFilesRequest"
+      },
+      "ParentRunFilesResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ParentRunFileInfo"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "expires_in"
+        ],
+        "title": "ParentRunFilesResponse"
+      },
+      "PresignedUploadUrlRequest": {
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "filename",
+          "content_type",
+          "file_size"
+        ],
+        "title": "PresignedUploadUrlRequest"
+      },
+      "PresignedUploadUrlResponse": {
+        "properties": {
+          "upload_url": {
+            "type": "string",
+            "title": "Upload Url"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_url",
+          "s3_key",
+          "expires_in"
+        ],
+        "title": "PresignedUploadUrlResponse"
       },
       "ProgressUpdateEvent": {
         "properties": {
@@ -9611,17 +10213,12 @@
       },
       "ReviewCompletedPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/ReviewCompletedEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "ReviewCompletedPayload"
@@ -9669,17 +10266,12 @@
       },
       "RunCompletedPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/RunCompletedEventPayload"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "RunCompletedPayload"
@@ -9831,10 +10423,6 @@
       },
       "RunFinishedPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "success": {
             "type": "boolean",
             "title": "Success"
@@ -9853,7 +10441,6 @@
         },
         "type": "object",
         "required": [
-          "run_id",
           "success"
         ],
         "title": "RunFinishedPayload"
@@ -9878,17 +10465,12 @@
       },
       "RunLogPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/RunLogEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "RunLogPayload"
@@ -9972,19 +10554,6 @@
         "title": "RunStartedEvent",
         "description": "Emitted when the research run actually starts executing (container is ready).\n\nEmission Criteria:\n- Triggered by run_started events from research pipeline\n- Marks the transition from \"pending\" to \"running\"\n- First event in the timeline (after creation)\n\nFrequency: 1 per run (always the first event)"
       },
-      "RunStartedPayload": {
-        "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "run_id"
-        ],
-        "title": "RunStartedPayload"
-      },
       "RunType": {
         "type": "string",
         "enum": [
@@ -10028,17 +10597,12 @@
       },
       "RunningCodePayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/RunningCodeEventPayload"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "RunningCodePayload"
@@ -10472,17 +11036,12 @@
       },
       "StageProgressPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/StageProgressEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "StageProgressPayload"
@@ -10527,17 +11086,12 @@
       },
       "StageSkipWindowPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/StageSkipWindowEventModel"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "StageSkipWindowPayload"
@@ -10645,17 +11199,12 @@
       },
       "SubstageCompletedPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/SubstageCompletedEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "SubstageCompletedPayload"
@@ -10680,17 +11229,12 @@
       },
       "SubstageSummaryPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/SubstageSummaryEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "SubstageSummaryPayload"
@@ -10780,17 +11324,12 @@
       },
       "TokenUsagePayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/TokenUsageEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "TokenUsagePayload"
@@ -10871,17 +11410,12 @@
       },
       "TreeVizStoredPayload": {
         "properties": {
-          "run_id": {
-            "type": "string",
-            "title": "Run Id"
-          },
           "event": {
             "$ref": "#/components/schemas/TreeVizStoredEvent"
           }
         },
         "type": "object",
         "required": [
-          "run_id",
           "event"
         ],
         "title": "TreeVizStoredPayload"

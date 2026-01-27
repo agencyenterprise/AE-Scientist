@@ -49,11 +49,6 @@ class RunPodEnvironment:
     openai_api_key: str
     hf_token: str
     telemetry_webhook_url: str
-    telemetry_webhook_token: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    aws_region: str
-    aws_s3_bucket_name: str
     sentry_dsn: str
     sentry_environment: str
 
@@ -74,11 +69,6 @@ def load_runpod_environment() -> RunPodEnvironment:
         openai_api_key=_require("OPENAI_API_KEY"),
         hf_token=_require("HF_TOKEN"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
-        telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
-        aws_access_key_id=_require("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
-        aws_region=_require("AWS_REGION"),
-        aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
         sentry_dsn=_optional("SENTRY_DSN"),
         sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
     )
@@ -160,30 +150,13 @@ def _codex_installation_commands() -> list[str]:
     ]
 
 
-def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
-    return [
-        "# === AWS Credentials Setup ===",
-        'echo "Creating ~/.aws/credentials..."',
-        "mkdir -p ~/.aws",
-        "chmod 700 ~/.aws",
-        "cat > ~/.aws/credentials << 'EOF'",
-        "[default]",
-        f"aws_access_key_id={env.aws_access_key_id}",
-        f"aws_secret_access_key={env.aws_secret_access_key}",
-        "EOF",
-        "chmod 600 ~/.aws/credentials",
-        "",
-    ]
-
-
 def _download_parent_run_data_commands() -> list[str]:
     return [
         "# === Download Parent Run Data ===",
         'if [ "${HAS_PREVIOUS_RUN:-false}" = "true" ] && [ -n "${PARENT_RUN_ID:-}" ]; then',
         '  echo "Downloading parent run data from ${PARENT_RUN_ID}..."',
         '  mkdir -p "${PREVIOUS_RUN_DATA_PATH}"',
-        '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/*"',
-        f'  s5cmd sync "${{s3_uri}}" "${{PREVIOUS_RUN_DATA_PATH}}/" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
+        f'  python download_parent_run.py --parent-run-id "${{PARENT_RUN_ID}}" --output "${{PREVIOUS_RUN_DATA_PATH}}" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
         '  echo "Started parent run data download in background (pid=$!)"',
         "else",
         '  echo "No parent run data to download"',
@@ -279,9 +252,10 @@ def build_remote_script(
     config_content_b64: str,
     run_id: str,
     has_previous_run: bool,
+    webhook_token: str,
 ) -> str:
     telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
-    telemetry_token = shlex.quote(env.telemetry_webhook_token)
+    telemetry_token = shlex.quote(webhook_token)
     run_id_quoted = shlex.quote(run_id)
     script_parts: list[str] = [
         "set -euo pipefail",
@@ -311,12 +285,8 @@ def build_remote_script(
     env_file_lines = [
         f"OPENAI_API_KEY={env.openai_api_key}",
         f"HF_TOKEN={env.hf_token}",
-        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
-        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
-        f"AWS_REGION={env.aws_region}",
-        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
-        "DATASETS_AWS_FOLDER=datasets",
-        f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
+        f"TELEMETRY_WEBHOOK_URL={env.telemetry_webhook_url}",
+        f"TELEMETRY_WEBHOOK_TOKEN={webhook_token}",
         f"RUN_ID={run_id}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
@@ -358,7 +328,6 @@ def build_remote_script(
         "set +a",
         "",
     ]
-    script_parts += _aws_credentials_setup_commands(env=env)
     script_parts += _inject_refined_idea_and_config_commands(
         idea_filename=idea_filename,
         idea_content_b64=idea_content_b64,
