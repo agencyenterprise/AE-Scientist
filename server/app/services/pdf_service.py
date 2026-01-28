@@ -61,7 +61,7 @@ class PDFService:
             if not extracted_text:
                 raise ValueError("No text content could be extracted from the PDF")
 
-            logger.info(
+            logger.debug(
                 f"Successfully extracted text from {page_count} pages ({len(extracted_text)} characters)"
             )
             return extracted_text

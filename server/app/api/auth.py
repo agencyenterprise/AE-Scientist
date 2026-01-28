@@ -85,7 +85,7 @@ async def logout(request: Request) -> Dict[str, str]:
         if session_token:
             success = await auth_service.logout_user(session_token=session_token)
             if success:
-                logger.info("User logged out successfully")
+                logger.debug("User logged out successfully")
             else:
                 logger.warning("Failed to invalidate session during logout")
 

@@ -73,6 +73,6 @@ class PromptsMixin(ConnectionProvider):
                     (prompt_type,),
                 )
                 rows_affected = cursor.rowcount
-                logger.info(f"Deactivated {rows_affected} prompt(s) for type '{prompt_type}'")
+                logger.debug(f"Deactivated {rows_affected} prompt(s) for type '{prompt_type}'")
                 await conn.commit()
                 return bool(rows_affected >= 0)

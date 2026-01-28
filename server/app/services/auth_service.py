@@ -47,7 +47,7 @@ class AuthService:
 
             if user:
                 # User already has Clerk ID - just update their info
-                logger.info(f"Found existing Clerk user: {user.email}")
+                logger.debug(f"Found existing Clerk user: {user.email}")
                 updated_user = await self.db.update_user(
                     user_id=user.id,
                     email=user_info["email"],
@@ -64,7 +64,7 @@ class AuthService:
 
                 if user:
                     # Existing user from Google OAuth - link Clerk ID to their account
-                    logger.info(f"Migrating existing user to Clerk: {user.email}")
+                    logger.debug(f"Migrating existing user to Clerk: {user.email}")
                     updated_user = await self.db.update_user(
                         user_id=user.id,
                         email=user_info["email"],
@@ -77,7 +77,7 @@ class AuthService:
                     user = updated_user
                 else:
                     # Brand new user - create account
-                    logger.info(f"Creating new Clerk user: {user_info['email']}")
+                    logger.debug(f"Creating new Clerk user: {user_info['email']}")
                     user = await self.db.create_user(
                         clerk_user_id=user_info["clerk_user_id"],
                         email=user_info["email"],
@@ -95,7 +95,7 @@ class AuthService:
                 logger.error("Failed to create user session")
                 return None
 
-            logger.info(f"Successfully authenticated Clerk user: {user.email}")
+            logger.debug(f"Successfully authenticated Clerk user: {user.email}")
             return {"user": user, "session_token": internal_session_token}
 
         except Exception as e:
@@ -132,7 +132,7 @@ class AuthService:
         try:
             success = await self.db.delete_user_session(session_token)
             if success:
-                logger.info("User logged out successfully")
+                logger.debug("User logged out successfully")
             return success
         except Exception as e:
             logger.exception(f"Error logging out user: {e}")
@@ -148,7 +148,7 @@ class AuthService:
         try:
             count = await self.db.delete_expired_sessions()
             if count > 0:
-                logger.info(f"Cleaned up {count} expired sessions")
+                logger.debug(f"Cleaned up {count} expired sessions")
             return count
         except Exception as e:
             logger.exception(f"Error cleaning up expired sessions: {e}")

@@ -83,7 +83,7 @@ class NarratorMixin(ConnectionProvider):
                 )
                 await conn.commit()
 
-        logger.info(
+        logger.debug(
             "Inserted timeline event: run=%s type=%s stage=%s",
             run_id,
             event_type,
@@ -241,7 +241,7 @@ class NarratorMixin(ConnectionProvider):
             )
             return False
 
-        logger.info(
+        logger.debug(
             "Upserted research run state: run=%s version=%s",
             run_id,
             state.version,
@@ -336,4 +336,4 @@ class NarratorMixin(ConnectionProvider):
                 await cursor.execute(query, (run_id,))
                 await conn.commit()
 
-        logger.info("Deleted research run state: run=%s", run_id)
+        logger.debug("Deleted research run state: run=%s", run_id)

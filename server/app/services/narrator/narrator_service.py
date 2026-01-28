@@ -64,7 +64,7 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
     """
     queue = _get_queue_for_run(run_id)
 
-    logger.info("Narrator: Started queue processor for run=%s", run_id)
+    logger.debug("Narrator: Started queue processor for run=%s", run_id)
 
     while True:
         event_type: str = "<not_set>"
@@ -72,7 +72,7 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
         try:
             # Check if run is complete and queue is empty BEFORE waiting for next event
             if _run_completed.get(run_id, False) and queue.qsize() == 0:
-                logger.info("Narrator: Run complete and queue empty, cleaning up run=%s", run_id)
+                logger.debug("Narrator: Run complete and queue empty, cleaning up run=%s", run_id)
                 _cleanup_run_queue(run_id)
                 break
 
@@ -82,7 +82,7 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
             )
             event_type, event_data = await queue.get()
 
-            logger.info("Narrator: Processing event from queue run=%s type=%s", run_id, event_type)
+            logger.debug("Narrator: Processing event from queue run=%s type=%s", run_id, event_type)
 
             # Process the event
             await _process_single_event(db, run_id, event_type, event_data)
@@ -93,7 +93,7 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
             logger.debug("Narrator: Event processed, queue_size=%d run=%s", queue.qsize(), run_id)
 
         except asyncio.CancelledError:
-            logger.info("Narrator: Queue processor cancelled for run=%s", run_id)
+            logger.debug("Narrator: Queue processor cancelled for run=%s", run_id)
             break
         except Exception as exc:
             logger.exception(
@@ -117,10 +117,10 @@ def _ensure_queue_processor_running(run_id: str, db: DatabaseManager) -> None:
     """
     if run_id not in _queue_processors or _queue_processors[run_id].done():
         # Start new processor task
-        logger.info("Narrator: Creating queue processor task for run=%s", run_id)
+        logger.debug("Narrator: Creating queue processor task for run=%s", run_id)
         task = asyncio.create_task(_process_event_queue(run_id, db))
         _queue_processors[run_id] = task
-        logger.info("Narrator: Queue processor task created for run=%s", run_id)
+        logger.debug("Narrator: Queue processor task created for run=%s", run_id)
 
 
 def _cleanup_run_queue(run_id: str) -> None:
@@ -149,7 +149,7 @@ def _mark_run_completed(run_id: str) -> None:
     The queue will be cleaned up after all pending events are processed.
     """
     _run_completed[run_id] = True
-    logger.info("Narrator: Marked run as completed run=%s", run_id)
+    logger.debug("Narrator: Marked run as completed run=%s", run_id)
 
 
 # ============================================================================
@@ -261,7 +261,7 @@ async def _process_single_event(
             )
             return
 
-        logger.info(
+        logger.debug(
             "Narrator: Processing %d event(s) run=%s type=%s → timeline_types=%s",
             len(timeline_events),
             run_id,
@@ -321,7 +321,7 @@ async def _process_single_event(
                 data=serialized_changes,
             )
 
-        logger.info(
+        logger.debug(
             "Narrator: Events processed successfully run=%s count=%d",
             run_id,
             len(timeline_events),
@@ -353,7 +353,7 @@ async def _get_or_create_state_locked(
 
     if current_state is None:
         # First event for this run - create initial state
-        logger.info("Narrator: Creating initial state for run=%s (fallback path)", run_id)
+        logger.debug("Narrator: Creating initial state for run=%s (fallback path)", run_id)
 
         # Get conversation_id and idea info from research_pipeline_runs + idea_versions tables
         run_idea_data = await db.get_run_idea_data(run_id, conn=conn)
@@ -432,7 +432,7 @@ async def initialize_run_state(
     # Persist to database
     await db.upsert_research_run_state(run_id=run_id, state=initial_state)
 
-    logger.info("Narrator: Initialized state for run=%s", run_id)
+    logger.debug("Narrator: Initialized state for run=%s", run_id)
 
     return initial_state
 
@@ -469,7 +469,7 @@ async def rebuild_state_from_events(
         logger.warning("Narrator: No events found for run=%s", run_id)
         return None
 
-    logger.info(
+    logger.debug(
         "Narrator: Rebuilding state from %d events for run=%s",
         len(event_rows),
         run_id,
@@ -504,6 +504,6 @@ async def rebuild_state_from_events(
     # Persist rebuilt state
     await db.upsert_research_run_state(run_id=run_id, state=current_state)
 
-    logger.info("Narrator: State rebuilt successfully for run=%s", run_id)
+    logger.debug("Narrator: State rebuilt successfully for run=%s", run_id)
 
     return current_state

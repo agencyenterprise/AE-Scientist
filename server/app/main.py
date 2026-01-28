@@ -63,7 +63,6 @@ def configure_logging() -> None:
 
     logger = logging.getLogger(__name__)
     logger.info("Logging configured at %s level", settings.LOG_LEVEL)
-    logger.info("Environment: %s", settings.RAILWAY_ENVIRONMENT_NAME)
 
 
 # Configure logging before creating the app

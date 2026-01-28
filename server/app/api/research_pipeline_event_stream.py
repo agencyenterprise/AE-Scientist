@@ -501,7 +501,7 @@ async def stream_research_run_events(
                 hw_cost_actual_dirty = False
             while True:
                 if await request.is_disconnected():
-                    logger.info("Client disconnected from SSE stream for run %s", run_id)
+                    logger.debug("Client disconnected from SSE stream for run %s", run_id)
                     break
 
                 if hw_started_running_at is None:
@@ -520,7 +520,7 @@ async def stream_research_run_events(
                     )
                 except asyncio.TimeoutError:
                     if await request.is_disconnected():
-                        logger.info("Client disconnected from SSE stream for run %s", run_id)
+                        logger.debug("Client disconnected from SSE stream for run %s", run_id)
                         break
                     yield _format_stream_event(event={"type": "heartbeat", "data": None})
                     hw_cost_event = _build_hw_cost_stream_event(

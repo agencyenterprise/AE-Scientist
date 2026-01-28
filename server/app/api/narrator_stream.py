@@ -23,7 +23,7 @@ def register_narrator_queue(run_id: str) -> asyncio.Queue[QueuePayload]:
     queue: asyncio.Queue[QueuePayload] = asyncio.Queue(maxsize=1000)
     subscribers = _NARRATOR_STREAM_SUBSCRIBERS.setdefault(run_id, set())
     subscribers.add(queue)
-    logger.info("Narrator stream: Registered subscriber for run_id=%s", run_id)
+    logger.debug("Narrator stream: Registered subscriber for run_id=%s", run_id)
     return queue
 
 
@@ -33,10 +33,10 @@ def unregister_narrator_queue(run_id: str, queue: asyncio.Queue[QueuePayload]) -
     if not subscribers:
         return
     subscribers.discard(queue)
-    logger.info("Narrator stream: Unregistered subscriber for run_id=%s", run_id)
+    logger.debug("Narrator stream: Unregistered subscriber for run_id=%s", run_id)
     if not subscribers:
         _NARRATOR_STREAM_SUBSCRIBERS.pop(run_id, None)
-        logger.info("Narrator stream: No more subscribers for run_id=%s", run_id)
+        logger.debug("Narrator stream: No more subscribers for run_id=%s", run_id)
 
 
 def publish_narrator_event(run_id: str, event_type: str, data: Dict[str, Any]) -> None:

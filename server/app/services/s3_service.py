@@ -60,7 +60,7 @@ class S3Service:
                 aws_secret_access_key=self.aws_secret_access_key,
                 region_name=self.aws_region,
             )
-            logger.info(f"S3 service initialized for bucket: {self.bucket_name}")
+            logger.debug(f"S3 service initialized for bucket: {self.bucket_name}")
         except NoCredentialsError as e:
             logger.error(f"AWS credentials not found: {e}")
             raise ValueError("Invalid AWS credentials") from e
@@ -164,7 +164,7 @@ class S3Service:
                 Metadata=sanitized_metadata,
             )
 
-            logger.info(f"File uploaded successfully: {s3_key}")
+            logger.debug(f"File uploaded successfully: {s3_key}")
             return s3_key
 
         except ClientError as e:
@@ -295,7 +295,7 @@ class S3Service:
         """
         try:
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
-            logger.info(f"File deleted successfully: {s3_key}")
+            logger.debug(f"File deleted successfully: {s3_key}")
 
         except ClientError as e:
             logger.error(f"S3 deletion failed: {e}")

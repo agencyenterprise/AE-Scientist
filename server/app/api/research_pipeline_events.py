@@ -487,7 +487,7 @@ async def ingest_stage_progress(
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
-    logger.info(
+    logger.debug(
         "RP stage progress: run=%s stage=%s iteration=%s/%s progress=%.3f",
         run_id,
         event.stage,
@@ -549,7 +549,7 @@ async def ingest_substage_completed(
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
-    logger.info(
+    logger.debug(
         "RP sub-stage completed: run=%s stage=%s reason=%s",
         run_id,
         event.stage,
@@ -601,7 +601,7 @@ async def ingest_paper_generation_progress(
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
-    logger.info(
+    logger.debug(
         "Paper generation progress: run=%s step=%s substep=%s progress=%.1f%% step_progress=%.1f%%",
         run_id,
         event.step,
@@ -672,7 +672,7 @@ async def ingest_artifact_uploaded(
         created_at=created_at_dt,
     )
 
-    logger.info(
+    logger.debug(
         "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
         run_id,
         event.artifact_type,
@@ -709,7 +709,7 @@ async def ingest_review_completed(
 ) -> None:
     event = payload.event
 
-    logger.info(
+    logger.debug(
         "Review completed: run=%s decision=%s overall=%.2f",
         run_id,
         event.decision,
@@ -780,7 +780,7 @@ async def ingest_substage_summary(
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
-    logger.info(
+    logger.debug(
         "RP sub-stage summary: run=%s stage=%s",
         run_id,
         event.stage,
@@ -821,7 +821,7 @@ async def ingest_best_node_selection(
     reasoning_preview = (
         event.reasoning if len(event.reasoning) <= 200 else f"{event.reasoning[:197]}..."
     )
-    logger.info(
+    logger.debug(
         "RP best-node selection: run=%s stage=%s node=%s reasoning=%s",
         run_id,
         event.stage,
@@ -873,7 +873,7 @@ async def ingest_stage_skip_window(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
-    logger.info(
+    logger.debug(
         "RP stage skip window event: run=%s stage=%s state=%s reason=%s",
         run_id,
         event.stage,
@@ -923,7 +923,7 @@ async def ingest_tree_viz_stored(
         version=event.version,
     )
 
-    logger.info(
+    logger.debug(
         "Tree viz stored: run=%s stage=%s tree_viz_id=%s version=%s",
         run_id,
         event.stage_id,
@@ -1002,7 +1002,7 @@ async def ingest_codex_event(
     _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
-    logger.info("RP codex event received: run=%s event=%s", run_id, payload.event)
+    logger.debug("RP codex event received: run=%s event=%s", run_id, payload.event)
 
     # Persist to database
     event_data = payload.event
@@ -1176,7 +1176,7 @@ async def ingest_run_started(
         },
     )
 
-    logger.info("RP run started: run=%s", run_id)
+    logger.debug("RP run started: run=%s", run_id)
 
 
 @router.post("/{run_id}/initialization-progress", status_code=status.HTTP_204_NO_CONTENT)
@@ -1212,7 +1212,7 @@ async def ingest_initialization_progress(
             ),
         ),
     )
-    logger.info("RP initialization progress: run=%s status=%s", run_id, message)
+    logger.debug("RP initialization progress: run=%s status=%s", run_id, message)
 
 
 @router.post("/{run_id}/run-finished", status_code=status.HTTP_204_NO_CONTENT)
@@ -1473,7 +1473,7 @@ async def ingest_figure_reviews(
     _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
-    logger.info(
+    logger.debug(
         "Figure reviews: run=%s count=%s",
         run_id,
         len(payload.event.reviews),
@@ -1574,7 +1574,7 @@ async def _retry_run_after_gpu_shortage(
             conversation_id=idea_version.conversation_id,
             parent_run_id=parent_run_id,
         )
-        logger.info(
+        logger.debug(
             "Scheduled retry run %s after GPU shortage on run %s.",
             new_run_id,
             failed_run.run_id,
@@ -1601,7 +1601,7 @@ def _build_retry_gpu_preferences(
     """Return a GPU preference list that reuses the user's original choice when possible."""
     supported_gpu_types = get_supported_gpu_types()
     if not failed_run_gpu_type:
-        logger.info(
+        logger.debug(
             "GPU shortage retry for run %s: no prior GPU recorded; using default list %s.",
             run_id,
             supported_gpu_types,
@@ -1609,7 +1609,7 @@ def _build_retry_gpu_preferences(
         return supported_gpu_types
 
     if failed_run_gpu_type in supported_gpu_types:
-        logger.info(
+        logger.debug(
             "GPU shortage retry for run %s: reusing original GPU type %s.",
             run_id,
             failed_run_gpu_type,
@@ -1617,7 +1617,7 @@ def _build_retry_gpu_preferences(
         return [failed_run_gpu_type]
 
     # If the GPU has been removed from the supported list, still try it first before falling back.
-    logger.info(
+    logger.debug(
         (
             "GPU shortage retry for run %s: requested GPU %s no longer in supported list; "
             "trying it first, then falling back to %s."
@@ -1683,7 +1683,7 @@ async def get_presigned_upload_url(
         metadata=metadata,
     )
 
-    logger.info(
+    logger.debug(
         "Generated presigned upload URL: run=%s type=%s filename=%s",
         run_id,
         payload.artifact_type,
@@ -1731,7 +1731,7 @@ async def get_parent_run_files(
             )
         )
 
-    logger.info(
+    logger.debug(
         "Listed parent run files: run=%s parent_run=%s count=%d",
         run_id,
         payload.parent_run_id,
@@ -1787,7 +1787,7 @@ async def list_datasets(
             )
         )
 
-    logger.info(
+    logger.debug(
         "Listed datasets: run=%s folder=%s count=%d",
         run_id,
         payload.datasets_folder,
@@ -1824,7 +1824,7 @@ async def get_dataset_upload_url(
         metadata={"run_id": run_id, "type": "dataset"},
     )
 
-    logger.info(
+    logger.debug(
         "Generated dataset upload URL: run=%s key=%s",
         run_id,
         s3_key,

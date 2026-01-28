@@ -451,7 +451,7 @@ async def _handle_existing_conversation(
         for msg in messages
     ]
     await db.update_conversation_messages(existing_conversation_id, db_messages)
-    logger.info(
+    logger.debug(
         f"Deleting imported conversation summary for conversation {existing_conversation_id}"
     )
     await db.delete_imported_conversation_summary(existing_conversation_id)
@@ -1051,12 +1051,12 @@ async def seed_idea_from_run(
                 sent_by_user_id=user.id,
             )
 
-            logger.info(
+            logger.debug(
                 f"Created initial improvement message for seeded idea {new_idea_id} "
                 f"based on review from run {run_id}. Frontend will auto-trigger SSE streaming."
             )
 
-        logger.info(
+        logger.debug(
             f"User {user.id} seeded new idea {new_idea_id} from run {run_id} "
             f"(conversation {new_conversation_id})"
         )

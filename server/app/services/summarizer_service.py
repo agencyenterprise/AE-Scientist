@@ -210,7 +210,7 @@ class SummarizerService:
             if "latest_summary" in response and isinstance(response["latest_summary"], str):
                 latest_summary = response["latest_summary"]
 
-            logger.info("Creating imported chat summary for conversation %s", conversation_id)
+            logger.debug("Creating imported chat summary for conversation %s", conversation_id)
 
             if latest_summary:
                 # Persist record immediately

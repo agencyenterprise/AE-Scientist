@@ -81,7 +81,7 @@ def prepare_config_text(*, title: str, idea_filename: str, telemetry: dict[str, 
             f"{CONFIG_TEMPLATE_PATH}. Ensure the file exists."
         )
     config = OmegaConf.load(CONFIG_TEMPLATE_PATH)
-    logger.info(
+    logger.debug(
         "Preparing pipeline config from %s with title=%s, desc_file=%s",
         CONFIG_TEMPLATE_PATH,
         title,

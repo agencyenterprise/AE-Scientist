@@ -129,7 +129,7 @@ N/A
             user_msg_id = chat_history[-1].id
             # Extract the actual message content from the last user message for LLM
             actual_user_message = chat_history[-1].content
-            logger.info(
+            logger.debug(
                 f"Auto-triggering response for existing user message ID: {user_msg_id} "
                 f"with content: {actual_user_message[:50]}..."
             )
@@ -141,7 +141,7 @@ N/A
                 sent_by_user_id=user.id,
             )
             actual_user_message = request_data.message
-            logger.info(f"Stored user message with ID: {user_msg_id}")
+            logger.debug(f"Stored user message with ID: {user_msg_id}")
 
             await charge_user_credits(
                 user_id=user.id,
@@ -158,7 +158,7 @@ N/A
         # Process file attachments if provided
         attached_files = []
         if request_data.attachment_ids:
-            logger.info(f"Processing {len(request_data.attachment_ids)} file attachments")
+            logger.debug(f"Processing {len(request_data.attachment_ids)} file attachments")
 
             # Get file attachments from database
             file_attachments = await db.get_file_attachments_by_ids(request_data.attachment_ids)
@@ -256,12 +256,12 @@ N/A
                 content="",  # Empty placeholder, will be updated when done
                 sent_by_user_id=user.id,
             )
-            logger.info(
+            logger.debug(
                 f"Created placeholder assistant message {assistant_msg_id} for conversation {conversation_id}"
             )
 
             try:
-                logger.info(f"Starting stream for conversation {conversation_id}")
+                logger.debug(f"Starting stream for conversation {conversation_id}")
 
                 provider_config = LLM_PROVIDER_REGISTRY.get(llm_provider)
                 if not provider_config:
@@ -314,7 +314,7 @@ N/A
                             # Delete the placeholder message since response is empty
                             try:
                                 await db.delete_chat_message(assistant_msg_id)
-                                logger.info(
+                                logger.debug(
                                     f"Deleted placeholder assistant message {assistant_msg_id} due to empty response"
                                 )
                             except Exception as delete_error:
@@ -329,7 +329,7 @@ N/A
                             message_id=assistant_msg_id,
                             content=event_data.data.assistant_response,
                         )
-                        logger.info(
+                        logger.debug(
                             f"Updated assistant message {assistant_msg_id} with final content for conversation {conversation_id}"
                         )
 
@@ -337,13 +337,13 @@ N/A
                     logger.debug(f"Yielding: {repr(json_data[:100])}")
                     yield json_data
 
-                logger.info(f"Stream completed for conversation {conversation_id}")
+                logger.debug(f"Stream completed for conversation {conversation_id}")
             except Exception as e:
                 logger.exception(f"Error in stream_chat_response: {e}")
                 # Delete the placeholder message on error
                 try:
                     await db.delete_chat_message(assistant_msg_id)
-                    logger.info(
+                    logger.debug(
                         f"Deleted placeholder assistant message {assistant_msg_id} after error"
                     )
                 except Exception as delete_error:
@@ -351,7 +351,7 @@ N/A
                 yield json.dumps({"type": "error", "data": f"Stream error: {str(e)}"}) + "\n"
 
             finally:
-                logger.info(f"Adding messages to chat summary for conversation {conversation_id}")
+                logger.debug(f"Adding messages to chat summary for conversation {conversation_id}")
                 await summarizer_service.add_messages_to_chat_summary(
                     idea_id=idea_id,
                     conversation_id=conversation_id,
