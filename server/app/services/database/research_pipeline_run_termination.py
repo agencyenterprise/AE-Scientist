@@ -274,3 +274,28 @@ class ResearchPipelineRunTerminationMixin(ConnectionProvider):
                     (attempts, error[:4000], run_id),
                 )
                 await conn.commit()
+
+    async def reset_stale_termination_leases(self) -> int:
+        """
+        Reset all in_progress terminations back to requested status.
+
+        This should be called on worker startup to reclaim jobs that were
+        orphaned when a previous worker died (e.g., due to deployment).
+        Returns the number of terminations reset.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE research_pipeline_run_terminations
+                    SET
+                        status = 'requested',
+                        lease_owner = NULL,
+                        lease_expires_at = NULL,
+                        updated_at = now()
+                    WHERE status = 'in_progress'
+                    """
+                )
+                count = cursor.rowcount
+                await conn.commit()
+        return count
