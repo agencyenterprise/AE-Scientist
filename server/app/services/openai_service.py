@@ -188,7 +188,9 @@ class OpenAIService(LangChainLLMService):
         blocks: List[Dict[str, Any]] = []
         for attachment in image_attachments:
             try:
-                image_url = self.s3_service.generate_download_url(attachment.s3_key)
+                image_url = self.s3_service.generate_download_url(
+                    attachment.s3_key, expires_in=3600
+                )
                 blocks.append(
                     {
                         "type": "image_url",

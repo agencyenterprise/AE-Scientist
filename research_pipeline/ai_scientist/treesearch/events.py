@@ -1,7 +1,42 @@
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Literal, Optional, Tuple
+
+from pydantic import BaseModel as PydanticBaseModel
+
+from ai_scientist.api_types import BestNodeSelectionEvent as BestNodeSelectionEventPayload
+from ai_scientist.api_types import (
+    PaperGenerationProgressEvent as PaperGenerationProgressEventPayload,
+)
+from ai_scientist.api_types import (
+    RunCompletedEventPayload,
+)
+from ai_scientist.api_types import RunLogEvent as RunLogEventPayload
+from ai_scientist.api_types import (
+    RunningCodeEventPayload,
+)
+from ai_scientist.api_types import RunType as ApiRunType
+from ai_scientist.api_types import StageProgressEvent as StageProgressEventPayload
+from ai_scientist.api_types import (
+    StageSkipWindowEventModel,
+)
+from ai_scientist.api_types import State as StageSkipState
+from ai_scientist.api_types import Status6 as RunCompletedStatus
+from ai_scientist.api_types import SubstageCompletedEvent as SubstageCompletedEventPayload
+from ai_scientist.api_types import SubstageSummaryEvent as SubstageSummaryEventPayload
+
+
+def _sanitize_summary(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure summary dict can be serialized to JSON."""
+    try:
+        json.dumps(data, default=str)
+        return data
+    except TypeError:
+        sanitized_raw = json.dumps(data, default=str)
+        sanitized: Dict[str, Any] = json.loads(sanitized_raw)
+        return sanitized
 
 
 class RunType(str, Enum):
@@ -28,7 +63,16 @@ EventKind = Literal[
     "token_usage",
     "figure_reviews",
 ]
-PersistenceRecord = Tuple[EventKind, Dict[str, Any]]
+PersistenceRecord = Tuple[EventKind, PydanticBaseModel]
+
+
+class CodexEventInnerPayload(PydanticBaseModel):
+    """Inner payload for CodexEvent (the dict inside CodexEventPayload.event)."""
+
+    stage: str
+    node: int
+    event_type: str
+    event_content: str
 
 
 class BaseEvent:
@@ -82,21 +126,19 @@ class RunStageProgressEvent(BaseEvent):
         return data
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "run_stage_progress",
-            {
-                "stage": self.stage,
-                "iteration": self.iteration,
-                "max_iterations": self.max_iterations,
-                "progress": float(self.progress),
-                "total_nodes": self.total_nodes,
-                "buggy_nodes": self.buggy_nodes,
-                "good_nodes": self.good_nodes,
-                "best_metric": self.best_metric,
-                "eta_s": self.eta_s,
-                "latest_iteration_time_s": self.latest_iteration_time_s,
-            },
+        event = StageProgressEventPayload(
+            stage=self.stage,
+            iteration=self.iteration,
+            max_iterations=self.max_iterations,
+            progress=float(self.progress),
+            total_nodes=self.total_nodes,
+            buggy_nodes=self.buggy_nodes,
+            good_nodes=self.good_nodes,
+            best_metric=self.best_metric,
+            eta_s=self.eta_s,
+            latest_iteration_time_s=self.latest_iteration_time_s,
         )
+        return ("run_stage_progress", event)
 
 
 @dataclass(frozen=True)
@@ -111,7 +153,8 @@ class RunLogEvent(BaseEvent):
         return {"message": self.message, "level": self.level}
 
     def persistence_record(self) -> PersistenceRecord:
-        return ("run_log", {"message": self.message, "level": self.level})
+        event = RunLogEventPayload(message=self.message, level=self.level)
+        return ("run_log", event)
 
 
 @dataclass(frozen=True)
@@ -135,15 +178,14 @@ class CodexEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "codex_event",
-            {
-                "stage": self.stage,
-                "node": self.node,
-                "event_type": self.event_type,
-                "event_content": self.event_content,
-            },
+        # Return the inner payload model; publish() wraps it in {"event": ...}
+        event = CodexEventInnerPayload(
+            stage=self.stage,
+            node=self.node,
+            event_type=self.event_type,
+            event_content=self.event_content,
         )
+        return ("codex_event", event)
 
 
 @dataclass(frozen=True)
@@ -168,15 +210,14 @@ class SubstageCompletedEvent(BaseEvent):
 
     def persistence_record(self) -> PersistenceRecord:
         # Persist a compact payload; detailed information lives in the summary.
-        return (
-            "substage_completed",
-            {
-                "stage": self.stage,
-                "main_stage_number": self.main_stage_number,
-                "reason": self.reason,
-                "summary": self.summary,
-            },
+        # Sanitize summary to ensure JSON serializability.
+        event = SubstageCompletedEventPayload(
+            stage=self.stage,
+            main_stage_number=self.main_stage_number,
+            reason=self.reason,
+            summary=_sanitize_summary(self.summary),
         )
+        return ("substage_completed", event)
 
 
 @dataclass(frozen=True)
@@ -196,13 +237,11 @@ class SubstageSummaryEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "substage_summary",
-            {
-                "stage": self.stage,
-                "summary": self.summary,
-            },
+        event = SubstageSummaryEventPayload(
+            stage=self.stage,
+            summary=self.summary,
         )
+        return ("substage_summary", event)
 
 
 @dataclass(frozen=True)
@@ -226,14 +265,12 @@ class BestNodeSelectedEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "best_node_selection",
-            {
-                "stage": self.stage,
-                "node_id": self.node_id,
-                "reasoning": self.reasoning,
-            },
+        event = BestNodeSelectionEventPayload(
+            stage=self.stage,
+            node_id=self.node_id,
+            reasoning=self.reasoning,
         )
+        return ("best_node_selection", event)
 
 
 @dataclass(frozen=True)
@@ -278,17 +315,15 @@ class PaperGenerationProgressEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "paper_generation_progress",
-            {
-                "run_id": self.run_id,
-                "step": self.step,
-                "substep": self.substep,
-                "progress": self.progress,
-                "step_progress": self.step_progress,
-                "details": self.details,
-            },
+        # Note: run_id is not included - it comes from the URL path on the server
+        event = PaperGenerationProgressEventPayload(
+            step=self.step,
+            substep=self.substep,
+            progress=self.progress,
+            step_progress=self.step_progress,
+            details=self.details,
         )
+        return ("paper_generation_progress", event)
 
 
 @dataclass(frozen=True)
@@ -312,16 +347,14 @@ class RunningCodeEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "running_code",
-            {
-                "execution_id": self.execution_id,
-                "stage_name": self.stage_name,
-                "run_type": self.run_type.value,
-                "code": self.code,
-                "started_at": self.started_at.isoformat(),
-            },
+        event = RunningCodeEventPayload(
+            execution_id=self.execution_id,
+            stage_name=self.stage_name,
+            run_type=ApiRunType(self.run_type.value),
+            code=self.code,
+            started_at=self.started_at.isoformat(),
         )
+        return ("running_code", event)
 
 
 @dataclass(frozen=True)
@@ -347,17 +380,15 @@ class RunCompletedEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        return (
-            "run_completed",
-            {
-                "execution_id": self.execution_id,
-                "stage_name": self.stage_name,
-                "run_type": self.run_type.value,
-                "status": self.status,
-                "exec_time": self.exec_time,
-                "completed_at": self.completed_at.isoformat(),
-            },
+        event = RunCompletedEventPayload(
+            execution_id=self.execution_id,
+            stage_name=self.stage_name,
+            run_type=ApiRunType(self.run_type.value),
+            status=RunCompletedStatus(self.status),
+            exec_time=self.exec_time,
+            completed_at=self.completed_at.isoformat(),
         )
+        return ("run_completed", event)
 
 
 @dataclass(frozen=True)
@@ -381,11 +412,10 @@ class StageSkipWindowEvent(BaseEvent):
         return payload
 
     def persistence_record(self) -> PersistenceRecord:
-        record: Dict[str, Any] = {
-            "stage": self.stage,
-            "state": self.state,
-            "timestamp": self.timestamp.isoformat(),
-        }
-        if self.reason:
-            record["reason"] = self.reason
-        return ("stage_skip_window", record)
+        event = StageSkipWindowEventModel(
+            stage=self.stage,
+            state=StageSkipState(self.state),
+            timestamp=self.timestamp.isoformat(),
+            reason=self.reason,
+        )
+        return ("stage_skip_window", event)

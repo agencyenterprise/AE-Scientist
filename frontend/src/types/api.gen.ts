@@ -720,7 +720,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/stage-progress": {
+    "/api/research-pipeline/events/{run_id}/stage-progress": {
         parameters: {
             query?: never;
             header?: never;
@@ -730,14 +730,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Stage Progress */
-        post: operations["ingest_stage_progress_api_research_pipeline_events_stage_progress_post"];
+        post: operations["ingest_stage_progress_api_research_pipeline_events__run_id__stage_progress_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/substage-completed": {
+    "/api/research-pipeline/events/{run_id}/substage-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -747,14 +747,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Substage Completed */
-        post: operations["ingest_substage_completed_api_research_pipeline_events_substage_completed_post"];
+        post: operations["ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/paper-generation-progress": {
+    "/api/research-pipeline/events/{run_id}/paper-generation-progress": {
         parameters: {
             query?: never;
             header?: never;
@@ -764,14 +764,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Paper Generation Progress */
-        post: operations["ingest_paper_generation_progress_api_research_pipeline_events_paper_generation_progress_post"];
+        post: operations["ingest_paper_generation_progress_api_research_pipeline_events__run_id__paper_generation_progress_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/artifact-uploaded": {
+    "/api/research-pipeline/events/{run_id}/artifact-uploaded": {
         parameters: {
             query?: never;
             header?: never;
@@ -781,14 +781,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Artifact Uploaded */
-        post: operations["ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post"];
+        post: operations["ingest_artifact_uploaded_api_research_pipeline_events__run_id__artifact_uploaded_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/review-completed": {
+    "/api/research-pipeline/events/{run_id}/review-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -798,14 +798,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Review Completed */
-        post: operations["ingest_review_completed_api_research_pipeline_events_review_completed_post"];
+        post: operations["ingest_review_completed_api_research_pipeline_events__run_id__review_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/substage-summary": {
+    "/api/research-pipeline/events/{run_id}/substage-summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -815,14 +815,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Substage Summary */
-        post: operations["ingest_substage_summary_api_research_pipeline_events_substage_summary_post"];
+        post: operations["ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/best-node-selection": {
+    "/api/research-pipeline/events/{run_id}/best-node-selection": {
         parameters: {
             query?: never;
             header?: never;
@@ -832,14 +832,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Best Node Selection */
-        post: operations["ingest_best_node_selection_api_research_pipeline_events_best_node_selection_post"];
+        post: operations["ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/stage-skip-window": {
+    "/api/research-pipeline/events/{run_id}/stage-skip-window": {
         parameters: {
             query?: never;
             header?: never;
@@ -849,14 +849,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Stage Skip Window */
-        post: operations["ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post"];
+        post: operations["ingest_stage_skip_window_api_research_pipeline_events__run_id__stage_skip_window_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/tree-viz-stored": {
+    "/api/research-pipeline/events/{run_id}/tree-viz-stored": {
         parameters: {
             query?: never;
             header?: never;
@@ -866,14 +866,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Tree Viz Stored */
-        post: operations["ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post"];
+        post: operations["ingest_tree_viz_stored_api_research_pipeline_events__run_id__tree_viz_stored_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/run-log": {
+    "/api/research-pipeline/events/{run_id}/run-log": {
         parameters: {
             query?: never;
             header?: never;
@@ -883,14 +883,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Run Log */
-        post: operations["ingest_run_log_api_research_pipeline_events_run_log_post"];
+        post: operations["ingest_run_log_api_research_pipeline_events__run_id__run_log_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/codex-event": {
+    "/api/research-pipeline/events/{run_id}/codex-event": {
         parameters: {
             query?: never;
             header?: never;
@@ -900,14 +900,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Codex Event */
-        post: operations["ingest_codex_event_api_research_pipeline_events_codex_event_post"];
+        post: operations["ingest_codex_event_api_research_pipeline_events__run_id__codex_event_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/running-code": {
+    "/api/research-pipeline/events/{run_id}/running-code": {
         parameters: {
             query?: never;
             header?: never;
@@ -917,14 +917,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Running Code */
-        post: operations["ingest_running_code_api_research_pipeline_events_running_code_post"];
+        post: operations["ingest_running_code_api_research_pipeline_events__run_id__running_code_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/run-completed": {
+    "/api/research-pipeline/events/{run_id}/run-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -934,14 +934,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Run Completed */
-        post: operations["ingest_run_completed_api_research_pipeline_events_run_completed_post"];
+        post: operations["ingest_run_completed_api_research_pipeline_events__run_id__run_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/run-started": {
+    "/api/research-pipeline/events/{run_id}/run-started": {
         parameters: {
             query?: never;
             header?: never;
@@ -951,14 +951,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Run Started */
-        post: operations["ingest_run_started_api_research_pipeline_events_run_started_post"];
+        post: operations["ingest_run_started_api_research_pipeline_events__run_id__run_started_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/initialization-progress": {
+    "/api/research-pipeline/events/{run_id}/initialization-progress": {
         parameters: {
             query?: never;
             header?: never;
@@ -968,14 +968,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Initialization Progress */
-        post: operations["ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post"];
+        post: operations["ingest_initialization_progress_api_research_pipeline_events__run_id__initialization_progress_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/run-finished": {
+    "/api/research-pipeline/events/{run_id}/run-finished": {
         parameters: {
             query?: never;
             header?: never;
@@ -985,14 +985,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Run Finished */
-        post: operations["ingest_run_finished_api_research_pipeline_events_run_finished_post"];
+        post: operations["ingest_run_finished_api_research_pipeline_events__run_id__run_finished_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/heartbeat": {
+    "/api/research-pipeline/events/{run_id}/heartbeat": {
         parameters: {
             query?: never;
             header?: never;
@@ -1002,14 +1002,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Heartbeat */
-        post: operations["ingest_heartbeat_api_research_pipeline_events_heartbeat_post"];
+        post: operations["ingest_heartbeat_api_research_pipeline_events__run_id__heartbeat_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/hw-stats": {
+    "/api/research-pipeline/events/{run_id}/hw-stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -1019,14 +1019,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Hw Stats */
-        post: operations["ingest_hw_stats_api_research_pipeline_events_hw_stats_post"];
+        post: operations["ingest_hw_stats_api_research_pipeline_events__run_id__hw_stats_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/gpu-shortage": {
+    "/api/research-pipeline/events/{run_id}/gpu-shortage": {
         parameters: {
             query?: never;
             header?: never;
@@ -1036,14 +1036,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Gpu Shortage */
-        post: operations["ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post"];
+        post: operations["ingest_gpu_shortage_api_research_pipeline_events__run_id__gpu_shortage_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/token-usage": {
+    "/api/research-pipeline/events/{run_id}/token-usage": {
         parameters: {
             query?: never;
             header?: never;
@@ -1053,14 +1053,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Token Usage */
-        post: operations["ingest_token_usage_api_research_pipeline_events_token_usage_post"];
+        post: operations["ingest_token_usage_api_research_pipeline_events__run_id__token_usage_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/figure-reviews": {
+    "/api/research-pipeline/events/{run_id}/figure-reviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -1070,7 +1070,87 @@ export interface paths {
         get?: never;
         put?: never;
         /** Ingest Figure Reviews */
-        post: operations["ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post"];
+        post: operations["ingest_figure_reviews_api_research_pipeline_events__run_id__figure_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/presigned-upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Presigned Upload Url
+         * @description Generate a presigned URL for uploading an artifact to S3.
+         */
+        post: operations["get_presigned_upload_url_api_research_pipeline_events__run_id__presigned_upload_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/parent-run-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Parent Run Files
+         * @description List files from a parent run and return presigned download URLs.
+         */
+        post: operations["get_parent_run_files_api_research_pipeline_events__run_id__parent_run_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/list-datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List Datasets
+         * @description List files in a datasets folder and return presigned download URLs.
+         */
+        post: operations["list_datasets_api_research_pipeline_events__run_id__list_datasets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/dataset-upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Dataset Upload Url
+         * @description Generate a presigned URL for uploading a file to the datasets folder.
+         */
+        post: operations["get_dataset_upload_url_api_research_pipeline_events__run_id__dataset_upload_url_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1609,8 +1689,6 @@ export interface components {
         };
         /** ArtifactUploadedPayload */
         ArtifactUploadedPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["ArtifactUploadedEvent"];
         };
         /**
@@ -1658,8 +1736,6 @@ export interface components {
         };
         /** BestNodeSelectionPayload */
         BestNodeSelectionPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["BestNodeSelectionEvent"];
         };
         /** BillingWalletResponse */
@@ -1890,8 +1966,6 @@ export interface components {
         };
         /** CodexEventPayload */
         CodexEventPayload: {
-            /** Run Id */
-            run_id: string;
             /** Event */
             event: Record<string, never>;
         };
@@ -2243,6 +2317,37 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /** DatasetFileInfo */
+        DatasetFileInfo: {
+            /** S3 Key */
+            s3_key: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Size */
+            size: number;
+            /** Download Url */
+            download_url: string;
+        };
+        /** DatasetUploadUrlRequest */
+        DatasetUploadUrlRequest: {
+            /** Datasets Folder */
+            datasets_folder: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+        };
+        /** DatasetUploadUrlResponse */
+        DatasetUploadUrlResponse: {
+            /** Upload Url */
+            upload_url: string;
+            /** S3 Key */
+            s3_key: string;
+            /** Expires In */
+            expires_in: number;
+        };
         /**
          * ErrorResponse
          * @description Standard error response schema.
@@ -2284,8 +2389,6 @@ export interface components {
         };
         /** FigureReviewsPayload */
         FigureReviewsPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["FigureReviewsEvent"];
         };
         /**
@@ -2391,8 +2494,6 @@ export interface components {
         };
         /** GPUShortagePayload */
         GPUShortagePayload: {
-            /** Run Id */
-            run_id: string;
             /** Required Gpus */
             required_gpus: number;
             /** Available Gpus */
@@ -2423,15 +2524,8 @@ export interface components {
         };
         /** HardwareStatsPayload */
         HardwareStatsPayload: {
-            /** Run Id */
-            run_id: string;
             /** Partitions */
             partitions?: components["schemas"]["HardwareStatsPartition"][];
-        };
-        /** HeartbeatPayload */
-        HeartbeatPayload: {
-            /** Run Id */
-            run_id: string;
         };
         /**
          * Idea
@@ -2643,8 +2737,6 @@ export interface components {
         };
         /** InitializationProgressPayload */
         InitializationProgressPayload: {
-            /** Run Id */
-            run_id: string;
             /** Message */
             message: string;
         };
@@ -2797,6 +2889,18 @@ export interface components {
         LaunchResearchRunRequest: {
             /** Gpu Type */
             gpu_type: string;
+        };
+        /** ListDatasetsRequest */
+        ListDatasetsRequest: {
+            /** Datasets Folder */
+            datasets_folder: string;
+        };
+        /** ListDatasetsResponse */
+        ListDatasetsResponse: {
+            /** Files */
+            files: components["schemas"]["DatasetFileInfo"][];
+            /** Expires In */
+            expires_in: number;
         };
         /**
          * LlmReviewNotFoundResponse
@@ -3250,8 +3354,6 @@ export interface components {
         };
         /** PaperGenerationProgressPayload */
         PaperGenerationProgressPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["PaperGenerationProgressEvent"];
         };
         /**
@@ -3328,6 +3430,53 @@ export interface components {
              * @description Step-specific details (figures selected, citations found, etc.)
              */
             details?: Record<string, never> | null;
+        };
+        /** ParentRunFileInfo */
+        ParentRunFileInfo: {
+            /** S3 Key */
+            s3_key: string;
+            /** Filename */
+            filename: string;
+            /** Size */
+            size: number;
+            /** Download Url */
+            download_url: string;
+        };
+        /** ParentRunFilesRequest */
+        ParentRunFilesRequest: {
+            /** Parent Run Id */
+            parent_run_id: string;
+        };
+        /** ParentRunFilesResponse */
+        ParentRunFilesResponse: {
+            /** Files */
+            files: components["schemas"]["ParentRunFileInfo"][];
+            /** Expires In */
+            expires_in: number;
+        };
+        /** PresignedUploadUrlRequest */
+        PresignedUploadUrlRequest: {
+            /** Artifact Type */
+            artifact_type: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /** PresignedUploadUrlResponse */
+        PresignedUploadUrlResponse: {
+            /** Upload Url */
+            upload_url: string;
+            /** S3 Key */
+            s3_key: string;
+            /** Expires In */
+            expires_in: number;
         };
         /**
          * ProgressUpdateEvent
@@ -4621,8 +4770,6 @@ export interface components {
         };
         /** ReviewCompletedPayload */
         ReviewCompletedPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["ReviewCompletedEvent"];
         };
         /** RunCompletedEventPayload */
@@ -4644,8 +4791,6 @@ export interface components {
         };
         /** RunCompletedPayload */
         RunCompletedPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["RunCompletedEventPayload"];
         };
         /**
@@ -4741,8 +4886,6 @@ export interface components {
         };
         /** RunFinishedPayload */
         RunFinishedPayload: {
-            /** Run Id */
-            run_id: string;
             /** Success */
             success: boolean;
             /** Message */
@@ -4760,8 +4903,6 @@ export interface components {
         };
         /** RunLogPayload */
         RunLogPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["RunLogEvent"];
         };
         /**
@@ -4818,11 +4959,6 @@ export interface components {
              */
             cost_per_hour_cents?: number | null;
         };
-        /** RunStartedPayload */
-        RunStartedPayload: {
-            /** Run Id */
-            run_id: string;
-        };
         /**
          * RunType
          * @description Execution stream identifier for research pipeline code execution telemetry.
@@ -4843,8 +4979,6 @@ export interface components {
         };
         /** RunningCodePayload */
         RunningCodePayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["RunningCodeEventPayload"];
         };
         /**
@@ -5071,8 +5205,6 @@ export interface components {
         };
         /** StageProgressPayload */
         StageProgressPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["StageProgressEvent"];
         };
         /** StageSkipWindowEventModel */
@@ -5091,8 +5223,6 @@ export interface components {
         };
         /** StageSkipWindowPayload */
         StageSkipWindowPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["StageSkipWindowEventModel"];
         };
         /**
@@ -5162,8 +5292,6 @@ export interface components {
         };
         /** SubstageCompletedPayload */
         SubstageCompletedPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["SubstageCompletedEvent"];
         };
         /** SubstageSummaryEvent */
@@ -5175,8 +5303,6 @@ export interface components {
         };
         /** SubstageSummaryPayload */
         SubstageSummaryPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["SubstageSummaryEvent"];
         };
         /**
@@ -5221,8 +5347,6 @@ export interface components {
         };
         /** TokenUsagePayload */
         TokenUsagePayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["TokenUsageEvent"];
         };
         /**
@@ -5277,8 +5401,6 @@ export interface components {
         };
         /** TreeVizStoredPayload */
         TreeVizStoredPayload: {
-            /** Run Id */
-            run_id: string;
             event: components["schemas"]["TreeVizStoredEvent"];
         };
         /**
@@ -6452,13 +6574,15 @@ export interface operations {
             };
         };
     };
-    ingest_stage_progress_api_research_pipeline_events_stage_progress_post: {
+    ingest_stage_progress_api_research_pipeline_events__run_id__stage_progress_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6485,13 +6609,15 @@ export interface operations {
             };
         };
     };
-    ingest_substage_completed_api_research_pipeline_events_substage_completed_post: {
+    ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6518,13 +6644,15 @@ export interface operations {
             };
         };
     };
-    ingest_paper_generation_progress_api_research_pipeline_events_paper_generation_progress_post: {
+    ingest_paper_generation_progress_api_research_pipeline_events__run_id__paper_generation_progress_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6551,13 +6679,15 @@ export interface operations {
             };
         };
     };
-    ingest_artifact_uploaded_api_research_pipeline_events_artifact_uploaded_post: {
+    ingest_artifact_uploaded_api_research_pipeline_events__run_id__artifact_uploaded_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6584,13 +6714,15 @@ export interface operations {
             };
         };
     };
-    ingest_review_completed_api_research_pipeline_events_review_completed_post: {
+    ingest_review_completed_api_research_pipeline_events__run_id__review_completed_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6617,13 +6749,15 @@ export interface operations {
             };
         };
     };
-    ingest_substage_summary_api_research_pipeline_events_substage_summary_post: {
+    ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6650,13 +6784,15 @@ export interface operations {
             };
         };
     };
-    ingest_best_node_selection_api_research_pipeline_events_best_node_selection_post: {
+    ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6683,13 +6819,15 @@ export interface operations {
             };
         };
     };
-    ingest_stage_skip_window_api_research_pipeline_events_stage_skip_window_post: {
+    ingest_stage_skip_window_api_research_pipeline_events__run_id__stage_skip_window_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6716,13 +6854,15 @@ export interface operations {
             };
         };
     };
-    ingest_tree_viz_stored_api_research_pipeline_events_tree_viz_stored_post: {
+    ingest_tree_viz_stored_api_research_pipeline_events__run_id__tree_viz_stored_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6749,13 +6889,15 @@ export interface operations {
             };
         };
     };
-    ingest_run_log_api_research_pipeline_events_run_log_post: {
+    ingest_run_log_api_research_pipeline_events__run_id__run_log_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6782,13 +6924,15 @@ export interface operations {
             };
         };
     };
-    ingest_codex_event_api_research_pipeline_events_codex_event_post: {
+    ingest_codex_event_api_research_pipeline_events__run_id__codex_event_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6815,13 +6959,15 @@ export interface operations {
             };
         };
     };
-    ingest_running_code_api_research_pipeline_events_running_code_post: {
+    ingest_running_code_api_research_pipeline_events__run_id__running_code_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6848,13 +6994,15 @@ export interface operations {
             };
         };
     };
-    ingest_run_completed_api_research_pipeline_events_run_completed_post: {
+    ingest_run_completed_api_research_pipeline_events__run_id__run_completed_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6881,20 +7029,18 @@ export interface operations {
             };
         };
     };
-    ingest_run_started_api_research_pipeline_events_run_started_post: {
+    ingest_run_started_api_research_pipeline_events__run_id__run_started_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunStartedPayload"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {
@@ -6914,13 +7060,15 @@ export interface operations {
             };
         };
     };
-    ingest_initialization_progress_api_research_pipeline_events_initialization_progress_post: {
+    ingest_initialization_progress_api_research_pipeline_events__run_id__initialization_progress_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6947,13 +7095,15 @@ export interface operations {
             };
         };
     };
-    ingest_run_finished_api_research_pipeline_events_run_finished_post: {
+    ingest_run_finished_api_research_pipeline_events__run_id__run_finished_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -6980,20 +7130,18 @@ export interface operations {
             };
         };
     };
-    ingest_heartbeat_api_research_pipeline_events_heartbeat_post: {
+    ingest_heartbeat_api_research_pipeline_events__run_id__heartbeat_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HeartbeatPayload"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             204: {
@@ -7013,13 +7161,15 @@ export interface operations {
             };
         };
     };
-    ingest_hw_stats_api_research_pipeline_events_hw_stats_post: {
+    ingest_hw_stats_api_research_pipeline_events__run_id__hw_stats_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -7046,13 +7196,15 @@ export interface operations {
             };
         };
     };
-    ingest_gpu_shortage_api_research_pipeline_events_gpu_shortage_post: {
+    ingest_gpu_shortage_api_research_pipeline_events__run_id__gpu_shortage_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -7079,13 +7231,15 @@ export interface operations {
             };
         };
     };
-    ingest_token_usage_api_research_pipeline_events_token_usage_post: {
+    ingest_token_usage_api_research_pipeline_events__run_id__token_usage_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -7112,13 +7266,15 @@ export interface operations {
             };
         };
     };
-    ingest_figure_reviews_api_research_pipeline_events_figure_reviews_post: {
+    ingest_figure_reviews_api_research_pipeline_events__run_id__figure_reviews_post: {
         parameters: {
             query?: never;
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                run_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -7133,6 +7289,154 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_presigned_upload_url_api_research_pipeline_events__run_id__presigned_upload_url_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresignedUploadUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresignedUploadUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_parent_run_files_api_research_pipeline_events__run_id__parent_run_files_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParentRunFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParentRunFilesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_datasets_api_research_pipeline_events__run_id__list_datasets_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListDatasetsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListDatasetsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dataset_upload_url_api_research_pipeline_events__run_id__dataset_upload_url_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetUploadUrlRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetUploadUrlResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

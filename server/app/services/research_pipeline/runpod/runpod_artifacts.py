@@ -18,13 +18,6 @@ logger = logging.getLogger(__name__)
 
 ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 40 * 60
 
-_LOG_UPLOAD_REQUIRED_ENVS = [
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_REGION",
-    "AWS_S3_BUCKET_NAME",
-]
-
 
 @retry(
     reraise=True,
@@ -42,21 +35,6 @@ def _run_artifact_upload_command(
         timeout=timeout_seconds,
         check=False,
     )
-
-
-def _gather_log_env(run_id: str) -> dict[str, str] | None:
-    env_values: dict[str, str] = {"RUN_ID": run_id}
-    missing: list[str] = []
-    for name in _LOG_UPLOAD_REQUIRED_ENVS:
-        value = os.environ.get(name)
-        if not value:
-            missing.append(name)
-        else:
-            env_values[name] = value
-    if missing:
-        logger.info("Missing env vars for pod log upload: %s", ", ".join(sorted(set(missing))))
-        return None
-    return env_values
 
 
 async def upload_runpod_artifacts_via_ssh(
@@ -97,9 +75,6 @@ def _upload_runpod_artifacts_via_ssh_sync(
             trigger,
         )
         return
-    env_values = _gather_log_env(run_id)
-    if env_values is None:
-        return
     logger.info(
         "Starting pod artifacts upload via SSH (run=%s trigger=%s host=%s port=%s)",
         run_id,
@@ -108,12 +83,14 @@ def _upload_runpod_artifacts_via_ssh_sync(
         port,
     )
     key_path = write_temp_key_file(private_key)
-    remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
+    # Source the pod's .env file which contains TELEMETRY_WEBHOOK_URL, TELEMETRY_WEBHOOK_TOKEN, and RUN_ID
+    env_file = f"{WORKSPACE_PATH}/AE-Scientist/research_pipeline/.env"
     remote_command = (
         f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline && "
-        f"{remote_env} .venv/bin/python upload_file.py "
+        f"set -a && source {env_file} && set +a && "
+        ".venv/bin/python upload_file.py "
         f"--file-path {WORKSPACE_PATH}/research_pipeline.log --artifact-type run_log || true && "
-        f"{remote_env} .venv/bin/python upload_folder.py "
+        ".venv/bin/python upload_folder.py "
         f"--folder-path {WORKSPACE_PATH}/AE-Scientist/research_pipeline/workspaces "
         "--artifact-type workspace_archive "
         "--archive-name workspace.zip"

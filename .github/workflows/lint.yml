@@ -102,6 +102,10 @@ jobs:
         run: |
           cd server && uv sync --frozen
 
+      - name: Install research_pipeline dependencies
+        run: |
+          cd research_pipeline && uv sync --frozen --dev
+
       - name: Install frontend dependencies
         run: |
           cd frontend && npm ci
@@ -114,7 +118,6 @@ jobs:
           ANTHROPIC_API_KEY: dummy
           XAI_API_KEY: dummy
           FRONTEND_URL: http://localhost:3000
-          TELEMETRY_WEBHOOK_TOKEN: dummy
           HF_TOKEN: dummy
           RUNPOD_API_KEY: dummy
           PIPELINE_MONITOR_POLL_INTERVAL_SECONDS: "60"
@@ -139,7 +142,7 @@ jobs:
 
       - name: Check for uncommitted changes
         run: |
-          if ! git diff --exit-code server/openapi.json frontend/src/types/api.gen.ts; then
+          if ! git diff --exit-code server/openapi.json frontend/src/types/api.gen.ts research_pipeline/ai_scientist/api_types.py; then
             echo "❌ Error: API types are out of date!"
             echo "Please run 'make gen-api-types' and commit the changes."
             exit 1

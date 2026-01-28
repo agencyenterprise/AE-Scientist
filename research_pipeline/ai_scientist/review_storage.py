@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ai_scientist.api_types import (
+    FigureReviewEvent,
+    FigureReviewsEvent,
+    ReviewCompletedEvent,
+)
 from ai_scientist.perform_llm_review import ReviewResponseModel
 from ai_scientist.perform_vlm_review import FigureImageCaptionRefReview
 from ai_scientist.telemetry.event_persistence import WebhookClient
@@ -39,26 +44,26 @@ class ReviewResponseRecorder:
             try:
                 self._webhook_client.publish(
                     kind="review_completed",
-                    payload={
-                        "summary": review.Summary,
-                        "strengths": payload.get("Strengths", []),
-                        "weaknesses": payload.get("Weaknesses", []),
-                        "originality": float(review.Originality),
-                        "quality": float(review.Quality),
-                        "clarity": float(review.Clarity),
-                        "significance": float(review.Significance),
-                        "questions": payload.get("Questions", []),
-                        "limitations": payload.get("Limitations", []),
-                        "ethical_concerns": review.Ethical_Concerns,
-                        "soundness": float(review.Soundness),
-                        "presentation": float(review.Presentation),
-                        "contribution": float(review.Contribution),
-                        "overall": float(review.Overall),
-                        "confidence": float(review.Confidence),
-                        "decision": review.Decision,
-                        "source_path": source_value,
-                        "created_at": created_at,
-                    },
+                    payload=ReviewCompletedEvent(
+                        summary=review.Summary,
+                        strengths=payload.get("Strengths", []),
+                        weaknesses=payload.get("Weaknesses", []),
+                        originality=float(review.Originality),
+                        quality=float(review.Quality),
+                        clarity=float(review.Clarity),
+                        significance=float(review.Significance),
+                        questions=payload.get("Questions", []),
+                        limitations=payload.get("Limitations", []),
+                        ethical_concerns=review.Ethical_Concerns,
+                        soundness=float(review.Soundness),
+                        presentation=float(review.Presentation),
+                        contribution=float(review.Contribution),
+                        overall=float(review.Overall),
+                        confidence=float(review.Confidence),
+                        decision=review.Decision,
+                        source_path=source_value,
+                        created_at=created_at,
+                    ),
                 )
                 logger.info("Emitted review SSE event for run_id=%s", self._run_id)
             except Exception:
@@ -92,20 +97,20 @@ class FigureReviewRecorder:
         # Emit webhook event
         if self._webhook_client is not None:
             try:
-                review_dicts = [
-                    {
-                        "figure_name": review.figure_name,
-                        "img_description": review.review.Img_description,
-                        "img_review": review.review.Img_review,
-                        "caption_review": review.review.Caption_review,
-                        "figrefs_review": review.review.Figrefs_review,
-                        "source_path": source_value,
-                    }
+                review_events = [
+                    FigureReviewEvent(
+                        figure_name=review.figure_name,
+                        img_description=review.review.Img_description,
+                        img_review=review.review.Img_review,
+                        caption_review=review.review.Caption_review,
+                        figrefs_review=review.review.Figrefs_review,
+                        source_path=source_value,
+                    )
                     for review in reviews
                 ]
                 self._webhook_client.publish(
                     kind="figure_reviews",
-                    payload={"reviews": review_dicts},
+                    payload=FigureReviewsEvent(reviews=review_events),
                 )
                 logger.info("Emitted figure reviews webhook for run_id=%s", self._run_id)
             except Exception:

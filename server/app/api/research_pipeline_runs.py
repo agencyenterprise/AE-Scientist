@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import logging
 import math
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol, Union, cast
 from uuid import uuid4
@@ -312,6 +314,17 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
     )
 
 
+def _generate_run_webhook_token() -> tuple[str, str]:
+    """Generate a per-run webhook token and its hash.
+
+    Returns:
+        Tuple of (plain_token, token_hash)
+    """
+    plain_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(plain_token.encode()).hexdigest()
+    return plain_token, token_hash
+
+
 async def create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
@@ -324,6 +337,7 @@ async def create_and_launch_research_run(
     if not gpu_types:
         raise PodLaunchError("At least one GPU type must be provided.")
     run_id = f"rp-{uuid4().hex[:10]}"
+    webhook_token, webhook_token_hash = _generate_run_webhook_token()
     await db.create_research_pipeline_run(
         run_id=run_id,
         idea_id=idea_data.idea_id,
@@ -334,6 +348,7 @@ async def create_and_launch_research_run(
         last_billed_at=datetime.now(timezone.utc),
         container_disk_gb=CONTAINER_DISK_GB,
         volume_disk_gb=WORKSPACE_DISK_GB,
+        webhook_token_hash=webhook_token_hash,
     )
 
     # Get the run to extract cost info
@@ -367,6 +382,7 @@ async def create_and_launch_research_run(
             requested_by_first_name=requested_by_first_name,
             gpu_types=gpu_types,
             parent_run_id=parent_run_id,
+            webhook_token=webhook_token,
         )
         await db.update_research_pipeline_run(
             run_id=run_id,
@@ -943,7 +959,7 @@ async def download_research_run_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
     s3 = get_s3_service()
     try:
-        download_url = s3.generate_download_url(artifact.s3_key)
+        download_url = s3.generate_download_url(artifact.s3_key, expires_in=3600)
     except Exception as exc:  # pragma: no cover - S3 errors already logged upstream
         logger.exception("Failed to generate download URL for artifact %s", artifact_id)
         raise HTTPException(status_code=500, detail="Failed to generate download URL") from exc

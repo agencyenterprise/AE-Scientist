@@ -5,7 +5,6 @@ Designed to be fork-safe: worker processes simply enqueue events while a single
 writer thread in the launcher process performs webhook publishes.
 """
 
-import json
 import logging
 import multiprocessing
 import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is imported
@@ -16,8 +15,16 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 import requests
+from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from ai_scientist.api_types import (
+    GPUShortagePayload,
+    HardwareStatsPartition,
+    HardwareStatsPayload,
+    InitializationProgressPayload,
+    RunFinishedPayload,
+)
 from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceRecord
 
 # pylint: disable=broad-except
@@ -29,7 +36,7 @@ logger = logging.getLogger("ai-scientist.telemetry")
 @dataclass(frozen=True)
 class PersistableEvent:
     kind: EventKind
-    data: dict[str, Any]
+    data: BaseModel
 
 
 class WebhookClient:
@@ -53,12 +60,6 @@ class WebhookClient:
         "token_usage": "/token-usage",
         "figure_reviews": "/figure-reviews",
     }
-    _RUN_STARTED_PATH = "/run-started"
-    _RUN_FINISHED_PATH = "/run-finished"
-    _INITIALIZATION_PROGRESS_PATH = "/initialization-progress"
-    _HEARTBEAT_PATH = "/heartbeat"
-    _HW_STATS_PATH = "/hw-stats"
-    _GPU_SHORTAGE_PATH = "/gpu-shortage"
 
     def __init__(self, *, base_url: str, token: str, run_id: str) -> None:
         self._base_url = base_url.rstrip("/")
@@ -66,7 +67,7 @@ class WebhookClient:
         self._run_id = run_id
 
     def _post(self, *, path: str, payload: dict[str, Any]) -> Future[None]:
-        url = f"{self._base_url}{path}"
+        url = f"{self._base_url}/{self._run_id}{path}"
         headers = {
             "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json",
@@ -130,24 +131,21 @@ class WebhookClient:
         )
         response.raise_for_status()
 
-    def publish(self, *, kind: EventKind, payload: dict[str, Any]) -> Optional[Future[None]]:
+    def publish(self, *, kind: EventKind, payload: BaseModel) -> Optional[Future[None]]:
         endpoint = self._EVENT_PATHS.get(kind)
         if not endpoint:
             logger.debug("No webhook endpoint configured for kind=%s", kind)
             return None
-        body = {"run_id": self._run_id, "event": payload}
+        body = {"event": payload.model_dump()}
         return self._post(path=endpoint, payload=body)
 
     def publish_run_started(self) -> Future[None]:
         logger.info("Publishing run started event for run_id=%s", self._run_id)
-        return self._post(path=self._RUN_STARTED_PATH, payload={"run_id": self._run_id})
+        return self._post(path="/run-started", payload={})
 
     def publish_initialization_progress(self, *, message: str) -> Future[None]:
-        payload = {
-            "run_id": self._run_id,
-            "message": message,
-        }
-        return self._post(path=self._INITIALIZATION_PROGRESS_PATH, payload=payload)
+        payload = InitializationProgressPayload(message=message)
+        return self._post(path="/initialization-progress", payload=payload.model_dump())
 
     def publish_run_finished(
         self,
@@ -155,25 +153,24 @@ class WebhookClient:
         success: bool,
         message: Optional[str] = None,
     ) -> Future[None]:
-        payload: dict[str, Any] = {"run_id": self._run_id, "success": success}
-        if message:
-            payload["message"] = message
-        return self._post(path=self._RUN_FINISHED_PATH, payload=payload)
+        payload = RunFinishedPayload(success=success, message=message)
+        return self._post(path="/run-finished", payload=payload.model_dump(exclude_none=True))
 
     def publish_heartbeat(self) -> Future[None]:
-        payload = {
-            "run_id": self._run_id,
-        }
-        return self._post(path=self._HEARTBEAT_PATH, payload=payload)
+        return self._post(path="/heartbeat", payload={})
 
     def publish_hw_stats(self, *, partitions: list[dict[str, int | str]]) -> Optional[Future[None]]:
         if not partitions:
             return None
-        payload = {
-            "run_id": self._run_id,
-            "partitions": partitions,
-        }
-        return self._post(path=self._HW_STATS_PATH, payload=payload)
+        typed_partitions = [
+            HardwareStatsPartition(
+                partition=str(p["partition"]),
+                used_bytes=int(p["used_bytes"]),
+            )
+            for p in partitions
+        ]
+        payload = HardwareStatsPayload(partitions=typed_partitions)
+        return self._post(path="/hw-stats", payload=payload.model_dump())
 
     def publish_gpu_shortage(
         self,
@@ -182,25 +179,12 @@ class WebhookClient:
         available_gpus: int,
         message: Optional[str] = None,
     ) -> Future[None]:
-        payload: dict[str, Any] = {
-            "run_id": self._run_id,
-            "required_gpus": required_gpus,
-            "available_gpus": available_gpus,
-        }
-        if message:
-            payload["message"] = message
-        return self._post(path=self._GPU_SHORTAGE_PATH, payload=payload)
-
-
-def _sanitize_payload(data: dict[str, Any]) -> dict[str, Any]:
-    """Ensure payload can be serialized to JSON."""
-    try:
-        json.dumps(data, default=str)
-        return data
-    except TypeError:
-        sanitized_raw = json.dumps(data, default=str)
-        sanitized: dict[str, Any] = json.loads(sanitized_raw)
-        return sanitized
+        payload = GPUShortagePayload(
+            required_gpus=required_gpus,
+            available_gpus=available_gpus,
+            message=message,
+        )
+        return self._post(path="/gpu-shortage", payload=payload.model_dump(exclude_none=True))
 
 
 class EventPersistenceManager:
@@ -305,14 +289,9 @@ class EventQueueEmitter:
         record = cast(Optional[PersistenceRecord], cast(Any, event).persistence_record())
         if record is None:
             return
-        kind, payload_data = record
-        if kind == "substage_completed":
-            payload_data = {
-                **payload_data,
-                "summary": _sanitize_payload(payload_data.get("summary") or {}),
-            }
+        kind, payload_model = record
         try:
-            self.queue.put_nowait(PersistableEvent(kind=kind, data=payload_data))
+            self.queue.put_nowait(PersistableEvent(kind=kind, data=payload_model))
         except queue.Full:
             logger.warning("Event queue is full; dropping telemetry event.")
         except Exception:  # noqa: BLE001

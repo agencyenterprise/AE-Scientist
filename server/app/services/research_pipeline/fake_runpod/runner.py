@@ -14,6 +14,31 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Query
 from pydantic import BaseModel
+
+# fmt: off
+# isort: off
+from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
+    BestNodeSelectionEvent,
+    CodexEventPayload,
+    FigureReviewEvent,
+    FigureReviewsEvent,
+    PaperGenerationProgressEvent,
+    ReviewCompletedEvent,
+    RunCompletedEventPayload,
+    RunLogEvent,
+    RunningCodeEventPayload,
+    RunType,
+    StageProgressEvent,
+    StageSkipWindowEventModel,
+    State as StageSkipState,
+    Status6 as RunCompletedStatus,
+    SubstageCompletedEvent,
+    SubstageSummaryEvent,
+    TokenUsageEvent,
+    TreeVizStoredEvent,
+)
+# isort: on
+# fmt: on
 from research_pipeline.ai_scientist.artifact_manager import (  # type: ignore[import-not-found]
     ArtifactPublisher,
     ArtifactSpec,
@@ -232,20 +257,12 @@ def _start_fake_runner(
     record: PodRecord,
     webhook_url: str,
     webhook_token: str,
-    aws_access_key_id: str,
-    aws_secret_access_key: str,
-    aws_region: str,
-    aws_s3_bucket_name: str,
 ) -> "FakeRunner":
     runner = FakeRunner(
         run_id=record.run_id,
         pod_id=record.id,
         webhook_url=webhook_url,
         webhook_token=webhook_token,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
     )
     thread = threading.Thread(target=runner.run, name=f"fake-runner-{record.run_id}", daemon=True)
     thread.start()
@@ -265,17 +282,12 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
     run_id = parsed_env.get("RUN_ID")
     if not run_id:
         raise HTTPException(status_code=400, detail="RUN_ID missing from dockerStartCmd .env")
-    aws_access_key_id = parsed_env.get("AWS_ACCESS_KEY_ID")
-    aws_secret_access_key = parsed_env.get("AWS_SECRET_ACCESS_KEY")
-    aws_region = parsed_env.get("AWS_REGION")
-    aws_s3_bucket_name = parsed_env.get("AWS_S3_BUCKET_NAME")
-    if (
-        not aws_access_key_id
-        or not aws_secret_access_key
-        or not aws_region
-        or not aws_s3_bucket_name
-    ):
-        raise HTTPException(status_code=400, detail="AWS_* missing from dockerStartCmd .env")
+    telemetry_webhook_url = parsed_env.get("TELEMETRY_WEBHOOK_URL")
+    telemetry_webhook_token = parsed_env.get("TELEMETRY_WEBHOOK_TOKEN")
+    if not telemetry_webhook_url or not telemetry_webhook_token:
+        raise HTTPException(
+            status_code=400, detail="TELEMETRY_WEBHOOK_* missing from dockerStartCmd .env"
+        )
     pod_id = f"fake-{uuid.uuid4()}"
     created_at = time.time()
     record = PodRecord(
@@ -294,16 +306,10 @@ def create_pod(request: PodRequest = Body(...)) -> Dict[str, object]:
         _pods[pod_id] = record
     logger.info("Created fake pod %s for run %s", pod_id, run_id)
     _schedule_ready_transition(record, delay_seconds=1)
-    webhook_url = _require_env("TELEMETRY_WEBHOOK_URL")
-    webhook_token = _require_env("TELEMETRY_WEBHOOK_TOKEN")
     runner = _start_fake_runner(
         record=record,
-        webhook_url=webhook_url,
-        webhook_token=webhook_token,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
+        webhook_url=telemetry_webhook_url,
+        webhook_token=telemetry_webhook_token,
     )
     with _lock:
         _runners_by_run_id[record.run_id] = runner
@@ -514,19 +520,11 @@ class FakeRunner:
         pod_id: str,
         webhook_url: str,
         webhook_token: str,
-        aws_access_key_id: str,
-        aws_secret_access_key: str,
-        aws_region: str,
-        aws_s3_bucket_name: str,
     ) -> None:
         self._run_id = run_id
         self._pod_id = pod_id
         self._webhook_url = webhook_url
         self._webhook_token = webhook_token
-        self._aws_access_key_id = aws_access_key_id
-        self._aws_secret_access_key = aws_secret_access_key
-        self._aws_region = aws_region
-        self._aws_s3_bucket_name = aws_s3_bucket_name
         self._iterations_per_stage = 3
         self._stage_plan: list[tuple[str, int]] = [
             ("1_initial_implementation", 10),
@@ -606,22 +604,22 @@ class FakeRunner:
         exec_time = max(0.0, (now - record.started_at).total_seconds())
         self._enqueue_event(
             kind="run_log",
-            data={
-                "message": f"Termination requested for execution {execution_id}: {payload}",
-                "level": "warn",
-            },
+            data=RunLogEvent(
+                message=f"Termination requested for execution {execution_id}: {payload}",
+                level="warn",
+            ),
         )
         # Publish termination webhook
         try:
             self._webhooks.publish_run_completed(
-                {
-                    "execution_id": execution_id,
-                    "stage_name": record.stage_name,
-                    "run_type": record.run_type,
-                    "status": "failed",
-                    "exec_time": exec_time,
-                    "completed_at": now.isoformat(),
-                }
+                RunCompletedEventPayload(
+                    execution_id=execution_id,
+                    stage_name=record.stage_name,
+                    run_type=RunType(record.run_type),
+                    status=RunCompletedStatus.failed,
+                    exec_time=exec_time,
+                    completed_at=now.isoformat(),
+                )
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception(
@@ -697,7 +695,9 @@ class FakeRunner:
         while not self._heartbeat_stop.is_set():
             logger.debug("Heartbeat tick for run %s", self._run_id)
             self._persistence.queue.put(
-                PersistableEvent(kind="run_log", data={"message": "heartbeat", "level": "debug"})
+                PersistableEvent(
+                    kind="run_log", data=RunLogEvent(message="heartbeat", level="debug")
+                )
             )
             try:
                 if webhook_client is not None:
@@ -712,15 +712,18 @@ class FakeRunner:
         counter = 1
         while not self._log_stop.is_set():
             message = f"[FakeRunner {self._run_id[:8]}] periodic log #{counter}"
-            payload = {"message": message, "level": "info"}
             try:
-                self._persistence.queue.put(PersistableEvent(kind="run_log", data=payload))
+                self._persistence.queue.put(
+                    PersistableEvent(
+                        kind="run_log", data=RunLogEvent(message=message, level="info")
+                    )
+                )
             except Exception:
                 logger.exception("Failed to enqueue periodic log for run %s", self._run_id)
             counter += 1
             self._log_stop.wait(timeout=self._adjusted_timeout(self._periodic_log_interval_seconds))
 
-    def _enqueue_event(self, *, kind: str, data: dict[str, Any]) -> None:
+    def _enqueue_event(self, *, kind: str, data: BaseModel) -> None:
         try:
             self._persistence.queue.put(PersistableEvent(kind=kind, data=data))
         except Exception:
@@ -728,12 +731,12 @@ class FakeRunner:
 
     def _emit_stage_skip_window_event(self, *, stage_name: str, state: str, reason: str) -> None:
         timestamp = datetime.now(timezone.utc).isoformat()
-        payload = {
-            "stage": stage_name,
-            "state": state,
-            "timestamp": timestamp,
-            "reason": reason,
-        }
+        payload = StageSkipWindowEventModel(
+            stage=stage_name,
+            state=StageSkipState(state),
+            timestamp=timestamp,
+            reason=reason,
+        )
         logger.info(
             "[FakeRunner %s] Stage skip window %s for %s",
             self._run_id[:8],
@@ -796,13 +799,13 @@ class FakeRunner:
                 status="running",
             )
         self._webhooks.publish_running_code(
-            {
-                "execution_id": execution_id,
-                "stage_name": stage_name,
-                "run_type": codex_run_type,
-                "code": fake_task_markdown,
-                "started_at": started_at.isoformat(),
-            }
+            RunningCodeEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(codex_run_type),
+                code=fake_task_markdown,
+                started_at=started_at.isoformat(),
+            )
         )
 
         # Emit Codex JSONL-like events so the UI can show Codex activity.
@@ -812,13 +815,13 @@ class FakeRunner:
         self._sleep(1)
         runfile_started_at = datetime.now(timezone.utc)
         self._webhooks.publish_running_code(
-            {
-                "execution_id": execution_id,
-                "stage_name": stage_name,
-                "run_type": runfile_run_type,
-                "code": fake_runfile_code,
-                "started_at": runfile_started_at.isoformat(),
-            }
+            RunningCodeEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(runfile_run_type),
+                code=fake_runfile_code,
+                started_at=runfile_started_at.isoformat(),
+            )
         )
 
         # Keep the "runfile execution" shorter than the overall Codex session.
@@ -841,14 +844,14 @@ class FakeRunner:
             runfile_completed_at.isoformat(),
         )
         self._webhooks.publish_run_completed(
-            {
-                "execution_id": execution_id,
-                "stage_name": stage_name,
-                "run_type": runfile_run_type,
-                "status": "success",
-                "exec_time": runfile_exec_time,
-                "completed_at": runfile_completed_at.isoformat(),
-            }
+            RunCompletedEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(runfile_run_type),
+                status=RunCompletedStatus.success,
+                exec_time=runfile_exec_time,
+                completed_at=runfile_completed_at.isoformat(),
+            )
         )
 
         # Ensure codex_execution always outlives runfile_execution.
@@ -862,14 +865,14 @@ class FakeRunner:
             completed_at.isoformat(),
         )
         self._webhooks.publish_run_completed(
-            {
-                "execution_id": execution_id,
-                "stage_name": stage_name,
-                "run_type": codex_run_type,
-                "status": "success",
-                "exec_time": exec_time,
-                "completed_at": completed_at.isoformat(),
-            }
+            RunCompletedEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(codex_run_type),
+                status=RunCompletedStatus.success,
+                exec_time=exec_time,
+                completed_at=completed_at.isoformat(),
+            )
         )
         with _lock:
             existing = _executions_by_id.get(execution_id)
@@ -889,12 +892,14 @@ class FakeRunner:
         }
         self._enqueue_event(
             kind="codex_event",
-            data={
-                "stage": stage_name,
-                "node": node_index,
-                "event_type": "item.started",
-                "event_content": item_event,
-            },
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "item.started",
+                    "event_content": item_event,
+                }
+            ),
         )
         item_completed_event = {
             "type": "item.completed",
@@ -908,12 +913,14 @@ class FakeRunner:
         }
         self._enqueue_event(
             kind="codex_event",
-            data={
-                "stage": stage_name,
-                "node": node_index,
-                "event_type": "item.completed",
-                "event_content": item_completed_event,
-            },
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "item.completed",
+                    "event_content": item_completed_event,
+                }
+            ),
         )
         turn_event = {
             "type": "turn.completed",
@@ -925,12 +932,14 @@ class FakeRunner:
         }
         self._enqueue_event(
             kind="codex_event",
-            data={
-                "stage": stage_name,
-                "node": node_index,
-                "event_type": "turn.completed",
-                "event_content": turn_event,
-            },
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "turn.completed",
+                    "event_content": turn_event,
+                }
+            ),
         )
 
     def _emit_progress_flow(self) -> None:
@@ -976,25 +985,25 @@ class FakeRunner:
                 self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
                 self._enqueue_event(
                     kind="run_stage_progress",
-                    data={
-                        "stage": stage_name,
-                        "iteration": iteration + 1,
-                        "max_iterations": max_iterations,
-                        "progress": progress,
-                        "total_nodes": 10 + iteration,
-                        "buggy_nodes": iteration,
-                        "good_nodes": 9 - iteration,
-                        "best_metric": f"metric-{progress:.2f}",
-                        "eta_s": int((total_iterations - current_iter) * 20),
-                        "latest_iteration_time_s": 20,
-                    },
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=iteration + 1,
+                        max_iterations=max_iterations,
+                        progress=progress,
+                        total_nodes=10 + iteration,
+                        buggy_nodes=iteration,
+                        good_nodes=9 - iteration,
+                        best_metric=f"metric-{progress:.2f}",
+                        eta_s=int((total_iterations - current_iter) * 20),
+                        latest_iteration_time_s=20,
+                    ),
                 )
                 self._enqueue_event(
                     kind="run_log",
-                    data={
-                        "message": f"{stage_name} iteration {iteration + 1} complete",
-                        "level": "info",
-                    },
+                    data=RunLogEvent(
+                        message=f"{stage_name} iteration {iteration + 1} complete",
+                        level="info",
+                    ),
                 )
                 # Mid-stage tree viz emit on second iteration (iteration index 1)
                 if iteration == 1:
@@ -1028,10 +1037,10 @@ class FakeRunner:
                 effective_skip_reason = stage_skip_reason or "Stage skipped by operator."
                 self._enqueue_event(
                     kind="run_log",
-                    data={
-                        "message": f"Skipping stage {stage_name}: {effective_skip_reason}",
-                        "level": "warn",
-                    },
+                    data=RunLogEvent(
+                        message=f"Skipping stage {stage_name}: {effective_skip_reason}",
+                        level="warn",
+                    ),
                 )
                 summary = {
                     "goals": f"Goals for {stage_name}",
@@ -1044,20 +1053,20 @@ class FakeRunner:
                 }
                 self._enqueue_event(
                     kind="substage_completed",
-                    data={
-                        "stage": stage_name,
-                        "main_stage_number": stage_index + 1,
-                        "reason": "skipped",
-                        "summary": summary,
-                    },
+                    data=SubstageCompletedEvent(
+                        stage=stage_name,
+                        main_stage_number=stage_index + 1,
+                        reason="skipped",
+                        summary=summary,
+                    ),
                 )
                 try:
                     self._enqueue_event(
                         kind="substage_summary",
-                        data={
-                            "stage": stage_name,
-                            "summary": summary,
-                        },
+                        data=SubstageSummaryEvent(
+                            stage=stage_name,
+                            summary=summary,
+                        ),
                     )
                 except Exception:
                     logger.exception(
@@ -1083,20 +1092,20 @@ class FakeRunner:
             logger.info("Emitting substage_completed for stage %s", stage_name)
             self._enqueue_event(
                 kind="substage_completed",
-                data={
-                    "stage": stage_name,
-                    "main_stage_number": stage_index + 1,
-                    "reason": "completed",
-                    "summary": summary,
-                },
+                data=SubstageCompletedEvent(
+                    stage=stage_name,
+                    main_stage_number=stage_index + 1,
+                    reason="completed",
+                    summary=summary,
+                ),
             )
             try:
                 self._enqueue_event(
                     kind="substage_summary",
-                    data={
-                        "stage": stage_name,
-                        "summary": summary,
-                    },
+                    data=SubstageSummaryEvent(
+                        stage=stage_name,
+                        summary=summary,
+                    ),
                 )
             except Exception:
                 logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
@@ -1169,24 +1178,24 @@ class FakeRunner:
 
                 self._enqueue_event(
                     kind="paper_generation_progress",
-                    data={
-                        "step": step_name,
-                        "substep": substep_name,
-                        "progress": overall_progress,
-                        "step_progress": step_progress,
-                        "details": {
+                    data=PaperGenerationProgressEvent(
+                        step=step_name,
+                        substep=substep_name,
+                        progress=overall_progress,
+                        step_progress=step_progress,
+                        details={
                             **step_details,
                             "current_substep": substep_idx + 1,
                             "total_substeps": len(substeps),
                         },
-                    },
+                    ),
                 )
                 self._enqueue_event(
                     kind="run_log",
-                    data={
-                        "message": f"Paper generation: {step_name} - {substep_name}",
-                        "level": "info",
-                    },
+                    data=RunLogEvent(
+                        message=f"Paper generation: {step_name} - {substep_name}",
+                        level="info",
+                    ),
                 )
                 # Shorter delay for paper generation steps (5s instead of 20s)
                 self._sleep(5)
@@ -1200,10 +1209,10 @@ class FakeRunner:
         # Log completion
         self._enqueue_event(
             kind="run_log",
-            data={
-                "message": "Paper generation completed",
-                "level": "info",
-            },
+            data=RunLogEvent(
+                message="Paper generation completed",
+                level="info",
+            ),
         )
         logger.info("[FakeRunner %s] Paper generation complete", self._run_id[:8])
 
@@ -1211,13 +1220,13 @@ class FakeRunner:
         """Emit fake token usage events to exercise the token_usage webhook."""
         stages = ["1_initial_implementation", "2_baseline_tuning", "3_creative_research"]
         for stage in stages:
-            payload = {
-                "provider": "openai",
-                "model": "gpt-4o",
-                "input_tokens": 15000 + hash(stage) % 5000,
-                "output_tokens": 3000 + hash(stage) % 1000,
-                "cached_input_tokens": 8000 + hash(stage) % 2000,
-            }
+            payload = TokenUsageEvent(
+                provider="openai",
+                model="gpt-4o",
+                input_tokens=15000 + hash(stage) % 5000,
+                output_tokens=3000 + hash(stage) % 1000,
+                cached_input_tokens=8000 + hash(stage) % 2000,
+            )
             try:
                 self._webhooks.publish_token_usage(payload)
             except Exception:
@@ -1251,7 +1260,7 @@ class FakeRunner:
 
     def _emit_fake_figure_reviews(self) -> None:
         """Emit fake VLM figure reviews to exercise the figure_reviews webhook."""
-        fake_reviews = [
+        fake_reviews: list[dict[str, str | None]] = [
             {
                 "figure_name": "Figure 1",
                 "img_description": "A line plot showing training loss curves over 100 epochs. The blue line represents the baseline model while the orange line shows our improved method.",
@@ -1279,7 +1288,18 @@ class FakeRunner:
         ]
 
         try:
-            self._webhooks.publish_figure_reviews({"reviews": fake_reviews})
+            review_events = [
+                FigureReviewEvent(
+                    figure_name=r["figure_name"],
+                    img_description=r["img_description"],
+                    img_review=r["img_review"],
+                    caption_review=r["caption_review"],
+                    figrefs_review=r["figrefs_review"],
+                    source_path=r["source_path"],
+                )
+                for r in fake_reviews
+            ]
+            self._webhooks.publish_figure_reviews(FigureReviewsEvent(reviews=review_events))
             logger.info(
                 "[FakeRunner %s] Posted figure_reviews webhook with %d reviews",
                 self._run_id[:8],
@@ -1327,26 +1347,26 @@ class FakeRunner:
         created_at = datetime.now(timezone.utc)
 
         # Publish the webhook (server will generate the ID and persist to database)
-        webhook_payload = {
-            "summary": summary,
-            "strengths": strengths,
-            "weaknesses": weaknesses,
-            "originality": originality,
-            "quality": quality,
-            "clarity": clarity,
-            "significance": significance,
-            "questions": questions,
-            "limitations": limitations,
-            "ethical_concerns": ethical_concerns,
-            "soundness": soundness,
-            "presentation": presentation,
-            "contribution": contribution,
-            "overall": overall,
-            "confidence": confidence,
-            "decision": decision,
-            "source_path": source_path,
-            "created_at": created_at.isoformat(),
-        }
+        webhook_payload = ReviewCompletedEvent(
+            summary=summary,
+            strengths=strengths,
+            weaknesses=weaknesses,
+            originality=originality,
+            quality=quality,
+            clarity=clarity,
+            significance=significance,
+            questions=questions,
+            limitations=limitations,
+            ethical_concerns=ethical_concerns,
+            soundness=soundness,
+            presentation=presentation,
+            contribution=contribution,
+            overall=overall,
+            confidence=confidence,
+            decision=decision,
+            source_path=source_path,
+            created_at=created_at.isoformat(),
+        )
 
         try:
             self._webhooks.publish_review_completed(webhook_payload)
@@ -1363,10 +1383,8 @@ class FakeRunner:
         logger.info("Uploading fake artifact %s", artifact_path)
         publisher = ArtifactPublisher(
             run_id=self._run_id,
-            aws_access_key_id=self._aws_access_key_id,
-            aws_secret_access_key=self._aws_secret_access_key,
-            aws_region=self._aws_region,
-            aws_s3_bucket_name=self._aws_s3_bucket_name,
+            webhook_base_url=self._webhook_url,
+            webhook_token=self._webhook_token,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
@@ -1396,10 +1414,8 @@ class FakeRunner:
         logger.info("Uploading fake plot artifact %s", plot_path)
         publisher = ArtifactPublisher(
             run_id=self._run_id,
-            aws_access_key_id=self._aws_access_key_id,
-            aws_secret_access_key=self._aws_secret_access_key,
-            aws_region=self._aws_region,
-            aws_s3_bucket_name=self._aws_s3_bucket_name,
+            webhook_base_url=self._webhook_url,
+            webhook_token=self._webhook_token,
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
@@ -1490,11 +1506,11 @@ class FakeRunner:
         # Publish tree_viz_stored event via webhook (server will generate ID and persist to DB)
         try:
             self._webhooks.publish_tree_viz_stored(
-                {
-                    "stage_id": stage_id,
-                    "version": version,
-                    "viz": payload,  # Include full viz data in webhook
-                }
+                TreeVizStoredEvent(
+                    stage_id=stage_id,
+                    version=version,
+                    viz=payload,  # Include full viz data in webhook
+                )
             )
             logger.info(
                 "Posted tree_viz_stored webhook: run=%s stage=%s",
@@ -1517,11 +1533,11 @@ class FakeRunner:
             self._persistence.queue.put(
                 PersistableEvent(
                     kind="best_node_selection",
-                    data={
-                        "stage": stage_name,
-                        "node_id": node_id,
-                        "reasoning": reasoning,
-                    },
+                    data=BestNodeSelectionEvent(
+                        stage=stage_name,
+                        node_id=node_id,
+                        reasoning=reasoning,
+                    ),
                 )
             )
         except Exception:

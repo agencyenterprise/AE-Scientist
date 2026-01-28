@@ -184,7 +184,7 @@ def format_pdf_content_for_context(
 
         try:
             # Generate temporary download URL from S3
-            file_url = s3_service.generate_download_url(file_attachment.s3_key)
+            file_url = s3_service.generate_download_url(file_attachment.s3_key, expires_in=3600)
             # Download file content
             response = requests.get(file_url, timeout=30)
             response.raise_for_status()

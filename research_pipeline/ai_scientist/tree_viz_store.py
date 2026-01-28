@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from ai_scientist.api_types import TreeVizStoredEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
@@ -46,11 +47,11 @@ class TreeVizStore:
             try:
                 webhook_client.publish(
                     kind="tree_viz_stored",
-                    payload={
-                        "stage_id": stage_id,
-                        "version": version,
-                        "viz": viz,
-                    },
+                    payload=TreeVizStoredEvent(
+                        stage_id=stage_id,
+                        version=version,
+                        viz=viz,
+                    ),
                 )
                 logger.info(
                     "Published tree_viz_stored webhook: run=%s stage=%s",

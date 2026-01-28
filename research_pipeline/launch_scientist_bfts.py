@@ -370,23 +370,21 @@ def _handle_gpu_shortage_event(
 
 
 def setup_artifact_publisher(
-    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None = None
+    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None
 ) -> tuple[ArtifactPublisher, ArtifactCallback]:
-    try:
-        aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
-        aws_secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-        aws_region = os.environ["AWS_REGION"]
-        aws_s3_bucket_name = os.environ["AWS_S3_BUCKET_NAME"]
-    except KeyError:
-        logger.error("Missing AWS environment variables; artifact publishing disabled.")
-        raise ValueError("Missing AWS environment variables; artifact publishing disabled.")
+    webhook_url = os.environ.get("TELEMETRY_WEBHOOK_URL")
+    webhook_token = os.environ.get("TELEMETRY_WEBHOOK_TOKEN")
+
+    if not webhook_url or not webhook_token:
+        logger.error(
+            "Missing TELEMETRY_WEBHOOK_URL or TELEMETRY_WEBHOOK_TOKEN; artifact publishing disabled."
+        )
+        raise ValueError("Missing TELEMETRY_WEBHOOK_URL or TELEMETRY_WEBHOOK_TOKEN")
 
     publisher = ArtifactPublisher(
         run_id=telemetry_cfg.run_id,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
+        webhook_base_url=webhook_url,
+        webhook_token=webhook_token,
         webhook_client=webhook_client,
     )
 
@@ -693,6 +691,8 @@ def run_plot_aggregation(
                         artifact_type="plot",
                         path=plot_path,
                         packaging="file",
+                        archive_name=None,
+                        exclude_dir_names=(),
                     )
                 )
         except Exception:
@@ -773,6 +773,8 @@ def run_writeup_stage(
                     artifact_type="paper_pdf",
                     path=pdf_path,
                     packaging="file",
+                    archive_name=None,
+                    exclude_dir_names=(),
                 )
             )
         except Exception:
@@ -785,6 +787,7 @@ def run_writeup_stage(
                     path=latex_path,
                     packaging="zip",
                     archive_name=f"{run_dir_path.name}-latex.zip",
+                    exclude_dir_names=(),
                 )
             )
         except Exception:
@@ -860,6 +863,8 @@ def run_review_stage(
                 artifact_type="llm_review",
                 path=review_json_path,
                 packaging="file",
+                archive_name=None,
+                exclude_dir_names=(),
             )
         )
     except Exception:
@@ -1091,6 +1096,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     artifact_type="run_log",
                     path=Path("/workspace/research_pipeline.log"),
                     packaging="file",
+                    archive_name=None,
+                    exclude_dir_names=(),
                 )
             )
 

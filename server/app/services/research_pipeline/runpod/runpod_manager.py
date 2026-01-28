@@ -382,6 +382,7 @@ async def launch_research_pipeline_run(
     requested_by_first_name: str,
     gpu_types: list[str],
     parent_run_id: str | None,
+    webhook_token: str,
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -393,7 +394,7 @@ async def launch_research_pipeline_run(
     telemetry_block: dict[str, str] = {
         "run_id": run_id,
         "webhook_url": env.telemetry_webhook_url,
-        "webhook_token": env.telemetry_webhook_token,
+        "webhook_token": webhook_token,
     }
     logger.info(
         "Launching research pipeline run_id=%s with config=%s (telemetry url=%s)",
@@ -417,6 +418,7 @@ async def launch_research_pipeline_run(
         config_content_b64=config_b64,
         run_id=run_id,
         has_previous_run=True if parent_run_id else False,
+        webhook_token=webhook_token,
     )
 
     creator = RunPodManager(api_key=runpod_api_key)

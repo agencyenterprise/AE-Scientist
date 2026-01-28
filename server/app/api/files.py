@@ -84,7 +84,7 @@ async def process_attachment_background(
             extracted_text = pdf_service.extract_text_from_pdf(file_content)
         elif file_type.startswith("image/"):
             # Generate a detailed caption using the selected provider's model if it supports images
-            image_url = s3_service.generate_download_url(s3_key=s3_key)
+            image_url = s3_service.generate_download_url(s3_key=s3_key, expires_in=3600)
 
             try:
                 # If the selected model isn't vision, we still attempt; service will fail gracefully if unsupported

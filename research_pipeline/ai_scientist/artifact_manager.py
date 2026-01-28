@@ -11,9 +11,15 @@ from pathlib import Path
 from typing import Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 
-import boto3
 import magic
+import requests
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from ai_scientist.api_types import (
+    ArtifactUploadedEvent,
+    PresignedUploadUrlRequest,
+    PresignedUploadUrlResponse,
+)
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
@@ -35,53 +41,113 @@ class ArtifactSpec:
 
     artifact_type: str
     path: Path
-    packaging: Literal["file", "zip"] = "file"
-    archive_name: str | None = None
-    exclude_dir_names: tuple[str, ...] = tuple()
+    packaging: Literal["file", "zip"]
+    archive_name: str | None
+    exclude_dir_names: tuple[str, ...]
 
 
-class S3ArtifactUploader:
+class PresignedUrlUploader:
+    """Uploads artifacts to S3 using presigned URLs obtained from the server."""
+
     def __init__(
         self,
         *,
-        bucket_name: str,
-        region: str,
-        aws_access_key_id: str,
-        aws_secret_access_key: str,
+        webhook_base_url: str,
+        webhook_token: str,
+        run_id: str,
     ) -> None:
-        self._bucket_name = bucket_name
-        self._client = boto3.client(
-            "s3",
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            region_name=region,
-        )
+        self._webhook_base_url = webhook_base_url.rstrip("/")
+        self._webhook_token = webhook_token
+        self._run_id = run_id
         self._detector: magic.Magic | None
         try:
             self._detector = magic.Magic(mime=True)
         except Exception:
             self._detector = None
 
-    def upload(self, *, request: ArtifactUploadRequest, run_id: str) -> tuple[str, str, int]:
+    def upload(self, *, request: ArtifactUploadRequest) -> tuple[str, str, int]:
+        """Upload file using presigned URL."""
         file_size = request.local_path.stat().st_size
         content_type = self._detect_content_type(path=request.local_path)
-        s3_key = f"research-pipeline/{run_id}/{request.artifact_type}/{request.filename}"
-        metadata = {
-            "run_id": run_id,
-            "artifact_type": request.artifact_type,
-            "source_path": str(request.source_path),
-        }
-        sanitized_metadata = {
-            key: self._sanitize_ascii(value=value) for key, value in metadata.items()
-        }
-        extra_args = {"ContentType": content_type, "Metadata": sanitized_metadata}
-        self._client.upload_file(
-            Filename=str(request.local_path),
-            Bucket=self._bucket_name,
-            Key=s3_key,
-            ExtraArgs=extra_args,
+
+        presigned_response = self._request_presigned_url(
+            artifact_type=request.artifact_type,
+            filename=request.filename,
+            content_type=content_type,
+            file_size=file_size,
+            source_path=str(request.source_path),
         )
-        return s3_key, content_type, file_size
+
+        self._upload_with_presigned_url(
+            upload_url=presigned_response.upload_url,
+            local_path=request.local_path,
+            content_type=content_type,
+        )
+
+        return presigned_response.s3_key, content_type, file_size
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
+    def _request_presigned_url(
+        self,
+        *,
+        artifact_type: str,
+        filename: str,
+        content_type: str,
+        file_size: int,
+        source_path: str,
+    ) -> PresignedUploadUrlResponse:
+        """Request a presigned upload URL from the server."""
+        url = f"{self._webhook_base_url}/{self._run_id}/presigned-upload-url"
+        headers = {
+            "Authorization": f"Bearer {self._webhook_token}",
+            "Content-Type": "application/json",
+        }
+        # Use generated type for request validation
+        request_payload = PresignedUploadUrlRequest(
+            artifact_type=artifact_type,
+            filename=filename,
+            content_type=content_type,
+            file_size=file_size,
+            metadata={"source_path": source_path},
+        )
+        response = requests.post(
+            url, headers=headers, json=request_payload.model_dump(), timeout=30
+        )
+        response.raise_for_status()
+        # Use generated type for response validation
+        return PresignedUploadUrlResponse.model_validate(response.json())
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=30),
+        reraise=True,
+    )
+    def _upload_with_presigned_url(
+        self,
+        *,
+        upload_url: str,
+        local_path: Path,
+        content_type: str,
+    ) -> None:
+        """Upload file content to S3 using presigned URL."""
+        with open(local_path, "rb") as f:
+            file_content = f.read()
+
+        headers = {"Content-Type": content_type}
+        response = requests.put(
+            upload_url,
+            data=file_content,
+            headers=headers,
+            timeout=3600,  # 1 hour for large uploads
+        )
+        response.raise_for_status()
+        logger.info("Successfully uploaded file via presigned URL: %s", local_path)
 
     def _detect_content_type(self, *, path: Path) -> str:
         try:
@@ -91,35 +157,24 @@ class S3ArtifactUploader:
             logger.exception("Failed to detect MIME type for artifact at %s", path)
         return "application/octet-stream"
 
-    def _sanitize_ascii(self, *, value: str) -> str:
-        try:
-            value.encode("ascii")
-            return value
-        except Exception:
-            normalized = value.encode("ascii", "ignore").decode("ascii")
-            return normalized or "n/a"
-
 
 class ArtifactPublisher:
-    """Uploads artifacts to S3 and publishes metadata via webhooks."""
+    """Uploads artifacts to S3 via presigned URLs and publishes metadata via webhooks."""
 
     def __init__(
         self,
         *,
         run_id: str,
-        aws_access_key_id: str,
-        aws_secret_access_key: str,
-        aws_region: str,
-        aws_s3_bucket_name: str,
-        webhook_client: WebhookClient | None = None,
+        webhook_base_url: str,
+        webhook_token: str,
+        webhook_client: WebhookClient | None,
     ) -> None:
         self._run_id = run_id
         self._temp_dir = Path(tempfile.mkdtemp(prefix="rp-artifacts-"))
-        self._uploader = S3ArtifactUploader(
-            bucket_name=aws_s3_bucket_name,
-            region=aws_region,
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
+        self._uploader = PresignedUrlUploader(
+            webhook_base_url=webhook_base_url,
+            webhook_token=webhook_token,
+            run_id=run_id,
         )
         self._webhook_client = webhook_client
 
@@ -134,21 +189,20 @@ class ArtifactPublisher:
             return
 
         logger.info("Uploading %s artifact from %s", spec.artifact_type, spec.path)
-        s3_key, file_type, file_size = self._uploader.upload(request=request, run_id=self._run_id)
+        s3_key, file_type, file_size = self._uploader.upload(request=request)
         created_at = datetime.now(timezone.utc).isoformat()
 
-        # Emit SSE event via webhook if available
         if self._webhook_client is not None:
             try:
                 self._webhook_client.publish(
                     kind="artifact_uploaded",
-                    payload={
-                        "artifact_type": spec.artifact_type,
-                        "filename": request.filename,
-                        "file_size": file_size,
-                        "file_type": file_type,
-                        "created_at": created_at,
-                    },
+                    payload=ArtifactUploadedEvent(
+                        artifact_type=spec.artifact_type,
+                        filename=request.filename,
+                        file_size=file_size,
+                        file_type=file_type,
+                        created_at=created_at,
+                    ),
                 )
                 logger.info("Emitted artifact SSE event for %s", request.filename)
             except Exception:

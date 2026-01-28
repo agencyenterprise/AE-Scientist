@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import time
@@ -17,7 +18,6 @@ from app.api.research_pipeline_runs import (
     extract_user_first_name,
 )
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
-from app.config import settings
 from app.models.research_pipeline import (
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
@@ -59,10 +59,13 @@ from app.services.research_pipeline.pod_termination_worker import (
 )
 from app.services.research_pipeline.runpod import get_supported_gpu_types
 from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
+from app.services.s3_service import get_s3_service
 
 
 class ResearchRunStore(Protocol):
     async def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]: ...
+
+    async def get_run_webhook_token_hash(self, run_id: str) -> Optional[str]: ...
 
     async def update_research_pipeline_run(
         self,
@@ -122,7 +125,6 @@ class StageProgressEvent(BaseModel):
 
 
 class StageProgressPayload(BaseModel):
-    run_id: str
     event: StageProgressEvent
 
 
@@ -134,7 +136,6 @@ class SubstageCompletedEvent(BaseModel):
 
 
 class SubstageCompletedPayload(BaseModel):
-    run_id: str
     event: SubstageCompletedEvent
 
 
@@ -144,22 +145,19 @@ class SubstageSummaryEvent(BaseModel):
 
 
 class SubstageSummaryPayload(BaseModel):
-    run_id: str
     event: SubstageSummaryEvent
 
 
 class RunStartedPayload(BaseModel):
-    run_id: str
+    pass
 
 
 class RunFinishedPayload(BaseModel):
-    run_id: str
     success: bool
     message: Optional[str] = None
 
 
 class InitializationProgressPayload(BaseModel):
-    run_id: str
     message: str
 
 
@@ -175,11 +173,10 @@ class HardwareStatsPartition(BaseModel):
 
 
 class HeartbeatPayload(BaseModel):
-    run_id: str
+    pass
 
 
 class HardwareStatsPayload(BaseModel):
-    run_id: str
     partitions: List[HardwareStatsPartition] = Field(default_factory=list)
 
 
@@ -207,7 +204,6 @@ def _resolve_partition_capacity_bytes(
 
 
 class GPUShortagePayload(BaseModel):
-    run_id: str
     required_gpus: int
     available_gpus: int
     message: Optional[str] = None
@@ -222,7 +218,6 @@ class PaperGenerationProgressEvent(BaseModel):
 
 
 class PaperGenerationProgressPayload(BaseModel):
-    run_id: str
     event: PaperGenerationProgressEvent
 
 
@@ -235,7 +230,6 @@ class ArtifactUploadedEvent(BaseModel):
 
 
 class ArtifactUploadedPayload(BaseModel):
-    run_id: str
     event: ArtifactUploadedEvent
 
 
@@ -261,7 +255,6 @@ class ReviewCompletedEvent(BaseModel):
 
 
 class ReviewCompletedPayload(BaseModel):
-    run_id: str
     event: ReviewCompletedEvent
 
 
@@ -272,7 +265,6 @@ class BestNodeSelectionEvent(BaseModel):
 
 
 class BestNodeSelectionPayload(BaseModel):
-    run_id: str
     event: BestNodeSelectionEvent
 
 
@@ -284,7 +276,6 @@ class StageSkipWindowEventModel(BaseModel):
 
 
 class StageSkipWindowPayload(BaseModel):
-    run_id: str
     event: StageSkipWindowEventModel
 
 
@@ -295,7 +286,6 @@ class TreeVizStoredEvent(BaseModel):
 
 
 class TreeVizStoredPayload(BaseModel):
-    run_id: str
     event: TreeVizStoredEvent
 
 
@@ -305,12 +295,10 @@ class RunLogEvent(BaseModel):
 
 
 class RunLogPayload(BaseModel):
-    run_id: str
     event: RunLogEvent
 
 
 class CodexEventPayload(BaseModel):
-    run_id: str
     event: dict[str, Any]
 
 
@@ -323,7 +311,6 @@ class RunningCodeEventPayload(BaseModel):
 
 
 class RunningCodePayload(BaseModel):
-    run_id: str
     event: RunningCodeEventPayload
 
 
@@ -337,7 +324,6 @@ class RunCompletedEventPayload(BaseModel):
 
 
 class RunCompletedPayload(BaseModel):
-    run_id: str
     event: RunCompletedEventPayload
 
 
@@ -350,7 +336,6 @@ class TokenUsageEvent(BaseModel):
 
 
 class TokenUsagePayload(BaseModel):
-    run_id: str
     event: TokenUsageEvent
 
 
@@ -370,23 +355,114 @@ class FigureReviewsEvent(BaseModel):
 
 
 class FigureReviewsPayload(BaseModel):
-    run_id: str
     event: FigureReviewsEvent
 
 
-def _verify_bearer_token(authorization: str = Header(...)) -> None:
-    expected_token = settings.TELEMETRY_WEBHOOK_TOKEN
-    if not expected_token:
+class PresignedUploadUrlRequest(BaseModel):
+    artifact_type: str
+    filename: str
+    content_type: str
+    file_size: int
+    metadata: Optional[Dict[str, str]] = None
+
+
+class PresignedUploadUrlResponse(BaseModel):
+    upload_url: str
+    s3_key: str
+    expires_in: int
+
+
+class ParentRunFileInfo(BaseModel):
+    s3_key: str
+    filename: str
+    size: int
+    download_url: str
+
+
+class ParentRunFilesRequest(BaseModel):
+    parent_run_id: str
+
+
+class ParentRunFilesResponse(BaseModel):
+    files: List[ParentRunFileInfo]
+    expires_in: int
+
+
+class DatasetFileInfo(BaseModel):
+    s3_key: str
+    relative_path: str
+    size: int
+    download_url: str
+
+
+class ListDatasetsRequest(BaseModel):
+    datasets_folder: str
+
+
+class ListDatasetsResponse(BaseModel):
+    files: List[DatasetFileInfo]
+    expires_in: int
+
+
+class DatasetUploadUrlRequest(BaseModel):
+    datasets_folder: str
+    relative_path: str
+    content_type: str
+    file_size: int
+
+
+class DatasetUploadUrlResponse(BaseModel):
+    upload_url: str
+    s3_key: str
+    expires_in: int
+
+
+async def _verify_run_token(run_id: str, token: str) -> None:
+    """Verify the bearer token for a specific run.
+
+    Validates against the per-run token hash stored in the database.
+    """
+    db = cast("ResearchRunStore", get_database())
+    stored_hash = await db.get_run_webhook_token_hash(run_id)
+
+    if stored_hash is None:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server is not configured to accept research pipeline events.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No token configured for this run.",
         )
-    scheme, _, credentials = authorization.partition(" ")
-    if scheme.lower() != "bearer" or credentials != expected_token:
+
+    provided_hash = hashlib.sha256(token.encode()).hexdigest()
+    if provided_hash != stored_hash:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token.",
         )
+
+
+async def verify_run_auth(
+    run_id: str,
+    authorization: str = Header(...),
+) -> None:
+    """FastAPI dependency that extracts and verifies the bearer token for a run.
+
+    This combines token extraction and verification into a single dependency,
+    eliminating the need for separate _extract_bearer_token and _verify_run_token calls.
+
+    Usage:
+        @router.post("/{run_id}/endpoint")
+        async def my_endpoint(
+            run_id: str,
+            _: None = Depends(verify_run_auth),
+        ) -> None:
+            ...
+    """
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format.",
+        )
+    await _verify_run_token(run_id, token)
 
 
 async def _resolve_run_owner_first_name(*, db: "ResearchRunStore", run_id: str) -> str:
@@ -403,16 +479,17 @@ def _next_stream_event_id() -> int:
     return int(time.time() * 1000)
 
 
-@router.post("/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/stage-progress", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_stage_progress(
+    run_id: str,
     payload: StageProgressPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
         "RP stage progress: run=%s stage=%s iteration=%s/%s progress=%.3f",
-        payload.run_id,
+        run_id,
         event.stage,
         event.iteration,
         event.max_iterations,
@@ -433,7 +510,7 @@ async def ingest_stage_progress(
         created_at=created_at,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSEStageProgressEvent(
             type="stage_progress",
             data=progress,
@@ -443,14 +520,14 @@ async def ingest_stage_progress(
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="stage_progress",
         event_data=event.model_dump(),
     )
 
     # Persist to database
     await db.insert_stage_progress_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event.stage,
         iteration=event.iteration,
         max_iterations=event.max_iterations,
@@ -464,16 +541,17 @@ async def ingest_stage_progress(
     )
 
 
-@router.post("/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_substage_completed(
+    run_id: str,
     payload: SubstageCompletedPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
         "RP sub-stage completed: run=%s stage=%s reason=%s",
-        payload.run_id,
+        run_id,
         event.stage,
         event.reason,
     )
@@ -489,7 +567,7 @@ async def ingest_substage_completed(
         created_at=created_at,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=cast(
             StreamEventModel,
             ResearchRunSubstageCompletedEvent(
@@ -502,29 +580,30 @@ async def ingest_substage_completed(
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="substage_completed",
         event_data=event.model_dump(),
     )
 
     # Persist to database (summary already contains main_stage_number and reason)
     await db.insert_substage_completed_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event.stage,
         summary=summary,
     )
 
 
-@router.post("/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/paper-generation-progress", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_paper_generation_progress(
+    run_id: str,
     payload: PaperGenerationProgressPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
         "Paper generation progress: run=%s step=%s substep=%s progress=%.1f%% step_progress=%.1f%%",
-        payload.run_id,
+        run_id,
         event.step,
         event.substep or "N/A",
         event.progress * 100,
@@ -533,7 +612,7 @@ async def ingest_paper_generation_progress(
     created_at = datetime.now(timezone.utc).isoformat()
     paper_event = ResearchRunPaperGenerationProgress(
         id=_next_stream_event_id(),
-        run_id=payload.run_id,
+        run_id=run_id,
         step=event.step,
         substep=event.substep,
         progress=event.progress,
@@ -542,7 +621,7 @@ async def ingest_paper_generation_progress(
         created_at=created_at,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSEPaperGenerationEvent(
             type="paper_generation_progress",
             data=paper_event,
@@ -552,14 +631,14 @@ async def ingest_paper_generation_progress(
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="paper_generation_progress",
         event_data=event.model_dump(),
     )
 
     # Persist to database
     await db.insert_paper_generation_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         step=event.step,
         substep=event.substep,
         progress=event.progress,
@@ -568,21 +647,22 @@ async def ingest_paper_generation_progress(
     )
 
 
-@router.post("/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/artifact-uploaded", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_artifact_uploaded(
+    run_id: str,
     payload: ArtifactUploadedPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
 
     # Reconstruct s3_key (same pattern as in artifact_manager.py)
-    s3_key = f"research-pipeline/{payload.run_id}/{event.artifact_type}/{event.filename}"
+    s3_key = f"research-pipeline/{run_id}/{event.artifact_type}/{event.filename}"
 
     # Persist to database (upsert based on s3_key)
     created_at_dt = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))
     artifact_id, db_created_at = await db.upsert_artifact(
-        run_id=payload.run_id,
+        run_id=run_id,
         artifact_type=event.artifact_type,
         filename=event.filename,
         file_size=event.file_size,
@@ -594,7 +674,7 @@ async def ingest_artifact_uploaded(
 
     logger.info(
         "Artifact uploaded: run=%s type=%s filename=%s size=%d artifact_id=%d",
-        payload.run_id,
+        run_id,
         event.artifact_type,
         event.filename,
         event.file_size,
@@ -608,11 +688,11 @@ async def ingest_artifact_uploaded(
         file_size=event.file_size,
         file_type=event.file_type,
         created_at=event.created_at,
-        run_id=payload.run_id,
+        run_id=run_id,
         conversation_id=None,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSEArtifactEvent(
             type="artifact",
             data=artifact_metadata,
@@ -620,24 +700,25 @@ async def ingest_artifact_uploaded(
     )
 
 
-@router.post("/review-completed", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/review-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_review_completed(
+    run_id: str,
     payload: ReviewCompletedPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
 
     logger.info(
         "Review completed: run=%s decision=%s overall=%.2f",
-        payload.run_id,
+        run_id,
         event.decision,
         event.overall,
     )
 
     # Persist to database first to get the database-generated review_id
     review_id = await db.insert_llm_review(
-        run_id=payload.run_id,
+        run_id=run_id,
         summary=event.summary,
         strengths=event.strengths,
         weaknesses=event.weaknesses,
@@ -661,7 +742,7 @@ async def ingest_review_completed(
     # Create LlmReviewResponse for SSE using database-generated review_id
     review_data = LlmReviewResponse(
         id=review_id,
-        run_id=payload.run_id,
+        run_id=run_id,
         summary=event.summary,
         strengths=event.strengths,
         weaknesses=event.weaknesses,
@@ -683,7 +764,7 @@ async def ingest_review_completed(
     )
 
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSEReviewCompletedEvent(
             type="review_completed",
             data=review_data,
@@ -691,16 +772,17 @@ async def ingest_review_completed(
     )
 
 
-@router.post("/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_substage_summary(
+    run_id: str,
     payload: SubstageSummaryPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.info(
         "RP sub-stage summary: run=%s stage=%s",
-        payload.run_id,
+        run_id,
         event.stage,
     )
     now = datetime.now(timezone.utc)
@@ -712,7 +794,7 @@ async def ingest_substage_summary(
         created_at=created_at,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSESubstageSummaryEvent(
             type="substage_summary",
             data=summary_model,
@@ -721,17 +803,18 @@ async def ingest_substage_summary(
 
     # Persist to database
     await db.insert_substage_summary_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event.stage,
         summary=event.summary,
         created_at=now,
     )
 
 
-@router.post("/best-node-selection", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/best-node-selection", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_best_node_selection(
+    run_id: str,
     payload: BestNodeSelectionPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
@@ -740,7 +823,7 @@ async def ingest_best_node_selection(
     )
     logger.info(
         "RP best-node selection: run=%s stage=%s node=%s reasoning=%s",
-        payload.run_id,
+        run_id,
         event.stage,
         event.node_id,
         reasoning_preview,
@@ -754,7 +837,7 @@ async def ingest_best_node_selection(
         created_at=created_at,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSEBestNodeEvent(
             type="best_node_selection",
             data=best_node,
@@ -764,40 +847,41 @@ async def ingest_best_node_selection(
     # Narrator: Ingest event for timeline
     await ingest_narration_event(
         db,
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="best_node_selection",
         event_data=event.model_dump(),
     )
 
     # Persist to database
     await db.insert_best_node_reasoning_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event.stage,
         node_id=event.node_id,
         reasoning=event.reasoning,
     )
 
 
-@router.post("/stage-skip-window", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/stage-skip-window", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_stage_skip_window(
+    run_id: str,
     payload: StageSkipWindowPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
     logger.info(
         "RP stage skip window event: run=%s stage=%s state=%s reason=%s",
-        payload.run_id,
+        run_id,
         event.stage,
         event.state,
         event.reason,
     )
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=cast(
             StreamEventModel,
             SSEStageSkipWindowEvent(
@@ -814,7 +898,7 @@ async def ingest_stage_skip_window(
 
     # Persist to database
     await cast(DatabaseManager, db).upsert_stage_skip_window(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event.stage,
         state=event.state,
         timestamp=datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
@@ -822,17 +906,18 @@ async def ingest_stage_skip_window(
     )
 
 
-@router.post("/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_tree_viz_stored(
+    run_id: str,
     payload: "TreeVizStoredPayload",
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
 
     # Persist to database
     tree_viz_id = await db.upsert_tree_viz(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage_id=event.stage_id,
         viz=event.viz,
         version=event.version,
@@ -840,7 +925,7 @@ async def ingest_tree_viz_stored(
 
     logger.info(
         "Tree viz stored: run=%s stage=%s tree_viz_id=%s version=%s",
-        payload.run_id,
+        run_id,
         event.stage_id,
         tree_viz_id,
         event.version,
@@ -850,7 +935,7 @@ async def ingest_tree_viz_stored(
     # Create run event for SSE streaming
     run_event = RPEvent(
         id=_next_stream_event_id(),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="tree_viz_stored",
         metadata={
             "stage_id": event.stage_id,
@@ -862,7 +947,7 @@ async def ingest_tree_viz_stored(
 
     # Publish to SSE stream
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSERunEvent(
             type="run_event",
             data=run_event,
@@ -870,25 +955,26 @@ async def ingest_tree_viz_stored(
     )
 
 
-@router.post("/run-log", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/run-log", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_log(
+    run_id: str,
     payload: RunLogPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     logger.debug(
         "RP log event received: run=%s level=%s message=%s",
-        payload.run_id,
+        run_id,
         payload.event.level,
         payload.event.message,
     )
     now = datetime.now(timezone.utc)
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=SSELogEvent(
             type="log",
             data=ResearchRunLogEntry(
@@ -902,25 +988,26 @@ async def ingest_run_log(
 
     # Persist to database
     await cast(DatabaseManager, db).insert_run_log_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         level=payload.event.level,
         message=payload.event.message,
         created_at=now,
     )
 
 
-@router.post("/codex-event", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/codex-event", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_codex_event(
+    run_id: str,
     payload: CodexEventPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
-    logger.info("RP codex event received: run=%s event=%s", payload.run_id, payload.event)
+    logger.info("RP codex event received: run=%s event=%s", run_id, payload.event)
 
     # Persist to database
     event_data = payload.event
     await db.insert_codex_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         stage=event_data.get("stage", ""),
         node=event_data.get("node", 0),
         event_type=event_data.get("event_type", ""),
@@ -928,19 +1015,20 @@ async def ingest_codex_event(
     )
 
 
-@router.post("/running-code", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/running-code", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_running_code(
+    run_id: str,
     payload: RunningCodePayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=cast(
             StreamEventModel,
             SSECodeExecutionStartedEvent(
@@ -959,14 +1047,14 @@ async def ingest_running_code(
     # Ingest into narrator
     await ingest_narration_event(
         cast(DatabaseManager, db),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="running_code",
         event_data=event.model_dump(),
     )
 
     # Persist to database (status defaults to "running")
     await cast(DatabaseManager, db).upsert_code_execution_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         execution_id=event.execution_id,
         stage_name=event.stage_name,
         run_type=event.run_type,
@@ -975,19 +1063,20 @@ async def ingest_running_code(
     )
 
 
-@router.post("/run-completed", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/run-completed", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_completed(
+    run_id: str,
     payload: RunCompletedPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
     publish_stream_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event=cast(
             StreamEventModel,
             SSECodeExecutionCompletedEvent(
@@ -1007,14 +1096,14 @@ async def ingest_run_completed(
     # Ingest into narrator
     await ingest_narration_event(
         cast(DatabaseManager, db),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="run_completed",
         event_data=event.model_dump(),
     )
 
     # Persist to database (updates the existing record with completion data)
     await cast(DatabaseManager, db).upsert_code_execution_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         execution_id=event.execution_id,
         stage_name=event.stage_name,
         run_type=event.run_type,
@@ -1024,19 +1113,19 @@ async def ingest_run_completed(
     )
 
 
-@router.post("/run-started", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/run-started", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_started(
-    payload: RunStartedPayload,
-    _: None = Depends(_verify_bearer_token),
+    run_id: str,
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
     now = datetime.now(timezone.utc)
     new_deadline = now + timedelta(minutes=5)
     await db.update_research_pipeline_run(
-        run_id=payload.run_id,
+        run_id=run_id,
         status="running",
         initialization_status="running",
         last_heartbeat_at=now,
@@ -1045,7 +1134,7 @@ async def ingest_run_started(
         started_running_at=now,
     )
     await db.insert_research_pipeline_run_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="status_changed",
         metadata={
             "from_status": run.status,
@@ -1057,7 +1146,7 @@ async def ingest_run_started(
     )
     run_event = RPEvent(
         id=_next_stream_event_id(),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="status_changed",
         metadata={
             "from_status": run.status,
@@ -1068,7 +1157,7 @@ async def ingest_run_started(
         occurred_at=now.isoformat(),
     )
     publish_stream_event(
-        payload.run_id,
+        run_id,
         SSERunEvent(
             type="run_event",
             data=run_event,
@@ -1078,7 +1167,7 @@ async def ingest_run_started(
     # Ingest into narrator to update state with started_running_at
     await ingest_narration_event(
         cast(DatabaseManager, db),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="run_started",
         event_data={
             "started_running_at": now.isoformat(),
@@ -1087,33 +1176,34 @@ async def ingest_run_started(
         },
     )
 
-    logger.info("RP run started: run=%s", payload.run_id)
+    logger.info("RP run started: run=%s", run_id)
 
 
-@router.post("/initialization-progress", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/initialization-progress", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_initialization_progress(
+    run_id: str,
     payload: InitializationProgressPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     now = datetime.now(timezone.utc)
     message = payload.message.strip()
     await db.update_research_pipeline_run(
-        run_id=payload.run_id,
+        run_id=run_id,
         initialization_status=message,
     )
     await db.insert_research_pipeline_run_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="initialization_progress",
         metadata={"initialization_status": message},
         occurred_at=now,
     )
     publish_stream_event(
-        payload.run_id,
+        run_id,
         SSEInitializationStatusEvent(
             type="initialization_status",
             data=ResearchRunInitializationStatusData(
@@ -1122,30 +1212,31 @@ async def ingest_initialization_progress(
             ),
         ),
     )
-    logger.info("RP initialization progress: run=%s status=%s", payload.run_id, message)
+    logger.info("RP initialization progress: run=%s status=%s", run_id, message)
 
 
-@router.post("/run-finished", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/run-finished", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_run_finished(
+    run_id: str,
     payload: RunFinishedPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     new_status = "completed" if payload.success else "failed"
     now = datetime.now(timezone.utc)
     await db.update_research_pipeline_run(
-        run_id=payload.run_id,
+        run_id=run_id,
         status=new_status,
         error_message=payload.message,
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
     await db.insert_research_pipeline_run_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="status_changed",
         metadata={
             "from_status": run.status,
@@ -1158,7 +1249,7 @@ async def ingest_run_finished(
     )
     run_event = RPEvent(
         id=_next_stream_event_id(),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="status_changed",
         metadata={
             "from_status": run.status,
@@ -1170,7 +1261,7 @@ async def ingest_run_finished(
         occurred_at=now.isoformat(),
     )
     publish_stream_event(
-        payload.run_id,
+        run_id,
         SSERunEvent(
             type="run_event",
             data=run_event,
@@ -1180,7 +1271,7 @@ async def ingest_run_finished(
     # Ingest into narrator for timeline and queue cleanup
     await ingest_narration_event(
         cast(DatabaseManager, db),
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="run_finished",
         event_data={
             "success": payload.success,
@@ -1190,46 +1281,47 @@ async def ingest_run_finished(
     )
 
     termination = await db.enqueue_research_pipeline_run_termination(
-        run_id=payload.run_id,
+        run_id=run_id,
         trigger="pipeline_event_finish",
     )
-    publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    publish_termination_status_event(run_id=run_id, termination=termination)
     notify_termination_requested()
 
 
-@router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_heartbeat(
-    payload: HeartbeatPayload,
-    _: None = Depends(_verify_bearer_token),
+    run_id: str,
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
             "Received heartbeat for unknown run_id=%s; ignoring but returning 204.",
-            payload.run_id,
+            run_id,
         )
         return
     now = datetime.now(timezone.utc)
     await db.update_research_pipeline_run(
-        run_id=payload.run_id,
+        run_id=run_id,
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
-    logger.debug("RP heartbeat received for run=%s", payload.run_id)
+    logger.debug("RP heartbeat received for run=%s", run_id)
 
 
-@router.post("/hw-stats", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/hw-stats", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_hw_stats(
+    run_id: str,
     payload: HardwareStatsPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
             "Received hardware stats for unknown run_id=%s; ignoring but returning 204.",
-            payload.run_id,
+            run_id,
         )
         return
     now = datetime.now(timezone.utc)
@@ -1242,7 +1334,7 @@ async def ingest_hw_stats(
         if total_bytes is None:
             logger.debug(
                 "Skipping hw_stats partition without capacity mapping: run=%s partition=%s",
-                payload.run_id,
+                run_id,
                 partition.partition,
             )
             continue
@@ -1256,26 +1348,27 @@ async def ingest_hw_stats(
     if not resolved_partitions:
         logger.debug(
             "No recognized partitions in hw_stats payload for run=%s; skipping record.",
-            payload.run_id,
+            run_id,
         )
         return
     await _record_disk_usage_event(
         db=db,
-        run_id=payload.run_id,
+        run_id=run_id,
         partitions=resolved_partitions,
         occurred_at=now,
         event_type="hw_stats",
     )
-    logger.debug("RP hardware stats received for run=%s", payload.run_id)
+    logger.debug("RP hardware stats received for run=%s", run_id)
 
 
-@router.post("/gpu-shortage", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/gpu-shortage", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_gpu_shortage(
+    run_id: str,
     payload: GPUShortagePayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
 ) -> None:
     db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
@@ -1286,19 +1379,19 @@ async def ingest_gpu_shortage(
     now = datetime.now(timezone.utc)
     logger.warning(
         "RP GPU shortage: run=%s required=%s available=%s",
-        payload.run_id,
+        run_id,
         payload.required_gpus,
         payload.available_gpus,
     )
     await db.update_research_pipeline_run(
-        run_id=payload.run_id,
+        run_id=run_id,
         status="failed",
         error_message=failure_reason,
         last_heartbeat_at=now,
         heartbeat_failures=0,
     )
     await db.insert_research_pipeline_run_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="gpu_shortage",
         metadata={
             "required_gpus": payload.required_gpus,
@@ -1308,7 +1401,7 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     await db.insert_research_pipeline_run_event(
-        run_id=payload.run_id,
+        run_id=run_id,
         event_type="status_changed",
         metadata={
             "from_status": run.status,
@@ -1319,35 +1412,36 @@ async def ingest_gpu_shortage(
         occurred_at=now,
     )
     termination = await db.enqueue_research_pipeline_run_termination(
-        run_id=payload.run_id,
+        run_id=run_id,
         trigger="gpu_shortage",
     )
-    publish_termination_status_event(run_id=payload.run_id, termination=termination)
+    publish_termination_status_event(run_id=run_id, termination=termination)
     notify_termination_requested()
     await _retry_run_after_gpu_shortage(db=db, failed_run=run)
 
 
-@router.post("/token-usage", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/token-usage", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_token_usage(
+    run_id: str,
     payload: TokenUsagePayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.debug(
         "Token usage: run=%s model=%s input=%s output=%s",
-        payload.run_id,
+        run_id,
         event.model,
         event.input_tokens,
         event.output_tokens,
     )
 
     # Look up conversation_id from run_id
-    run = await db.get_research_pipeline_run(run_id=payload.run_id)
+    run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
             "Cannot track token usage: run_id=%s not found",
-            payload.run_id,
+            run_id,
         )
         return
     # Get conversation_id via idea_id
@@ -1368,19 +1462,20 @@ async def ingest_token_usage(
         input_tokens=event.input_tokens,
         cached_input_tokens=event.cached_input_tokens,
         output_tokens=event.output_tokens,
-        run_id=payload.run_id,
+        run_id=run_id,
     )
 
 
-@router.post("/figure-reviews", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{run_id}/figure-reviews", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_figure_reviews(
+    run_id: str,
     payload: FigureReviewsPayload,
-    _: None = Depends(_verify_bearer_token),
+    _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     logger.info(
         "Figure reviews: run=%s count=%s",
-        payload.run_id,
+        run_id,
         len(payload.event.reviews),
     )
 
@@ -1399,7 +1494,7 @@ async def ingest_figure_reviews(
 
     # Insert into database
     await db.insert_vlm_figure_reviews(
-        run_id=payload.run_id,
+        run_id=run_id,
         reviews=reviews_data,
     )
 
@@ -1554,3 +1649,189 @@ def _coerce_list(value: object) -> List[object]:
         if isinstance(parsed, list):
             return parsed
     return []
+
+
+PRESIGNED_URL_EXPIRES_IN_SECONDS = 3600
+
+
+@router.post("/{run_id}/presigned-upload-url", response_model=PresignedUploadUrlResponse)
+async def get_presigned_upload_url(
+    run_id: str,
+    payload: PresignedUploadUrlRequest,
+    _: None = Depends(verify_run_auth),
+) -> PresignedUploadUrlResponse:
+    """Generate a presigned URL for uploading an artifact to S3."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+
+    metadata = {
+        "run_id": run_id,
+        "artifact_type": payload.artifact_type,
+    }
+    if payload.metadata:
+        metadata.update(payload.metadata)
+
+    s3_service = get_s3_service()
+    upload_url = s3_service.generate_upload_url(
+        s3_key=s3_key,
+        content_type=payload.content_type,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+        metadata=metadata,
+    )
+
+    logger.info(
+        "Generated presigned upload URL: run=%s type=%s filename=%s",
+        run_id,
+        payload.artifact_type,
+        payload.filename,
+    )
+
+    return PresignedUploadUrlResponse(
+        upload_url=upload_url,
+        s3_key=s3_key,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+@router.post("/{run_id}/parent-run-files", response_model=ParentRunFilesResponse)
+async def get_parent_run_files(
+    run_id: str,
+    payload: ParentRunFilesRequest,
+    _: None = Depends(verify_run_auth),
+) -> ParentRunFilesResponse:
+    """List files from a parent run and return presigned download URLs."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_service = get_s3_service()
+    prefix = f"research-pipeline/{payload.parent_run_id}/"
+
+    objects = s3_service.list_objects(prefix=prefix)
+
+    files: List[ParentRunFileInfo] = []
+    for obj in objects:
+        s3_key = str(obj["key"])
+        filename = s3_key.split("/")[-1]
+        download_url = s3_service.generate_download_url(
+            s3_key=s3_key,
+            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+        )
+        files.append(
+            ParentRunFileInfo(
+                s3_key=s3_key,
+                filename=filename,
+                size=int(obj["size"]),
+                download_url=download_url,
+            )
+        )
+
+    logger.info(
+        "Listed parent run files: run=%s parent_run=%s count=%d",
+        run_id,
+        payload.parent_run_id,
+        len(files),
+    )
+
+    return ParentRunFilesResponse(
+        files=files,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+MAX_DATASET_FILES = 2000
+
+
+@router.post("/{run_id}/list-datasets", response_model=ListDatasetsResponse)
+async def list_datasets(
+    run_id: str,
+    payload: ListDatasetsRequest,
+    _: None = Depends(verify_run_auth),
+) -> ListDatasetsResponse:
+    """List files in a datasets folder and return presigned download URLs."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_service = get_s3_service()
+    folder = payload.datasets_folder.strip("/")
+    prefix = f"{folder}/" if folder else ""
+
+    objects = s3_service.list_objects(prefix=prefix)
+
+    files: List[DatasetFileInfo] = []
+    for obj in objects:
+        if len(files) >= MAX_DATASET_FILES:
+            break
+        s3_key = str(obj["key"])
+        # Skip "directory" entries (keys ending with / and size 0)
+        if s3_key.endswith("/") and obj["size"] == 0:
+            continue
+        relative_path = s3_key[len(prefix) :] if s3_key.startswith(prefix) else s3_key
+        download_url = s3_service.generate_download_url(
+            s3_key=s3_key,
+            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+        )
+        files.append(
+            DatasetFileInfo(
+                s3_key=s3_key,
+                relative_path=relative_path,
+                size=int(obj["size"]),
+                download_url=download_url,
+            )
+        )
+
+    logger.info(
+        "Listed datasets: run=%s folder=%s count=%d",
+        run_id,
+        payload.datasets_folder,
+        len(files),
+    )
+
+    return ListDatasetsResponse(
+        files=files,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+@router.post("/{run_id}/dataset-upload-url", response_model=DatasetUploadUrlResponse)
+async def get_dataset_upload_url(
+    run_id: str,
+    payload: DatasetUploadUrlRequest,
+    _: None = Depends(verify_run_auth),
+) -> DatasetUploadUrlResponse:
+    """Generate a presigned URL for uploading a file to the datasets folder."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    folder = payload.datasets_folder.strip("/")
+    relative = payload.relative_path.lstrip("/")
+    s3_key = f"{folder}/{relative}" if folder else relative
+
+    s3_service = get_s3_service()
+    upload_url = s3_service.generate_upload_url(
+        s3_key=s3_key,
+        content_type=payload.content_type,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+        metadata={"run_id": run_id, "type": "dataset"},
+    )
+
+    logger.info(
+        "Generated dataset upload URL: run=%s key=%s",
+        run_id,
+        s3_key,
+    )
+
+    return DatasetUploadUrlResponse(
+        upload_url=upload_url,
+        s3_key=s3_key,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )

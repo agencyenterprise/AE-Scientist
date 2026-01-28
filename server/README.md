@@ -316,9 +316,8 @@ AWS_ACCESS_KEY_ID="your-aws-access-key"             # For file uploads
 AWS_SECRET_ACCESS_KEY="your-aws-secret"             # For file uploads
 AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
 
-# Research pipeline telemetry (optional webhooks from the experiment runner)
+# Research pipeline configuration
 TELEMETRY_WEBHOOK_URL="https://your-backend-host/api/research-pipeline/events"
-TELEMETRY_WEBHOOK_TOKEN="your_shared_secret_token"
 HF_TOKEN="your_huggingface_token"
 
 # Research pipeline monitor settings (all required)
