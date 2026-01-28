@@ -13,7 +13,13 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import magic
 import requests
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from ai_scientist.api_types import (
     ArtifactUploadedEvent,
@@ -123,9 +129,10 @@ class PresignedUrlUploader:
         return PresignedUploadUrlResponse.model_validate(response.json())
 
     @retry(
-        retry=retry_if_exception_type(requests.RequestException),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, max=30),
+        retry=retry_if_exception_type((requests.RequestException, OSError)),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, max=60),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
     def _upload_with_presigned_url(
@@ -135,18 +142,37 @@ class PresignedUrlUploader:
         local_path: Path,
         content_type: str,
     ) -> None:
-        """Upload file content to S3 using presigned URL."""
-        with open(local_path, "rb") as f:
-            file_content = f.read()
+        """Upload file content to S3 using presigned URL.
 
-        headers = {"Content-Type": content_type}
-        response = requests.put(
-            upload_url,
-            data=file_content,
-            headers=headers,
-            timeout=3600,  # 1 hour for large uploads
+        Streams the file directly to avoid loading large files into memory.
+        Includes retry logic for transient SSL/network errors.
+        """
+        file_size = local_path.stat().st_size
+        headers = {
+            "Content-Type": content_type,
+            "Content-Length": str(file_size),
+        }
+        logger.info(
+            "Uploading %s (%d bytes) via presigned URL",
+            local_path.name,
+            file_size,
         )
-        response.raise_for_status()
+        try:
+            with open(local_path, "rb") as f:
+                response = requests.put(
+                    upload_url,
+                    data=f,  # Stream the file directly instead of reading into memory
+                    headers=headers,
+                    timeout=3600,  # 1 hour for large uploads
+                )
+            response.raise_for_status()
+        except Exception:
+            logger.exception(
+                "Failed to upload %s (%d bytes) to presigned URL",
+                local_path.name,
+                file_size,
+            )
+            raise
         logger.info("Successfully uploaded file via presigned URL: %s", local_path)
 
     def _detect_content_type(self, *, path: Path) -> str:
