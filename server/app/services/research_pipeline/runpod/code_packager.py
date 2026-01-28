@@ -22,6 +22,7 @@ class CodeTarballInfo(NamedTuple):
     url: str
     commit_hash: str
 
+
 logger = logging.getLogger(__name__)
 
 # Directories/files to exclude from the tarball
