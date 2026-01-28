@@ -61,6 +61,9 @@ def _dir_size_bytes(*, root: Path) -> int:
 
 
 def _list_local_datasets(*, local_datasets_dir: Path) -> list[LocalDataset]:
+    if local_datasets_dir == Path(""):
+        logger.info("Local datasets directory is empty")
+        return []
     local_datasets_dir.mkdir(parents=True, exist_ok=True)
     datasets: list[LocalDataset] = []
     for p in sorted(local_datasets_dir.iterdir(), key=lambda x: x.name):

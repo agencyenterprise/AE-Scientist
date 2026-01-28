@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -13,6 +14,9 @@ from ..gpu_manager import GPUSpec
 _WORKSPACE_USAGE_FILE = Path("/tmp/ae_scientist_workspace_usage.txt")
 _MAX_S3_DATASET_GROUPS_FOR_PROMPT = 50
 _MAX_S3_DATASET_ENTRIES_PER_GROUP_FOR_PROMPT = 30
+
+
+logger = logging.getLogger("ai-scientist")
 
 
 def _load_workspace_usage_file(*, usage_file: Path) -> int | None:
@@ -101,6 +105,8 @@ def build_environment_context(*, gpu_id: int | None, gpu_spec: GPUSpec | None) -
     # Dataset cache inventory (best effort; never fail the run because of this)
     datasets_aws_folder = str(os.environ.get("DATASETS_AWS_FOLDER", "")).strip()
     local_datasets_dir = Path(str(os.environ.get("DATASETS_LOCAL_DIR", "")).strip())
+    logger.info(f"Local datasets directory: {local_datasets_dir}")
+    logger.info(f"Datasets AWS folder: {datasets_aws_folder}")
     try:
         datasets_info = get_available_datasets(
             local_datasets_dir=local_datasets_dir, datasets_aws_folder=datasets_aws_folder
