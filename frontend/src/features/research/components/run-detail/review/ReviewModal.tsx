@@ -148,7 +148,7 @@ export function ReviewModal({
 
         {showContent && (
           <>
-            <ReviewHeader decision={review.decision} onClose={onClose} />
+            <ReviewHeader review={review} onClose={onClose} />
 
             <ReviewTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
