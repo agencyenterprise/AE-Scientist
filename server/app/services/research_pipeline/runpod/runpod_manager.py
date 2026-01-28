@@ -10,7 +10,7 @@ from typing import Any, NamedTuple, cast
 
 import httpx
 
-from .code_packager import get_code_tarball_url
+from .code_packager import get_code_tarball_info
 from .runpod_initialization import (
     CONTAINER_DISK_GB,
     WORKSPACE_DISK_GB,
@@ -410,6 +410,9 @@ async def launch_research_pipeline_run(
     idea_b64 = encode_multiline(idea_text)
     config_b64 = encode_multiline(config_text)
 
+    # Get code tarball info (URL and commit hash)
+    tarball_info = get_code_tarball_info()
+
     docker_cmd = build_remote_script(
         env=env,
         idea_filename=idea_filename,
@@ -419,15 +422,13 @@ async def launch_research_pipeline_run(
         run_id=run_id,
         has_previous_run=True if parent_run_id else False,
         webhook_token=webhook_token,
+        commit_hash=tarball_info.commit_hash,
     )
 
     creator = RunPodManager(api_key=runpod_api_key)
 
-    # Get presigned URL for the code tarball (uploaded to S3, no git credentials needed)
-    code_tarball_url = get_code_tarball_url()
-
     pod_env = {
-        "CODE_TARBALL_URL": code_tarball_url,
+        "CODE_TARBALL_URL": tarball_info.url,
     }
     if parent_run_id:
         pod_env["HAS_PREVIOUS_RUN"] = "true"

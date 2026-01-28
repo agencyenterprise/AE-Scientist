@@ -11,8 +11,16 @@ import subprocess
 import tarfile
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 from app.services.s3_service import get_s3_service
+
+
+class CodeTarballInfo(NamedTuple):
+    """Information about the code tarball for a pod."""
+
+    url: str
+    commit_hash: str
 
 logger = logging.getLogger(__name__)
 
@@ -157,15 +165,15 @@ def ensure_code_tarball_uploaded() -> str:
     return s3_key
 
 
-def get_code_tarball_url() -> str:
+def get_code_tarball_info() -> CodeTarballInfo:
     """
-    Get a presigned URL for the research_pipeline code tarball.
+    Get information about the research_pipeline code tarball.
 
     Assumes the tarball has already been uploaded via ensure_code_tarball_uploaded().
     This is safe to call from multiple worker processes - it only generates a URL.
 
     Returns:
-        Presigned S3 URL for the code tarball (valid for 2 hours)
+        CodeTarballInfo with presigned URL (valid for 2 hours) and commit hash
     """
     commit_hash = _get_git_commit_hash()
     s3_key = _get_s3_key(commit_hash)
@@ -182,4 +190,4 @@ def get_code_tarball_url() -> str:
         "Generated presigned URL for code tarball (expires in %ds)", PRESIGNED_URL_EXPIRY_SECONDS
     )
 
-    return presigned_url
+    return CodeTarballInfo(url=presigned_url, commit_hash=commit_hash)

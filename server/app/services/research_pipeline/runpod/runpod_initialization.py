@@ -207,6 +207,16 @@ def _upload_scrubbed_run_config_commands(*, config_filename: str) -> list[str]:
     ]
 
 
+def _upload_commit_hash_commands(*, commit_hash: str) -> list[str]:
+    return [
+        "# === Upload Commit Hash ===",
+        "commit_hash_path=/tmp/commit_hash.txt",
+        f'echo "{commit_hash}" > "$commit_hash_path"',
+        f'python upload_file.py --file-path "$commit_hash_path" --artifact-type commit_hash >{WORKSPACE_PATH}/commit_hash_upload.log 2>&1 &',
+        'echo "Started commit_hash upload (pid=$!)"',
+    ]
+
+
 def _launch_research_pipeline_commands(*, config_filename: str) -> list[str]:
     return [
         "pipeline_exit_code=0",
@@ -251,6 +261,7 @@ def build_remote_script(
     run_id: str,
     has_previous_run: bool,
     webhook_token: str,
+    commit_hash: str,
 ) -> str:
     telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
     telemetry_token = shlex.quote(webhook_token)
@@ -339,6 +350,7 @@ def build_remote_script(
     script_parts += _pytorch_cuda_test_command()
     script_parts += _download_parent_run_data_commands()
     script_parts += _upload_scrubbed_run_config_commands(config_filename=config_filename)
+    script_parts += _upload_commit_hash_commands(commit_hash=commit_hash)
     script_parts += _launch_research_pipeline_commands(config_filename=config_filename)
     script_parts += _await_external_cleanup_commands()
     return "\n".join(script_parts).strip()
