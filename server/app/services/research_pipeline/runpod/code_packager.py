@@ -6,6 +6,7 @@ Uses git commit hash as a cache key to avoid re-uploading the same code version.
 
 import io
 import logging
+import os
 import subprocess
 import tarfile
 import time
@@ -38,7 +39,19 @@ PRESIGNED_URL_EXPIRY_SECONDS = 7200
 
 
 def _get_git_commit_hash() -> str:
-    """Get the current git commit hash."""
+    """Get the current git commit hash.
+
+    Checks in order:
+    1. RAILWAY_GIT_COMMIT_SHA environment variable (set by Railway)
+    2. Running `git rev-parse HEAD` command
+    3. Fallback to timestamp-based identifier
+    """
+    # Check Railway environment variable first (git may not be installed in container)
+    railway_commit = os.environ.get("RAILWAY_GIT_COMMIT_SHA")
+    if railway_commit:
+        return railway_commit[:12]
+
+    # Try git command
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -48,7 +61,7 @@ def _get_git_commit_hash() -> str:
             cwd=Path(__file__).resolve().parents[5],  # repo root
         )
         return result.stdout.strip()[:12]  # Short hash
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
         logger.warning("Failed to get git commit hash: %s", e)
         # Fallback to a timestamp-based identifier
         return f"unknown-{int(time.time())}"
