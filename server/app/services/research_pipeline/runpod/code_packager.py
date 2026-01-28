@@ -76,8 +76,20 @@ def _get_git_commit_hash() -> str:
 
 
 def _get_research_pipeline_path() -> Path:
-    """Get the path to the research_pipeline directory."""
-    # Navigate from this file to the repo root, then to research_pipeline
+    """Get the path to the research_pipeline directory.
+
+    Checks in order:
+    1. RESEARCH_PIPELINE_PATH environment variable (set in Docker)
+    2. Navigate from this file to repo root (for local development)
+    """
+    env_path = os.environ.get("RESEARCH_PIPELINE_PATH")
+    if env_path:
+        research_pipeline_path = Path(env_path)
+        if research_pipeline_path.exists():
+            return research_pipeline_path
+        raise RuntimeError(f"RESEARCH_PIPELINE_PATH set but directory not found: {env_path}")
+
+    # Fallback for local development: navigate from this file to repo root
     repo_root = Path(__file__).resolve().parents[5]
     research_pipeline_path = repo_root / "research_pipeline"
     if not research_pipeline_path.exists():
