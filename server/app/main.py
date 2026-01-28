@@ -41,8 +41,8 @@ def configure_logging() -> None:
     # Set specific loggers to appropriate levels
     # Reduce noise from third-party libraries
     if settings.is_production:
-        # In production, suppress HTTP request logs to reduce noise
-        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        # In production, log HTTP requests for debugging
+        logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     else:
         # In development, show HTTP requests for debugging
         logging.getLogger("uvicorn.access").setLevel(logging.INFO)

@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..datasets_context import (
     S3DatasetEntry,
@@ -34,6 +35,19 @@ def _load_workspace_usage_file(*, usage_file: Path) -> int | None:
         return None
 
 
+def _extract_path_from_presigned_url(url: str) -> str:
+    """Extract the S3 key path from a presigned URL.
+
+    Handles URLs like:
+    - https://bucket.s3.amazonaws.com/path/to/file?AWSAccessKeyId=...
+    - https://bucket.s3.region.amazonaws.com/path/to/file?AWSAccessKeyId=...
+    """
+    parsed = urlparse(url)
+    # Remove query string and get the path, stripping leading slash
+    path = parsed.path.lstrip("/")
+    return path
+
+
 def _format_s3_entries_for_prompt(
     *,
     datasets_aws_folder: str,
@@ -44,27 +58,38 @@ def _format_s3_entries_for_prompt(
     folder = datasets_aws_folder.strip("/")
     prefix = f"{folder}/" if folder else ""
 
-    grouped: dict[str, list[tuple[str, int]]] = {}
+    # Group entries by folder, storing (relative_path, size_bytes, full_url)
+    grouped: dict[str, list[tuple[str, int, str]]] = {}
     for entry in entries:
-        s3_uri = entry.s3_uri
+        presigned_url = entry.s3_uri
         size_bytes = entry.size_on_disk_bytes
-        without_scheme = s3_uri.removeprefix("s3://")
-        parts = without_scheme.split("/", 1)
-        key = parts[1] if len(parts) == 2 else ""
+
+        # Extract the path from the presigned URL
+        key = _extract_path_from_presigned_url(presigned_url)
+
+        # Remove the datasets folder prefix to get relative path
         relative = key[len(prefix) :] if key.startswith(prefix) else key
-        group = relative.split("/", 1)[0] if "/" in relative else "(root)"
-        grouped.setdefault(group, []).append((relative, size_bytes))
+
+        # Group by first folder in relative path
+        if "/" in relative:
+            group = relative.split("/", 1)[0]
+        else:
+            group = "(root)"
+
+        grouped.setdefault(group, []).append((relative, size_bytes, presigned_url))
 
     lines: list[str] = []
     for group_name in sorted(grouped.keys())[:max_groups]:
         lines.append(f"- {group_name}/")
         group_entries = grouped[group_name]
         shown = 0
-        for rel_path, size_bytes in group_entries:
+        for rel_path, size_bytes, full_url in group_entries:
             if shown >= max_entries_per_group:
                 break
+            # Get the filename (last part of path)
             child_path = rel_path.split("/", 1)[1] if "/" in rel_path else rel_path
             lines.append(f"  - {child_path} | size={size_bytes} bytes")
+            lines.append(f"    URL: '{full_url}'")
             shown += 1
         remaining = max(len(group_entries) - shown, 0)
         if remaining:
