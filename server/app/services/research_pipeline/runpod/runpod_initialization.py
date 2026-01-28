@@ -45,7 +45,6 @@ def get_pod_name(*, user_name: str, run_id: str) -> str:
 
 @dataclass
 class RunPodEnvironment:
-    git_deploy_key: str
     openai_api_key: str
     hf_token: str
     telemetry_webhook_url: str
@@ -65,7 +64,6 @@ def load_runpod_environment() -> RunPodEnvironment:
         return value or ""
 
     return RunPodEnvironment(
-        git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
         hf_token=_require("HF_TOKEN"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
@@ -310,7 +308,7 @@ def build_remote_script(
         'echo "✅ GPU validated"',
         "",
     ]
-    script_parts += ['send_init_status "Cloning repository"', ""]
+    script_parts += ['send_init_status "Downloading code"', ""]
     script_parts += _repository_setup_commands()
     script_parts += ['send_init_status "Installing packages"', ""]
     script_parts += _python_packages_installation_commands()

@@ -3,7 +3,6 @@ Launches the research pipeline on RunPod and injects refined ideas/configuration
 """
 
 import asyncio
-import base64
 import logging
 import math
 import os
@@ -11,6 +10,7 @@ from typing import Any, NamedTuple, cast
 
 import httpx
 
+from .code_packager import get_code_tarball_url
 from .runpod_initialization import (
     CONTAINER_DISK_GB,
     WORKSPACE_DISK_GB,
@@ -422,13 +422,12 @@ async def launch_research_pipeline_run(
     )
 
     creator = RunPodManager(api_key=runpod_api_key)
-    github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
-    runpod_repo_branch = os.environ.get("RUN_POD_REPO_BRANCH", "main")
+
+    # Get presigned URL for the code tarball (uploaded to S3, no git credentials needed)
+    code_tarball_url = get_code_tarball_url()
+
     pod_env = {
-        "GIT_SSH_KEY_B64": github_key_b64,
-        "REPO_NAME": "AE-Scientist",
-        "REPO_ORG": "agencyenterprise",
-        "REPO_BRANCH": runpod_repo_branch,
+        "CODE_TARBALL_URL": code_tarball_url,
     }
     if parent_run_id:
         pod_env["HAS_PREVIOUS_RUN"] = "true"
