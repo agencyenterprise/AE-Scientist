@@ -13,6 +13,8 @@ Usage:
 import logging
 import sys
 
+from app.services.research_pipeline.runpod.code_packager import ensure_code_tarball_uploaded
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -23,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 def main() -> int:
     try:
-        from app.services.research_pipeline.runpod.code_packager import ensure_code_tarball_uploaded
 
         logger.info("Uploading research_pipeline code tarball to S3...")
         s3_key = ensure_code_tarball_uploaded()
