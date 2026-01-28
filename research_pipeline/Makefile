@@ -18,8 +18,9 @@ gen-api-types:
 		--collapse-root-models \
 		--use-default-kwarg \
 		--enum-field-as-literal one
-	@# Add mypy ignore directive to auto-generated file (enum defaults have known issues)
-	@sed -i '' '1s/^/# mypy: ignore-errors\n/' ai_scientist/api_types.py
+	@# Add mypy ignore directive and remove timestamp (to avoid spurious diffs)
+	@grep -v '#   timestamp:' ai_scientist/api_types.py > ai_scientist/api_types.py.tmp && mv ai_scientist/api_types.py.tmp ai_scientist/api_types.py
+	@echo '# mypy: ignore-errors' | cat - ai_scientist/api_types.py > ai_scientist/api_types.py.tmp && mv ai_scientist/api_types.py.tmp ai_scientist/api_types.py
 	VIRTUAL_ENV= uv run black ai_scientist/api_types.py --exclude 'workspaces|\.venv'
 	VIRTUAL_ENV= uv run isort ai_scientist/api_types.py
 	@echo "✅ API types generated at ai_scientist/api_types.py"
