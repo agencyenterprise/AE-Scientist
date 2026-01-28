@@ -291,6 +291,9 @@ def build_remote_script(
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
         f"PIPELINE_WORKSPACE_PATH={WORKSPACE_PATH}",
+        # Dataset configuration (not AWS credentials, just paths/folder names)
+        f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
+        "DATASETS_AWS_FOLDER=datasets",
     ]
     if has_previous_run:
         env_file_lines.append('HAS_PREVIOUS_RUN="true"')
