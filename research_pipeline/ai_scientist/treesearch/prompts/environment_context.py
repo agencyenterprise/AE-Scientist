@@ -166,7 +166,6 @@ def build_environment_context(*, gpu_id: int | None, gpu_spec: GPUSpec | None) -
 
         env_file = get_research_pipeline_env_file()
         s3_download_snippet = build_s3_download_snippet(
-            datasets_aws_folder=datasets_aws_folder,
             local_datasets_dir=local_datasets_dir,
             env_file=env_file,
         )

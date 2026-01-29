@@ -149,7 +149,6 @@ def _list_s3_folder_entries(
 
 def build_s3_download_snippet(
     *,
-    datasets_aws_folder: str,  # noqa: ARG001
     local_datasets_dir: Path,
     env_file: Path,
 ) -> str:
@@ -174,7 +173,7 @@ def build_s3_download_snippet(
         "# Copy a presigned download URL from the 'S3 datasets directory' list above\n"
         "# The URLs in the list are presigned and can be used directly with requests\n"
         "download_url = '<PASTE_PRESIGNED_URL_FROM_LIST>'\n"
-        "response = requests.get(download_url, timeout=600)\n"
+        "response = requests.get(download_url, timeout=3600)\n"
         "response.raise_for_status()\n"
         "destination_file.write_bytes(response.content)\n"
         "print(f'Downloaded to {destination_file}')\n"

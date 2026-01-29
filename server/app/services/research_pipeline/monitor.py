@@ -7,7 +7,6 @@ from typing import Dict, Optional, Protocol, cast
 
 from psycopg import AsyncConnection
 
-from app.api.research_pipeline_events import ingest_narration_event
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
@@ -17,6 +16,7 @@ from app.services.database import DatabaseManager
 from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline.pod_termination_worker import (
     PodTerminationWorker,
     notify_termination_requested,
