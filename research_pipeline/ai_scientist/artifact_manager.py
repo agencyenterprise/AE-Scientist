@@ -3,12 +3,13 @@ Collect and publish research pipeline artifacts.
 """
 
 import logging
+import math
 import shutil
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import magic
@@ -23,12 +24,35 @@ from tenacity import (
 
 from ai_scientist.api_types import (
     ArtifactUploadedEvent,
+    MultipartUploadCompleteRequest,
+    MultipartUploadInitRequest,
+    MultipartUploadInitResponse,
+    MultipartUploadPart,
     PresignedUploadUrlRequest,
     PresignedUploadUrlResponse,
+    RunLogEvent,
 )
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
+
+# Threshold for using multipart upload (100 MB)
+MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024
+
+# Part size for multipart upload (50 MB)
+MULTIPART_PART_SIZE_BYTES = 50 * 1024 * 1024
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format byte size to human-readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
 @dataclass(frozen=True)
@@ -61,21 +85,45 @@ class PresignedUrlUploader:
         webhook_base_url: str,
         webhook_token: str,
         run_id: str,
+        progress_callback: Callable[[str], None],
     ) -> None:
         self._webhook_base_url = webhook_base_url.rstrip("/")
         self._webhook_token = webhook_token
         self._run_id = run_id
+        self._progress_callback = progress_callback
         self._detector: magic.Magic | None
         try:
             self._detector = magic.Magic(mime=True)
         except Exception:
             self._detector = None
 
+    def _log_progress(self, message: str) -> None:
+        """Log progress message and call callback if available."""
+        logger.info(message)
+        print(message, flush=True)
+        self._progress_callback(message)
+
     def upload(self, *, request: ArtifactUploadRequest) -> tuple[str, str, int]:
-        """Upload file using presigned URL."""
+        """Upload file using presigned URL or multipart upload for large files."""
         file_size = request.local_path.stat().st_size
         content_type = self._detect_content_type(path=request.local_path)
 
+        # Use multipart upload for large files
+        if file_size > MULTIPART_THRESHOLD_BYTES:
+            self._log_progress(
+                f"[upload] Starting multipart upload for {request.filename} "
+                f"({_format_size(file_size)})"
+            )
+            return self._upload_multipart(
+                request=request,
+                content_type=content_type,
+                file_size=file_size,
+            )
+
+        # Use simple presigned URL upload for smaller files
+        self._log_progress(
+            f"[upload] Starting upload for {request.filename} ({_format_size(file_size)})"
+        )
         presigned_response = self._request_presigned_url(
             artifact_type=request.artifact_type,
             filename=request.filename,
@@ -90,7 +138,220 @@ class PresignedUrlUploader:
             content_type=content_type,
         )
 
+        self._log_progress(f"[upload] Completed upload for {request.filename}")
         return presigned_response.s3_key, content_type, file_size
+
+    def _upload_multipart(
+        self,
+        *,
+        request: ArtifactUploadRequest,
+        content_type: str,
+        file_size: int,
+    ) -> tuple[str, str, int]:
+        """Upload large file using multipart upload."""
+        num_parts = math.ceil(file_size / MULTIPART_PART_SIZE_BYTES)
+
+        self._log_progress(
+            f"[upload] Initiating multipart upload: {num_parts} parts of "
+            f"{_format_size(MULTIPART_PART_SIZE_BYTES)} each"
+        )
+
+        # Request multipart upload initialization
+        init_response = self._init_multipart_upload(
+            artifact_type=request.artifact_type,
+            filename=request.filename,
+            content_type=content_type,
+            file_size=file_size,
+            num_parts=num_parts,
+            source_path=str(request.source_path),
+        )
+
+        upload_id = init_response.upload_id
+        s3_key = init_response.s3_key
+        part_urls = {p.part_number: p.upload_url for p in init_response.part_urls}
+
+        completed_parts: list[MultipartUploadPart] = []
+
+        try:
+            # Upload each part
+            with open(request.local_path, "rb") as f:
+                for part_num in range(1, num_parts + 1):
+                    # Calculate part size (last part may be smaller)
+                    part_start = (part_num - 1) * MULTIPART_PART_SIZE_BYTES
+                    part_end = min(part_start + MULTIPART_PART_SIZE_BYTES, file_size)
+                    part_size = part_end - part_start
+
+                    # Read part data
+                    f.seek(part_start)
+                    part_data = f.read(part_size)
+
+                    self._log_progress(
+                        f"[upload] Uploading part {part_num}/{num_parts} "
+                        f"({_format_size(part_size)})"
+                    )
+
+                    # Upload part with retry
+                    etag = self._upload_part(
+                        upload_url=part_urls[part_num],
+                        part_data=part_data,
+                        part_number=part_num,
+                    )
+
+                    completed_parts.append(MultipartUploadPart(PartNumber=part_num, ETag=etag))
+
+                    progress_pct = int(part_num / num_parts * 100)
+                    self._log_progress(
+                        f"[upload] Part {part_num}/{num_parts} complete ({progress_pct}%)"
+                    )
+
+            # Complete multipart upload
+            self._log_progress("[upload] Completing multipart upload...")
+            self._complete_multipart_upload(
+                upload_id=upload_id,
+                s3_key=s3_key,
+                parts=completed_parts,
+                artifact_type=request.artifact_type,
+                filename=request.filename,
+                file_size=file_size,
+                content_type=content_type,
+            )
+
+            self._log_progress(f"[upload] Multipart upload completed for {request.filename}")
+            return s3_key, content_type, file_size
+
+        except Exception:
+            # Abort multipart upload on failure
+            self._log_progress("[upload] Upload failed, aborting multipart upload...")
+            try:
+                self._abort_multipart_upload(upload_id=upload_id, s3_key=s3_key)
+            except Exception:
+                logger.exception("Failed to abort multipart upload")
+            raise
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
+    def _init_multipart_upload(
+        self,
+        *,
+        artifact_type: str,
+        filename: str,
+        content_type: str,
+        file_size: int,
+        num_parts: int,
+        source_path: str,
+    ) -> MultipartUploadInitResponse:
+        """Request multipart upload initialization from the server."""
+        url = f"{self._webhook_base_url}/{self._run_id}/multipart-upload-init"
+        headers = {
+            "Authorization": f"Bearer {self._webhook_token}",
+            "Content-Type": "application/json",
+        }
+        request_payload = MultipartUploadInitRequest(
+            artifact_type=artifact_type,
+            filename=filename,
+            content_type=content_type,
+            file_size=file_size,
+            part_size=MULTIPART_PART_SIZE_BYTES,
+            num_parts=num_parts,
+            metadata={"source_path": source_path},
+        )
+        response = requests.post(
+            url, headers=headers, json=request_payload.model_dump(), timeout=60
+        )
+        response.raise_for_status()
+        return MultipartUploadInitResponse.model_validate(response.json())
+
+    @retry(
+        retry=retry_if_exception_type((requests.RequestException, OSError)),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, max=60),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _upload_part(
+        self,
+        *,
+        upload_url: str,
+        part_data: bytes,
+        part_number: int,
+    ) -> str:
+        """Upload a single part and return its ETag."""
+        headers = {
+            "Content-Length": str(len(part_data)),
+        }
+        try:
+            response = requests.put(
+                upload_url,
+                data=part_data,
+                headers=headers,
+                timeout=600,  # 10 minutes per part
+            )
+            response.raise_for_status()
+            etag = response.headers.get("ETag", "").strip('"')
+            if not etag:
+                raise ValueError(f"No ETag returned for part {part_number}")
+            return etag
+        except Exception:
+            logger.exception("Failed to upload part %d", part_number)
+            raise
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
+    def _complete_multipart_upload(
+        self,
+        *,
+        upload_id: str,
+        s3_key: str,
+        parts: list[MultipartUploadPart],
+        artifact_type: str,
+        filename: str,
+        file_size: int,
+        content_type: str,
+    ) -> None:
+        """Complete the multipart upload."""
+        url = f"{self._webhook_base_url}/{self._run_id}/multipart-upload-complete"
+        headers = {
+            "Authorization": f"Bearer {self._webhook_token}",
+            "Content-Type": "application/json",
+        }
+        request_payload = MultipartUploadCompleteRequest(
+            upload_id=upload_id,
+            s3_key=s3_key,
+            parts=parts,
+            artifact_type=artifact_type,
+            filename=filename,
+            file_size=file_size,
+            content_type=content_type,
+        )
+        response = requests.post(
+            url,
+            headers=headers,
+            json=request_payload.model_dump(by_alias=True),
+            timeout=60,
+        )
+        response.raise_for_status()
+
+    def _abort_multipart_upload(self, *, upload_id: str, s3_key: str) -> None:
+        """Abort a multipart upload."""
+        url = f"{self._webhook_base_url}/{self._run_id}/multipart-upload-abort"
+        headers = {
+            "Authorization": f"Bearer {self._webhook_token}",
+            "Content-Type": "application/json",
+        }
+        payload = {"upload_id": upload_id, "s3_key": s3_key}
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+        except Exception:
+            logger.exception("Failed to abort multipart upload")
 
     @retry(
         retry=retry_if_exception_type(requests.RequestException),
@@ -152,10 +413,8 @@ class PresignedUrlUploader:
             "Content-Type": content_type,
             "Content-Length": str(file_size),
         }
-        logger.info(
-            "Uploading %s (%d bytes) via presigned URL",
-            local_path.name,
-            file_size,
+        self._log_progress(
+            f"[upload] Uploading {local_path.name} ({_format_size(file_size)}) " "via presigned URL"
         )
         try:
             with open(local_path, "rb") as f:
@@ -173,7 +432,7 @@ class PresignedUrlUploader:
                 file_size,
             )
             raise
-        logger.info("Successfully uploaded file via presigned URL: %s", local_path)
+        self._log_progress(f"[upload] Successfully uploaded {local_path.name}")
 
     def _detect_content_type(self, *, path: Path) -> str:
         try:
@@ -197,12 +456,25 @@ class ArtifactPublisher:
     ) -> None:
         self._run_id = run_id
         self._temp_dir = Path(tempfile.mkdtemp(prefix="rp-artifacts-"))
+        self._webhook_client = webhook_client
+
+        # Create progress callback that sends run_log events
+        def progress_callback(message: str) -> None:
+            if self._webhook_client is not None:
+                try:
+                    self._webhook_client.publish(
+                        kind="run_log",
+                        payload=RunLogEvent(message=message, level="info"),
+                    )
+                except Exception:
+                    logger.debug("Failed to publish progress event", exc_info=True)
+
         self._uploader = PresignedUrlUploader(
             webhook_base_url=webhook_base_url,
             webhook_token=webhook_token,
             run_id=run_id,
+            progress_callback=progress_callback,
         )
-        self._webhook_client = webhook_client
 
     def publish(self, *, spec: ArtifactSpec) -> None:
         request = self._build_request(spec=spec)
@@ -234,7 +506,7 @@ class ArtifactPublisher:
             except Exception:
                 logger.exception("Failed to emit artifact SSE event (non-fatal)")
         else:
-            logger.warning(
+            logger.info(
                 "No webhook client available to emit artifact SSE event for artifact_type=%s, filename=%s, file_size=%s, file_type=%s",
                 spec.artifact_type,
                 request.filename,
@@ -261,6 +533,7 @@ class ArtifactPublisher:
         archive_name = spec.archive_name or f"{source_dir.name}.zip"
         archive_path = self._temp_dir / archive_name
         files_added = 0
+        logger.info("Creating zip archive %s from %s", archive_name, source_dir)
         with ZipFile(archive_path, mode="w", compression=ZIP_DEFLATED) as archive:
             for candidate in source_dir.rglob("*"):
                 if not candidate.is_file():
@@ -273,6 +546,13 @@ class ArtifactPublisher:
         if files_added == 0:
             archive_path.unlink(missing_ok=True)
             return None
+        archive_size = archive_path.stat().st_size
+        logger.info(
+            "Created zip archive %s with %d files (%s)",
+            archive_name,
+            files_added,
+            _format_size(archive_size),
+        )
         return ArtifactUploadRequest(
             artifact_type=spec.artifact_type,
             filename=archive_name,

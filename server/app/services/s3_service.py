@@ -317,6 +317,122 @@ class S3Service:
         except ClientError:
             return False
 
+    def create_multipart_upload(
+        self, s3_key: str, content_type: str, metadata: dict[str, str]
+    ) -> str:
+        """
+        Initiate a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            content_type: MIME type of the file
+            metadata: Metadata to attach to the uploaded object
+
+        Returns:
+            Upload ID for the multipart upload
+
+        Raises:
+            Exception: If initiation fails
+        """
+        try:
+            sanitized_metadata = {
+                key: self._sanitize_ascii(value) for key, value in metadata.items()
+            }
+            response = self.s3_client.create_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                ContentType=content_type,
+                Metadata=sanitized_metadata,
+            )
+            upload_id: str = response["UploadId"]
+            logger.debug(f"Created multipart upload for {s3_key}: {upload_id}")
+            return upload_id
+
+        except ClientError as e:
+            logger.error(f"Failed to create multipart upload: {e}")
+            raise Exception(f"Failed to create multipart upload: {str(e)}") from e
+
+    def generate_multipart_part_url(
+        self, s3_key: str, upload_id: str, part_number: int, expires_in: int
+    ) -> str:
+        """
+        Generate a presigned URL for uploading a single part.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+            part_number: Part number (1-10000)
+            expires_in: URL expiration time in seconds
+
+        Returns:
+            Presigned URL for uploading the part
+        """
+        try:
+            url = self.s3_client.generate_presigned_url(
+                "upload_part",
+                Params={
+                    "Bucket": self.bucket_name,
+                    "Key": s3_key,
+                    "UploadId": upload_id,
+                    "PartNumber": part_number,
+                },
+                ExpiresIn=expires_in,
+            )
+            logger.debug(f"Generated multipart part URL for {s3_key}, part {part_number}")
+            return str(url)
+
+        except ClientError as e:
+            logger.error(f"Failed to generate multipart part URL: {e}")
+            raise Exception(f"Failed to generate multipart part URL: {str(e)}") from e
+
+    def complete_multipart_upload(
+        self, s3_key: str, upload_id: str, parts: list[dict[str, str | int]]
+    ) -> None:
+        """
+        Complete a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+            parts: List of dicts with "PartNumber" and "ETag" for each part
+
+        Raises:
+            Exception: If completion fails
+        """
+        try:
+            self.s3_client.complete_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": parts},
+            )
+            logger.debug(f"Completed multipart upload for {s3_key}")
+
+        except ClientError as e:
+            logger.error(f"Failed to complete multipart upload: {e}")
+            raise Exception(f"Failed to complete multipart upload: {str(e)}") from e
+
+    def abort_multipart_upload(self, s3_key: str, upload_id: str) -> None:
+        """
+        Abort a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+        """
+        try:
+            self.s3_client.abort_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                UploadId=upload_id,
+            )
+            logger.debug(f"Aborted multipart upload for {s3_key}")
+
+        except ClientError as e:
+            logger.warning(
+                f"Failed to abort multipart upload (may already be complete/aborted): {e}"
+            )
+
     def get_file_info(self, s3_key: str) -> dict:
         """
         Get file metadata from S3.

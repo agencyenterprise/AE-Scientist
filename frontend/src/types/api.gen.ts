@@ -1097,6 +1097,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/{run_id}/multipart-upload-init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Init Multipart Upload
+         * @description Initiate a multipart upload for large files.
+         */
+        post: operations["init_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_init_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/multipart-upload-complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Multipart Upload
+         * @description Complete a multipart upload.
+         */
+        post: operations["complete_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research-pipeline/events/{run_id}/multipart-upload-abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abort Multipart Upload
+         * @description Abort a multipart upload.
+         */
+        post: operations["abort_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_abort_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/{run_id}/parent-run-files": {
         parameters: {
             query?: never;
@@ -3140,6 +3200,108 @@ export interface components {
             model: string;
             /** Cost */
             cost: number;
+        };
+        /**
+         * MultipartUploadAbortRequest
+         * @description Request to abort a multipart upload.
+         */
+        MultipartUploadAbortRequest: {
+            /** Upload Id */
+            upload_id: string;
+            /** S3 Key */
+            s3_key: string;
+        };
+        /**
+         * MultipartUploadCompleteRequest
+         * @description Request to complete a multipart upload.
+         */
+        MultipartUploadCompleteRequest: {
+            /** Upload Id */
+            upload_id: string;
+            /** S3 Key */
+            s3_key: string;
+            /** Parts */
+            parts: components["schemas"]["MultipartUploadPart"][];
+            /** Artifact Type */
+            artifact_type: string;
+            /** Filename */
+            filename: string;
+            /** File Size */
+            file_size: number;
+            /** Content Type */
+            content_type: string;
+        };
+        /**
+         * MultipartUploadCompleteResponse
+         * @description Response after completing a multipart upload.
+         */
+        MultipartUploadCompleteResponse: {
+            /** S3 Key */
+            s3_key: string;
+            /** Success */
+            success: boolean;
+        };
+        /**
+         * MultipartUploadInitRequest
+         * @description Request to initiate a multipart upload.
+         */
+        MultipartUploadInitRequest: {
+            /** Artifact Type */
+            artifact_type: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** File Size */
+            file_size: number;
+            /**
+             * Part Size
+             * @description Size of each part in bytes
+             */
+            part_size: number;
+            /**
+             * Num Parts
+             * @description Total number of parts
+             */
+            num_parts: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: string;
+            } | null;
+        };
+        /**
+         * MultipartUploadInitResponse
+         * @description Response with multipart upload initiation details.
+         */
+        MultipartUploadInitResponse: {
+            /** Upload Id */
+            upload_id: string;
+            /** S3 Key */
+            s3_key: string;
+            /** Part Urls */
+            part_urls: components["schemas"]["MultipartUploadPartUrl"][];
+            /** Expires In */
+            expires_in: number;
+        };
+        /**
+         * MultipartUploadPart
+         * @description Completed part information for multipart upload completion.
+         */
+        MultipartUploadPart: {
+            /** Partnumber */
+            PartNumber: number;
+            /** Etag */
+            ETag: string;
+        };
+        /**
+         * MultipartUploadPartUrl
+         * @description Presigned URL for uploading a single part.
+         */
+        MultipartUploadPartUrl: {
+            /** Part Number */
+            part_number: number;
+            /** Upload Url */
+            upload_url: string;
         };
         /**
          * NodeExecutionCompletedEvent
@@ -7326,6 +7488,115 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PresignedUploadUrlResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    init_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_init_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartUploadInitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultipartUploadInitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_complete_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartUploadCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultipartUploadCompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abort_multipart_upload_api_research_pipeline_events__run_id__multipart_upload_abort_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartUploadAbortRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

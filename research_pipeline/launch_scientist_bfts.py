@@ -1088,7 +1088,17 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     path=Path(base_cfg.workspace_dir),
                     packaging="zip",
                     archive_name="workspace.zip",
-                    exclude_dir_names=(".ai_scientist_venv", ".venv"),
+                    exclude_dir_names=(
+                        ".ai_scientist_venv",
+                        ".venv",
+                        "__pycache__",
+                        ".git",
+                        "node_modules",
+                        ".cache",
+                        ".pytest_cache",
+                        ".mypy_cache",
+                        ".ruff_cache",
+                    ),
                 )
             )
             artifact_callback(

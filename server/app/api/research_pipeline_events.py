@@ -372,6 +372,70 @@ class PresignedUploadUrlResponse(BaseModel):
     expires_in: int
 
 
+class MultipartUploadInitRequest(BaseModel):
+    """Request to initiate a multipart upload."""
+
+    artifact_type: str
+    filename: str
+    content_type: str
+    file_size: int
+    part_size: int = Field(description="Size of each part in bytes")
+    num_parts: int = Field(description="Total number of parts")
+    metadata: Optional[Dict[str, str]] = None
+
+
+class MultipartUploadPartUrl(BaseModel):
+    """Presigned URL for uploading a single part."""
+
+    part_number: int
+    upload_url: str
+
+
+class MultipartUploadInitResponse(BaseModel):
+    """Response with multipart upload initiation details."""
+
+    upload_id: str
+    s3_key: str
+    part_urls: List[MultipartUploadPartUrl]
+    expires_in: int
+
+
+class MultipartUploadPart(BaseModel):
+    """Completed part information for multipart upload completion."""
+
+    part_number: int = Field(alias="PartNumber")
+    etag: str = Field(alias="ETag")
+
+    class Config:
+        populate_by_name = True
+
+
+class MultipartUploadCompleteRequest(BaseModel):
+    """Request to complete a multipart upload."""
+
+    upload_id: str
+    s3_key: str
+    parts: List[MultipartUploadPart]
+    artifact_type: str
+    filename: str
+    file_size: int
+    content_type: str
+
+
+class MultipartUploadCompleteResponse(BaseModel):
+    """Response after completing a multipart upload."""
+
+    s3_key: str
+    success: bool
+
+
+class MultipartUploadAbortRequest(BaseModel):
+    """Request to abort a multipart upload."""
+
+    upload_id: str
+    s3_key: str
+
+
 class ParentRunFileInfo(BaseModel):
     s3_key: str
     filename: str
@@ -1694,6 +1758,142 @@ async def get_presigned_upload_url(
         upload_url=upload_url,
         s3_key=s3_key,
         expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+@router.post("/{run_id}/multipart-upload-init", response_model=MultipartUploadInitResponse)
+async def init_multipart_upload(
+    run_id: str,
+    payload: MultipartUploadInitRequest,
+    _: None = Depends(verify_run_auth),
+) -> MultipartUploadInitResponse:
+    """Initiate a multipart upload for large files."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+
+    metadata = {
+        "run_id": run_id,
+        "artifact_type": payload.artifact_type,
+    }
+    if payload.metadata:
+        metadata.update(payload.metadata)
+
+    s3_service = get_s3_service()
+
+    # Create multipart upload
+    upload_id = s3_service.create_multipart_upload(
+        s3_key=s3_key,
+        content_type=payload.content_type,
+        metadata=metadata,
+    )
+
+    # Generate presigned URLs for all parts
+    part_urls = []
+    for part_num in range(1, payload.num_parts + 1):
+        part_url = s3_service.generate_multipart_part_url(
+            s3_key=s3_key,
+            upload_id=upload_id,
+            part_number=part_num,
+            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+        )
+        part_urls.append(MultipartUploadPartUrl(part_number=part_num, upload_url=part_url))
+
+    logger.info(
+        "Initiated multipart upload: run=%s type=%s filename=%s parts=%d upload_id=%s",
+        run_id,
+        payload.artifact_type,
+        payload.filename,
+        payload.num_parts,
+        upload_id,
+    )
+
+    return MultipartUploadInitResponse(
+        upload_id=upload_id,
+        s3_key=s3_key,
+        part_urls=part_urls,
+        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+@router.post("/{run_id}/multipart-upload-complete", response_model=MultipartUploadCompleteResponse)
+async def complete_multipart_upload(
+    run_id: str,
+    payload: MultipartUploadCompleteRequest,
+    _: None = Depends(verify_run_auth),
+) -> MultipartUploadCompleteResponse:
+    """Complete a multipart upload."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_service = get_s3_service()
+
+    # Convert parts to format expected by S3
+    parts: List[Dict[str, str | int]] = [
+        {"PartNumber": p.part_number, "ETag": p.etag} for p in payload.parts
+    ]
+
+    try:
+        s3_service.complete_multipart_upload(
+            s3_key=payload.s3_key,
+            upload_id=payload.upload_id,
+            parts=parts,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to complete multipart upload: run=%s s3_key=%s error=%s",
+            run_id,
+            payload.s3_key,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to complete multipart upload: {str(e)}",
+        ) from e
+
+    logger.info(
+        "Completed multipart upload: run=%s type=%s filename=%s size=%d",
+        run_id,
+        payload.artifact_type,
+        payload.filename,
+        payload.file_size,
+    )
+
+    return MultipartUploadCompleteResponse(
+        s3_key=payload.s3_key,
+        success=True,
+    )
+
+
+@router.post("/{run_id}/multipart-upload-abort", status_code=status.HTTP_204_NO_CONTENT)
+async def abort_multipart_upload(
+    run_id: str,
+    payload: MultipartUploadAbortRequest,
+    _: None = Depends(verify_run_auth),
+) -> None:
+    """Abort a multipart upload."""
+    db = cast("ResearchRunStore", get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_service = get_s3_service()
+
+    s3_service.abort_multipart_upload(
+        s3_key=payload.s3_key,
+        upload_id=payload.upload_id,
+    )
+
+    logger.info(
+        "Aborted multipart upload: run=%s s3_key=%s upload_id=%s",
+        run_id,
+        payload.s3_key,
+        payload.upload_id,
     )
 
 

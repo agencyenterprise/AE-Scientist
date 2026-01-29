@@ -683,6 +683,36 @@ class ModelCost(BaseModel):
     cost: Annotated[float, Field(title="Cost")]
 
 
+class MultipartUploadAbortRequest(BaseModel):
+    upload_id: Annotated[str, Field(title="Upload Id")]
+    s3_key: Annotated[str, Field(title="S3 Key")]
+
+
+class MultipartUploadCompleteResponse(BaseModel):
+    s3_key: Annotated[str, Field(title="S3 Key")]
+    success: Annotated[bool, Field(title="Success")]
+
+
+class MultipartUploadInitRequest(BaseModel):
+    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    filename: Annotated[str, Field(title="Filename")]
+    content_type: Annotated[str, Field(title="Content Type")]
+    file_size: Annotated[int, Field(title="File Size")]
+    part_size: Annotated[int, Field(description="Size of each part in bytes", title="Part Size")]
+    num_parts: Annotated[int, Field(description="Total number of parts", title="Num Parts")]
+    metadata: Annotated[dict[str, str] | None, Field(title="Metadata")] = None
+
+
+class MultipartUploadPart(BaseModel):
+    PartNumber: Annotated[int, Field(title="Partnumber")]
+    ETag: Annotated[str, Field(title="Etag")]
+
+
+class MultipartUploadPartUrl(BaseModel):
+    part_number: Annotated[int, Field(title="Part Number")]
+    upload_url: Annotated[str, Field(title="Upload Url")]
+
+
 class Status1(StrEnum):
     success = "success"
     failed = "failed"
@@ -1911,6 +1941,23 @@ class MetricCollection(BaseModel):
         list[MetricInterpretation] | None,
         Field(description="Additional metrics tracked", title="Secondary"),
     ] = None
+
+
+class MultipartUploadCompleteRequest(BaseModel):
+    upload_id: Annotated[str, Field(title="Upload Id")]
+    s3_key: Annotated[str, Field(title="S3 Key")]
+    parts: Annotated[list[MultipartUploadPart], Field(title="Parts")]
+    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    filename: Annotated[str, Field(title="Filename")]
+    file_size: Annotated[int, Field(title="File Size")]
+    content_type: Annotated[str, Field(title="Content Type")]
+
+
+class MultipartUploadInitResponse(BaseModel):
+    upload_id: Annotated[str, Field(title="Upload Id")]
+    s3_key: Annotated[str, Field(title="S3 Key")]
+    part_urls: Annotated[list[MultipartUploadPartUrl], Field(title="Part Urls")]
+    expires_in: Annotated[int, Field(title="Expires In")]
 
 
 class NodeResultEvent(BaseModel):

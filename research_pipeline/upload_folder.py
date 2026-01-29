@@ -11,7 +11,17 @@ from ai_scientist.telemetry.event_persistence import WebhookClient
 
 PROJECT_DIR = Path(__file__).resolve().parent
 load_dotenv(PROJECT_DIR / ".env")
-DEFAULT_EXCLUDES = (".venv", ".ai_scientist_venv")
+DEFAULT_EXCLUDES = (
+    ".venv",
+    ".ai_scientist_venv",
+    "__pycache__",
+    ".git",
+    "node_modules",
+    ".cache",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+)
 
 
 def _require_env(name: str) -> str:
