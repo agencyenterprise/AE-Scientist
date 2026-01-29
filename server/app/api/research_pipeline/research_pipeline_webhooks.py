@@ -1,22 +1,12 @@
-import hashlib
-import json
+"""Event webhook endpoints for research pipeline: stage progress, heartbeats, status changes."""
+
 import logging
 import time
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, cast
+from typing import cast
 
-import sentry_sdk
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.research_pipeline_runs import (
-    REQUESTER_NAME_FALLBACK,
-    IdeaPayloadSource,
-    PodLaunchError,
-    create_and_launch_research_run,
-    extract_user_first_name,
-)
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.models.research_pipeline import (
     LlmReviewResponse,
@@ -30,7 +20,7 @@ from app.models.research_pipeline import (
     ResearchRunStageProgress,
 )
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
-from app.models.research_pipeline import ResearchRunSubstageSummary, RunType
+from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
@@ -48,495 +38,43 @@ from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindow
 from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
-from app.services.database.ideas import IdeaVersionData
-from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
-from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
-from app.services.database.users import UserData
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
     publish_termination_status_event,
 )
-from app.services.research_pipeline.runpod import get_supported_gpu_types
-from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
-from app.services.s3_service import get_s3_service
 
+from .auth import ResearchRunStore, verify_run_auth
+from .gpu_retry import (
+    record_disk_usage_event,
+    resolve_partition_capacity_bytes,
+    retry_run_after_gpu_shortage,
+)
+from .schemas import (
+    ArtifactUploadedPayload,
+    BestNodeSelectionPayload,
+    CodexEventPayload,
+    DiskUsagePartition,
+    FigureReviewsPayload,
+    GPUShortagePayload,
+    HardwareStatsPayload,
+    InitializationProgressPayload,
+    PaperGenerationProgressPayload,
+    ReviewCompletedPayload,
+    RunCompletedPayload,
+    RunFinishedPayload,
+    RunLogPayload,
+    RunningCodePayload,
+    StageProgressPayload,
+    StageSkipWindowPayload,
+    SubstageCompletedPayload,
+    SubstageSummaryPayload,
+    TokenUsagePayload,
+    TreeVizStoredPayload,
+)
 
-class ResearchRunStore(Protocol):
-    async def get_research_pipeline_run(self, run_id: str) -> Optional[ResearchPipelineRun]: ...
-
-    async def get_run_webhook_token_hash(self, run_id: str) -> Optional[str]: ...
-
-    async def update_research_pipeline_run(
-        self,
-        *,
-        run_id: str,
-        status: Optional[str] = None,
-        initialization_status: Optional[str] = None,
-        pod_update_info: Optional[PodUpdateInfo] = None,
-        error_message: Optional[str] = None,
-        last_heartbeat_at: Optional[datetime] = None,
-        heartbeat_failures: Optional[int] = None,
-        start_deadline_at: Optional[datetime] = None,
-        last_billed_at: Optional[datetime] = None,
-        started_running_at: Optional[datetime] = None,
-    ) -> None: ...
-
-    async def insert_research_pipeline_run_event(
-        self,
-        *,
-        run_id: str,
-        event_type: str,
-        metadata: Dict[str, object],
-        occurred_at: datetime,
-    ) -> None: ...
-
-    async def enqueue_research_pipeline_run_termination(
-        self,
-        *,
-        run_id: str,
-        trigger: str,
-    ) -> ResearchPipelineRunTermination: ...
-
-    async def get_run_owner_user_id(self, run_id: str) -> Optional[int]: ...
-
-    async def get_user_by_id(self, user_id: int) -> Optional[UserData]: ...
-
-    async def get_idea_version_by_id(self, idea_version_id: int) -> Optional[IdeaVersionData]: ...
-
-    async def get_conversation_parent_run_id(self, conversation_id: int) -> Optional[str]: ...
-
-
-router = APIRouter(prefix="/research-pipeline/events", tags=["research-pipeline-events"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-class StageProgressEvent(BaseModel):
-    stage: str
-    iteration: int
-    max_iterations: int
-    progress: float
-    total_nodes: int
-    buggy_nodes: int
-    good_nodes: int
-    best_metric: Optional[str] = None
-    eta_s: Optional[int] = None
-    latest_iteration_time_s: Optional[int] = None
-
-
-class StageProgressPayload(BaseModel):
-    event: StageProgressEvent
-
-
-class SubstageCompletedEvent(BaseModel):
-    stage: str
-    main_stage_number: int
-    reason: str
-    summary: Dict[str, Any]
-
-
-class SubstageCompletedPayload(BaseModel):
-    event: SubstageCompletedEvent
-
-
-class SubstageSummaryEvent(BaseModel):
-    stage: str
-    summary: Dict[str, Any]
-
-
-class SubstageSummaryPayload(BaseModel):
-    event: SubstageSummaryEvent
-
-
-class RunStartedPayload(BaseModel):
-    pass
-
-
-class RunFinishedPayload(BaseModel):
-    success: bool
-    message: Optional[str] = None
-
-
-class InitializationProgressPayload(BaseModel):
-    message: str
-
-
-class DiskUsagePartition(BaseModel):
-    partition: str
-    total_bytes: int
-    used_bytes: int
-
-
-class HardwareStatsPartition(BaseModel):
-    partition: str
-    used_bytes: int
-
-
-class HeartbeatPayload(BaseModel):
-    pass
-
-
-class HardwareStatsPayload(BaseModel):
-    partitions: List[HardwareStatsPartition] = Field(default_factory=list)
-
-
-LOW_FREE_DISK_THRESHOLD_BYTES = 50 * 1024**3
-BYTES_PER_GB = 1024**3
-
-
-def _resolve_partition_capacity_bytes(
-    *,
-    run: ResearchPipelineRun,
-    partition: str,
-) -> Optional[int]:
-    normalized = partition if partition == "/" else partition.rstrip("/")
-    if not normalized:
-        normalized = "/"
-    if normalized == "/":
-        capacity_gb = run.container_disk_gb
-    elif normalized == WORKSPACE_PATH:
-        capacity_gb = run.volume_disk_gb
-    else:
-        return None
-    if capacity_gb is None:
-        return None
-    return int(capacity_gb) * BYTES_PER_GB
-
-
-class GPUShortagePayload(BaseModel):
-    required_gpus: int
-    available_gpus: int
-    message: Optional[str] = None
-
-
-class PaperGenerationProgressEvent(BaseModel):
-    step: str
-    substep: Optional[str] = None
-    progress: float
-    step_progress: float
-    details: Optional[Dict[str, Any]] = None
-
-
-class PaperGenerationProgressPayload(BaseModel):
-    event: PaperGenerationProgressEvent
-
-
-class ArtifactUploadedEvent(BaseModel):
-    artifact_type: str
-    filename: str
-    file_size: int
-    file_type: str
-    created_at: str
-
-
-class ArtifactUploadedPayload(BaseModel):
-    event: ArtifactUploadedEvent
-
-
-class ReviewCompletedEvent(BaseModel):
-    summary: str
-    strengths: List[str]
-    weaknesses: List[str]
-    originality: float
-    quality: float
-    clarity: float
-    significance: float
-    questions: List[str]
-    limitations: List[str]
-    ethical_concerns: bool
-    soundness: float
-    presentation: float
-    contribution: float
-    overall: float
-    confidence: float
-    decision: str
-    source_path: Optional[str]
-    created_at: str
-
-
-class ReviewCompletedPayload(BaseModel):
-    event: ReviewCompletedEvent
-
-
-class BestNodeSelectionEvent(BaseModel):
-    stage: str
-    node_id: str
-    reasoning: str
-
-
-class BestNodeSelectionPayload(BaseModel):
-    event: BestNodeSelectionEvent
-
-
-class StageSkipWindowEventModel(BaseModel):
-    stage: str
-    state: Literal["opened", "closed"]
-    timestamp: str
-    reason: Optional[str] = None
-
-
-class StageSkipWindowPayload(BaseModel):
-    event: StageSkipWindowEventModel
-
-
-class TreeVizStoredEvent(BaseModel):
-    stage_id: str
-    version: int
-    viz: Dict[str, Any]
-
-
-class TreeVizStoredPayload(BaseModel):
-    event: TreeVizStoredEvent
-
-
-class RunLogEvent(BaseModel):
-    message: str
-    level: str = "info"
-
-
-class RunLogPayload(BaseModel):
-    event: RunLogEvent
-
-
-class CodexEventPayload(BaseModel):
-    event: dict[str, Any]
-
-
-class RunningCodeEventPayload(BaseModel):
-    execution_id: str
-    stage_name: str
-    code: str
-    started_at: str
-    run_type: RunType
-
-
-class RunningCodePayload(BaseModel):
-    event: RunningCodeEventPayload
-
-
-class RunCompletedEventPayload(BaseModel):
-    execution_id: str
-    stage_name: str
-    status: Literal["success", "failed"]
-    exec_time: float
-    completed_at: str
-    run_type: RunType
-
-
-class RunCompletedPayload(BaseModel):
-    event: RunCompletedEventPayload
-
-
-class TokenUsageEvent(BaseModel):
-    provider: str
-    model: str
-    input_tokens: int
-    cached_input_tokens: int
-    output_tokens: int
-
-
-class TokenUsagePayload(BaseModel):
-    event: TokenUsageEvent
-
-
-class FigureReviewEvent(BaseModel):
-    figure_name: str
-    img_description: str
-    img_review: str
-    caption_review: str
-    figrefs_review: str
-    source_path: Optional[str] = None
-
-
-class FigureReviewsEvent(BaseModel):
-    """Event containing multiple figure reviews."""
-
-    reviews: List[FigureReviewEvent]
-
-
-class FigureReviewsPayload(BaseModel):
-    event: FigureReviewsEvent
-
-
-class PresignedUploadUrlRequest(BaseModel):
-    artifact_type: str
-    filename: str
-    content_type: str
-    file_size: int
-    metadata: Optional[Dict[str, str]] = None
-
-
-class PresignedUploadUrlResponse(BaseModel):
-    upload_url: str
-    s3_key: str
-    expires_in: int
-
-
-class MultipartUploadInitRequest(BaseModel):
-    """Request to initiate a multipart upload."""
-
-    artifact_type: str
-    filename: str
-    content_type: str
-    file_size: int
-    part_size: int = Field(description="Size of each part in bytes")
-    num_parts: int = Field(description="Total number of parts")
-    metadata: Optional[Dict[str, str]] = None
-
-
-class MultipartUploadPartUrl(BaseModel):
-    """Presigned URL for uploading a single part."""
-
-    part_number: int
-    upload_url: str
-
-
-class MultipartUploadInitResponse(BaseModel):
-    """Response with multipart upload initiation details."""
-
-    upload_id: str
-    s3_key: str
-    part_urls: List[MultipartUploadPartUrl]
-    expires_in: int
-
-
-class MultipartUploadPart(BaseModel):
-    """Completed part information for multipart upload completion."""
-
-    part_number: int = Field(alias="PartNumber")
-    etag: str = Field(alias="ETag")
-
-    class Config:
-        populate_by_name = True
-
-
-class MultipartUploadCompleteRequest(BaseModel):
-    """Request to complete a multipart upload."""
-
-    upload_id: str
-    s3_key: str
-    parts: List[MultipartUploadPart]
-    artifact_type: str
-    filename: str
-    file_size: int
-    content_type: str
-
-
-class MultipartUploadCompleteResponse(BaseModel):
-    """Response after completing a multipart upload."""
-
-    s3_key: str
-    success: bool
-
-
-class MultipartUploadAbortRequest(BaseModel):
-    """Request to abort a multipart upload."""
-
-    upload_id: str
-    s3_key: str
-
-
-class ParentRunFileInfo(BaseModel):
-    s3_key: str
-    filename: str
-    size: int
-    download_url: str
-
-
-class ParentRunFilesRequest(BaseModel):
-    parent_run_id: str
-
-
-class ParentRunFilesResponse(BaseModel):
-    files: List[ParentRunFileInfo]
-    expires_in: int
-
-
-class DatasetFileInfo(BaseModel):
-    s3_key: str
-    relative_path: str
-    size: int
-    download_url: str
-
-
-class ListDatasetsRequest(BaseModel):
-    datasets_folder: str
-
-
-class ListDatasetsResponse(BaseModel):
-    files: List[DatasetFileInfo]
-    expires_in: int
-
-
-class DatasetUploadUrlRequest(BaseModel):
-    datasets_folder: str
-    relative_path: str
-    content_type: str
-    file_size: int
-
-
-class DatasetUploadUrlResponse(BaseModel):
-    upload_url: str
-    s3_key: str
-    expires_in: int
-
-
-async def _verify_run_token(run_id: str, token: str) -> None:
-    """Verify the bearer token for a specific run.
-
-    Validates against the per-run token hash stored in the database.
-    """
-    db = cast("ResearchRunStore", get_database())
-    stored_hash = await db.get_run_webhook_token_hash(run_id)
-
-    if stored_hash is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No token configured for this run.",
-        )
-
-    provided_hash = hashlib.sha256(token.encode()).hexdigest()
-    if provided_hash != stored_hash:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization token.",
-        )
-
-
-async def verify_run_auth(
-    run_id: str,
-    authorization: str = Header(...),
-) -> None:
-    """FastAPI dependency that extracts and verifies the bearer token for a run.
-
-    This combines token extraction and verification into a single dependency,
-    eliminating the need for separate _extract_bearer_token and _verify_run_token calls.
-
-    Usage:
-        @router.post("/{run_id}/endpoint")
-        async def my_endpoint(
-            run_id: str,
-            _: None = Depends(verify_run_auth),
-        ) -> None:
-            ...
-    """
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format.",
-        )
-    await _verify_run_token(run_id, token)
-
-
-async def _resolve_run_owner_first_name(*, db: "ResearchRunStore", run_id: str) -> str:
-    owner_id = await db.get_run_owner_user_id(run_id=run_id)
-    if owner_id is None:
-        return REQUESTER_NAME_FALLBACK
-    user = await db.get_user_by_id(user_id=owner_id)
-    if user is None:
-        return REQUESTER_NAME_FALLBACK
-    return extract_user_first_name(full_name=user.name)
 
 
 def _next_stream_event_id() -> int:
@@ -931,7 +469,7 @@ async def ingest_stage_skip_window(
     payload: StageSkipWindowPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -973,7 +511,7 @@ async def ingest_stage_skip_window(
 @router.post("/{run_id}/tree-viz-stored", status_code=status.HTTP_204_NO_CONTENT)
 async def ingest_tree_viz_stored(
     run_id: str,
-    payload: "TreeVizStoredPayload",
+    payload: TreeVizStoredPayload,
     _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
@@ -1025,7 +563,7 @@ async def ingest_run_log(
     payload: RunLogPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1085,7 +623,7 @@ async def ingest_running_code(
     payload: RunningCodePayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1133,7 +671,7 @@ async def ingest_run_completed(
     payload: RunCompletedPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1182,7 +720,7 @@ async def ingest_run_started(
     run_id: str,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1249,7 +787,7 @@ async def ingest_initialization_progress(
     payload: InitializationProgressPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1285,7 +823,7 @@ async def ingest_run_finished(
     payload: RunFinishedPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1357,7 +895,7 @@ async def ingest_heartbeat(
     run_id: str,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
@@ -1380,7 +918,7 @@ async def ingest_hw_stats(
     payload: HardwareStatsPayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
@@ -1391,8 +929,9 @@ async def ingest_hw_stats(
     now = datetime.now(timezone.utc)
     resolved_partitions: list[DiskUsagePartition] = []
     for partition in payload.partitions:
-        total_bytes = _resolve_partition_capacity_bytes(
-            run=run,
+        total_bytes = resolve_partition_capacity_bytes(
+            container_disk_gb=run.container_disk_gb,
+            volume_disk_gb=run.volume_disk_gb,
             partition=partition.partition,
         )
         if total_bytes is None:
@@ -1415,7 +954,7 @@ async def ingest_hw_stats(
             run_id,
         )
         return
-    await _record_disk_usage_event(
+    await record_disk_usage_event(
         db=db,
         run_id=run_id,
         partitions=resolved_partitions,
@@ -1431,7 +970,7 @@ async def ingest_gpu_shortage(
     payload: GPUShortagePayload,
     _: None = Depends(verify_run_auth),
 ) -> None:
-    db = cast("ResearchRunStore", get_database())
+    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -1481,7 +1020,12 @@ async def ingest_gpu_shortage(
     )
     publish_termination_status_event(run_id=run_id, termination=termination)
     notify_termination_requested()
-    await _retry_run_after_gpu_shortage(db=db, failed_run=run)
+    await retry_run_after_gpu_shortage(
+        db=db,
+        failed_run_id=run_id,
+        failed_run_gpu_type=run.gpu_type,
+        idea_version_id=run.idea_version_id,
+    )
 
 
 @router.post("/{run_id}/token-usage", status_code=status.HTTP_204_NO_CONTENT)
@@ -1560,478 +1104,4 @@ async def ingest_figure_reviews(
     await db.insert_vlm_figure_reviews(
         run_id=run_id,
         reviews=reviews_data,
-    )
-
-
-async def _record_disk_usage_event(
-    *,
-    db: ResearchRunStore,
-    run_id: str,
-    partitions: Sequence[DiskUsagePartition],
-    occurred_at: datetime,
-    event_type: str,
-) -> None:
-    if not partitions:
-        return
-    partitions_payload = []
-    low_free_partitions: list[tuple[str, int]] = []
-    for partition in partitions:
-        free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
-        partitions_payload.append(
-            {
-                "partition": partition.partition,
-                "total_bytes": partition.total_bytes,
-                "used_bytes": partition.used_bytes,
-                "free_bytes": free_bytes,
-            }
-        )
-        if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
-            low_free_partitions.append((partition.partition, free_bytes))
-    await db.insert_research_pipeline_run_event(
-        run_id=run_id,
-        event_type=event_type,
-        metadata={"partitions": partitions_payload},
-        occurred_at=occurred_at,
-    )
-    if low_free_partitions:
-        details = ", ".join(
-            f"{name}={free_bytes / (1024**3):.1f} GiB free"
-            for name, free_bytes in low_free_partitions
-        )
-        message = f"Low disk space detected for run {run_id}: {details}"
-        logger.warning(message)
-        sentry_sdk.capture_message(message, level="warning")
-
-
-async def _retry_run_after_gpu_shortage(
-    *, db: "ResearchRunStore", failed_run: ResearchPipelineRun
-) -> None:
-    version_id = failed_run.idea_version_id
-    idea_version = await db.get_idea_version_by_id(version_id)
-    if idea_version is None:
-        logger.warning(
-            "Cannot retry run %s after GPU shortage: idea version %s not found.",
-            failed_run.run_id,
-            version_id,
-        )
-        return
-    idea_payload = RetryIdeaPayload(
-        idea_id=idea_version.idea_id,
-        version_id=idea_version.version_id,
-        version_number=idea_version.version_number,
-        title=idea_version.title,
-        idea_markdown=idea_version.idea_markdown,
-    )
-    requester_first_name = await _resolve_run_owner_first_name(db=db, run_id=failed_run.run_id)
-    retry_gpu_types = _build_retry_gpu_preferences(
-        failed_run_gpu_type=failed_run.gpu_type, run_id=failed_run.run_id
-    )
-
-    # Get parent run ID if this conversation is seeded from a previous run
-    parent_run_id = await db.get_conversation_parent_run_id(idea_version.conversation_id)
-
-    try:
-        new_run_id, _pod_info = await create_and_launch_research_run(
-            idea_data=idea_payload,
-            requested_by_first_name=requester_first_name,
-            gpu_types=retry_gpu_types,
-            conversation_id=idea_version.conversation_id,
-            parent_run_id=parent_run_id,
-        )
-        logger.debug(
-            "Scheduled retry run %s after GPU shortage on run %s.",
-            new_run_id,
-            failed_run.run_id,
-        )
-        await db.insert_research_pipeline_run_event(
-            run_id=failed_run.run_id,
-            event_type="gpu_shortage_retry",
-            metadata={
-                "retry_run_id": new_run_id,
-                "reason": "gpu_shortage",
-            },
-            occurred_at=datetime.now(timezone.utc),
-        )
-    except PodLaunchError:
-        logger.exception(
-            "Failed to schedule retry run after GPU shortage for run %s", failed_run.run_id
-        )
-        return
-
-
-def _build_retry_gpu_preferences(
-    *, failed_run_gpu_type: str | None, run_id: str | None
-) -> list[str]:
-    """Return a GPU preference list that reuses the user's original choice when possible."""
-    supported_gpu_types = get_supported_gpu_types()
-    if not failed_run_gpu_type:
-        logger.debug(
-            "GPU shortage retry for run %s: no prior GPU recorded; using default list %s.",
-            run_id,
-            supported_gpu_types,
-        )
-        return supported_gpu_types
-
-    if failed_run_gpu_type in supported_gpu_types:
-        logger.debug(
-            "GPU shortage retry for run %s: reusing original GPU type %s.",
-            run_id,
-            failed_run_gpu_type,
-        )
-        return [failed_run_gpu_type]
-
-    # If the GPU has been removed from the supported list, still try it first before falling back.
-    logger.debug(
-        (
-            "GPU shortage retry for run %s: requested GPU %s no longer in supported list; "
-            "trying it first, then falling back to %s."
-        ),
-        run_id,
-        failed_run_gpu_type,
-        supported_gpu_types,
-    )
-    return [failed_run_gpu_type, *supported_gpu_types]
-
-
-@dataclass(frozen=True)
-class RetryIdeaPayload(IdeaPayloadSource):
-    idea_id: int
-    version_id: int
-    version_number: int
-    title: str
-    idea_markdown: str
-
-
-def _coerce_list(value: object) -> List[object]:
-    if isinstance(value, list):
-        return value
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-        if isinstance(parsed, list):
-            return parsed
-    return []
-
-
-PRESIGNED_URL_EXPIRES_IN_SECONDS = 3600
-
-
-@router.post("/{run_id}/presigned-upload-url", response_model=PresignedUploadUrlResponse)
-async def get_presigned_upload_url(
-    run_id: str,
-    payload: PresignedUploadUrlRequest,
-    _: None = Depends(verify_run_auth),
-) -> PresignedUploadUrlResponse:
-    """Generate a presigned URL for uploading an artifact to S3."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
-
-    metadata = {
-        "run_id": run_id,
-        "artifact_type": payload.artifact_type,
-    }
-    if payload.metadata:
-        metadata.update(payload.metadata)
-
-    s3_service = get_s3_service()
-    upload_url = s3_service.generate_upload_url(
-        s3_key=s3_key,
-        content_type=payload.content_type,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-        metadata=metadata,
-    )
-
-    logger.debug(
-        "Generated presigned upload URL: run=%s type=%s filename=%s",
-        run_id,
-        payload.artifact_type,
-        payload.filename,
-    )
-
-    return PresignedUploadUrlResponse(
-        upload_url=upload_url,
-        s3_key=s3_key,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-    )
-
-
-@router.post("/{run_id}/multipart-upload-init", response_model=MultipartUploadInitResponse)
-async def init_multipart_upload(
-    run_id: str,
-    payload: MultipartUploadInitRequest,
-    _: None = Depends(verify_run_auth),
-) -> MultipartUploadInitResponse:
-    """Initiate a multipart upload for large files."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
-
-    metadata = {
-        "run_id": run_id,
-        "artifact_type": payload.artifact_type,
-    }
-    if payload.metadata:
-        metadata.update(payload.metadata)
-
-    s3_service = get_s3_service()
-
-    # Create multipart upload
-    upload_id = s3_service.create_multipart_upload(
-        s3_key=s3_key,
-        content_type=payload.content_type,
-        metadata=metadata,
-    )
-
-    # Generate presigned URLs for all parts
-    part_urls = []
-    for part_num in range(1, payload.num_parts + 1):
-        part_url = s3_service.generate_multipart_part_url(
-            s3_key=s3_key,
-            upload_id=upload_id,
-            part_number=part_num,
-            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-        )
-        part_urls.append(MultipartUploadPartUrl(part_number=part_num, upload_url=part_url))
-
-    logger.info(
-        "Initiated multipart upload: run=%s type=%s filename=%s parts=%d upload_id=%s",
-        run_id,
-        payload.artifact_type,
-        payload.filename,
-        payload.num_parts,
-        upload_id,
-    )
-
-    return MultipartUploadInitResponse(
-        upload_id=upload_id,
-        s3_key=s3_key,
-        part_urls=part_urls,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-    )
-
-
-@router.post("/{run_id}/multipart-upload-complete", response_model=MultipartUploadCompleteResponse)
-async def complete_multipart_upload(
-    run_id: str,
-    payload: MultipartUploadCompleteRequest,
-    _: None = Depends(verify_run_auth),
-) -> MultipartUploadCompleteResponse:
-    """Complete a multipart upload."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_service = get_s3_service()
-
-    # Convert parts to format expected by S3
-    parts: List[Dict[str, str | int]] = [
-        {"PartNumber": p.part_number, "ETag": p.etag} for p in payload.parts
-    ]
-
-    try:
-        s3_service.complete_multipart_upload(
-            s3_key=payload.s3_key,
-            upload_id=payload.upload_id,
-            parts=parts,
-        )
-    except Exception as e:
-        logger.error(
-            "Failed to complete multipart upload: run=%s s3_key=%s error=%s",
-            run_id,
-            payload.s3_key,
-            str(e),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to complete multipart upload: {str(e)}",
-        ) from e
-
-    logger.info(
-        "Completed multipart upload: run=%s type=%s filename=%s size=%d",
-        run_id,
-        payload.artifact_type,
-        payload.filename,
-        payload.file_size,
-    )
-
-    return MultipartUploadCompleteResponse(
-        s3_key=payload.s3_key,
-        success=True,
-    )
-
-
-@router.post("/{run_id}/multipart-upload-abort", status_code=status.HTTP_204_NO_CONTENT)
-async def abort_multipart_upload(
-    run_id: str,
-    payload: MultipartUploadAbortRequest,
-    _: None = Depends(verify_run_auth),
-) -> None:
-    """Abort a multipart upload."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_service = get_s3_service()
-
-    s3_service.abort_multipart_upload(
-        s3_key=payload.s3_key,
-        upload_id=payload.upload_id,
-    )
-
-    logger.info(
-        "Aborted multipart upload: run=%s s3_key=%s upload_id=%s",
-        run_id,
-        payload.s3_key,
-        payload.upload_id,
-    )
-
-
-@router.post("/{run_id}/parent-run-files", response_model=ParentRunFilesResponse)
-async def get_parent_run_files(
-    run_id: str,
-    payload: ParentRunFilesRequest,
-    _: None = Depends(verify_run_auth),
-) -> ParentRunFilesResponse:
-    """List files from a parent run and return presigned download URLs."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_service = get_s3_service()
-    prefix = f"research-pipeline/{payload.parent_run_id}/"
-
-    objects = s3_service.list_objects(prefix=prefix)
-
-    files: List[ParentRunFileInfo] = []
-    for obj in objects:
-        s3_key = str(obj["key"])
-        filename = s3_key.split("/")[-1]
-        download_url = s3_service.generate_download_url(
-            s3_key=s3_key,
-            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-        )
-        files.append(
-            ParentRunFileInfo(
-                s3_key=s3_key,
-                filename=filename,
-                size=int(obj["size"]),
-                download_url=download_url,
-            )
-        )
-
-    logger.debug(
-        "Listed parent run files: run=%s parent_run=%s count=%d",
-        run_id,
-        payload.parent_run_id,
-        len(files),
-    )
-
-    return ParentRunFilesResponse(
-        files=files,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-    )
-
-
-MAX_DATASET_FILES = 2000
-
-
-@router.post("/{run_id}/list-datasets", response_model=ListDatasetsResponse)
-async def list_datasets(
-    run_id: str,
-    payload: ListDatasetsRequest,
-    _: None = Depends(verify_run_auth),
-) -> ListDatasetsResponse:
-    """List files in a datasets folder and return presigned download URLs."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    s3_service = get_s3_service()
-    folder = payload.datasets_folder.strip("/")
-    prefix = f"{folder}/" if folder else ""
-
-    objects = s3_service.list_objects(prefix=prefix)
-
-    files: List[DatasetFileInfo] = []
-    for obj in objects:
-        if len(files) >= MAX_DATASET_FILES:
-            break
-        s3_key = str(obj["key"])
-        # Skip "directory" entries (keys ending with / and size 0)
-        if s3_key.endswith("/") and obj["size"] == 0:
-            continue
-        relative_path = s3_key[len(prefix) :] if s3_key.startswith(prefix) else s3_key
-        download_url = s3_service.generate_download_url(
-            s3_key=s3_key,
-            expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-        )
-        files.append(
-            DatasetFileInfo(
-                s3_key=s3_key,
-                relative_path=relative_path,
-                size=int(obj["size"]),
-                download_url=download_url,
-            )
-        )
-
-    logger.debug(
-        "Listed datasets: run=%s folder=%s count=%d",
-        run_id,
-        payload.datasets_folder,
-        len(files),
-    )
-
-    return ListDatasetsResponse(
-        files=files,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-    )
-
-
-@router.post("/{run_id}/dataset-upload-url", response_model=DatasetUploadUrlResponse)
-async def get_dataset_upload_url(
-    run_id: str,
-    payload: DatasetUploadUrlRequest,
-    _: None = Depends(verify_run_auth),
-) -> DatasetUploadUrlResponse:
-    """Generate a presigned URL for uploading a file to the datasets folder."""
-    db = cast("ResearchRunStore", get_database())
-    run = await db.get_research_pipeline_run(run_id=run_id)
-    if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
-
-    folder = payload.datasets_folder.strip("/")
-    relative = payload.relative_path.lstrip("/")
-    s3_key = f"{folder}/{relative}" if folder else relative
-
-    s3_service = get_s3_service()
-    upload_url = s3_service.generate_upload_url(
-        s3_key=s3_key,
-        content_type=payload.content_type,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
-        metadata={"run_id": run_id, "type": "dataset"},
-    )
-
-    logger.debug(
-        "Generated dataset upload URL: run=%s key=%s",
-        run_id,
-        s3_key,
-    )
-
-    return DatasetUploadUrlResponse(
-        upload_url=upload_url,
-        s3_key=s3_key,
-        expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
     )

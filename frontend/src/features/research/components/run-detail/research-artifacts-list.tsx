@@ -2,7 +2,8 @@
 
 import { Download, FileText, Package } from "lucide-react";
 import type { ArtifactMetadata } from "@/types/research";
-import { formatBytes, formatRelativeTime } from "@/shared/lib/date-utils";
+import { formatRelativeTime } from "@/shared/lib/date-utils";
+import { formatFileSize } from "@/shared/lib/fileUtils";
 import { useArtifactDownload } from "@/features/research/hooks/useArtifactDownload";
 
 interface ResearchArtifactsListProps {
@@ -46,7 +47,7 @@ export function ResearchArtifactsList({
               <div>
                 <p className="font-medium text-white">{artifact.filename}</p>
                 <p className="text-xs text-slate-400">
-                  {artifact.artifact_type} &middot; {formatBytes(artifact.file_size)} &middot;{" "}
+                  {artifact.artifact_type} &middot; {formatFileSize(artifact.file_size)} &middot;{" "}
                   {formatRelativeTime(artifact.created_at)}
                 </p>
               </div>

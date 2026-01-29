@@ -17,8 +17,8 @@ from app.api.ideas import router as ideas_router
 from app.api.llm_defaults import router as llm_defaults_router
 from app.api.llm_prompts import router as llm_prompts_router
 from app.api.public_config import router as public_config_router
+from app.api.research_pipeline import router as rp_events_router
 from app.api.research_pipeline_event_stream import router as rp_event_stream_router
-from app.api.research_pipeline_events import router as rp_events_router
 from app.api.research_pipeline_runs import router as rp_runs_router
 from app.api.research_runs import router as research_runs_router
 from app.api.research_runs_narrative import router as narrator_router

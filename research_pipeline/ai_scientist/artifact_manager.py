@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 
+import humanize
 import magic
 import requests
 from tenacity import (
@@ -41,18 +42,6 @@ MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024
 
 # Part size for multipart upload (50 MB)
 MULTIPART_PART_SIZE_BYTES = 50 * 1024 * 1024
-
-
-def _format_size(size_bytes: int) -> str:
-    """Format byte size to human-readable string."""
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
-    else:
-        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
 
 
 @dataclass(frozen=True)
@@ -112,7 +101,7 @@ class PresignedUrlUploader:
         if file_size > MULTIPART_THRESHOLD_BYTES:
             self._log_progress(
                 f"[upload] Starting multipart upload for {request.filename} "
-                f"({_format_size(file_size)})"
+                f"({humanize.naturalsize(file_size, binary=True)})"
             )
             return self._upload_multipart(
                 request=request,
@@ -122,7 +111,7 @@ class PresignedUrlUploader:
 
         # Use simple presigned URL upload for smaller files
         self._log_progress(
-            f"[upload] Starting upload for {request.filename} ({_format_size(file_size)})"
+            f"[upload] Starting upload for {request.filename} ({humanize.naturalsize(file_size, binary=True)})"
         )
         presigned_response = self._request_presigned_url(
             artifact_type=request.artifact_type,
@@ -153,7 +142,7 @@ class PresignedUrlUploader:
 
         self._log_progress(
             f"[upload] Initiating multipart upload: {num_parts} parts of "
-            f"{_format_size(MULTIPART_PART_SIZE_BYTES)} each"
+            f"{humanize.naturalsize(MULTIPART_PART_SIZE_BYTES, binary=True)} each"
         )
 
         # Request multipart upload initialization
@@ -187,7 +176,7 @@ class PresignedUrlUploader:
 
                     self._log_progress(
                         f"[upload] Uploading part {part_num}/{num_parts} "
-                        f"({_format_size(part_size)})"
+                        f"({humanize.naturalsize(part_size, binary=True)})"
                     )
 
                     # Upload part with retry
@@ -414,7 +403,8 @@ class PresignedUrlUploader:
             "Content-Length": str(file_size),
         }
         self._log_progress(
-            f"[upload] Uploading {local_path.name} ({_format_size(file_size)}) " "via presigned URL"
+            f"[upload] Uploading {local_path.name} ({humanize.naturalsize(file_size, binary=True)}) "
+            "via presigned URL"
         )
         try:
             with open(local_path, "rb") as f:
@@ -551,7 +541,7 @@ class ArtifactPublisher:
             "Created zip archive %s with %d files (%s)",
             archive_name,
             files_added,
-            _format_size(archive_size),
+            humanize.naturalsize(archive_size, binary=True),
         )
         return ArtifactUploadRequest(
             artifact_type=spec.artifact_type,

@@ -178,6 +178,11 @@ def ensure_code_tarball_uploaded() -> str:
     return s3_key
 
 
+def _is_using_fake_runpod() -> bool:
+    """Check if the fake runpod is being used (for local development)."""
+    return bool(os.environ.get("FAKE_RUNPOD_BASE_URL"))
+
+
 def get_code_tarball_info() -> CodeTarballInfo:
     """
     Get information about the research_pipeline code tarball.
@@ -189,6 +194,13 @@ def get_code_tarball_info() -> CodeTarballInfo:
         CodeTarballInfo with presigned URL (valid for 2 hours) and commit hash
     """
     commit_hash = _get_git_commit_hash()
+
+    # When using fake runpod locally, skip the S3 tarball check since the code
+    # is already available locally
+    if _is_using_fake_runpod():
+        logger.info("Fake runpod detected, skipping code tarball S3 check")
+        return CodeTarballInfo(url="", commit_hash=commit_hash)
+
     s3_key = _get_s3_key(commit_hash)
     s3_service = get_s3_service()
 
