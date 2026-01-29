@@ -46,19 +46,6 @@ export function formatDateTime(dateString: string): string {
 }
 
 /**
- * Formats bytes into human-readable file size
- * @param bytes - Number of bytes
- * @returns Formatted file size string (e.g., "1.5 MB")
- */
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-/**
  * Formats the duration between two dates in short format (e.g., "2h 30m")
  * @param startDate - ISO date string (start time)
  * @param endDate - ISO date string (end time), defaults to current time if not provided

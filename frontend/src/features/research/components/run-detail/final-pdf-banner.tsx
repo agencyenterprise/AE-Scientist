@@ -2,7 +2,7 @@
 
 import { Download, FileText, FolderArchive } from "lucide-react";
 import type { ArtifactMetadata } from "@/types/research";
-import { formatBytes } from "@/shared/lib/date-utils";
+import { formatFileSize } from "@/shared/lib/fileUtils";
 import { useArtifactDownload } from "@/features/research/hooks/useArtifactDownload";
 import { isDevelopment } from "@/shared/lib/config";
 
@@ -84,7 +84,7 @@ export function FinalPdfBanner({ artifacts, conversationId, runId }: FinalPdfBan
               <div className="flex-1">
                 <div className="text-sm font-semibold text-emerald-100">Final Paper (PDF)</div>
                 <div className="mt-1 text-xs text-emerald-400/70">
-                  {finalPdf.file_size ? formatBytes(finalPdf.file_size) : "Unknown size"}
+                  {finalPdf.file_size ? formatFileSize(finalPdf.file_size) : "Unknown size"}
                 </div>
               </div>
             </div>
@@ -117,7 +117,7 @@ export function FinalPdfBanner({ artifacts, conversationId, runId }: FinalPdfBan
                 <div className="text-sm font-semibold text-emerald-100">Experiment Archive</div>
                 <div className="mt-1 text-xs text-emerald-400/70">
                   {workspaceArchive.file_size
-                    ? formatBytes(workspaceArchive.file_size)
+                    ? formatFileSize(workspaceArchive.file_size)
                     : "Unknown size"}{" "}
                   &middot; Complete experiment data
                 </div>
