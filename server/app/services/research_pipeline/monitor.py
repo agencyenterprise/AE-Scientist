@@ -7,6 +7,7 @@ from typing import Dict, Optional, Protocol, cast
 
 from psycopg import AsyncConnection
 
+from app.api.research_pipeline_runs import _generate_run_webhook_token
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
@@ -17,12 +18,17 @@ from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.narrator.narrator_service import ingest_narration_event
+from app.services.research_pipeline.pod_restart import attempt_pod_restart
 from app.services.research_pipeline.pod_termination_worker import (
     PodTerminationWorker,
     notify_termination_requested,
     publish_termination_status_event,
 )
-from app.services.research_pipeline.runpod import RunPodError, RunPodManager
+from app.services.research_pipeline.runpod import (
+    RunPodError,
+    RunPodManager,
+    get_supported_gpu_types,
+)
 
 
 class ResearchRunStore(Protocol):
@@ -315,12 +321,26 @@ class ResearchPipelineMonitor:
                 self._max_missed_heartbeats,
             )
             if failures >= self._max_missed_heartbeats:
-                await self._fail_run(
-                    db,
-                    run,
-                    "Pipeline heartbeats exceeded failure threshold.",
-                    "heartbeat_timeout",
+                # Try restart instead of immediate failure
+                actual_db = get_database()
+                webhook_token, webhook_token_hash = _generate_run_webhook_token()
+                gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
+                restarted = await attempt_pod_restart(
+                    db=actual_db,
+                    run=run,
+                    reason="heartbeat_timeout",
+                    gpu_types=gpu_types,
+                    webhook_token=webhook_token,
+                    webhook_token_hash=webhook_token_hash,
                 )
+                if not restarted:
+                    # Max restarts exceeded, fail permanently
+                    await self._fail_run(
+                        db,
+                        run,
+                        f"Pipeline heartbeats exceeded failure threshold after {run.restart_count} restart attempt(s).",
+                        "heartbeat_timeout",
+                    )
             return
 
         if run.heartbeat_failures > 0:
@@ -338,17 +358,31 @@ class ResearchPipelineMonitor:
                     )
                 elif status not in ("RUNNING", "PENDING"):
                     logger.warning(
-                        "Run %s pod %s returned unexpected status '%s'; failing run.",
+                        "Run %s pod %s returned unexpected status '%s'; attempting restart.",
                         run.run_id,
                         run.pod_id,
                         status,
                     )
-                    await self._fail_run(
-                        db,
-                        run,
-                        f"Pod status is {status}; terminating run.",
-                        "container_died",
+                    # Try restart instead of immediate failure
+                    actual_db = get_database()
+                    webhook_token, webhook_token_hash = _generate_run_webhook_token()
+                    gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
+                    restarted = await attempt_pod_restart(
+                        db=actual_db,
+                        run=run,
+                        reason="container_died",
+                        gpu_types=gpu_types,
+                        webhook_token=webhook_token,
+                        webhook_token_hash=webhook_token_hash,
                     )
+                    if not restarted:
+                        # Max restarts exceeded, fail permanently
+                        await self._fail_run(
+                            db,
+                            run,
+                            f"Pod status is {status} after {run.restart_count} restart attempt(s).",
+                            "container_died",
+                        )
             except RunPodError as exc:
                 logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
 

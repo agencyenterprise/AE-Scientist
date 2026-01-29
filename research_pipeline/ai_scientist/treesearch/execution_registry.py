@@ -3,11 +3,9 @@ import threading
 import time
 from dataclasses import dataclass
 from multiprocessing.managers import DictProxy
-from typing import TYPE_CHECKING, Literal, Optional, Tuple
+from typing import Literal, Optional, Tuple
 
-if TYPE_CHECKING:
-    from .journal import Node
-
+from .journal import Node
 
 RegistryStatus = Literal["running", "terminated", "completed"]
 logger = logging.getLogger(__name__)

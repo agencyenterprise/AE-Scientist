@@ -91,6 +91,9 @@ class ResearchPipelineRun(NamedTuple):
     start_deadline_at: Optional[datetime]
     last_heartbeat_at: Optional[datetime]
     heartbeat_failures: int
+    restart_count: int
+    last_restart_at: Optional[datetime]
+    last_restart_reason: Optional[str]
     last_billed_at: datetime
     webhook_token_hash: Optional[str]
     created_at: datetime
@@ -215,6 +218,10 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         start_deadline_at: Optional[datetime] = None,
         last_billed_at: Optional[datetime] = None,
         started_running_at: Optional[datetime] = None,
+        restart_count: Optional[int] = None,
+        last_restart_at: Optional[datetime] = None,
+        last_restart_reason: Optional[str] = None,
+        webhook_token_hash: Optional[str] = None,
     ) -> None:
         fields = []
         values: list[object] = []
@@ -250,6 +257,18 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         if started_running_at is not None:
             fields.append("started_running_at = %s")
             values.append(started_running_at)
+        if restart_count is not None:
+            fields.append("restart_count = %s")
+            values.append(restart_count)
+        if last_restart_at is not None:
+            fields.append("last_restart_at = %s")
+            values.append(last_restart_at)
+        if last_restart_reason is not None:
+            fields.append("last_restart_reason = %s")
+            values.append(last_restart_reason[:100])
+        if webhook_token_hash is not None:
+            fields.append("webhook_token_hash = %s")
+            values.append(webhook_token_hash)
         fields.append("updated_at = %s")
         values.append(datetime.now(timezone.utc))
         values.append(run_id)
@@ -501,6 +520,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             start_deadline_at=row.get("start_deadline_at"),
             last_heartbeat_at=row.get("last_heartbeat_at"),
             heartbeat_failures=row.get("heartbeat_failures", 0),
+            restart_count=row.get("restart_count", 0),
+            last_restart_at=row.get("last_restart_at"),
+            last_restart_reason=row.get("last_restart_reason"),
             last_billed_at=row.get("last_billed_at") or row["created_at"],
             webhook_token_hash=row.get("webhook_token_hash"),
             created_at=row["created_at"],
