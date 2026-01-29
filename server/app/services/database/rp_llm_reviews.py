@@ -3,7 +3,7 @@ Database helpers for research pipeline LLM reviews.
 """
 
 from datetime import datetime
-from typing import Any, Dict, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -102,14 +102,14 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
                     raise ValueError("Failed to insert LLM review")
                 return int(result["id"])
 
-    async def get_review_by_run_id(self, run_id: str) -> Optional[Dict[str, Any]]:
+    async def get_review_by_run_id(self, run_id: str) -> Optional[LlmReview]:
         """Fetch the LLM review for a specific research run.
 
         Args:
             run_id: The research pipeline run identifier
 
         Returns:
-            Dictionary with all review fields, or None if no review exists for this run
+            LlmReview with all review fields, or None if no review exists for this run
         """
         query = """
             SELECT id, run_id, summary, strengths, weaknesses, originality, quality,
@@ -126,4 +126,4 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
                 row = await cursor.fetchone()
         if not row:
             return None
-        return dict(row)
+        return LlmReview(**row)

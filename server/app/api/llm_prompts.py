@@ -39,7 +39,10 @@ def get_default_prompt(prompt_type: str) -> str:
         str: The system prompt to use for chat
     """
     if prompt_type == PromptTypes.IDEA_CHAT:
-        return get_default_chat_system_prompt()
+        return get_default_chat_system_prompt(
+            current_idea="{{current_idea}}",
+            original_conversation_summary="{{original_conversation_summary}}",
+        )
     elif prompt_type == PromptTypes.IDEA_GENERATION:
         return get_default_idea_generation_prompt()
     else:
