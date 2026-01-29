@@ -1074,3 +1074,77 @@ async def get_tree_viz(
     if record is None:
         raise HTTPException(status_code=404, detail="Tree viz not found")
     return TreeVizItem.from_db_record(record)
+
+
+# New run-tree router for endpoints not scoped to a conversation
+run_tree_router = APIRouter(prefix="/research-runs", tags=["research-pipeline"])
+
+
+class RunTreeNodeResponse(BaseModel):
+    """A single node in the run tree."""
+
+    run_id: str
+    idea_title: str
+    status: str
+    created_at: str | None
+    parent_run_id: str | None
+    conversation_id: int
+    is_current: bool
+
+
+class RunTreeResponse(BaseModel):
+    """Response containing the full tree of runs."""
+
+    nodes: list[RunTreeNodeResponse]
+
+
+@run_tree_router.get(
+    "/{run_id}/tree",
+    response_model=RunTreeResponse,
+)
+async def get_run_tree(
+    run_id: str,
+    request: Request,
+) -> RunTreeResponse:
+    """
+    Get the full tree of runs (ancestors and descendants) for a given run.
+
+    This returns all runs that are connected to the specified run through
+    the parent-child seeding relationship, including:
+    - All ancestor runs (runs that this run was seeded from, transitively)
+    - All descendant runs (runs seeded from this run, transitively)
+    - The current run itself
+
+    The tree is ordered by creation time, oldest first.
+    """
+    user = get_current_user(request)
+    db = get_database()
+
+    # First verify the run exists and user has access
+    run_conversation_id = await db.get_run_conversation_id(run_id)
+    if run_conversation_id is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    conversation = await db.get_conversation_by_id(run_conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this run")
+
+    # Get the full tree
+    tree_nodes = await db.get_run_tree(run_id)
+
+    return RunTreeResponse(
+        nodes=[
+            RunTreeNodeResponse(
+                run_id=node["run_id"],
+                idea_title=node["idea_title"],
+                status=node["status"],
+                created_at=node["created_at"],
+                parent_run_id=node["parent_run_id"],
+                conversation_id=node["conversation_id"],
+                is_current=node["is_current"],
+            )
+            for node in tree_nodes
+        ]
+    )

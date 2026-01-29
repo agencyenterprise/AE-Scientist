@@ -3900,6 +3900,49 @@
         }
       }
     },
+    "/api/research-runs/{run_id}/tree": {
+      "get": {
+        "tags": [
+          "research-pipeline"
+        ],
+        "summary": "Get Run Tree",
+        "description": "Get the full tree of runs (ancestors and descendants) for a given run.\n\nThis returns all runs that are connected to the specified run through\nthe parent-child seeding relationship, including:\n- All ancestor runs (runs that this run was seeded from, transitively)\n- All descendant runs (runs seeded from this run, transitively)\n- The current run itself\n\nThe tree is ordered by creation time, oldest first.",
+        "operationId": "get_run_tree_api_research_runs__run_id__tree_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunTreeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-runs/": {
       "get": {
         "tags": [
@@ -10942,6 +10985,81 @@
         ],
         "title": "RunStartedEvent",
         "description": "Emitted when the research run actually starts executing (container is ready).\n\nEmission Criteria:\n- Triggered by run_started events from research pipeline\n- Marks the transition from \"pending\" to \"running\"\n- First event in the timeline (after creation)\n\nFrequency: 1 per run (always the first event)"
+      },
+      "RunTreeNodeResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "idea_title": {
+            "type": "string",
+            "title": "Idea Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "conversation_id": {
+            "type": "integer",
+            "title": "Conversation Id"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "idea_title",
+          "status",
+          "created_at",
+          "parent_run_id",
+          "conversation_id",
+          "is_current"
+        ],
+        "title": "RunTreeNodeResponse",
+        "description": "A single node in the run tree."
+      },
+      "RunTreeResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/RunTreeNodeResponse"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodes"
+        ],
+        "title": "RunTreeResponse",
+        "description": "Response containing the full tree of runs."
       },
       "RunType": {
         "type": "string",

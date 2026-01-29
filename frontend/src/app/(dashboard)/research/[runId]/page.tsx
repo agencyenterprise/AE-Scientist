@@ -15,18 +15,18 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
+  RunTreeCard,
   TreeVizCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
-import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { PageCard } from "@/shared/components/PageCard";
 import { apiFetch } from "@/shared/lib/api-client";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, GitBranch, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -143,7 +143,6 @@ export default function ResearchRunDetailPage() {
     paper_generation_progress,
     best_node_selections = [],
     code_executions,
-    child_conversations = [],
   } = details;
 
   const codexExecution = code_executions?.codex_execution ?? null;
@@ -235,32 +234,9 @@ export default function ResearchRunDetailPage() {
           <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
             <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
 
-            {child_conversations.length > 0 && (
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                  <GitBranch className="w-5 h-5 text-emerald-400" />
-                  Ideas Seeded from This Run
-                </h3>
-                <ul className="space-y-2">
-                  {child_conversations.map(child => (
-                    <li
-                      key={child.conversation_id}
-                      className="flex items-center justify-between py-1"
-                    >
-                      <a
-                        href={`/conversations/${child.conversation_id}`}
-                        className="text-sm text-emerald-400 hover:text-emerald-300 hover:underline truncate max-w-[70%]"
-                      >
-                        {child.title}
-                      </a>
-                      <span className="text-xs text-slate-500">
-                        {formatRelativeTime(child.created_at)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="mt-4">
+              <RunTreeCard runId={runId} />
+            </div>
 
             <div className="mt-4">
               <CostDetailsCard

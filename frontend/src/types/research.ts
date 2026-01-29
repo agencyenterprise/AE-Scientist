@@ -478,3 +478,21 @@ export function isReview(
 ): response is LlmReviewResponse {
   return "exists" in response ? response.exists !== false : true;
 }
+
+// ==========================================
+// Run Tree Types (for ancestor/descendant tree)
+// ==========================================
+
+export interface RunTreeNode {
+  run_id: string;
+  idea_title: string;
+  status: string;
+  created_at: string | null;
+  parent_run_id: string | null;
+  conversation_id: number;
+  is_current: boolean;
+}
+
+export interface RunTreeResponse {
+  nodes: RunTreeNode[];
+}

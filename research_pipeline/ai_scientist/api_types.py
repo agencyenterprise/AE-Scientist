@@ -1498,6 +1498,20 @@ class RunStartedEvent(BaseModel):
     ] = None
 
 
+class RunTreeNodeResponse(BaseModel):
+    run_id: Annotated[str, Field(title="Run Id")]
+    idea_title: Annotated[str, Field(title="Idea Title")]
+    status: Annotated[str, Field(title="Status")]
+    created_at: Annotated[str | None, Field(title="Created At")]
+    parent_run_id: Annotated[str | None, Field(title="Parent Run Id")]
+    conversation_id: Annotated[int, Field(title="Conversation Id")]
+    is_current: Annotated[bool, Field(title="Is Current")]
+
+
+class RunTreeResponse(BaseModel):
+    nodes: Annotated[list[RunTreeNodeResponse], Field(title="Nodes")]
+
+
 class RunType(StrEnum):
     codex_execution = "codex_execution"
     runfile_execution = "runfile_execution"

@@ -1453,6 +1453,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-runs/{run_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Run Tree
+         * @description Get the full tree of runs (ancestors and descendants) for a given run.
+         *
+         *     This returns all runs that are connected to the specified run through
+         *     the parent-child seeding relationship, including:
+         *     - All ancestor runs (runs that this run was seeded from, transitively)
+         *     - All descendant runs (runs seeded from this run, transitively)
+         *     - The current run itself
+         *
+         *     The tree is ordered by creation time, oldest first.
+         */
+        get: operations["get_run_tree_api_research_runs__run_id__tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-runs/": {
         parameters: {
             query?: never;
@@ -5122,6 +5150,34 @@ export interface components {
             cost_per_hour_cents?: number | null;
         };
         /**
+         * RunTreeNodeResponse
+         * @description A single node in the run tree.
+         */
+        RunTreeNodeResponse: {
+            /** Run Id */
+            run_id: string;
+            /** Idea Title */
+            idea_title: string;
+            /** Status */
+            status: string;
+            /** Created At */
+            created_at: string | null;
+            /** Parent Run Id */
+            parent_run_id: string | null;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Is Current */
+            is_current: boolean;
+        };
+        /**
+         * RunTreeResponse
+         * @description Response containing the full tree of runs.
+         */
+        RunTreeResponse: {
+            /** Nodes */
+            nodes: components["schemas"]["RunTreeNodeResponse"][];
+        };
+        /**
          * RunType
          * @description Execution stream identifier for research pipeline code execution telemetry.
          * @enum {string}
@@ -8127,6 +8183,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TreeVizItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_tree_api_research_runs__run_id__tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunTreeResponse"];
                 };
             };
             /** @description Validation Error */

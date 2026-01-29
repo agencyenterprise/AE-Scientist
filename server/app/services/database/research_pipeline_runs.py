@@ -672,3 +672,131 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 rows = await cursor.fetchall() or []
 
         return [dict(row) for row in rows], total
+
+    async def get_run_tree(self, run_id: str) -> list[dict[str, Any]]:
+        """
+        Get the full tree of runs (ancestors and descendants) for a given run.
+
+        The tree structure is built from:
+        - Ancestors: Follow conversation.parent_run_id up the chain
+        - Descendants: Find conversations seeded from runs, and their runs
+
+        Returns a list of nodes where each node contains:
+        - run_id: The run ID
+        - idea_title: The title of the idea
+        - status: The run status
+        - created_at: When the run was created
+        - parent_run_id: The parent run ID (if any)
+        - conversation_id: The conversation ID for this run
+        - is_current: Whether this is the run being queried
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                # Use recursive CTEs to build the full tree
+                # First, get the current run's conversation_id and its parent_run_id
+                await cursor.execute(
+                    """
+                    WITH RECURSIVE
+                    -- Get the current run info
+                    current_run AS (
+                        SELECT
+                            r.run_id,
+                            i.conversation_id,
+                            c.parent_run_id
+                        FROM research_pipeline_runs r
+                        JOIN ideas i ON r.idea_id = i.id
+                        JOIN conversations c ON i.conversation_id = c.id
+                        WHERE r.run_id = %s
+                    ),
+                    -- Find all ancestors by following parent_run_id chain
+                    ancestors AS (
+                        -- Base case: parent of current run
+                        SELECT
+                            r.run_id,
+                            i.conversation_id,
+                            c.parent_run_id,
+                            1 as depth
+                        FROM research_pipeline_runs r
+                        JOIN ideas i ON r.idea_id = i.id
+                        JOIN conversations c ON i.conversation_id = c.id
+                        WHERE r.run_id = (SELECT parent_run_id FROM current_run)
+
+                        UNION ALL
+
+                        -- Recursive case: parent of parent
+                        SELECT
+                            r.run_id,
+                            i.conversation_id,
+                            c.parent_run_id,
+                            a.depth + 1
+                        FROM ancestors a
+                        JOIN research_pipeline_runs r ON r.run_id = a.parent_run_id
+                        JOIN ideas i ON r.idea_id = i.id
+                        JOIN conversations c ON i.conversation_id = c.id
+                        WHERE a.parent_run_id IS NOT NULL
+                    ),
+                    -- Find all descendants by following seeded conversations
+                    descendants AS (
+                        -- Base case: conversations seeded from current run
+                        SELECT
+                            r.run_id,
+                            i.conversation_id,
+                            c.parent_run_id,
+                            1 as depth
+                        FROM conversations c
+                        JOIN ideas i ON i.conversation_id = c.id
+                        JOIN research_pipeline_runs r ON r.idea_id = i.id
+                        WHERE c.parent_run_id = %s
+
+                        UNION ALL
+
+                        -- Recursive case: runs from conversations seeded from descendant runs
+                        SELECT
+                            r.run_id,
+                            i.conversation_id,
+                            c.parent_run_id,
+                            d.depth + 1
+                        FROM descendants d
+                        JOIN conversations c ON c.parent_run_id = d.run_id
+                        JOIN ideas i ON i.conversation_id = c.id
+                        JOIN research_pipeline_runs r ON r.idea_id = i.id
+                    ),
+                    -- Combine all runs (current, ancestors, descendants)
+                    all_runs AS (
+                        SELECT run_id, conversation_id, parent_run_id FROM current_run
+                        UNION
+                        SELECT run_id, conversation_id, parent_run_id FROM ancestors
+                        UNION
+                        SELECT run_id, conversation_id, parent_run_id FROM descendants
+                    )
+                    -- Get full details for all runs in the tree
+                    SELECT DISTINCT
+                        r.run_id,
+                        iv.title as idea_title,
+                        r.status,
+                        r.created_at,
+                        ar.parent_run_id,
+                        ar.conversation_id,
+                        (r.run_id = %s) as is_current
+                    FROM all_runs ar
+                    JOIN research_pipeline_runs r ON r.run_id = ar.run_id
+                    JOIN ideas i ON r.idea_id = i.id
+                    JOIN idea_versions iv ON r.idea_version_id = iv.id
+                    ORDER BY r.created_at ASC
+                    """,
+                    (run_id, run_id, run_id),
+                )
+                rows = await cursor.fetchall() or []
+
+        return [
+            {
+                "run_id": row["run_id"],
+                "idea_title": row["idea_title"],
+                "status": row["status"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "parent_run_id": row["parent_run_id"],
+                "conversation_id": row["conversation_id"],
+                "is_current": row["is_current"],
+            }
+            for row in rows
+        ]

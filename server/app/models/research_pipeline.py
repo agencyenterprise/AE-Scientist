@@ -522,3 +522,31 @@ class LlmReviewNotFoundResponse(BaseModel):
     run_id: str = Field(..., description="Research run identifier")
     exists: bool = Field(False, description="Indicates no review exists")
     message: str = Field(..., description="Explanation that no review was found")
+
+
+# ============================================================================
+# Run Tree Models
+# ============================================================================
+
+
+class RunTreeNode(BaseModel):
+    """A single node in the run tree (ancestors and descendants)."""
+
+    run_id: str = Field(..., description="Unique identifier of the run")
+    idea_title: str = Field(..., description="Title of the idea for this run")
+    status: str = Field(..., description="Current status of the run")
+    created_at: Optional[str] = Field(None, description="ISO timestamp when the run was created")
+    parent_run_id: Optional[str] = Field(
+        None, description="Parent run ID if this run was seeded from another run"
+    )
+    conversation_id: int = Field(..., description="ID of the conversation for this run")
+    is_current: bool = Field(False, description="Whether this is the currently viewed run")
+
+
+class RunTreeResponse(BaseModel):
+    """Response containing the full tree of runs (ancestors and descendants)."""
+
+    nodes: List[RunTreeNode] = Field(
+        default_factory=list,
+        description="List of all runs in the tree, ordered by creation time",
+    )

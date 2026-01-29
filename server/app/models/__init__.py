@@ -83,6 +83,8 @@ from app.models.research_pipeline import (
     ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
+    RunTreeNode,
+    RunTreeResponse,
     TreeVizItem,
 )
 from app.models.sse import (
@@ -118,6 +120,8 @@ __all__ = [
     "TreeVizItem",
     "LlmReviewResponse",
     "LlmReviewNotFoundResponse",
+    "RunTreeNode",
+    "RunTreeResponse",
     "ImportChatGPTConversation",
     "ImportChatPrompt",
     "ImportChatCreateNew",
