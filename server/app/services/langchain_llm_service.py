@@ -285,9 +285,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         del user_id
         db = get_database()
         system_prompt = await get_idea_generation_prompt(db=db)
-        user_prompt = (
-            "Analyze this conversation and generate a research idea based on the discussion below.\n\n"
-            f"{conversation_text}"
+        user_prompt = render_text(
+            template_name="idea_generation_user.txt.j2",
+            context={"conversation_text": conversation_text},
         )
         messages = [
             SystemMessage(content=self._text_content_block(text=system_prompt)),
@@ -304,10 +304,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         """
         Generate a user prompt for a manual seed idea.
         """
-        return (
-            "Create a structured research idea draft using the provided manual seed.\n\n"
-            f"Title: {idea_title}\n"
-            f"Hypothesis: {idea_hypothesis}"
+        return render_text(
+            template_name="manual_seed_user.txt.j2",
+            context={"idea_title": idea_title, "idea_hypothesis": idea_hypothesis},
         )
 
     async def generate_manual_seed_idea(
