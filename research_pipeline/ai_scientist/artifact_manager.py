@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 # Threshold for using multipart upload (100 MB)
 MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024
 
-# Part size for multipart upload (50 MB)
-MULTIPART_PART_SIZE_BYTES = 50 * 1024 * 1024
+# Part size for multipart upload (100 MB)
+MULTIPART_PART_SIZE_BYTES = 100 * 1024 * 1024
 
 
 @dataclass(frozen=True)
