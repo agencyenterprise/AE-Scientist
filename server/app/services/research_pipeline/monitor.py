@@ -263,12 +263,26 @@ class ResearchPipelineMonitor:
                     remaining,
                 )
         if deadline and now > deadline:
-            await self._fail_run(
-                db,
-                run,
-                "Pipeline did not start within the grace period.",
-                "deadline_exceeded",
+            # Try restart instead of immediate failure
+            actual_db = get_database()
+            webhook_token, webhook_token_hash = _generate_run_webhook_token()
+            gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
+            restarted = await attempt_pod_restart(
+                db=actual_db,
+                run=run,
+                reason="startup_timeout",
+                gpu_types=gpu_types,
+                webhook_token=webhook_token,
+                webhook_token_hash=webhook_token_hash,
             )
+            if not restarted:
+                # Max restarts exceeded, fail permanently
+                await self._fail_run(
+                    db,
+                    run,
+                    f"Pipeline did not start within the grace period after {run.restart_count} restart attempt(s).",
+                    "deadline_exceeded",
+                )
 
     async def _handle_running_run(
         self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
