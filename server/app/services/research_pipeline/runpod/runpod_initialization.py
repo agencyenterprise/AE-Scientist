@@ -123,6 +123,10 @@ def _python_packages_installation_commands() -> list[str]:
         'echo "Running installation script..."',
         f"cd {WORKSPACE_PATH}/AE-Scientist",
         "cat <<'RUNPOD_INSTALL' | bash",
+        # Install ae-paper-review package first (research_pipeline depends on it)
+        f"cd {WORKSPACE_PATH}/AE-Scientist/packages/ae-paper-review",
+        "pip install -e .",
+        # Then install research_pipeline
         f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline/",
         "uv venv --system-site-packages",
         "source .venv/bin/activate",

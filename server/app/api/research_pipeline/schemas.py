@@ -114,18 +114,18 @@ class ReviewCompletedEvent(BaseModel):
     summary: str
     strengths: List[str]
     weaknesses: List[str]
-    originality: float
-    quality: float
-    clarity: float
-    significance: float
+    originality: int
+    quality: int
+    clarity: int
+    significance: int
     questions: List[str]
     limitations: List[str]
     ethical_concerns: bool
-    soundness: float
-    presentation: float
-    contribution: float
-    overall: float
-    confidence: float
+    soundness: int
+    presentation: int
+    contribution: int
+    overall: int
+    confidence: int
     decision: str
     source_path: Optional[str]
     created_at: str

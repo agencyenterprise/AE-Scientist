@@ -1,7 +1,12 @@
+"""Research-pipeline specific token tracking functions.
+
+This module provides token tracking that publishes via webhooks or to files,
+specific to the research_pipeline's telemetry system.
+"""
+
 import csv
 import logging
 import os
-import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -59,6 +64,7 @@ def save_cost_track(
     cached_input_tokens: int,
     output_tokens: int,
 ) -> None:
+    """Save token usage either via webhook or to file depending on environment."""
     run_id = RUN_ID
     model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
@@ -96,7 +102,6 @@ def save_webhook_cost_track(
         return
 
     try:
-        # Note: Server will look up conversation_id from run_id
         webhook_client.publish(
             kind="token_usage",
             payload=TokenUsageEvent(
@@ -120,6 +125,7 @@ def save_file_cost_track(
     output_tokens: int,
     now: datetime,
 ) -> None:
+    """Save token usage to a CSV file."""
     file_path = Path(os.environ.get("WORKSPACE_DIR") or "") / "cost_track.csv"
     file_path.parent.mkdir(parents=True, exist_ok=True)
     if not file_path.exists():
@@ -150,17 +156,20 @@ def save_file_cost_track(
 
 
 class TrackCostCallbackHandler(BaseCallbackHandler):
-    def __init__(self, model: str | None = None):
+    """Callback handler that tracks token costs via webhook or file."""
+
+    def __init__(self, model: str | None = None) -> None:
         self.model = model
 
     def on_llm_end(
         self,
         response: LLMResult,
         *,
-        run_id: UUID,  # noqa: ARG002
-        parent_run_id: UUID | None = None,  # noqa: ARG002
-        **kwargs: Any,  # noqa: ANN401, ARG002
-    ) -> Any:  # noqa: ANN401
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: object,
+    ) -> None:
+        del run_id, parent_run_id, kwargs  # Required by interface but unused
         try:
             if not response.generations:
                 return
@@ -195,7 +204,6 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                     output_tokens=output_tokens,
                 )
         except Exception:
-            traceback.print_exc()
             logging.warning("Token tracking failed; continuing without tracking")
 
 

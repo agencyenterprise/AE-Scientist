@@ -3,6 +3,7 @@ name = "AE-Scientist"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    # ae-paper-review is installed via Makefile (editable install)
     "albumentations>=2.0.8",
     "anthropic>=0.72.0",
     "backoff>=2.2.1",
@@ -15,13 +16,14 @@ dependencies = [
     "funcy>=2.0",
     "genson>=1.3.0",
     "hf-transfer>=0.1.9",
+    "httpx==0.27.2",
     "huggingface-hub>=0.36.0",
     "humanize>=4.14.0",
     "igraph>=1.0.0",
     "ipython>=9.6.0",
     "jsonschema>=4.25.1",
-    "langchain-google-genai>=3.1.0",
-    "langchain[anthropic,openai]>=1.0.8",
+    "langchain-google-genai>=3.0.0,<4.0.0",
+    "langchain[anthropic,openai]>=1.1.0",
     "lightgbm>=4.6.0",
     "matplotlib>=3.8.4",
     "numpy>=2.3.4",
@@ -30,9 +32,7 @@ dependencies = [
     "pandas>=2.3.3",
     "pydantic>=2.12.4",
     "pymongo>=4.15.3",
-    "pymupdf>=1.26.6",
-    "pymupdf4llm>=0.1.7",
-    "pypdf>=6.1.3",
+    # pymupdf, pymupdf4llm, pypdf provided by ae-paper-review
     "python-dotenv>=1.2.1",
     "python-magic>=0.4.27",
     "python-ulid>=3.1.0",

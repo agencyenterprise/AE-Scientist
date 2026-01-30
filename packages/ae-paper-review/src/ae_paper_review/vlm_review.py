@@ -1,4 +1,5 @@
-import base64
+"""VLM-based figure review functionality."""
+
 import hashlib
 import logging
 import os
@@ -6,82 +7,26 @@ import re
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import pymupdf  # type: ignore[import-untyped]
-from pydantic import BaseModel, Field
 
-from ai_scientist.llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
-from ai_scientist.perform_llm_review import load_paper
-from ai_scientist.prompts.render import render_text
+from .llm.token_tracking import TokenUsage
+from .llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
+from .llm_review import load_paper
+from .models import (
+    FigureImageCaptionRefReview,
+    ImageCaptionRefReview,
+    ImageReview,
+    ImageSelectionReview,
+)
+from .prompts import render_text
 
 logger = logging.getLogger(__name__)
 
 
-def encode_image_to_base64(image_data: str | list[bytes] | bytes) -> str:
-    """Encode image data to base64 string."""
-    if isinstance(image_data, str):
-        with open(image_data, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
-    elif isinstance(image_data, list):
-        return base64.b64encode(image_data[0]).decode("utf-8")
-    elif isinstance(image_data, bytes):
-        return base64.b64encode(image_data).decode("utf-8")
-    else:
-        raise TypeError(f"Unsupported image data type: {type(image_data)}")
-
-
-reviewer_system_prompt_base = render_text(
+# Pre-render static templates
+_reviewer_system_prompt_base = render_text(
     template_name="vlm/reviewer_system_prompt_base.txt.j2",
     context={},
 )
-
-
-class ImageCaptionRefReview(BaseModel):
-    Img_description: str = Field(
-        ...,
-        description="Describe the figure's contents, axes, and notable patterns.",
-    )
-    Img_review: str = Field(
-        ...,
-        description="Analysis of the figure quality, clarity, and potential improvements.",
-    )
-    Caption_review: str = Field(
-        ...,
-        description="Assessment of how well the caption matches and explains the figure.",
-    )
-    Figrefs_review: str = Field(
-        ...,
-        description="Evaluation of how the main text references integrate this figure.",
-    )
-
-
-class ImageSelectionReview(ImageCaptionRefReview):
-    Overall_comments: str = Field(
-        ...,
-        description="Whether the figure adds sufficient value given page limits.",
-    )
-    Containing_sub_figures: str = Field(
-        ...,
-        description="Whether the figure has subplots and if their layout is adequate.",
-    )
-    Informative_review: str = Field(
-        ...,
-        description="Whether the figure is informative or redundant.",
-    )
-
-
-class ImageReview(BaseModel):
-    Img_description: str = Field(
-        ...,
-        description="Describe the figure's contents in detail.",
-    )
-    Img_review: str = Field(
-        ...,
-        description="Critique or suggestions for improving the figure.",
-    )
-
-
-class FigureImageCaptionRefReview(BaseModel):
-    figure_name: str = Field(..., description="Normalized identifier for the figure.")
-    review: ImageCaptionRefReview
 
 
 class _ImgCapRefPromptContext(NamedTuple):
@@ -104,25 +49,28 @@ def extract_figure_screenshots(
     min_text_length: int = 50,
     min_vertical_gap: int = 30,
 ) -> List[Dict[str, Any]]:
-    """
-    Extract screenshots for figure captions ("Figure X." or "Figure X:")
-    and also gather text blocks (anywhere in the PDF) mentioning that
-    exact figure with "Figure", "Fig.", or "Fig-ure" (including line breaks).
-    Avoid partial matches, e.g. "Figure 11" doesn't match "Figure 1".
+    """Extract screenshots for figure captions from a PDF.
+
+    Args:
+        pdf_path: Path to the PDF file
+        img_folder_path: Directory to save extracted images
+        num_pages: Optional limit on pages to process
+        min_text_length: Minimum text length for blocks above figures
+        min_vertical_gap: Minimum vertical gap between text and figure
+
+    Returns:
+        List of dicts with img_name, caption, images, main_text_figrefs
     """
     os.makedirs(img_folder_path, exist_ok=True)
     doc = pymupdf.open(pdf_path)
     page_range = range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
 
-    # ---------- (A) EXTRACT ALL TEXT BLOCKS FROM THE DOCUMENT ----------
-    text_blocks: List[Dict[str, Any]] = (
-        []
-    )  # will hold dicts: { 'page': int, 'bbox': Rect, 'text': str }
+    # Extract all text blocks from the document
+    text_blocks: List[Dict[str, Any]] = []
     for page_num in page_range:
         page = doc[page_num]
         try:
             blocks = page.get_text("blocks")
-            # blocks: [x0, y0, x1, y1, text, block_no, ...]
             for b in blocks:
                 txt = b[4].strip()
                 if txt:
@@ -131,54 +79,46 @@ def extract_figure_screenshots(
         except Exception as e:
             logger.exception(f"Error extracting text from page {page_num}: {e}")
 
-    # ---------- (B) REGEX FOR FIGURE CAPTIONS  ----------
-    # Captures the figure label so we can reference it later (group name 'fig_label').
-    # Example matches: "Figure 1:", "Figure (A).2.", "Figure A.1:"
+    # Regex for figure captions
     figure_caption_pattern = re.compile(
         r"^(?:Figure)\s+(?P<fig_label>"
-        r"(?:\d+"  # "1", "11", ...
-        r"|[A-Za-z]+\.\d+"  # "A.1", "S2.3"
-        r"|\(\s*[A-Za-z]+\s*\)\.\d+"  # "(A).2"
+        r"(?:\d+"
+        r"|[A-Za-z]+\.\d+"
+        r"|\(\s*[A-Za-z]+\s*\)\.\d+"
         r")"
-        r")(?:\.|:)",  # Must end with "." or ":"
+        r")(?:\.|:)",
         re.IGNORECASE,
     )
 
-    # ---------- (C) DETECT SUB-FIGURE CAPTIONS (e.g. "(a)")  ----------
+    # Detect sub-figure captions
     subfigure_pattern = re.compile(r"\(\s*[a-zA-Z]\s*\)")
 
     def is_subfigure_caption(txt: str) -> bool:
         return bool(subfigure_pattern.search(txt))
 
-    # ---------- (D) MAIN ROUTINE: LOOP OVER PAGES AND CAPTIONS ----------
     result_pairs: List[Dict[str, Any]] = []
 
     for page_num in page_range:
         page = doc[page_num]
         page_rect = page.rect
 
-        # All text blocks for this page
         page_blocks = [b for b in text_blocks if b["page"] == page_num]
-        # Sort top-to-bottom
         page_blocks.sort(key=lambda b: b["bbox"].y0)
 
-        # ----- (D.1) Find figure captions -----
         for blk in page_blocks:
             caption_text = blk["text"]
             m = figure_caption_pattern.match(caption_text)
             if not m:
-                continue  # not a figure caption
+                continue
 
-            fig_label = m.group("fig_label")  # e.g. "1", "A.1", "(A).2", etc.
+            fig_label = m.group("fig_label")
             fig_x0, fig_y0, fig_x1, fig_y1 = blk["bbox"]
 
-            # (a) Find a large text block above the caption (on the same page)
+            # Find a large text block above the caption
             above_blocks = []
             for ab in page_blocks:
                 if ab["bbox"].y1 < fig_y0:
-                    # vertical gap
                     ab_height_gap = fig_y0 - ab["bbox"].y1
-                    # horizontal overlap
                     overlap_x = min(fig_x1, ab["bbox"].x1) - max(fig_x0, ab["bbox"].x0)
                     width_min = min((fig_x1 - fig_x0), (ab["bbox"].x1 - ab["bbox"].x0))
                     horiz_overlap_ratio = overlap_x / float(width_min) if width_min > 0 else 0.0
@@ -191,7 +131,6 @@ def extract_figure_screenshots(
                     ):
                         above_blocks.append(ab)
 
-            # pick the block with the largest bottom edge
             if above_blocks:
                 above_block = max(above_blocks, key=lambda b: b["bbox"].y1)
                 clip_top = above_block["bbox"].y1
@@ -202,13 +141,11 @@ def extract_figure_screenshots(
             clip_right = fig_x1
             clip_bottom = fig_y0
 
-            # (b) Create figure screenshot
             if (clip_bottom > clip_top) and (clip_right > clip_left):
                 clip_rect = pymupdf.Rect(clip_left, clip_top, clip_right, clip_bottom)
                 pix = page.get_pixmap(clip=clip_rect, dpi=150)
 
                 fig_label_escaped = re.escape(fig_label)
-                # unique filename
                 fig_hash = hashlib.md5(
                     f"figure_{fig_label_escaped}_{page_num}_{clip_rect}".encode()
                 ).hexdigest()[:10]
@@ -216,13 +153,8 @@ def extract_figure_screenshots(
                 fig_filepath = os.path.join(img_folder_path, fig_filename)
                 pix.save(fig_filepath)
 
-                # (c) Now find references across the ENTIRE DOCUMENT
-                #     We'll build a pattern that matches:
-                #         Figure/Fig./Fig-ure + possible line break + fig_label
-                #     We also ensure we do NOT match if there's a digit/letter
-                #     immediately after fig_label (so "Figure 11" won't match "Figure 1").
+                # Find references across the entire document
                 fig_label_escaped = re.escape(fig_label)
-                # negative lookahead (?![0 - 9A-Za-z]) ensures no letter/digit follows
                 main_text_figure_pattern = re.compile(
                     rf"(?:Fig(?:\.|-\s*ure)?|Figure)\s*{fig_label_escaped}(?![0 - 9A-Za-z])",
                     re.IGNORECASE,
@@ -230,14 +162,11 @@ def extract_figure_screenshots(
 
                 references_in_doc = []
                 for tb in text_blocks:
-                    # exclude the caption block itself
                     if tb is blk:
                         continue
-                    # see if it references this figure label
                     if main_text_figure_pattern.search(tb["text"]):
                         references_in_doc.append(tb["text"])
 
-                # (d) Create the final result item
                 result_pairs.append(
                     {
                         "img_name": f"figure_{fig_label_escaped}",
@@ -251,42 +180,36 @@ def extract_figure_screenshots(
 
 
 def extract_abstract(text: str) -> str:
-    # Split text into lines
-    lines = text.split("\n")
+    """Extract abstract from paper text.
 
-    # Regex to identify a heading line: starts with # after optional spaces
-    # e.g. "### Some Heading"
+    Args:
+        text: Full paper text in markdown format
+
+    Returns:
+        Extracted abstract text or empty string if not found
+    """
+    lines = text.split("\n")
     heading_pattern = re.compile(r"^\s*#+\s*(.*)$")
 
-    # Find the line containing "abstract" in a heading
     abstract_start = None
     for i, line in enumerate(lines):
-        # Check if this line is a heading
         match = heading_pattern.match(line)
         if match:
-            # Extract the heading text after '#'
             heading_text = match.group(1)
             if "abstract" in heading_text.lower():
                 abstract_start = i
                 break
 
     if abstract_start is None:
-        # No abstract heading found
         return ""
 
-    # From abstract_start, collect lines until the next heading
     abstract_lines = []
     for j in range(abstract_start + 1, len(lines)):
-        # Check if this line is another heading
         if heading_pattern.match(lines[j]):
-            # We've hit the next section heading, stop extraction
             break
-        # Otherwise, accumulate the line as part of the abstract
         abstract_lines.append(lines[j])
 
-    # Join the abstract lines into a single string
-    abstract_text = "\n".join(abstract_lines).strip()
-    return abstract_text
+    return "\n".join(abstract_lines).strip()
 
 
 def generate_vlm_img_cap_ref_review(
@@ -294,7 +217,20 @@ def generate_vlm_img_cap_ref_review(
     abstract: str,
     model: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> ImageCaptionRefReview | None:
+    """Generate a VLM review for a figure with caption and references.
+
+    Args:
+        img: Dict with caption, images, main_text_figrefs
+        abstract: Paper abstract
+        model: VLM model identifier
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        ImageCaptionRefReview or None if failed
+    """
     prompt_ctx = _ImgCapRefPromptContext(
         abstract=abstract,
         caption=str(img["caption"]),
@@ -309,9 +245,10 @@ def generate_vlm_img_cap_ref_review(
             msg=prompt,
             image_paths=img["images"],
             model=model,
-            system_message=reviewer_system_prompt_base,
+            system_message=_reviewer_system_prompt_base,
             temperature=temperature,
             schema_class=ImageCaptionRefReview,
+            usage=usage,
         )
     except Exception:
         logger.exception("Failed to obtain structured VLM caption/reference review.")
@@ -323,16 +260,29 @@ def generate_vlm_img_review(
     img: Dict[str, Any],
     model: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> Dict[str, Any] | None:
+    """Generate a simple VLM review for an image.
+
+    Args:
+        img: Dict with images list
+        model: VLM model identifier
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        Review dict or None if failed
+    """
     prompt = render_text(template_name="vlm/img_review_prompt.txt.j2", context={})
     try:
         parsed, _ = get_structured_response_from_vlm(
             msg=prompt,
             image_paths=img["images"],
             model=model,
-            system_message=reviewer_system_prompt_base,
+            system_message=_reviewer_system_prompt_base,
             temperature=temperature,
             schema_class=ImageReview,
+            usage=usage,
         )
     except Exception:
         logger.exception("Failed to obtain structured VLM image review.")
@@ -344,7 +294,19 @@ def perform_imgs_cap_ref_review(
     model: str,
     pdf_path: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> List[FigureImageCaptionRefReview]:
+    """Review all figures in a paper with caption and reference analysis.
+
+    Args:
+        model: VLM model identifier
+        pdf_path: Path to the PDF file
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        List of FigureImageCaptionRefReview for each figure
+    """
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -352,20 +314,24 @@ def perform_imgs_cap_ref_review(
     )
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
+
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
     img_reviews: List[FigureImageCaptionRefReview] = []
     abstract = extract_abstract(paper_txt)
+
     for img in img_pairs:
         review = generate_vlm_img_cap_ref_review(
             img=img,
             abstract=abstract,
             model=model,
             temperature=temperature,
+            usage=usage,
         )
         if review is not None:
             img_reviews.append(
                 FigureImageCaptionRefReview(figure_name=img["img_name"], review=review)
             )
+
     return img_reviews
 
 
@@ -373,7 +339,19 @@ def detect_duplicate_figures(
     model: str,
     pdf_path: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> str | Dict[str, str]:
+    """Detect duplicate or similar figures in a paper.
+
+    Args:
+        model: VLM model identifier
+        pdf_path: Path to the PDF file
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        Analysis string or error dict
+    """
     load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -381,13 +359,17 @@ def detect_duplicate_figures(
     )
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
+
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
 
     system_message = (
         "You are an expert at identifying duplicate or highly similar images. "
-        "Please analyze these images and determine if they are duplicates or variations of the same visualization. "
-        "Response format: reasoning, followed by `Duplicate figures: <list of duplicate figure names>`."
-        "Make sure you use the exact figure names (e.g. Figure 1, Figure 2b, etc.) as they appear in the paper."
+        "Please analyze these images and determine if they are duplicates "
+        "or variations of the same visualization. "
+        "Response format: reasoning, followed by "
+        "`Duplicate figures: <list of duplicate figure names>`. "
+        "Make sure you use the exact figure names (e.g. Figure 1, Figure 2b, etc.) "
+        "as they appear in the paper. "
         "If you find no duplicates, respond with `No duplicates found`."
     )
 
@@ -397,12 +379,14 @@ def detect_duplicate_figures(
         content, _ = get_response_from_vlm(
             msg=(
                 "Are any of these images duplicates or highly similar? If so, please identify "
-                "which ones are similar and explain why. Focus on content similarity, not just visual style."
+                "which ones are similar and explain why. "
+                "Focus on content similarity, not just visual style."
             ),
             image_paths=image_paths,
             model=model,
             system_message=system_message,
             temperature=temperature,
+            usage=usage,
         )
         return content
     except Exception as e:
@@ -416,7 +400,21 @@ def generate_vlm_img_selection_review(
     model: str,
     reflection_page_info: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> Dict[str, Any] | None:
+    """Generate a VLM review for figure selection decisions.
+
+    Args:
+        img: Dict with caption, images, main_text_figrefs
+        abstract: Paper abstract
+        model: VLM model identifier
+        reflection_page_info: Page limit information
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        Review dict or None if failed
+    """
     selection_ctx = _ImgCapSelectionPromptContext(
         abstract=abstract,
         caption=str(img["caption"]),
@@ -432,9 +430,10 @@ def generate_vlm_img_selection_review(
             msg=prompt,
             image_paths=img["images"],
             model=model,
-            system_message=reviewer_system_prompt_base,
+            system_message=_reviewer_system_prompt_base,
             temperature=temperature,
             schema_class=ImageSelectionReview,
+            usage=usage,
         )
     except Exception:
         logger.exception("Failed to obtain structured VLM selection review.")
@@ -447,7 +446,20 @@ def perform_imgs_cap_ref_review_selection(
     pdf_path: str,
     reflection_page_info: str,
     temperature: float,
+    usage: TokenUsage | None = None,
 ) -> Dict[str, Any]:
+    """Review figures for selection decisions.
+
+    Args:
+        model: VLM model identifier
+        pdf_path: Path to the PDF file
+        reflection_page_info: Page limit information
+        temperature: Sampling temperature
+        usage: Optional token usage accumulator
+
+    Returns:
+        Dict mapping figure names to reviews
+    """
     paper_txt = load_paper(pdf_path)
     img_folder_path = os.path.join(
         os.path.dirname(pdf_path),
@@ -455,9 +467,11 @@ def perform_imgs_cap_ref_review_selection(
     )
     if not os.path.exists(img_folder_path):
         os.makedirs(img_folder_path)
+
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
     img_reviews: Dict[str, Any] = {}
     abstract = extract_abstract(paper_txt)
+
     for img in img_pairs:
         review = generate_vlm_img_selection_review(
             img=img,
@@ -465,6 +479,8 @@ def perform_imgs_cap_ref_review_selection(
             model=model,
             reflection_page_info=reflection_page_info,
             temperature=temperature,
+            usage=usage,
         )
         img_reviews[img["img_name"]] = review
+
     return img_reviews

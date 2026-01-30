@@ -75,6 +75,23 @@ class BestNodeSelectionPayload(BaseModel):
     event: BestNodeSelectionEvent
 
 
+class BodyCreatePaperReviewApiPaperReviewsPost(BaseModel):
+    file: Annotated[bytes, Field(description="PDF file to review", title="File")]
+    model: Annotated[
+        str | None, Field(description="LLM model to use for review", title="Model")
+    ] = "anthropic/claude-sonnet-4-20250514"
+    num_reviews_ensemble: Annotated[
+        int | None,
+        Field(
+            description="Number of ensemble reviews (1-5)", ge=1, le=5, title="Num Reviews Ensemble"
+        ),
+    ] = 3
+    num_reflections: Annotated[
+        int | None,
+        Field(description="Number of reflection rounds (1-3)", ge=1, le=3, title="Num Reflections"),
+    ] = 2
+
+
 class BodyUploadFileApiConversationsConversationIdFilesPost(BaseModel):
     file: Annotated[bytes, Field(title="File")]
     llm_model: Annotated[str, Field(title="Llm Model")]
@@ -576,11 +593,11 @@ class LlmReviewResponse(BaseModel):
     weaknesses: Annotated[
         list[str], Field(description="List of identified weaknesses", title="Weaknesses")
     ]
-    originality: Annotated[float, Field(description="Originality score (1-4)", title="Originality")]
-    quality: Annotated[float, Field(description="Quality score (1-4)", title="Quality")]
-    clarity: Annotated[float, Field(description="Clarity score (1-4)", title="Clarity")]
+    originality: Annotated[int, Field(description="Originality score (1-4)", title="Originality")]
+    quality: Annotated[int, Field(description="Quality score (1-4)", title="Quality")]
+    clarity: Annotated[int, Field(description="Clarity score (1-4)", title="Clarity")]
     significance: Annotated[
-        float, Field(description="Significance score (1-4)", title="Significance")
+        int, Field(description="Significance score (1-4)", title="Significance")
     ]
     questions: Annotated[
         list[str], Field(description="List of reviewer questions", title="Questions")
@@ -591,16 +608,16 @@ class LlmReviewResponse(BaseModel):
     ethical_concerns: Annotated[
         bool, Field(description="Whether ethical concerns were raised", title="Ethical Concerns")
     ]
-    soundness: Annotated[float, Field(description="Soundness score (1-4)", title="Soundness")]
+    soundness: Annotated[int, Field(description="Soundness score (1-4)", title="Soundness")]
     presentation: Annotated[
-        float, Field(description="Presentation score (1-4)", title="Presentation")
+        int, Field(description="Presentation score (1-4)", title="Presentation")
     ]
     contribution: Annotated[
-        float, Field(description="Contribution score (1-4)", title="Contribution")
+        int, Field(description="Contribution score (1-4)", title="Contribution")
     ]
-    overall: Annotated[float, Field(description="Overall quality score (1-10)", title="Overall")]
+    overall: Annotated[int, Field(description="Overall quality score (1-10)", title="Overall")]
     confidence: Annotated[
-        float, Field(description="Reviewer confidence score (1-5)", title="Confidence")
+        int, Field(description="Reviewer confidence score (1-5)", title="Confidence")
     ]
     decision: Annotated[
         str, Field(description="Final decision ('Accept' or 'Reject')", title="Decision")
@@ -1456,18 +1473,18 @@ class ReviewCompletedEvent(BaseModel):
     summary: Annotated[str, Field(title="Summary")]
     strengths: Annotated[list[str], Field(title="Strengths")]
     weaknesses: Annotated[list[str], Field(title="Weaknesses")]
-    originality: Annotated[float, Field(title="Originality")]
-    quality: Annotated[float, Field(title="Quality")]
-    clarity: Annotated[float, Field(title="Clarity")]
-    significance: Annotated[float, Field(title="Significance")]
+    originality: Annotated[int, Field(title="Originality")]
+    quality: Annotated[int, Field(title="Quality")]
+    clarity: Annotated[int, Field(title="Clarity")]
+    significance: Annotated[int, Field(title="Significance")]
     questions: Annotated[list[str], Field(title="Questions")]
     limitations: Annotated[list[str], Field(title="Limitations")]
     ethical_concerns: Annotated[bool, Field(title="Ethical Concerns")]
-    soundness: Annotated[float, Field(title="Soundness")]
-    presentation: Annotated[float, Field(title="Presentation")]
-    contribution: Annotated[float, Field(title="Contribution")]
-    overall: Annotated[float, Field(title="Overall")]
-    confidence: Annotated[float, Field(title="Confidence")]
+    soundness: Annotated[int, Field(title="Soundness")]
+    presentation: Annotated[int, Field(title="Presentation")]
+    contribution: Annotated[int, Field(title="Contribution")]
+    overall: Annotated[int, Field(title="Overall")]
+    confidence: Annotated[int, Field(title="Confidence")]
     decision: Annotated[str, Field(title="Decision")]
     source_path: Annotated[str | None, Field(title="Source Path")]
     created_at: Annotated[str, Field(title="Created At")]

@@ -1,7 +1,9 @@
 # Installation
 install:
 	@echo "📦 Installing research_pipeline dependencies..."
-	uv sync
+	VIRTUAL_ENV= uv sync --inexact
+	@echo "📦 Installing ae-paper-review (after sync to avoid removal)..."
+	VIRTUAL_ENV= uv pip install -e ../packages/ae-paper-review --quiet
 
 # Generate Python types from OpenAPI spec
 gen-api-types:
@@ -29,12 +31,12 @@ gen-api-types:
 lint:
 	@echo "🔍 Linting research_pipeline..."
 	@echo "🎨 Auto-formatting research_pipeline..."
-	VIRTUAL_ENV= uv run black . --exclude 'workspaces|\.venv'
-	VIRTUAL_ENV= uv run isort . --skip-glob 'workspaces/*' --skip-glob '.venv/*'
-	VIRTUAL_ENV= uv run ruff check . --exclude workspaces,.venv,ai_scientist/example_code.py
-	VIRTUAL_ENV= uv run mypy . --exclude '^(workspaces|\.venv|ai_scientist/example_code.py|ai_scientist/api_types.py)'
-	VIRTUAL_ENV= uv run pyright --project pyproject.toml
-	VIRTUAL_ENV= uv run python ../linter/check_inline_imports.py --target-dir . --exclude workspaces
+	VIRTUAL_ENV= uv run --no-sync black . --exclude 'workspaces|\.venv'
+	VIRTUAL_ENV= uv run --no-sync isort . --skip-glob 'workspaces/*' --skip-glob '.venv/*'
+	VIRTUAL_ENV= uv run --no-sync ruff check . --exclude workspaces,.venv,ai_scientist/example_code.py
+	VIRTUAL_ENV= uv run --no-sync mypy . --exclude '^(workspaces|\.venv|ai_scientist/example_code.py|ai_scientist/api_types.py)'
+	VIRTUAL_ENV= uv run --no-sync pyright --project pyproject.toml
+	VIRTUAL_ENV= uv run --no-sync python ../linter/check_inline_imports.py --target-dir . --exclude workspaces
 	@echo "✅ Linting complete"
 
 .PHONY: install lint gen-api-types

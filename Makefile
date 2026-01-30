@@ -1,21 +1,27 @@
 # Installation targets
+install-ae-paper-review:
+	$(MAKE) -C packages/ae-paper-review install
+
 install-research:
 	$(MAKE) -C research_pipeline install
 
 install-server:
 	$(MAKE) -C server install
 
-install: install-research install-server
+install: install-ae-paper-review install-research install-server
 	@echo "✅ All dependencies installed"
 
 # Linting targets
+lint-ae-paper-review:
+	$(MAKE) -C packages/ae-paper-review lint
+
 lint-research:
 	$(MAKE) -C research_pipeline lint
 
 lint-server:
 	$(MAKE) -C server lint
 
-lint: lint-research lint-server
+lint: lint-ae-paper-review lint-research lint-server
 	@echo "✅ All linting complete"
 
 lint-frontend:
@@ -51,4 +57,4 @@ gen-api-types:
 migrate-db:
 	$(MAKE) -C server migrate
 
-.PHONY: install-research install-server install lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod
+.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod

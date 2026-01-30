@@ -16,6 +16,8 @@ from .imported_conversation_summaries import ImportedConversationSummariesMixin
 from .llm_defaults import LLMDefaultsMixin
 from .llm_token_usages import LlmTokenUsagesMixin
 from .narrator import NarratorMixin
+from .paper_review_token_usages import PaperReviewTokenUsagesMixin
+from .paper_reviews import PaperReviewsMixin
 from .prompts import PromptsMixin
 from .research_pipeline_run_termination import ResearchPipelineRunTerminationMixin
 from .research_pipeline_runs import ResearchPipelineRunsMixin
@@ -48,6 +50,8 @@ class DatabaseManager(
     ResearchPipelineVlmFigureReviewsMixin,
     BillingDatabaseMixin,
     NarratorMixin,
+    PaperReviewsMixin,
+    PaperReviewTokenUsagesMixin,
 ):
     """
     Main database manager that combines all domain-specific functionality.

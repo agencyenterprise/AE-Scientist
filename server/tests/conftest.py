@@ -1,11 +1,7 @@
-"""
-Pytest configuration and shared fixtures.
-"""
+"""Pytest configuration and shared fixtures."""
 
+# Setup env before any app imports
 import json
-import os
-import sys
-from pathlib import Path
 from typing import Callable, Iterator
 from unittest.mock import MagicMock, patch
 
@@ -13,22 +9,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure app imports work
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-# Minimal env required for app initialization in tests
-os.environ.setdefault("OPENAI_API_KEY", "test")
-os.environ.setdefault("ANTHROPIC_API_KEY", "test")
-os.environ.setdefault("XAI_API_KEY", "test")
-os.environ.setdefault("METACOGNITION_AUTH_TOKEN", "test")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
-os.environ.setdefault("AWS_REGION", "test")
-os.environ.setdefault("AWS_S3_BUCKET_NAME", "test")
-
-
-from app.main import app  # noqa: E402
-from app.services.database.users import UserData  # noqa: E402
+import tests.conftest_setup  # noqa: F401  # pylint: disable=unused-import
+from app.main import app
+from app.services.database.users import UserData
 
 
 @pytest.fixture

@@ -1,8 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "AE-Scientist-API"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    # ae-paper-review is installed via Makefile (editable install)
     "aiohttp>=3.12.15",
     "alembic==1.16.5",
     "anthropic==0.75.0",
@@ -48,6 +53,9 @@ dev = [
     "ruff>=0.14.3",
     "types-boto3>=1.41.5",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*", "database_migrations*"]
 
 [tool.black]
 line-length = 100
