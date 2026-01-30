@@ -62,7 +62,7 @@ export function ResearchRunHeader({
               Terminating
             </span>
           )}
-          {terminationStatus === "terminated" && (
+          {terminationStatus === "terminated" && status !== "completed" && (
             <span className="inline-flex items-center rounded-full border border-slate-500/40 bg-slate-500/10 px-3 py-1 text-sm font-medium text-slate-200">
               Terminated
             </span>
