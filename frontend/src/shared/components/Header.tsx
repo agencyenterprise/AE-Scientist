@@ -3,7 +3,7 @@
 import { UserProfileDropdown } from "@/features/user-profile/components/UserProfileDropdown";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useWalletBalance } from "@/shared/hooks/useWalletBalance";
-import { MessageSquare, FlaskConical, BookOpen } from "lucide-react";
+import { MessageSquare, FlaskConical, BookOpen, FileSearch } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +14,7 @@ export function Header() {
 
   const isConversationsActive = pathname.startsWith("/conversations");
   const isResearchActive = pathname.startsWith("/research");
+  const isPaperReviewActive = pathname.startsWith("/paper-review");
   const isHowItWorksActive = pathname.startsWith("/how-it-works");
 
   return (
@@ -57,6 +58,17 @@ export function Header() {
               >
                 <FlaskConical className="h-4 w-4" />
                 Research
+              </Link>
+              <Link
+                href="/paper-review"
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isPaperReviewActive
+                    ? "bg-amber-500/15 text-amber-400"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <FileSearch className="h-4 w-4" />
+                Paper Review
               </Link>
             </nav>
           )}
