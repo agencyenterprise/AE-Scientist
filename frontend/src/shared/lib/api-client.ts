@@ -3,6 +3,17 @@
  *
  * Provides fetch wrappers that throw typed errors with HTTP status codes,
  * enabling global 401 handling in QueryProvider.
+ *
+ * **PREFER using the typed client for new code:**
+ * ```ts
+ * import { api } from "@/shared/lib/api-client-typed";
+ *
+ * // Paths are validated at compile time - invalid paths cause TypeScript errors
+ * const { data, error } = await api.GET("/api/auth/me");
+ * ```
+ *
+ * The `apiFetch` function below accepts any string path and won't catch
+ * invalid endpoints until runtime (404 errors).
  */
 
 import { config } from "./config";
@@ -31,7 +42,14 @@ interface ApiFetchOptions extends Omit<RequestInit, "body"> {
 }
 
 /**
- * Type-safe fetch wrapper for API requests.
+ * Fetch wrapper for API requests.
+ *
+ * **NOTE:** This function accepts any string path without compile-time validation.
+ * For new code, prefer using the typed client from `@/shared/lib/api-client-typed`:
+ * ```ts
+ * import { api } from "@/shared/lib/api-client-typed";
+ * const { data, error } = await api.GET("/api/auth/me");
+ * ```
  *
  * - Automatically attaches bearer tokens for auth when available
  * - Sets Content-Type header for JSON requests
@@ -41,21 +59,6 @@ interface ApiFetchOptions extends Omit<RequestInit, "body"> {
  * @param options - Fetch options with additional skipJson flag
  * @returns Parsed JSON response (or undefined if skipJson)
  * @throws ApiError on non-ok responses
- *
- * @example
- * ```ts
- * // GET request
- * const data = await apiFetch<LLMDefaultsResponse>('/llm-defaults/idea_generation');
- *
- * // GET with query params
- * const results = await apiFetch<SearchResponse>('/search?q=test&limit=20');
- *
- * // POST with body
- * const result = await apiFetch<Response>('/endpoint', {
- *   method: 'POST',
- *   body: { key: 'value' }
- * });
- * ```
  */
 export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
   const { skipJson, body, ...fetchOptions } = options || {};

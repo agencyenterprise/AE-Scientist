@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { SectionEditModal } from "./SectionEditModal";
 
@@ -75,26 +75,32 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
     // Remember the current version number before revert
     const previousActiveVersionNumber = projectState.projectDraft.active_version.version_number;
 
-    try {
-      const result = await apiFetch<{ idea: IdeaType }>(
-        `/conversations/${conversation.id}/idea/versions/${versionState.comparisonVersion.version_id}/activate`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (result.idea) {
-        projectState.setProjectDraft(result.idea);
-        animations.triggerUpdateAnimation();
-        // Reload versions after revert
-        await versionState.loadVersions();
-
-        // Set the comparison to show the diff leading up to the new reverted version
-        versionState.setSelectedVersionForComparison(previousActiveVersionNumber);
+    const { data, error } = await api.POST(
+      "/api/conversations/{conversation_id}/idea/versions/{version_id}/activate",
+      {
+        params: {
+          path: {
+            conversation_id: conversation.id,
+            version_id: versionState.comparisonVersion.version_id,
+          },
+        },
       }
-    } catch (error) {
+    );
+
+    if (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to revert changes:", error);
+      return;
+    }
+
+    if (data && "idea" in data && data.idea) {
+      projectState.setProjectDraft(data.idea as IdeaType);
+      animations.triggerUpdateAnimation();
+      // Reload versions after revert
+      await versionState.loadVersions();
+
+      // Set the comparison to show the diff leading up to the new reverted version
+      versionState.setSelectedVersionForComparison(previousActiveVersionNumber);
     }
   };
 
@@ -120,19 +126,22 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
     setIsTitleSaving(true);
     try {
       // Save the updated title and markdown separately
-      const response = await apiFetch<{ idea: IdeaType }>(
-        `/conversations/${conversation.id}/idea`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            title: newTitle,
-            idea_markdown: projectState.projectDraft.active_version.idea_markdown,
-          }),
-        }
-      );
+      const { data, error } = await api.PATCH("/api/conversations/{conversation_id}/idea", {
+        params: { path: { conversation_id: conversation.id } },
+        body: {
+          title: newTitle,
+          idea_markdown: projectState.projectDraft.active_version.idea_markdown,
+        },
+      });
 
-      if (response.idea) {
-        projectState.setProjectDraft(response.idea);
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to save title:", error);
+        return;
+      }
+
+      if (data && "idea" in data && data.idea) {
+        projectState.setProjectDraft(data.idea as IdeaType);
 
         // Trigger update animation and refresh diffs
         animations.triggerUpdateAnimation();

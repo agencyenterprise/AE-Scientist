@@ -9,7 +9,7 @@ import type {
 import { ProtectedRoute } from "@/shared/components/ProtectedRoute";
 import type { Conversation } from "@/shared/lib/api-adapters";
 import { convertApiConversationList } from "@/shared/lib/api-adapters";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ConversationListResponse } from "@/types";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -40,23 +40,20 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
   const loadConversations = useCallback(async (): Promise<void> => {
     try {
       setIsLoading(true);
-      // Build query string with filters
-      const params = new URLSearchParams();
-      params.set("limit", "500");
-      params.set("offset", "0");
 
-      // Only add filter params if they're not "all"
-      if (conversationStatusFilter !== "all") {
-        params.set("conversation_status", conversationStatusFilter);
-      }
-      if (runStatusFilter !== "all") {
-        params.set("run_status", runStatusFilter);
-      }
-
-      const apiResponse = await apiFetch<ConversationListResponse>(
-        `/conversations?${params.toString()}`
-      );
-      const data = convertApiConversationList(apiResponse);
+      const { data: apiResponse, error } = await api.GET("/api/conversations", {
+        params: {
+          query: {
+            limit: 500,
+            offset: 0,
+            conversation_status:
+              conversationStatusFilter !== "all" ? conversationStatusFilter : undefined,
+            run_status: runStatusFilter !== "all" ? runStatusFilter : undefined,
+          },
+        },
+      });
+      if (error) throw new Error("Failed to load conversations");
+      const data = convertApiConversationList(apiResponse as ConversationListResponse);
       setConversations(data);
     } catch {
       // silence error in prod/CI

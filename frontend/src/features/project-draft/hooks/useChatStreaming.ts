@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
-import { isErrorResponse } from "@/shared/lib/api-adapters";
+import { api } from "@/shared/lib/api-client-typed";
 import type {
   ChatMessage,
   ChatRequest,
@@ -246,17 +246,11 @@ export function useChatStreaming({
         if (projectUpdated && onProjectDraftUpdate) {
           // Fetch the latest idea data
           try {
-            const ideaResponse = await fetch(
-              `${config.apiUrl}/conversations/${conversationId}/idea`,
-              {
-                headers: withAuthHeaders(),
-              }
-            );
-            if (ideaResponse.ok) {
-              const result = await ideaResponse.json();
-              if (!isErrorResponse(result) && result.idea) {
-                onProjectDraftUpdate(result.idea);
-              }
+            const { data } = await api.GET("/api/conversations/{conversation_id}/idea", {
+              params: { path: { conversation_id: conversationId } },
+            });
+            if (data && "idea" in data && data.idea) {
+              onProjectDraftUpdate(data.idea as Idea);
             }
           } catch (err) {
             // eslint-disable-next-line no-console

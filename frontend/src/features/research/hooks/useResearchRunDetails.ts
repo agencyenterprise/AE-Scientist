@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type {
   ResearchRunDetails,
@@ -294,25 +294,21 @@ export function useResearchRunDetails({
           return;
         }
         try {
-          const treeViz = await apiFetch<TreeVizItem[]>(
-            `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
+          const { data: treeViz, error: treeVizError } = await api.GET(
+            "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz",
+            {
+              params: {
+                path: { conversation_id: conversationId, run_id: runId },
+              },
+            }
           );
-          let artifacts: ArtifactMetadata[] | null = null;
-          try {
-            artifacts = await apiFetch<ArtifactMetadata[]>(
-              `/conversations/${conversationId}/idea/research-run/${runId}/artifacts`
-            );
-          } catch (artifactErr) {
-            // Ignore artifact fetch failures (e.g., 404 when not yet available)
-            // eslint-disable-next-line no-console
-            console.warn("Artifacts not refreshed after tree viz SSE:", artifactErr);
-          }
+          if (treeVizError) throw new Error("Failed to fetch tree viz");
+          // Note: Artifacts are handled via SSE onArtifact callback, no separate fetch needed
           setDetails(prev =>
             prev
               ? {
                   ...prev,
-                  tree_viz: treeViz,
-                  artifacts: artifacts ?? prev.artifacts,
+                  tree_viz: treeViz as TreeVizItem[],
                 }
               : prev
           );
@@ -367,10 +363,16 @@ export function useResearchRunDetails({
     const fetchTreeViz = async () => {
       treeVizFetchAttempted.current = true;
       try {
-        const treeViz = await apiFetch<TreeVizItem[]>(
-          `/conversations/${conversationId}/idea/research-run/${runId}/tree-viz`
+        const { data: treeViz, error: treeVizError } = await api.GET(
+          "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz",
+          {
+            params: {
+              path: { conversation_id: conversationId, run_id: runId },
+            },
+          }
         );
-        setDetails(prev => (prev ? { ...prev, tree_viz: treeViz } : prev));
+        if (treeVizError) throw new Error("Failed to load tree viz");
+        setDetails(prev => (prev ? { ...prev, tree_viz: treeViz as TreeVizItem[] } : prev));
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error("Failed to load tree viz", err);
@@ -496,9 +498,13 @@ export function useResearchRunDetails({
   useEffect(() => {
     const fetchConversationId = async () => {
       try {
-        const runInfo = await apiFetch<{ run_id: string; conversation_id: number }>(
-          `/research-runs/${runId}/`
+        const { data: runInfo, error: runInfoError } = await api.GET(
+          "/api/research-runs/{run_id}/",
+          {
+            params: { path: { run_id: runId } },
+          }
         );
+        if (runInfoError) throw new Error("Failed to load research run");
         setConversationId(runInfo.conversation_id);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load research run");
@@ -514,10 +520,16 @@ export function useResearchRunDetails({
     }
     const refreshDetails = async () => {
       try {
-        const refreshed = await apiFetch<ResearchRunDetails>(
-          `/conversations/${conversationId}/idea/research-run/${runId}`
+        const { data: refreshed, error: refreshError } = await api.GET(
+          "/api/conversations/{conversation_id}/idea/research-run/{run_id}",
+          {
+            params: {
+              path: { conversation_id: conversationId, run_id: runId },
+            },
+          }
         );
-        setDetails(refreshed);
+        if (refreshError) throw new Error("Failed to refresh run details");
+        setDetails(refreshed as unknown as ResearchRunDetails);
       } catch (refreshErr) {
         // eslint-disable-next-line no-console
         console.warn("Failed to refresh run details after stop:", refreshErr);
@@ -526,9 +538,15 @@ export function useResearchRunDetails({
     try {
       setStopError(null);
       setStopPending(true);
-      await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/stop`, {
-        method: "POST",
-      });
+      const { error: stopError } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/stop",
+        {
+          params: {
+            path: { conversation_id: conversationId, run_id: runId },
+          },
+        }
+      );
+      if (stopError) throw new Error("Failed to stop research run");
       // Best-effort refresh so the UI updates immediately even if SSE is delayed/lost.
       await refreshDetails();
     } catch (err) {
@@ -543,12 +561,18 @@ export function useResearchRunDetails({
       if (!conversationId) {
         throw new Error("Conversation not available yet. Please try again.");
       }
-      await apiFetch(`/conversations/${conversationId}/idea/research-run/${runId}/skip-stage`, {
-        method: "POST",
-        body: {
-          stage: stageSlug,
-        },
-      });
+      const { error: skipError } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/skip-stage",
+        {
+          params: {
+            path: { conversation_id: conversationId, run_id: runId },
+          },
+          body: {
+            stage: stageSlug,
+          },
+        }
+      );
+      if (skipError) throw new Error("Failed to skip stage");
       setSkipPendingStage(stageSlug);
     },
     [conversationId, runId]
@@ -563,10 +587,15 @@ export function useResearchRunDetails({
       setSeedError(null);
       setSeedPending(true);
 
-      const response = await apiFetch<{ conversation_id: number; idea_id: number }>(
-        `/conversations/${conversationId}/idea/research-run/${runId}/seed-new-idea`,
-        { method: "POST" }
+      const { data: response, error: seedError } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/seed-new-idea",
+        {
+          params: {
+            path: { conversation_id: conversationId, run_id: runId },
+          },
+        }
       );
+      if (seedError) throw new Error("Failed to seed new idea from this run");
 
       router.push(`/conversations/${response.conversation_id}`);
     } catch (err) {

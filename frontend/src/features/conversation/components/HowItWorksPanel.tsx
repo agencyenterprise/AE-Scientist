@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, BarChart3, Clock4, DollarSign, FileText, GitBranch } from "lucide-react";
-
-type PublicConfigResponse = {
-  pipeline_monitor_max_runtime_hours: number;
-};
 
 const FLOW_STEPS = [
   {
@@ -52,10 +48,15 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
   useEffect(() => {
     let isMounted = true;
 
-    apiFetch<PublicConfigResponse>("/public-config")
-      .then(data => {
+    api
+      .GET("/api/public-config")
+      .then(({ data, error }) => {
         if (isMounted) {
-          setMaxRuntimeHours(data.pipeline_monitor_max_runtime_hours);
+          if (error || !data?.pipeline_monitor_max_runtime_hours) {
+            setMaxRuntimeHours(null);
+          } else {
+            setMaxRuntimeHours(data.pipeline_monitor_max_runtime_hours);
+          }
         }
       })
       .catch(() => {

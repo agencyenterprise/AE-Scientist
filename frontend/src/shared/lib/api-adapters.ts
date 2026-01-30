@@ -109,57 +109,6 @@ export function extractSummary(resp: { summary?: string } | ErrorResponse): stri
   return resp.summary ?? null;
 }
 
-export type SearchScope = "imported_chat" | "draft_chat" | "project_draft";
-
-export interface BaseResult {
-  sourceType: SearchScope;
-  snippet: string;
-  score: number;
-}
-export interface ImportedChatResult extends BaseResult {
-  sourceType: "imported_chat";
-  conversationId: number;
-  messageIndex: number;
-  chunkIndex: number;
-}
-export interface DraftChatResult extends BaseResult {
-  sourceType: "draft_chat";
-  projectDraftId: number;
-  projectDraftVersionId: number;
-  chatMessageId: number;
-  sequenceNumber: number;
-  chunkIndex: number;
-}
-export interface ProjectDraftResult extends BaseResult {
-  sourceType: "project_draft";
-  projectDraftId: number;
-  projectDraftVersionId: number;
-  chunkIndex: number;
-}
-
-export type SearchResult = ImportedChatResult | DraftChatResult | ProjectDraftResult;
-
-export async function searchApi({
-  query,
-  scopes,
-  top_k,
-}: {
-  query: string;
-  scopes: SearchScope[];
-  top_k: number;
-}): Promise<SearchResult[]> {
-  const res = await fetch(`/api/search`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, scopes, top_k }),
-  });
-  if (!res.ok) {
-    return [];
-  }
-  const data = await res.json();
-  return data.results as SearchResult[];
-}
-
 // ============================================================================
 // Research Run types and converters
 // ============================================================================
@@ -208,7 +157,7 @@ export function convertApiResearchRunList(
 // User types and API functions
 // ============================================================================
 
-import { apiFetch } from "./api-client";
+import { api } from "./api-client-typed";
 
 export interface UserListItem {
   id: number;
@@ -216,12 +165,8 @@ export interface UserListItem {
   name: string;
 }
 
-interface UserListResponseApi {
-  items: UserListItem[];
-  total: number;
-}
-
 export async function fetchUsers(): Promise<UserListItem[]> {
-  const response = await apiFetch<UserListResponseApi>("/users/");
-  return response.items;
+  const { data, error } = await api.GET("/api/users/");
+  if (error) throw new Error("Failed to fetch users");
+  return (data?.items as UserListItem[]) ?? [];
 }

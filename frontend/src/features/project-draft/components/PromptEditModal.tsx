@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { LLMPromptCreateRequest, LLMPromptResponse } from "@/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import { LLMPromptResponse } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
 import { DiffViewer } from "./DiffViewer";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 
@@ -42,15 +42,18 @@ export function PromptEditModal({
   };
 
   const fetchCurrentPrompt = useCallback(async (): Promise<LLMPromptResponse | null> => {
-    try {
-      const result = await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}`);
-      return result;
-    } catch (err) {
+    const { data, error } = await api.GET("/api/llm-prompts/{prompt_type}", {
+      params: { path: { prompt_type: promptType } },
+    });
+
+    if (error) {
       setError("Failed to load prompt");
       // eslint-disable-next-line no-console
-      console.error("Failed to load prompt:", err);
+      console.error("Failed to load prompt:", error);
       return null;
     }
+
+    return data as LLMPromptResponse;
   }, [promptType]);
 
   const loadCurrentPrompt = useCallback(async (): Promise<void> => {
@@ -71,16 +74,19 @@ export function PromptEditModal({
     setIsLoadingDefault(true);
     setError("");
 
-    try {
-      const result = await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}/default`);
-      setDefaultPrompt(result.system_prompt);
-    } catch (err) {
+    const { data, error } = await api.GET("/api/llm-prompts/{prompt_type}/default", {
+      params: { path: { prompt_type: promptType } },
+    });
+
+    if (error) {
       setError("Failed to load default prompt");
       // eslint-disable-next-line no-console
-      console.error("Failed to load default prompt:", err);
-    } finally {
-      setIsLoadingDefault(false);
+      console.error("Failed to load default prompt:", error);
+    } else if (data && "system_prompt" in data) {
+      setDefaultPrompt(data.system_prompt || "");
     }
+
+    setIsLoadingDefault(false);
   }, [promptType]);
 
   // Load prompt when modal opens
@@ -105,15 +111,20 @@ export function PromptEditModal({
     setError("");
 
     try {
-      const requestData: LLMPromptCreateRequest = {
-        prompt_type: promptType,
-        system_prompt: systemPrompt.trim(),
-      };
-
-      await apiFetch<LLMPromptResponse>(`/llm-prompts/${promptType}`, {
-        method: "POST",
-        body: requestData,
+      const { error } = await api.POST("/api/llm-prompts/{prompt_type}", {
+        params: { path: { prompt_type: promptType } },
+        body: {
+          prompt_type: promptType,
+          system_prompt: systemPrompt.trim(),
+        },
       });
+
+      if (error) {
+        setError("Failed to save prompt");
+        // eslint-disable-next-line no-console
+        console.error("Failed to save prompt:", error);
+        return;
+      }
 
       // Background refresh without spinner to avoid flicker
       const result = await fetchCurrentPrompt();
@@ -122,10 +133,6 @@ export function PromptEditModal({
       }
       setSuccessMessage("Saved");
       setShowBackButton(true);
-    } catch (err) {
-      setError("Failed to save prompt");
-      // eslint-disable-next-line no-console
-      console.error("Failed to save prompt:", err);
     } finally {
       setIsSaving(false);
     }
@@ -141,10 +148,17 @@ export function PromptEditModal({
     setError("");
 
     try {
-      await apiFetch<void>(`/llm-prompts/${promptType}`, {
-        method: "DELETE",
-        skipJson: true,
+      const { error } = await api.DELETE("/api/llm-prompts/{prompt_type}", {
+        params: { path: { prompt_type: promptType } },
       });
+
+      if (error) {
+        const errorMessage = `Failed to revert to default: ${JSON.stringify(error)}`;
+        setError(errorMessage);
+        // eslint-disable-next-line no-console
+        console.error("Revert to default error:", error);
+        return;
+      }
 
       // Background refresh without spinner to avoid flicker
       const result = await fetchCurrentPrompt();
@@ -154,11 +168,6 @@ export function PromptEditModal({
       // Show success without closing to avoid flicker
       setSuccessMessage("Reverted to default");
       setShowBackButton(true);
-    } catch (err) {
-      const errorMessage = `Failed to revert to default: ${err instanceof Error ? err.message : String(err)}`;
-      setError(errorMessage);
-      // eslint-disable-next-line no-console
-      console.error("Revert to default error:", err);
     } finally {
       setIsDeleting(false);
     }

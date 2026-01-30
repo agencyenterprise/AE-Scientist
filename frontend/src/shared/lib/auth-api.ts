@@ -4,8 +4,8 @@
  * Handles communication with the backend authentication endpoints.
  */
 
-import { config } from "./config";
-import { getSessionToken, withAuthHeaders } from "./session-token";
+import { api } from "./api-client-typed";
+import { getSessionToken } from "./session-token";
 import type { AuthStatus, User } from "@/types/auth";
 
 /**
@@ -13,10 +13,7 @@ import type { AuthStatus, User } from "@/types/auth";
  */
 export async function logout(): Promise<boolean> {
   try {
-    const response = await fetch(`${config.apiUrl}/auth/logout`, {
-      method: "POST",
-      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
-    });
+    const { response } = await api.POST("/api/auth/logout");
 
     if (response.ok || response.status === 401) {
       return true;
@@ -37,13 +34,10 @@ export async function getCurrentUser(): Promise<User | null> {
   }
 
   try {
-    const response = await fetch(`${config.apiUrl}/auth/me`, {
-      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
-    });
+    const { data, response } = await api.GET("/api/auth/me");
 
-    if (response.ok) {
-      const user: User = await response.json();
-      return user;
+    if (response.ok && data) {
+      return data as User;
     } else if (response.status === 401) {
       // Not authenticated
       return null;
@@ -64,13 +58,10 @@ export async function checkAuthStatus(): Promise<AuthStatus> {
   }
 
   try {
-    const response = await fetch(`${config.apiUrl}/auth/status`, {
-      headers: withAuthHeaders(new Headers({ "Content-Type": "application/json" })),
-    });
+    const { data, response } = await api.GET("/api/auth/status");
 
-    if (response.ok) {
-      const authStatus: AuthStatus = await response.json();
-      return authStatus;
+    if (response.ok && data) {
+      return data as AuthStatus;
     } else {
       return { authenticated: false };
     }

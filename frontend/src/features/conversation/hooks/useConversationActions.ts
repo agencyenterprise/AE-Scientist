@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from "react";
 
-import { apiFetch } from "@/shared/lib/api-client";
-import type { ConversationDetail, ConversationUpdateResponse, ErrorResponse } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
+import type { ConversationDetail } from "@/types";
 import { convertApiConversationDetail, isErrorResponse } from "@/shared/lib/api-adapters";
 
 interface UseConversationActionsReturn {
@@ -20,10 +20,10 @@ export function useConversationActions(): UseConversationActionsReturn {
   const deleteConversation = useCallback(async (id: number): Promise<boolean> => {
     setIsDeleting(true);
     try {
-      await apiFetch<void>(`/conversations/${id}`, {
-        method: "DELETE",
-        skipJson: true,
+      const { error } = await api.DELETE("/api/conversations/{conversation_id}", {
+        params: { path: { conversation_id: id } },
       });
+      if (error) throw new Error("Failed to delete conversation");
       return true;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -41,18 +41,13 @@ export function useConversationActions(): UseConversationActionsReturn {
 
       setIsUpdatingTitle(true);
       try {
-        const result = await apiFetch<ConversationUpdateResponse | ErrorResponse>(
-          `/conversations/${id}`,
-          {
-            method: "PATCH",
-            body: { title: trimmedTitle },
-          }
-        );
+        const { data, error } = await api.PATCH("/api/conversations/{conversation_id}", {
+          params: { path: { conversation_id: id } },
+          body: { title: trimmedTitle },
+        });
 
-        if (!isErrorResponse(result)) {
-          return convertApiConversationDetail(result.conversation);
-        }
-        throw new Error(result.error ?? "Update failed");
+        if (error || isErrorResponse(data)) throw new Error("Update failed");
+        return convertApiConversationDetail(data.conversation);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to update title:", error);

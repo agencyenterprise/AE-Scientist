@@ -12,7 +12,7 @@ import { useAuth as useClerkAuth, useUser } from "@clerk/nextjs";
 import type { AuthContextValue, AuthState } from "@/types/auth";
 import * as authApi from "@/shared/lib/auth-api";
 import { clearSessionToken, getSessionToken, setSessionToken } from "@/shared/lib/session-token";
-import { config } from "@/shared/lib/config";
+import { api } from "@/shared/lib/api-client-typed";
 import { LoadingPage } from "../components/LoadingPage";
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,19 +52,16 @@ function AuthProviderInner({ children }: AuthProviderProps) {
       }
 
       // Exchange for internal session token
-      const response = await fetch(`${config.apiUrl}/auth/clerk-session`, {
-        method: "POST",
+      const { data, error } = await api.POST("/api/auth/clerk-session", {
         headers: {
           Authorization: `Bearer ${clerkToken}`,
-          "Content-Type": "application/json",
         },
       });
 
-      if (!response.ok) {
+      if (error || !data) {
         throw new Error("Failed to exchange Clerk session");
       }
 
-      const data = await response.json();
       return data.session_token;
     } catch (error) {
       // eslint-disable-next-line no-console
