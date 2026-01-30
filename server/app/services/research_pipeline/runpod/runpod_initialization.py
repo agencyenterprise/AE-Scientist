@@ -185,11 +185,16 @@ def _inject_refined_idea_and_config_commands(
 def _pytorch_cuda_test_command() -> list[str]:
     return [
         'send_init_status "Initializing PyTorch"',
-        "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
+        "python - <<'PY'",
         "import torch",
         "torch.cuda.set_device(0)",
         "print('✅ PyTorch device initialized successfully')",
         "PY",
+        "if [ $? -ne 0 ]; then",
+        '  echo "❌ PyTorch CUDA initialization failed"',
+        '  send_gpu_failure "PyTorch CUDA initialization failed - GPU may be unavailable or defective"',
+        "  exit 1",
+        "fi",
         "",
     ]
 
@@ -289,6 +294,23 @@ def build_remote_script(
         '    --data "${payload}" >/dev/null 2>&1 || true',
         "}",
         "",
+        "# Function to notify server of GPU failure so it can restart quickly",
+        "send_gpu_failure() {",
+        '  if [ -z "${TELEMETRY_WEBHOOK_URL:-}" ] || [ -z "${TELEMETRY_WEBHOOK_TOKEN:-}" ] || [ -z "${RUN_ID:-}" ]; then',
+        "    return 0",
+        "  fi",
+        "  if ! command -v curl >/dev/null 2>&1; then",
+        "    return 0",
+        "  fi",
+        '  msg="$1"',
+        '  msg="${msg//\\"/\\\\\\"}"',
+        '  payload="{\\"required_gpus\\":1,\\"available_gpus\\":0,\\"message\\":\\"${msg}\\"}"',
+        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/${RUN_ID}/gpu-shortage" \\',
+        '    -H "Authorization: Bearer ${TELEMETRY_WEBHOOK_TOKEN}" \\',
+        '    -H "Content-Type: application/json" \\',
+        '    --data "${payload}" >/dev/null 2>&1 || true',
+        "}",
+        "",
     ]
     hw_stats_paths = _resolve_disk_stats_paths()
     env_file_lines = [
@@ -315,7 +337,11 @@ def build_remote_script(
         "# === GPU Validation ===",
         'send_init_status "Validating GPU"',
         'echo "Validating GPU..."',
-        'nvidia-smi || { echo "❌ nvidia-smi failed"; exit 1; }',
+        "if ! nvidia-smi; then",
+        '  echo "❌ nvidia-smi failed"',
+        '  send_gpu_failure "nvidia-smi failed - GPU driver or hardware issue"',
+        "  exit 1",
+        "fi",
         'echo "✅ GPU validated"',
         "",
     ]
