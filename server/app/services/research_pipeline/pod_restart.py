@@ -111,14 +111,21 @@ async def attempt_pod_restart(
         logger.error("Cannot restart run %s: idea data not found", run.run_id)
         return False
 
-    # Step 3: Launch new pod
+    # Step 3: Launch new pod (preserve original pod name by extracting username)
+    # Pod name format: "aescientist_{username}_{run_id}"
+    original_username = "User"
+    if run.pod_name:
+        parts = run.pod_name.split("_", 2)
+        if len(parts) >= 2:
+            original_username = parts[1]
+
     try:
         pod_info = await launch_research_pipeline_run(
             title=idea_data["title"],
             idea=idea_data["idea_markdown"],
             config_name=f"{run.run_id}_config.yaml",
             run_id=run.run_id,
-            requested_by_first_name="Restart",
+            requested_by_first_name=original_username,
             gpu_types=gpu_types,
             parent_run_id=None,
             webhook_token=webhook_token,
