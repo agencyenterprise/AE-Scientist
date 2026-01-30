@@ -19,6 +19,7 @@ from app.services.chat_models import (
     StreamIdeaUpdateEvent,
     StreamStatusEvent,
 )
+from app.services.prompts.render import render_text
 
 logger = getLogger(__name__)
 
@@ -177,18 +178,7 @@ class BaseLLMService(ABC):
         Splits input into budgeted chunks, summarizes each (map), then reduces
         into a cohesive final summary.
         """
-        system_prompt = (
-            "You are an expert summarizer. Provide a concise but information-dense summary "
-            "covering main topics, entities, claims, and decisions."
-        )
-        map_instruction = (
-            "Summarize this excerpt in 2-4 sentences focusing on key facts, decisions, and entities. "
-            "No preamble, no lists.\n\n"
-        )
-        reduce_instruction = (
-            "Combine these excerpt summaries into a single cohesive summary (4-8 sentences), "
-            "remove redundancy, keep salient details. No preamble.\n\n"
-        )
+        system_prompt = render_text(template_name="summarization/system.txt.j2")
 
         model_id = llm_model.id
         context_tokens = llm_model.context_window_tokens
@@ -196,7 +186,12 @@ class BaseLLMService(ABC):
         reduce_completion_tokens = 600
         overhead_tokens = 128
         sys_tokens = self.estimate_tokens_via_char_heuristic(system_prompt)
-        map_inst_tokens = self.estimate_tokens_via_char_heuristic(map_instruction)
+        # Estimate map instruction tokens with empty content placeholder
+        map_inst_base = render_text(
+            template_name="summarization/map_instruction.txt.j2",
+            context={"content": ""},
+        )
+        map_inst_tokens = self.estimate_tokens_via_char_heuristic(map_inst_base)
         available_for_map_text = max(
             context_tokens
             - (sys_tokens + map_inst_tokens + overhead_tokens + map_completion_tokens),
@@ -207,7 +202,10 @@ class BaseLLMService(ABC):
         text_chunks = self.split_text_to_fit_char_budget(text=content, max_chars=char_budget)
         chunk_summaries: List[str] = []
         for chunk in text_chunks:
-            user_prompt = f"{map_instruction}{chunk}"
+            user_prompt = render_text(
+                template_name="summarization/map_instruction.txt.j2",
+                context={"content": chunk},
+            )
             piece = await self.generate_text_single_call(
                 llm_model=model_id,
                 system_prompt=system_prompt,
@@ -221,7 +219,10 @@ class BaseLLMService(ABC):
             return chunk_summaries[0]
 
         reduce_input = "\n".join(f"- {s}" for s in chunk_summaries[:50])
-        reduce_user_prompt = f"{reduce_instruction}{reduce_input}"
+        reduce_user_prompt = render_text(
+            template_name="summarization/reduce_instruction.txt.j2",
+            context={"summaries": reduce_input},
+        )
         final_summary = await self.generate_text_single_call(
             llm_model=model_id,
             system_prompt=system_prompt,

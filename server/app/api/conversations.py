@@ -1038,10 +1038,10 @@ async def seed_idea_from_run(
         )
 
         # Fetch LLM review for this run and create initial improvement message
-        review_data = await db.get_review_by_run_id(run_id=run_id)
-        if review_data:
+        review = await db.get_review_by_run_id(run_id=run_id)
+        if review:
             # Format the review feedback into a user message
-            improvement_message = format_review_feedback_message(review_data=review_data)
+            improvement_message = format_review_feedback_message(review=review)
 
             # Create initial chat message asking LLM to help improve the idea
             await db.create_chat_message(

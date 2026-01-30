@@ -48,6 +48,7 @@ from app.services.prompts import (
     get_idea_generation_prompt,
     get_manual_seed_prompt,
 )
+from app.services.prompts.render import render_text
 from app.services.s3_service import S3Service, get_s3_service
 
 logger = logging.getLogger(__name__)
@@ -284,9 +285,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         del user_id
         db = get_database()
         system_prompt = await get_idea_generation_prompt(db=db)
-        user_prompt = (
-            "Analyze this conversation and generate a research idea based on the discussion below.\n\n"
-            f"{conversation_text}"
+        user_prompt = render_text(
+            template_name="idea_generation_user.txt.j2",
+            context={"conversation_text": conversation_text},
         )
         messages = [
             SystemMessage(content=self._text_content_block(text=system_prompt)),
@@ -303,10 +304,9 @@ class LangChainLLMService(BaseLLMService, ABC):
         """
         Generate a user prompt for a manual seed idea.
         """
-        return (
-            "Create a structured research idea draft using the provided manual seed.\n\n"
-            f"Title: {idea_title}\n"
-            f"Hypothesis: {idea_hypothesis}"
+        return render_text(
+            template_name="manual_seed_user.txt.j2",
+            context={"idea_title": idea_title, "idea_hypothesis": idea_hypothesis},
         )
 
     async def generate_manual_seed_idea(
@@ -473,16 +473,14 @@ class LangChainLLMService(BaseLLMService, ABC):
     async def summarize_image(self, llm_model: LLMModel, image_url: str) -> str:
         if not llm_model.supports_images:
             raise ValueError(f"Model {llm_model.id} does not support image inputs")
-        system_prompt = (
-            "You are an expert image describer. Provide a concise but information-dense description "
-            "covering scene, objects, text, layout, and any notable artifacts or anomalies."
-        )
+        system_prompt = render_text(template_name="image_description/system.txt.j2")
+        user_instruction = render_text(template_name="image_description/user_instruction.txt.j2")
         content_blocks = self.render_image_url(image_url=image_url)
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(
                 content=[
-                    {"type": "text", "text": "Please describe this image precisely:"},
+                    {"type": "text", "text": user_instruction},
                     *content_blocks,
                 ]
             ),
