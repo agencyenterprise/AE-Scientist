@@ -1624,6 +1624,70 @@
         }
       }
     },
+    "/api/mcp-integration/key": {
+      "get": {
+        "tags": [
+          "mcp-integration"
+        ],
+        "summary": "Get Mcp Api Key",
+        "description": "Get the current user's MCP API key (masked).",
+        "operationId": "get_mcp_api_key_api_mcp_integration_key_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPApiKeyResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "mcp-integration"
+        ],
+        "summary": "Revoke Mcp Api Key",
+        "description": "Revoke the current user's MCP API key.",
+        "operationId": "revoke_mcp_api_key_api_mcp_integration_key_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPApiKeyRevokedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mcp-integration/generate-key": {
+      "post": {
+        "tags": [
+          "mcp-integration"
+        ],
+        "summary": "Generate Mcp Api Key",
+        "description": "Generate a new MCP API key for the current user (replaces existing).",
+        "operationId": "generate_mcp_api_key_api_mcp_integration_generate_key_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MCPApiKeyGeneratedResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/public-config": {
       "get": {
         "tags": [
@@ -4211,6 +4275,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "tags": [
+          "mcp"
+        ],
+        "summary": "Mcp Endpoint",
+        "description": "Main MCP JSON-RPC endpoint.",
+        "operationId": "mcp_endpoint_mcp_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -6949,6 +7061,80 @@
         ],
         "title": "LlmReviewResponse",
         "description": "Response model for LLM review data."
+      },
+      "MCPApiKeyGeneratedResponse": {
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "title": "Api Key"
+          },
+          "masked_key": {
+            "type": "string",
+            "title": "Masked Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "api_key",
+          "masked_key"
+        ],
+        "title": "MCPApiKeyGeneratedResponse",
+        "description": "Response after generating a new API key."
+      },
+      "MCPApiKeyResponse": {
+        "properties": {
+          "has_key": {
+            "type": "boolean",
+            "title": "Has Key"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "masked_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Masked Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_key"
+        ],
+        "title": "MCPApiKeyResponse",
+        "description": "Response containing the MCP API key status."
+      },
+      "MCPApiKeyRevokedResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "MCPApiKeyRevokedResponse",
+        "description": "Response after revoking an API key."
       },
       "ManualIdeaSeedRequest": {
         "properties": {

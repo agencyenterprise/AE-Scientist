@@ -104,6 +104,51 @@ The backend exposes:
 On the frontend, add the corresponding public variables (`NEXT_PUBLIC_*`) so the Billing page can
 display thresholds and redirect URLs.
 
+### MCP Server Integration (Claude Code)
+
+AE Scientist exposes an MCP (Model Context Protocol) server that allows you to run research pipelines directly from Claude Code.
+
+#### How It Works
+
+1. **Generate an API Key**: In the frontend, click your profile dropdown and select "Integrate with Claude" to generate an MCP API key.
+
+2. **Add the MCP Server to Claude Code**: Run the command shown in the modal:
+   ```bash
+   claude mcp add-json research-pipeline '{"type":"http","url":"https://your-backend-url/mcp","headers":{"Authorization":"Bearer mcp_your_api_key"}}'
+   ```
+
+3. **Use the `run_pipeline` Tool**: In Claude Code, you can now use the `run_pipeline` tool to start research runs:
+   ```
+   Use the run_pipeline tool to research "Investigating novel attention mechanisms"
+   ```
+
+#### Available Tools
+
+| Tool | Description |
+| --- | --- |
+| `run_pipeline` | Start a research pipeline run with a research idea and detailed content |
+
+The `run_pipeline` tool accepts:
+- `idea`: A concise, descriptive title for the research idea
+- `content`: Markdown content with sections for hypothesis, related work, abstract, experiments, expected outcomes, and risk factors
+
+#### API Endpoints
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /mcp` | MCP JSON-RPC endpoint (authenticates via Bearer token with MCP API key) |
+| `GET /api/mcp-integration/key` | Get current user's MCP API key (masked) |
+| `POST /api/mcp-integration/generate-key` | Generate a new MCP API key |
+| `DELETE /api/mcp-integration/key` | Revoke the current MCP API key |
+
+#### Response
+
+When a pipeline is launched successfully, the tool returns:
+- `run_id`: The research run ID
+- `conversation_id`: The conversation ID
+- `url`: Direct link to view the run in the frontend
+- Pod information (pod_id, pod_name, gpu_type)
+
 ### Playwright Setup
 
 Playwright is used for browser automation in the server (e.g., scraping and browser-driven tests). After installing backend dependencies, install the browser binaries locally.

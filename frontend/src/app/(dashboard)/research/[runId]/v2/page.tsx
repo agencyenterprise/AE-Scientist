@@ -163,9 +163,8 @@ export default function ResearchRunDetailV2Page() {
         ? hwEstimatedCostCents / 100
         : null;
   const modelCostUsd = costDetails?.total_cost ?? null;
-  const totalCostUsd = hwCostUsd !== null || modelCostUsd !== null
-    ? (hwCostUsd ?? 0) + (modelCostUsd ?? 0)
-    : null;
+  const totalCostUsd =
+    hwCostUsd !== null || modelCostUsd !== null ? (hwCostUsd ?? 0) + (modelCostUsd ?? 0) : null;
 
   return (
     <PageCard>
@@ -256,11 +255,7 @@ export default function ResearchRunDetailV2Page() {
           </TabsContent>
 
           <TabsContent value="artifacts">
-            <ArtifactsTab
-              artifacts={artifacts}
-              conversationId={conversationId}
-              runId={runId}
-            />
+            <ArtifactsTab artifacts={artifacts} conversationId={conversationId} runId={runId} />
           </TabsContent>
 
           <TabsContent value="logs">

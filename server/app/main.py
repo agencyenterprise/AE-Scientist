@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 
+from app.api.mcp_server import router as mcp_router
 from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
@@ -110,6 +111,9 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include API routes
 app.include_router(api_router)
+
+# Include MCP server at root level (not under /api)
+app.include_router(mcp_router)
 
 
 @app.get("/")

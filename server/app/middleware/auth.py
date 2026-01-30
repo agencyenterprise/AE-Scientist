@@ -49,6 +49,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/clerk-session",
             "/api/research-pipeline/events",
             "/api/billing/stripe-webhook",
+            "/mcp",  # MCP server uses its own API key authentication
         ]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

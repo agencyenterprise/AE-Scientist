@@ -133,7 +133,15 @@ export function EvaluationTab({
   );
 }
 
-function ScoreItem({ label, value, maxValue = 4 }: { label: string; value: number; maxValue?: number }) {
+function ScoreItem({
+  label,
+  value,
+  maxValue = 4,
+}: {
+  label: string;
+  value: number;
+  maxValue?: number;
+}) {
   const normalizedScore = (value / maxValue) * 10;
 
   const getColorClass = (normalizedScore: number) => {

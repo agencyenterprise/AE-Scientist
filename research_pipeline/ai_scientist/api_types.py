@@ -614,6 +614,22 @@ class LlmReviewResponse(BaseModel):
     ]
 
 
+class MCPApiKeyGeneratedResponse(BaseModel):
+    api_key: Annotated[str, Field(title="Api Key")]
+    masked_key: Annotated[str, Field(title="Masked Key")]
+
+
+class MCPApiKeyResponse(BaseModel):
+    has_key: Annotated[bool, Field(title="Has Key")]
+    api_key: Annotated[str | None, Field(title="Api Key")] = None
+    masked_key: Annotated[str | None, Field(title="Masked Key")] = None
+
+
+class MCPApiKeyRevokedResponse(BaseModel):
+    success: Annotated[bool, Field(title="Success")]
+    message: Annotated[str, Field(title="Message")]
+
+
 class ManualIdeaSeedRequest(BaseModel):
     idea_title: Annotated[
         str, Field(description="Idea title to seed generation", min_length=1, title="Idea Title")

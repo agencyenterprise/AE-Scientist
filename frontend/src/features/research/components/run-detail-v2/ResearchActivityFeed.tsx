@@ -126,19 +126,24 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     const hasStarted = hasStageStarted || hasRunStarted;
 
     const progressEvents = stageEvents.filter(e => e.type === "progress_update");
-    const lastProgress = progressEvents.length > 0 ? progressEvents[progressEvents.length - 1] : null;
+    const lastProgress =
+      progressEvents.length > 0 ? progressEvents[progressEvents.length - 1] : null;
     let progress = 0;
     if (isCompleted) {
       progress = 100;
     } else if (lastProgress && "iteration" in lastProgress && "max_iterations" in lastProgress) {
-      progress = Math.round(((lastProgress.iteration as number) / (lastProgress.max_iterations as number)) * 100);
+      progress = Math.round(
+        ((lastProgress.iteration as number) / (lastProgress.max_iterations as number)) * 100
+      );
     } else if (hasStarted) {
       progress = 10; // Just started
     }
 
     const timestamps = stageEvents.map(e => new Date(e.timestamp).getTime());
-    const startTime = timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
-    const endTime = isCompleted && timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
+    const startTime =
+      timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null;
+    const endTime =
+      isCompleted && timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
 
     return {
       stageId,
@@ -486,8 +491,7 @@ export function ResearchActivityFeed({ runId, maxHeight = "500px" }: ResearchAct
                 return [...prev, event];
               });
             }
-          } catch {
-          }
+          } catch {}
         }
       }
 
@@ -553,9 +557,7 @@ export function ResearchActivityFeed({ runId, maxHeight = "500px" }: ResearchAct
               isConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-500"
             )}
           />
-          <span className="text-xs text-slate-400">
-            {isConnected ? "Live" : "Disconnected"}
-          </span>
+          <span className="text-xs text-slate-400">{isConnected ? "Live" : "Disconnected"}</span>
         </div>
       </div>
 

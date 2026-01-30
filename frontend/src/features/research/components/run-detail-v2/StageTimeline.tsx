@@ -64,11 +64,11 @@ function buildTimelineEvents(
     }
   }
 
-  const stages = Array.from(stageMap.entries())
-    .sort(([a], [b]) => parseInt(a) - parseInt(b));
+  const stages = Array.from(stageMap.entries()).sort(([a], [b]) => parseInt(a) - parseInt(b));
 
   const runIsFinished = status === "completed" || status === "failed";
-  const highestStageNumber = stages.length > 0 ? Number(stages[stages.length - 1]?.toString() ?? 0) : 0;
+  const highestStageNumber =
+    stages.length > 0 ? Number(stages[stages.length - 1]?.toString() ?? 0) : 0;
 
   for (const [stageNumber, progress] of stages) {
     const stageNum = Number(stageNumber);
@@ -109,12 +109,7 @@ function buildTimelineEvents(
   return events;
 }
 
-export function StageTimeline({
-  status,
-  createdAt,
-  updatedAt,
-  stageProgress,
-}: StageTimelineProps) {
+export function StageTimeline({ status, createdAt, updatedAt, stageProgress }: StageTimelineProps) {
   const events = buildTimelineEvents(status, createdAt, updatedAt, stageProgress);
 
   if (events.length === 0) {
@@ -151,15 +146,15 @@ export function StageTimeline({
               </div>
 
               <div className={cn("pb-6", isLast && "pb-0")}>
-                <p className={cn(
-                  "text-sm font-medium",
-                  event.status === "completed" ? "text-foreground" : "text-muted-foreground"
-                )}>
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    event.status === "completed" ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
                   {event.label}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatTimeAgo(event.timestamp)}
-                </p>
+                <p className="text-xs text-muted-foreground">{formatTimeAgo(event.timestamp)}</p>
               </div>
             </div>
           );
