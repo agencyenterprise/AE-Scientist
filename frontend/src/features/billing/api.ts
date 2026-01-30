@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 
 export interface CreditTransaction {
   id: number;
@@ -31,11 +31,17 @@ export interface CreditPackListResponse {
 }
 
 export async function fetchWallet(): Promise<WalletResponse> {
-  return apiFetch<WalletResponse>("/billing/wallet?limit=25");
+  const { data, error } = await api.GET("/api/billing/wallet", {
+    params: { query: { limit: 25 } },
+  });
+  if (error) throw new Error("Failed to fetch wallet");
+  return data as WalletResponse;
 }
 
 export async function fetchCreditPacks(): Promise<CreditPackListResponse> {
-  return apiFetch<CreditPackListResponse>("/billing/packs");
+  const { data, error } = await api.GET("/api/billing/packs");
+  if (error) throw new Error("Failed to fetch credit packs");
+  return data as CreditPackListResponse;
 }
 
 export async function createCheckoutSession(payload: {
@@ -43,8 +49,9 @@ export async function createCheckoutSession(payload: {
   success_url: string;
   cancel_url: string;
 }): Promise<{ checkout_url: string }> {
-  return apiFetch<{ checkout_url: string }>("/billing/checkout-session", {
-    method: "POST",
+  const { data, error } = await api.POST("/api/billing/checkout-session", {
     body: payload,
   });
+  if (error) throw new Error("Failed to create checkout session");
+  return data as { checkout_url: string };
 }

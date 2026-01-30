@@ -55,11 +55,8 @@ def apply_log_level(*, level_name: str) -> None:
             "urllib3.connectionpool",
             "fsspec",
             "fsspec.spec",
-            "s3fs",
             "datasets",
             "huggingface_hub",
-            "boto3",
-            "botocore",
         ]
         for name in noisy_loggers:
             lgr = logging.getLogger(name)
@@ -140,6 +137,8 @@ class WriteupConfig:
     citation_model: str
     writeup_retries: int
     num_cite_rounds: int
+    max_refinement_rounds: int
+    page_limit: int
 
 
 @dataclass

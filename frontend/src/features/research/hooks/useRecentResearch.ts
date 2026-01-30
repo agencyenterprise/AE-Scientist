@@ -1,13 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { convertApiResearchRunList } from "@/shared/lib/api-adapters";
 import type { ResearchRun, ResearchRunListResponseApi } from "@/types/research";
 
 async function fetchRecentResearch(): Promise<ResearchRun[]> {
-  const data = await apiFetch<ResearchRunListResponseApi>("/research-runs/?limit=10");
-  const converted = convertApiResearchRunList(data);
+  const { data, error } = await api.GET("/api/research-runs/", {
+    params: { query: { limit: 10 } },
+  });
+  if (error) throw new Error("Failed to fetch recent research");
+  const converted = convertApiResearchRunList(data as unknown as ResearchRunListResponseApi);
   return converted.items;
 }
 

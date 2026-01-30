@@ -60,7 +60,7 @@ class S3Service:
                 aws_secret_access_key=self.aws_secret_access_key,
                 region_name=self.aws_region,
             )
-            logger.info(f"S3 service initialized for bucket: {self.bucket_name}")
+            logger.debug(f"S3 service initialized for bucket: {self.bucket_name}")
         except NoCredentialsError as e:
             logger.error(f"AWS credentials not found: {e}")
             raise ValueError("Invalid AWS credentials") from e
@@ -164,7 +164,7 @@ class S3Service:
                 Metadata=sanitized_metadata,
             )
 
-            logger.info(f"File uploaded successfully: {s3_key}")
+            logger.debug(f"File uploaded successfully: {s3_key}")
             return s3_key
 
         except ClientError as e:
@@ -185,13 +185,13 @@ class S3Service:
             ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
             return ascii_only
 
-    def generate_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
+    def generate_download_url(self, s3_key: str, expires_in: int) -> str:
         """
         Generate a temporary signed URL for downloading a file.
 
         Args:
             s3_key: S3 key for the file
-            expires_in: URL expiration time in seconds (default: 1 hour)
+            expires_in: URL expiration time in seconds
 
         Returns:
             Temporary signed URL for file download
@@ -213,6 +213,76 @@ class S3Service:
             logger.error(f"Failed to generate download URL: {e}")
             raise Exception(f"Failed to generate download URL: {str(e)}") from e
 
+    def generate_upload_url(
+        self, s3_key: str, content_type: str, expires_in: int, metadata: dict[str, str]
+    ) -> str:
+        """
+        Generate a temporary signed URL for uploading a file.
+
+        Args:
+            s3_key: S3 key for the file
+            content_type: MIME type of the file to upload
+            expires_in: URL expiration time in seconds
+            metadata: Metadata to attach to the uploaded object
+
+        Returns:
+            Temporary signed URL for file upload
+
+        Raises:
+            Exception: If URL generation fails
+        """
+        try:
+            sanitized_metadata = {
+                key: self._sanitize_ascii(value) for key, value in metadata.items()
+            }
+            params = {
+                "Bucket": self.bucket_name,
+                "Key": s3_key,
+                "ContentType": content_type,
+                "Metadata": sanitized_metadata,
+            }
+
+            url = self.s3_client.generate_presigned_url(
+                "put_object",
+                Params=params,
+                ExpiresIn=expires_in,
+            )
+
+            logger.debug(f"Generated upload URL for: {s3_key}")
+            return str(url)
+
+        except ClientError as e:
+            logger.error(f"Failed to generate upload URL: {e}")
+            raise Exception(f"Failed to generate upload URL: {str(e)}") from e
+
+    def list_objects(self, prefix: str) -> list[dict[str, str | int]]:
+        """
+        List objects in S3 with a given prefix.
+
+        Args:
+            prefix: S3 key prefix to filter objects
+
+        Returns:
+            List of objects with key, size, and last_modified
+        """
+        try:
+            result = []
+            paginator = self.s3_client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    result.append(
+                        {
+                            "key": obj["Key"],
+                            "size": obj["Size"],
+                            "last_modified": obj["LastModified"].isoformat(),
+                        }
+                    )
+            return result
+
+        except ClientError as e:
+            logger.error(f"Failed to list objects: {e}")
+            raise Exception(f"Failed to list objects: {str(e)}") from e
+
     def delete_file(self, s3_key: str) -> None:
         """
         Delete a file from S3.
@@ -225,7 +295,7 @@ class S3Service:
         """
         try:
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
-            logger.info(f"File deleted successfully: {s3_key}")
+            logger.debug(f"File deleted successfully: {s3_key}")
 
         except ClientError as e:
             logger.error(f"S3 deletion failed: {e}")
@@ -246,6 +316,122 @@ class S3Service:
             return True
         except ClientError:
             return False
+
+    def create_multipart_upload(
+        self, s3_key: str, content_type: str, metadata: dict[str, str]
+    ) -> str:
+        """
+        Initiate a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            content_type: MIME type of the file
+            metadata: Metadata to attach to the uploaded object
+
+        Returns:
+            Upload ID for the multipart upload
+
+        Raises:
+            Exception: If initiation fails
+        """
+        try:
+            sanitized_metadata = {
+                key: self._sanitize_ascii(value) for key, value in metadata.items()
+            }
+            response = self.s3_client.create_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                ContentType=content_type,
+                Metadata=sanitized_metadata,
+            )
+            upload_id: str = response["UploadId"]
+            logger.debug(f"Created multipart upload for {s3_key}: {upload_id}")
+            return upload_id
+
+        except ClientError as e:
+            logger.error(f"Failed to create multipart upload: {e}")
+            raise Exception(f"Failed to create multipart upload: {str(e)}") from e
+
+    def generate_multipart_part_url(
+        self, s3_key: str, upload_id: str, part_number: int, expires_in: int
+    ) -> str:
+        """
+        Generate a presigned URL for uploading a single part.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+            part_number: Part number (1-10000)
+            expires_in: URL expiration time in seconds
+
+        Returns:
+            Presigned URL for uploading the part
+        """
+        try:
+            url = self.s3_client.generate_presigned_url(
+                "upload_part",
+                Params={
+                    "Bucket": self.bucket_name,
+                    "Key": s3_key,
+                    "UploadId": upload_id,
+                    "PartNumber": part_number,
+                },
+                ExpiresIn=expires_in,
+            )
+            logger.debug(f"Generated multipart part URL for {s3_key}, part {part_number}")
+            return str(url)
+
+        except ClientError as e:
+            logger.error(f"Failed to generate multipart part URL: {e}")
+            raise Exception(f"Failed to generate multipart part URL: {str(e)}") from e
+
+    def complete_multipart_upload(
+        self, s3_key: str, upload_id: str, parts: list[dict[str, str | int]]
+    ) -> None:
+        """
+        Complete a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+            parts: List of dicts with "PartNumber" and "ETag" for each part
+
+        Raises:
+            Exception: If completion fails
+        """
+        try:
+            self.s3_client.complete_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": parts},
+            )
+            logger.debug(f"Completed multipart upload for {s3_key}")
+
+        except ClientError as e:
+            logger.error(f"Failed to complete multipart upload: {e}")
+            raise Exception(f"Failed to complete multipart upload: {str(e)}") from e
+
+    def abort_multipart_upload(self, s3_key: str, upload_id: str) -> None:
+        """
+        Abort a multipart upload.
+
+        Args:
+            s3_key: S3 key for the file
+            upload_id: Multipart upload ID
+        """
+        try:
+            self.s3_client.abort_multipart_upload(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                UploadId=upload_id,
+            )
+            logger.debug(f"Aborted multipart upload for {s3_key}")
+
+        except ClientError as e:
+            logger.warning(
+                f"Failed to abort multipart upload (may already be complete/aborted): {e}"
+            )
 
     def get_file_info(self, s3_key: str) -> dict:
         """
@@ -289,7 +475,7 @@ class S3Service:
         """
         try:
             # Generate temporary download URL
-            download_url = self.generate_download_url(s3_key)
+            download_url = self.generate_download_url(s3_key, expires_in=3600)
 
             # Download file content
             response = requests.get(download_url, timeout=30)

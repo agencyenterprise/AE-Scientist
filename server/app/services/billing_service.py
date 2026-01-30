@@ -50,7 +50,7 @@ class BillingService:
     # ------------------------------------------------------------------
     async def list_credit_packs(self) -> List[Dict[str, Any]]:
         price_map = settings.STRIPE_PRICE_TO_CREDITS
-        logger.info("Price map: %s", price_map)
+        logger.debug("Price map: %s", price_map)
         if not price_map:
             return []
 
@@ -166,7 +166,7 @@ class BillingService:
             logger.warning("Stripe session %s not found; skipping fulfillment.", session_id)
             return
         if session.status == "completed":
-            logger.info("Stripe session %s already completed; skipping.", session_id)
+            logger.debug("Stripe session %s already completed; skipping.", session_id)
             return
 
         updated_session = await self.db.update_stripe_checkout_session_status(
@@ -188,7 +188,7 @@ class BillingService:
             metadata=metadata,
             stripe_session_id=session_id,
         )
-        logger.info(
+        logger.debug(
             "Fulfilled Stripe session %s for user %s (%s credits).",
             session_id,
             updated_session.user_id,

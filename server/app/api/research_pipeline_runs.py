@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import logging
 import math
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol, Union, cast
 from uuid import uuid4
@@ -16,6 +18,7 @@ from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ArtifactPresignedUrlResponse,
+    ChildConversationInfo,
     LlmReviewNotFoundResponse,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
@@ -311,6 +314,17 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
     )
 
 
+def _generate_run_webhook_token() -> tuple[str, str]:
+    """Generate a per-run webhook token and its hash.
+
+    Returns:
+        Tuple of (plain_token, token_hash)
+    """
+    plain_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(plain_token.encode()).hexdigest()
+    return plain_token, token_hash
+
+
 async def create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
@@ -323,6 +337,7 @@ async def create_and_launch_research_run(
     if not gpu_types:
         raise PodLaunchError("At least one GPU type must be provided.")
     run_id = f"rp-{uuid4().hex[:10]}"
+    webhook_token, webhook_token_hash = _generate_run_webhook_token()
     await db.create_research_pipeline_run(
         run_id=run_id,
         idea_id=idea_data.idea_id,
@@ -333,6 +348,7 @@ async def create_and_launch_research_run(
         last_billed_at=datetime.now(timezone.utc),
         container_disk_gb=CONTAINER_DISK_GB,
         volume_disk_gb=WORKSPACE_DISK_GB,
+        webhook_token_hash=webhook_token_hash,
     )
 
     # Get the run to extract cost info
@@ -366,6 +382,7 @@ async def create_and_launch_research_run(
             requested_by_first_name=requested_by_first_name,
             gpu_types=gpu_types,
             parent_run_id=parent_run_id,
+            webhook_token=webhook_token,
         )
         await db.update_research_pipeline_run(
             run_id=run_id,
@@ -531,8 +548,22 @@ async def get_research_run_details(
     ]
     termination = await db.get_research_pipeline_run_termination(run_id=run_id)
 
+    # Get child conversations seeded from this run
+    child_convs = await db.list_child_conversations_by_run_id(run_id=run_id)
+    child_conversations = [
+        ChildConversationInfo(
+            conversation_id=c.id,
+            title=c.title,
+            created_at=c.created_at.isoformat(),
+            status=c.status,
+        )
+        for c in child_convs
+    ]
+
     return ResearchRunDetailsResponse(
-        run=ResearchRunInfo.from_db_record(run=run, termination=termination),
+        run=ResearchRunInfo.from_db_record(
+            run=run, termination=termination, parent_run_id=conversation.parent_run_id
+        ),
         stage_progress=stage_events,
         logs=log_events,
         substage_events=substage_events,
@@ -543,6 +574,7 @@ async def get_research_run_details(
         paper_generation_progress=paper_gen_events,
         tree_viz=tree_viz,
         stage_skip_windows=stage_skip_windows,
+        child_conversations=child_conversations,
     )
 
 
@@ -581,26 +613,26 @@ async def get_research_run_review(
         )
 
     return LlmReviewResponse(
-        id=review["id"],
-        run_id=review["run_id"],
-        summary=review["summary"],
-        strengths=review["strengths"] or [],
-        weaknesses=review["weaknesses"] or [],
-        originality=float(review["originality"]),
-        quality=float(review["quality"]),
-        clarity=float(review["clarity"]),
-        significance=float(review["significance"]),
-        questions=review["questions"] or [],
-        limitations=review["limitations"] or [],
-        ethical_concerns=review["ethical_concerns"],
-        soundness=float(review["soundness"]),
-        presentation=float(review["presentation"]),
-        contribution=float(review["contribution"]),
-        overall=float(review["overall"]),
-        confidence=float(review["confidence"]),
-        decision=review["decision"],
-        source_path=review["source_path"],
-        created_at=review["created_at"].isoformat(),
+        id=review.id,
+        run_id=review.run_id,
+        summary=review.summary,
+        strengths=review.strengths or [],
+        weaknesses=review.weaknesses or [],
+        originality=float(review.originality),
+        quality=float(review.quality),
+        clarity=float(review.clarity),
+        significance=float(review.significance),
+        questions=review.questions or [],
+        limitations=review.limitations or [],
+        ethical_concerns=review.ethical_concerns,
+        soundness=float(review.soundness),
+        presentation=float(review.presentation),
+        contribution=float(review.contribution),
+        overall=float(review.overall),
+        confidence=float(review.confidence),
+        decision=review.decision,
+        source_path=review.source_path,
+        created_at=review.created_at.isoformat(),
     )
 
 
@@ -927,7 +959,7 @@ async def download_research_run_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
     s3 = get_s3_service()
     try:
-        download_url = s3.generate_download_url(artifact.s3_key)
+        download_url = s3.generate_download_url(artifact.s3_key, expires_in=3600)
     except Exception as exc:  # pragma: no cover - S3 errors already logged upstream
         logger.exception("Failed to generate download URL for artifact %s", artifact_id)
         raise HTTPException(status_code=500, detail="Failed to generate download URL") from exc
@@ -1042,3 +1074,77 @@ async def get_tree_viz(
     if record is None:
         raise HTTPException(status_code=404, detail="Tree viz not found")
     return TreeVizItem.from_db_record(record)
+
+
+# New run-tree router for endpoints not scoped to a conversation
+run_tree_router = APIRouter(prefix="/research-runs", tags=["research-pipeline"])
+
+
+class RunTreeNodeResponse(BaseModel):
+    """A single node in the run tree."""
+
+    run_id: str
+    idea_title: str
+    status: str
+    created_at: str | None
+    parent_run_id: str | None
+    conversation_id: int
+    is_current: bool
+
+
+class RunTreeResponse(BaseModel):
+    """Response containing the full tree of runs."""
+
+    nodes: list[RunTreeNodeResponse]
+
+
+@run_tree_router.get(
+    "/{run_id}/tree",
+    response_model=RunTreeResponse,
+)
+async def get_run_tree(
+    run_id: str,
+    request: Request,
+) -> RunTreeResponse:
+    """
+    Get the full tree of runs (ancestors and descendants) for a given run.
+
+    This returns all runs that are connected to the specified run through
+    the parent-child seeding relationship, including:
+    - All ancestor runs (runs that this run was seeded from, transitively)
+    - All descendant runs (runs seeded from this run, transitively)
+    - The current run itself
+
+    The tree is ordered by creation time, oldest first.
+    """
+    user = get_current_user(request)
+    db = get_database()
+
+    # First verify the run exists and user has access
+    run_conversation_id = await db.get_run_conversation_id(run_id)
+    if run_conversation_id is None:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    conversation = await db.get_conversation_by_id(run_conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this run")
+
+    # Get the full tree
+    tree_nodes = await db.get_run_tree(run_id)
+
+    return RunTreeResponse(
+        nodes=[
+            RunTreeNodeResponse(
+                run_id=node["run_id"],
+                idea_title=node["idea_title"],
+                status=node["status"],
+                created_at=node["created_at"],
+                parent_run_id=node["parent_run_id"],
+                conversation_id=node["conversation_id"],
+                is_current=node["is_current"],
+            )
+            for node in tree_nodes
+        ]
+    )

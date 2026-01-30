@@ -117,31 +117,48 @@ N/A
         # Get chat history
         chat_history = await db.get_chat_messages(idea_id)
 
-        # Store user message in database
-        user_msg_id = await db.create_chat_message(
-            idea_id=idea_id,
-            role="user",
-            content=request_data.message,
-            sent_by_user_id=user.id,
-        )
-        logger.info(f"Stored user message with ID: {user_msg_id}")
+        # Store user message in database (unless skipping for auto-trigger)
+        if request_data.skip_user_message_creation:
+            # For auto-trigger of existing messages, use the last user message from history
+            if not chat_history or chat_history[-1].role != "user":
+                response.status_code = 400
+                return ErrorResponse(
+                    error="No user message to respond to",
+                    detail="skip_user_message_creation requires an existing user message",
+                )
+            user_msg_id = chat_history[-1].id
+            # Extract the actual message content from the last user message for LLM
+            actual_user_message = chat_history[-1].content
+            logger.debug(
+                f"Auto-triggering response for existing user message ID: {user_msg_id} "
+                f"with content: {actual_user_message[:50]}..."
+            )
+        else:
+            user_msg_id = await db.create_chat_message(
+                idea_id=idea_id,
+                role="user",
+                content=request_data.message,
+                sent_by_user_id=user.id,
+            )
+            actual_user_message = request_data.message
+            logger.debug(f"Stored user message with ID: {user_msg_id}")
 
-        await charge_user_credits(
-            user_id=user.id,
-            cost=settings.CHAT_MESSAGE_CREDIT_COST,
-            action="chat_message",
-            description=f"Conversation {conversation_id} message",
-            metadata={
-                "conversation_id": conversation_id,
-                "idea_id": idea_id,
-                "chat_message_id": user_msg_id,
-            },
-        )
+            await charge_user_credits(
+                user_id=user.id,
+                cost=settings.CHAT_MESSAGE_CREDIT_COST,
+                action="chat_message",
+                description=f"Conversation {conversation_id} message",
+                metadata={
+                    "conversation_id": conversation_id,
+                    "idea_id": idea_id,
+                    "chat_message_id": user_msg_id,
+                },
+            )
 
         # Process file attachments if provided
         attached_files = []
         if request_data.attachment_ids:
-            logger.info(f"Processing {len(request_data.attachment_ids)} file attachments")
+            logger.debug(f"Processing {len(request_data.attachment_ids)} file attachments")
 
             # Get file attachments from database
             file_attachments = await db.get_file_attachments_by_ids(request_data.attachment_ids)
@@ -231,13 +248,30 @@ N/A
 
         # Create async streaming response
         async def generate_stream() -> AsyncGenerator[str, None]:
+            # Create placeholder assistant message immediately to prevent duplicate executions
+            # on page refresh during streaming
+            assistant_msg_id = await db.create_chat_message(
+                idea_id=idea_id,
+                role="assistant",
+                content="",  # Empty placeholder, will be updated when done
+                sent_by_user_id=user.id,
+            )
+            logger.debug(
+                f"Created placeholder assistant message {assistant_msg_id} for conversation {conversation_id}"
+            )
+
             try:
-                logger.info(f"Starting stream for conversation {conversation_id}")
+                logger.debug(f"Starting stream for conversation {conversation_id}")
 
                 provider_config = LLM_PROVIDER_REGISTRY.get(llm_provider)
                 if not provider_config:
                     error_msg = f"Unsupported LLM provider: {llm_provider}"
                     logger.error(error_msg)
+                    # Delete placeholder on error
+                    try:
+                        await db.delete_chat_message(assistant_msg_id)
+                    except Exception:
+                        pass
                     yield json.dumps({"type": "error", "data": error_msg}) + "\n"
                     return
 
@@ -245,6 +279,11 @@ N/A
                 if not target_model:
                     error_msg = f"Unsupported model '{llm_model}' for provider '{llm_provider}'"
                     logger.error(error_msg)
+                    # Delete placeholder on error
+                    try:
+                        await db.delete_chat_message(assistant_msg_id)
+                    except Exception:
+                        pass
                     yield json.dumps({"type": "error", "data": error_msg}) + "\n"
                     return
 
@@ -252,7 +291,7 @@ N/A
                     llm_model=target_model,
                     conversation_id=conversation_id,
                     idea_id=idea_id,
-                    user_message=request_data.message,
+                    user_message=actual_user_message,
                     chat_history=chat_history_payload,
                     attached_files=llm_attachment_payload,
                     user_id=user.id,
@@ -272,27 +311,47 @@ N/A
                             logger.warning(
                                 f"Empty assistant response for conversation {conversation_id}; emitting error instead of persisting"
                             )
+                            # Delete the placeholder message since response is empty
+                            try:
+                                await db.delete_chat_message(assistant_msg_id)
+                                logger.debug(
+                                    f"Deleted placeholder assistant message {assistant_msg_id} due to empty response"
+                                )
+                            except Exception as delete_error:
+                                logger.error(
+                                    f"Failed to delete placeholder message after empty response: {delete_error}"
+                                )
                             yield error_json
                             return
 
-                        await db.create_chat_message(
-                            idea_id=idea_id,
-                            role="assistant",
+                        # Update the placeholder assistant message with the final content
+                        await db.update_chat_message_content(
+                            message_id=assistant_msg_id,
                             content=event_data.data.assistant_response,
-                            sent_by_user_id=user.id,
+                        )
+                        logger.debug(
+                            f"Updated assistant message {assistant_msg_id} with final content for conversation {conversation_id}"
                         )
 
                     json_data = json.dumps(event_data._asdict()) + "\n"
                     logger.debug(f"Yielding: {repr(json_data[:100])}")
                     yield json_data
 
-                logger.info(f"Stream completed for conversation {conversation_id}")
+                logger.debug(f"Stream completed for conversation {conversation_id}")
             except Exception as e:
                 logger.exception(f"Error in stream_chat_response: {e}")
+                # Delete the placeholder message on error
+                try:
+                    await db.delete_chat_message(assistant_msg_id)
+                    logger.debug(
+                        f"Deleted placeholder assistant message {assistant_msg_id} after error"
+                    )
+                except Exception as delete_error:
+                    logger.error(f"Failed to delete placeholder message: {delete_error}")
                 yield json.dumps({"type": "error", "data": f"Stream error: {str(e)}"}) + "\n"
 
             finally:
-                logger.info(f"Adding messages to chat summary for conversation {conversation_id}")
+                logger.debug(f"Adding messages to chat summary for conversation {conversation_id}")
                 await summarizer_service.add_messages_to_chat_summary(
                     idea_id=idea_id,
                     conversation_id=conversation_id,

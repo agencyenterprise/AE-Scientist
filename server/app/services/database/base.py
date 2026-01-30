@@ -63,7 +63,7 @@ class BaseDatabaseManager(ConnectionProvider):
             "yes",
         )
         if self._skip_db_connections:
-            logger.info("Skipping database connection (SKIP_DB_CONNECTION=true)")
+            logger.debug("Skipping database connection (SKIP_DB_CONNECTION=true)")
             return
 
         if BaseDatabaseManager._pool is None:
@@ -213,9 +213,9 @@ class BaseDatabaseManager(ConnectionProvider):
         if cls._pool is not None:
             cls._pool.close()
             cls._pool = None
-            logger.info("Closed synchronous DB connection pool")
+            logger.debug("Closed synchronous DB connection pool")
 
         if cls._async_pool is not None:
             await cls._async_pool.close()
             cls._async_pool = None
-            logger.info("Closed async DB connection pool")
+            logger.debug("Closed async DB connection pool")

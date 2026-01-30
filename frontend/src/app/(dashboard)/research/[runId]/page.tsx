@@ -15,13 +15,14 @@ import {
   ResearchRunHeader,
   ResearchRunStats,
   ReviewModal,
+  RunTreeCard,
   TreeVizCard,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
 import { PageCard } from "@/shared/components/PageCard";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
@@ -60,7 +61,13 @@ export default function ResearchRunDetailPage() {
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
     queryKey: ["researchRunMeta", runId],
-    queryFn: () => apiFetch(`/research-runs/${runId}/`),
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/research-runs/{run_id}/", {
+        params: { path: { run_id: runId } },
+      });
+      if (error) throw new Error("Failed to load run metadata");
+      return data as unknown as ResearchRunListItemApi;
+    },
     enabled: !!runId,
     staleTime: 60 * 1000,
   });
@@ -81,7 +88,13 @@ export default function ResearchRunDetailPage() {
 
   const { data: costDetails, isLoading: isLoadingCost } = useQuery<ResearchRunCostResponse>({
     queryKey: ["researchRunCost", runId],
-    queryFn: () => apiFetch(`/research-runs/${runId}/costs`),
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/research-runs/{run_id}/costs", {
+        params: { path: { run_id: runId } },
+      });
+      if (error) throw new Error("Failed to load run costs");
+      return data as ResearchRunCostResponse;
+    },
     enabled: !!runId,
     refetchInterval: 10000,
   });
@@ -98,13 +111,20 @@ export default function ResearchRunDetailPage() {
       if (!conversationId) {
         throw new Error("Conversation not available yet. Please try again in a moment.");
       }
-      await apiFetch(
-        `/conversations/${conversationId}/idea/research-run/${runId}/executions/${executionId}/terminate`,
+      const { error } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
         {
-          method: "POST",
+          params: {
+            path: {
+              conversation_id: conversationId,
+              run_id: runId,
+              execution_id: executionId,
+            },
+          },
           body: { payload: feedback },
         }
       );
+      if (error) throw new Error("Failed to terminate execution");
     },
     [conversationId, runId]
   );
@@ -232,6 +252,10 @@ export default function ResearchRunDetailPage() {
           </div>
           <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
             <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
+
+            <div className="mt-4">
+              <RunTreeCard runId={runId} />
+            </div>
 
             <div className="mt-4">
               <CostDetailsCard

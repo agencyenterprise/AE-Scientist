@@ -2,6 +2,7 @@ import React, { ReactElement, useState } from "react";
 import { Pencil } from "lucide-react";
 
 import type { Idea } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
 
 import { isIdeaGenerating } from "../utils/versionUtils";
 import { ProjectDraftSkeleton } from "./ProjectDraftSkeleton";
@@ -32,19 +33,20 @@ export function ProjectDraftContent({
   const handleSave = async (updatedMarkdown: string) => {
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/idea`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea_markdown: updatedMarkdown }),
+      const { data, error } = await api.PATCH("/api/conversations/{conversation_id}/idea", {
+        params: { path: { conversation_id: Number(conversationId) } },
+        body: {
+          title: activeVersion?.title ?? "",
+          idea_markdown: updatedMarkdown,
+        },
       });
 
-      if (!response.ok) {
+      if (error) {
         throw new Error("Failed to update idea");
       }
 
-      const data = await response.json();
-      if (data.success && data.idea) {
-        onUpdate(data.idea);
+      if (data && "idea" in data) {
+        onUpdate(data.idea as Idea);
         setIsEditModalOpen(false);
       }
     } catch (error) {

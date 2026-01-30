@@ -84,11 +84,11 @@ async def process_attachment_background(
             extracted_text = pdf_service.extract_text_from_pdf(file_content)
         elif file_type.startswith("image/"):
             # Generate a detailed caption using the selected provider's model if it supports images
-            image_url = s3_service.generate_download_url(s3_key=s3_key)
+            image_url = s3_service.generate_download_url(s3_key=s3_key, expires_in=3600)
 
             try:
                 # If the selected model isn't vision, we still attempt; service will fail gracefully if unsupported
-                logger.info(
+                logger.debug(
                     f"Summarizing image {filename} with model {llm_model} and provider {llm_provider}"
                 )
                 detailed = await service.summarize_image(
@@ -96,7 +96,7 @@ async def process_attachment_background(
                     image_url=image_url,
                 )
                 extracted_text = detailed or f"Image: {filename}"
-                logger.info(f"Summary of image {filename} is {extracted_text}")
+                logger.debug(f"Summary of image {filename} is {extracted_text}")
             except Exception:
                 extracted_text = f"Image: {filename}"
         elif file_type == "text/plain":
@@ -107,14 +107,14 @@ async def process_attachment_background(
 
         # Skip summarization and DB update if nothing was extracted
         if not extracted_text.strip():
-            logger.info(
+            logger.debug(
                 f"No text extracted for attachment {attachment_id} (type={file_type}); skipping summarization and persistence"
             )
             return
 
         summary_text = ""
         try:
-            logger.info(
+            logger.debug(
                 f"Summarizing segment {attachment_id} with model {llm_model} and provider {llm_provider}"
             )
             summary_text = await service.summarize_document(
@@ -124,7 +124,7 @@ async def process_attachment_background(
         except Exception:
             summary_text = (extracted_text or "")[:1000]
 
-        logger.info(
+        logger.debug(
             f"Storing summary text for attachment {attachment_id}: {summary_text}, {extracted_text}"
         )
         await db.update_attachment_texts(
@@ -295,7 +295,7 @@ async def download_file(
             s3_key=file_attachment.s3_key, expires_in=3600
         )
 
-        logger.info("Generated download URL for file %s: %s", file_id, file_attachment.filename)
+        logger.debug("Generated download URL for file %s: %s", file_id, file_attachment.filename)
 
         # Allow JSON clients to fetch the presigned URL directly (used by SPA token auth)
         accept_header = request.headers.get("accept", "")

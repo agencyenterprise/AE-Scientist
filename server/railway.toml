@@ -2,7 +2,7 @@
 builder = "DOCKERFILE"
 dockerfilePath = "server/Dockerfile"
 
-[deploy]    
+[deploy]
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

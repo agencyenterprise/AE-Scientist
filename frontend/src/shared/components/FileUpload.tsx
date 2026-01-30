@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import Image from "next/image";
 
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import {
   createImagePreview,
   formatFileSize,
@@ -16,7 +16,6 @@ import {
   validateFile,
 } from "@/shared/lib/fileUtils";
 import type { FileMetadata } from "@/types";
-import { isErrorResponse } from "@/shared/lib/api-adapters";
 
 interface UploadProgress {
   uploadId: string;
@@ -114,29 +113,34 @@ export function FileUpload({
       try {
         updateUpload(uploadId, { status: "uploading", progress: 0 });
 
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("llm_model", currentModel);
-        formData.append("llm_provider", currentProvider);
-
-        const result = await apiFetch<
-          import("@/types").ApiComponents["schemas"]["FileUploadResponse"]
-        >(`/conversations/${conversationId}/files`, {
-          method: "POST",
-          body: formData,
+        const { data, error } = await api.POST("/api/conversations/{conversation_id}/files", {
+          params: { path: { conversation_id: conversationId } },
+          // OpenAPI types binary as string, but we need to pass File for FormData
+          body: {
+            file: file as unknown as string,
+            llm_model: currentModel,
+            llm_provider: currentProvider,
+          },
+          bodySerializer: body => {
+            const formData = new FormData();
+            formData.append("file", body.file as unknown as File);
+            formData.append("llm_model", body.llm_model);
+            formData.append("llm_provider", body.llm_provider);
+            return formData;
+          },
         });
 
-        if (isErrorResponse(result)) {
-          throw new Error(result.error || "Upload failed");
+        if (error || !data || "error" in data) {
+          throw new Error((data && "error" in data ? data.error : null) || "Upload failed");
         }
 
         updateUpload(uploadId, {
           status: "completed",
           progress: 100,
-          uploadedFile: result.file,
+          uploadedFile: data.file,
         });
 
-        return result.file;
+        return data.file;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Upload failed";
         updateUpload(uploadId, {

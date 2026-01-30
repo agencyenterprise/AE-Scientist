@@ -66,6 +66,7 @@ from app.models.llm_prompts import (
 from app.models.llm_token_usage import LlmTokenUsage, LLMTokenUsageCost
 from app.models.research_pipeline import (
     ArtifactPresignedUrlResponse,
+    ChildConversationInfo,
     LlmReviewNotFoundResponse,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
@@ -82,6 +83,8 @@ from app.models.research_pipeline import (
     ResearchRunStageSkipWindow,
     ResearchRunSubstageEvent,
     ResearchRunSubstageSummary,
+    RunTreeNode,
+    RunTreeResponse,
     TreeVizItem,
 )
 from app.models.sse import (
@@ -112,10 +115,13 @@ __all__ = [
     "ResearchRunDetailsResponse",
     "ResearchRunCodeExecution",
     "ResearchRunListItem",
+    "ChildConversationInfo",
     "ResearchRunListResponse",
     "TreeVizItem",
     "LlmReviewResponse",
     "LlmReviewNotFoundResponse",
+    "RunTreeNode",
+    "RunTreeResponse",
     "ImportChatGPTConversation",
     "ImportChatPrompt",
     "ImportChatCreateNew",

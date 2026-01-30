@@ -41,11 +41,11 @@ def should_give_free_credits(email: str) -> bool:
     Determine if the user should be given free credits.
     """
     if email.endswith("@ae.studio") or email.endswith("@agencyenterprise.com"):
-        logger.info(f"Giving free credits to {email}")
+        logger.debug(f"Giving free credits to {email}")
         return True
     whitelist_emails = os.getenv("WHITELIST_EMAILS_FREE_CREDIT", "").split(",")
     if email in whitelist_emails:
-        logger.info(f"Giving free credits to {email}")
+        logger.debug(f"Giving free credits to {email}")
         return True
     return False
 
@@ -354,7 +354,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor() as cursor:
                     await cursor.execute("DELETE FROM user_sessions WHERE expires_at <= NOW()")
                     deleted_count = cursor.rowcount
-                    logger.info(f"Deleted {deleted_count} expired sessions")
+                    logger.debug(f"Deleted {deleted_count} expired sessions")
                     return deleted_count
         except Exception as e:
             logger.exception(f"Error deleting expired sessions: {e}")

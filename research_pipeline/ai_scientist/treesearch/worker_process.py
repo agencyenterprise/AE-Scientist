@@ -439,6 +439,17 @@ def _ensure_worker_log_level(*, cfg: AppConfig) -> None:
         pass
 
 
+def _cleanup_venv(*, venv_dir: Path) -> None:
+    """Remove the per-execution venv to free disk space."""
+    if not venv_dir.exists():
+        return
+    try:
+        shutil.rmtree(venv_dir)
+        logger.debug("Cleaned up venv at %s", venv_dir)
+    except OSError:
+        logger.warning("Failed to cleanup venv at %s", venv_dir, exc_info=True)
+
+
 def _prepare_workspace(
     *,
     cfg: AppConfig,
@@ -1174,7 +1185,7 @@ def process_node(
     _abort_if_skip_requested(execution_id=execution_id)
 
     if seed_eval and seed_aggregation is None and parent_node is not None:
-        return _process_seed_eval_reuse(
+        result_data = _process_seed_eval_reuse(
             cfg=cfg,
             title=title,
             task_desc=task_desc,
@@ -1191,6 +1202,8 @@ def process_node(
             event_callback=event_callback,
             node_index=node_index,
         )
+        _cleanup_venv(venv_dir=venv_dir)
+        return result_data
 
     output_json_file, task_file, _env_ctx = _prepare_codex_task_file(
         workspace_dir=workspace_dir,
@@ -1507,4 +1520,5 @@ def process_node(
 
     result_data = child_node.to_dict()
     pickle.dumps(result_data)
+    _cleanup_venv(venv_dir=venv_dir)
     return result_data

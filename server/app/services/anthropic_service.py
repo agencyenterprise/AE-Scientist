@@ -54,7 +54,7 @@ class AnthropicService(LangChainLLMService):
         api_key = settings.ANTHROPIC_API_KEY
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable is required")
-        logger.info("Initializing Anthropic model '%s'", model_id)
+        logger.debug("Initializing Anthropic model '%s'", model_id)
         chat_model_cls: Any = ChatAnthropic
         return cast(
             ChatAnthropic,

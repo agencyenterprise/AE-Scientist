@@ -84,6 +84,10 @@ class ResearchRunListItem(BaseModel):
     artifacts_count: int = Field(0, description="Number of artifacts produced by this run")
     error_message: Optional[str] = Field(None, description="Error message if the run failed")
     conversation_id: int = Field(..., description="ID of the associated conversation")
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Parent run ID if this run's conversation was seeded from a previous run",
+    )
 
 
 class ResearchRunListResponse(BaseModel):
@@ -110,12 +114,29 @@ class ResearchRunInfo(ResearchRunSummary):
         None,
         description="Last termination workflow error, if any.",
     )
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Parent run ID if this run's conversation was seeded from a previous run",
+    )
+    restart_count: int = Field(
+        0,
+        description="Number of times this run has been restarted due to pod failures",
+    )
+    last_restart_at: Optional[str] = Field(
+        None,
+        description="ISO timestamp of the last pod restart",
+    )
+    last_restart_reason: Optional[str] = Field(
+        None,
+        description="Reason for the last restart (heartbeat_timeout or container_died)",
+    )
 
     @staticmethod
     def from_db_record(
         *,
         run: ResearchPipelineRun,
         termination: ResearchPipelineRunTermination | None,
+        parent_run_id: Optional[str] = None,
     ) -> "ResearchRunInfo":
         termination_status: Literal["none", "requested", "in_progress", "terminated", "failed"] = (
             "none"
@@ -154,6 +175,10 @@ class ResearchRunInfo(ResearchRunSummary):
             start_deadline_at=run.start_deadline_at.isoformat() if run.start_deadline_at else None,
             termination_status=termination_status,
             termination_last_error=termination_last_error,
+            parent_run_id=parent_run_id,
+            restart_count=run.restart_count,
+            last_restart_at=run.last_restart_at.isoformat() if run.last_restart_at else None,
+            last_restart_reason=run.last_restart_reason,
         )
 
 
@@ -424,6 +449,15 @@ class TreeVizItem(BaseModel):
         )
 
 
+class ChildConversationInfo(BaseModel):
+    """Brief info about a child conversation seeded from a run."""
+
+    conversation_id: int = Field(..., description="Child conversation ID")
+    title: str = Field(..., description="Child conversation title")
+    created_at: str = Field(..., description="ISO timestamp when created")
+    status: str = Field(..., description="Conversation status")
+
+
 class ResearchRunDetailsResponse(BaseModel):
     run: ResearchRunInfo = Field(..., description="Metadata describing the run")
     stage_progress: List[ResearchRunStageProgress] = Field(
@@ -460,6 +494,10 @@ class ResearchRunDetailsResponse(BaseModel):
     stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
         default_factory=list,
         description="Windows indicating when each stage became skippable.",
+    )
+    child_conversations: List[ChildConversationInfo] = Field(
+        default_factory=list,
+        description="Conversations that were seeded from this run",
     )
 
 
@@ -499,3 +537,31 @@ class LlmReviewNotFoundResponse(BaseModel):
     run_id: str = Field(..., description="Research run identifier")
     exists: bool = Field(False, description="Indicates no review exists")
     message: str = Field(..., description="Explanation that no review was found")
+
+
+# ============================================================================
+# Run Tree Models
+# ============================================================================
+
+
+class RunTreeNode(BaseModel):
+    """A single node in the run tree (ancestors and descendants)."""
+
+    run_id: str = Field(..., description="Unique identifier of the run")
+    idea_title: str = Field(..., description="Title of the idea for this run")
+    status: str = Field(..., description="Current status of the run")
+    created_at: Optional[str] = Field(None, description="ISO timestamp when the run was created")
+    parent_run_id: Optional[str] = Field(
+        None, description="Parent run ID if this run was seeded from another run"
+    )
+    conversation_id: int = Field(..., description="ID of the conversation for this run")
+    is_current: bool = Field(False, description="Whether this is the currently viewed run")
+
+
+class RunTreeResponse(BaseModel):
+    """Response containing the full tree of runs (ancestors and descendants)."""
+
+    nodes: List[RunTreeNode] = Field(
+        default_factory=list,
+        description="List of all runs in the tree, ordered by creation time",
+    )

@@ -149,7 +149,7 @@ async def narrative_stream(
                     yield _format_sse_event("ping", "keepalive")
 
         except asyncio.CancelledError:
-            logger.info("Narrator stream: Client disconnected for run_id=%s", run_id)
+            logger.debug("Narrator stream: Client disconnected for run_id=%s", run_id)
 
         finally:
             unregister_narrator_queue(run_id, queue)

@@ -370,23 +370,21 @@ def _handle_gpu_shortage_event(
 
 
 def setup_artifact_publisher(
-    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None = None
+    *, telemetry_cfg: TelemetryConfig, webhook_client: WebhookClient | None
 ) -> tuple[ArtifactPublisher, ArtifactCallback]:
-    try:
-        aws_access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
-        aws_secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-        aws_region = os.environ["AWS_REGION"]
-        aws_s3_bucket_name = os.environ["AWS_S3_BUCKET_NAME"]
-    except KeyError:
-        logger.error("Missing AWS environment variables; artifact publishing disabled.")
-        raise ValueError("Missing AWS environment variables; artifact publishing disabled.")
+    webhook_url = os.environ.get("TELEMETRY_WEBHOOK_URL")
+    webhook_token = os.environ.get("TELEMETRY_WEBHOOK_TOKEN")
+
+    if not webhook_url or not webhook_token:
+        logger.error(
+            "Missing TELEMETRY_WEBHOOK_URL or TELEMETRY_WEBHOOK_TOKEN; artifact publishing disabled."
+        )
+        raise ValueError("Missing TELEMETRY_WEBHOOK_URL or TELEMETRY_WEBHOOK_TOKEN")
 
     publisher = ArtifactPublisher(
         run_id=telemetry_cfg.run_id,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region=aws_region,
-        aws_s3_bucket_name=aws_s3_bucket_name,
+        webhook_base_url=webhook_url,
+        webhook_token=webhook_token,
         webhook_client=webhook_client,
     )
 
@@ -693,6 +691,8 @@ def run_plot_aggregation(
                         artifact_type="plot",
                         path=plot_path,
                         packaging="file",
+                        archive_name=None,
+                        exclude_dir_names=(),
                     )
                 )
         except Exception:
@@ -707,8 +707,9 @@ def run_plot_aggregation(
 def run_writeup_stage(
     writeup_cfg: WriteupConfig,
     reports_base: str,
-    run_dir_path: Path | None,
+    run_dir_path: Path,
     artifact_callback: ArtifactCallback,
+    codex_timeout_seconds: int,
     event_callback: Callable[[BaseEvent], None] | None = None,
     run_id: str | None = None,
 ) -> None:
@@ -719,7 +720,7 @@ def run_writeup_stage(
     citation_model = writeup_cfg.citation_model or writeup_model
     base_path = Path(reports_base)
     logs_dir = base_path / "logs"
-    run_name = run_dir_path.name if run_dir_path is not None else None
+    run_dir_name = run_dir_path.name
 
     citations_text = gather_citations(
         base_path=base_path,
@@ -727,7 +728,7 @@ def run_writeup_stage(
         model=citation_model,
         temperature=writeup_cfg.temperature,
         num_cite_rounds=num_cite_rounds,
-        run_dir_name=run_name or "",
+        run_dir_name=run_dir_name,
     )
     writeup_success = False
     last_error: Exception | None = None
@@ -737,11 +738,14 @@ def run_writeup_stage(
             writeup_success = perform_writeup(
                 base_folder=reports_base,
                 model=writeup_model,
-                page_limit=8,
-                citations_text=citations_text,
-                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
                 temperature=writeup_cfg.temperature,
-                artifact_callback=artifact_callback,
+                run_dir_name=run_dir_name,
+                num_cite_rounds=num_cite_rounds,
+                max_refinement_rounds=writeup_cfg.max_refinement_rounds,
+                page_limit=writeup_cfg.page_limit,
+                codex_timeout_seconds=codex_timeout_seconds,
+                writeup_attempt=attempt,
+                citations_text=citations_text,
                 event_callback=event_callback,
                 run_id=run_id,
             )
@@ -759,9 +763,6 @@ def run_writeup_stage(
             raise RuntimeError(error_message) from last_error
         raise RuntimeError(error_message)
 
-    if run_dir_path is None:
-        return
-
     run_out_dir = Path(reports_base) / "logs" / run_dir_path.name
     latex_path = run_out_dir / "latex"
     pdf_paths = sorted(run_out_dir.glob("*.pdf"))
@@ -772,6 +773,8 @@ def run_writeup_stage(
                     artifact_type="paper_pdf",
                     path=pdf_path,
                     packaging="file",
+                    archive_name=None,
+                    exclude_dir_names=(),
                 )
             )
         except Exception:
@@ -784,6 +787,7 @@ def run_writeup_stage(
                     path=latex_path,
                     packaging="zip",
                     archive_name=f"{run_dir_path.name}-latex.zip",
+                    exclude_dir_names=(),
                 )
             )
         except Exception:
@@ -859,6 +863,8 @@ def run_review_stage(
                 artifact_type="llm_review",
                 path=review_json_path,
                 packaging="file",
+                archive_name=None,
+                exclude_dir_names=(),
             )
         )
     except Exception:
@@ -1050,6 +1056,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     reports_base=reports_base,
                     run_dir_path=run_dir_path,
                     artifact_callback=artifact_callback,
+                    codex_timeout_seconds=base_cfg.exec.timeout,
                     event_callback=event_callback,
                     run_id=run_id,
                 )
@@ -1080,8 +1087,18 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     artifact_type="workspace_archive",
                     path=Path(base_cfg.workspace_dir),
                     packaging="zip",
-                    archive_name=f"{run_dir_path.name}-workspace.zip",
-                    exclude_dir_names=(".ai_scientist_venv", ".venv"),
+                    archive_name="workspace.zip",
+                    exclude_dir_names=(
+                        ".ai_scientist_venv",
+                        ".venv",
+                        "__pycache__",
+                        ".git",
+                        "node_modules",
+                        ".cache",
+                        ".pytest_cache",
+                        ".mypy_cache",
+                        ".ruff_cache",
+                    ),
                 )
             )
             artifact_callback(
@@ -1089,6 +1106,8 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     artifact_type="run_log",
                     path=Path("/workspace/research_pipeline.log"),
                     packaging="file",
+                    archive_name=None,
+                    exclude_dir_names=(),
                 )
             )
 

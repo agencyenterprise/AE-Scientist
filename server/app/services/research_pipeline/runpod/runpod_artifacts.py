@@ -16,14 +16,7 @@ from .runpod_ssh import write_temp_key_file
 
 logger = logging.getLogger(__name__)
 
-ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 40 * 60
-
-_LOG_UPLOAD_REQUIRED_ENVS = [
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_REGION",
-    "AWS_S3_BUCKET_NAME",
-]
+ARTIFACT_UPLOAD_TIMEOUT_SECONDS = 180 * 60  # 3 hours
 
 
 @retry(
@@ -42,21 +35,6 @@ def _run_artifact_upload_command(
         timeout=timeout_seconds,
         check=False,
     )
-
-
-def _gather_log_env(run_id: str) -> dict[str, str] | None:
-    env_values: dict[str, str] = {"RUN_ID": run_id}
-    missing: list[str] = []
-    for name in _LOG_UPLOAD_REQUIRED_ENVS:
-        value = os.environ.get(name)
-        if not value:
-            missing.append(name)
-        else:
-            env_values[name] = value
-    if missing:
-        logger.info("Missing env vars for pod log upload: %s", ", ".join(sorted(set(missing))))
-        return None
-    return env_values
 
 
 async def upload_runpod_artifacts_via_ssh(
@@ -97,9 +75,6 @@ def _upload_runpod_artifacts_via_ssh_sync(
             trigger,
         )
         return
-    env_values = _gather_log_env(run_id)
-    if env_values is None:
-        return
     logger.info(
         "Starting pod artifacts upload via SSH (run=%s trigger=%s host=%s port=%s)",
         run_id,
@@ -108,15 +83,27 @@ def _upload_runpod_artifacts_via_ssh_sync(
         port,
     )
     key_path = write_temp_key_file(private_key)
-    remote_env = " ".join(f"{name}={shlex.quote(value)}" for name, value in env_values.items())
+    # Source the pod's .env file which contains TELEMETRY_WEBHOOK_URL, TELEMETRY_WEBHOOK_TOKEN, and RUN_ID
+    env_file = f"{WORKSPACE_PATH}/AE-Scientist/research_pipeline/.env"
+    log_file = f"{WORKSPACE_PATH}/research_pipeline.log"
+    upload_log_file = f"{WORKSPACE_PATH}/upload_log.txt"
+    # Wrap upload commands in a subshell with tee to log to upload_log.txt
+    # Use -u for unbuffered Python output and stdbuf for unbuffered tee
     remote_command = (
         f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline && "
-        f"{remote_env} .venv/bin/python upload_file.py "
-        f"--file-path {WORKSPACE_PATH}/research_pipeline.log --artifact-type run_log || true && "
-        f"{remote_env} .venv/bin/python upload_folder.py "
+        f"set -a && source {env_file} && set +a && "
+        "( "
+        # Upload the run log
+        "echo '=== Uploading run log ===' && "
+        f".venv/bin/python -u upload_file.py "
+        f"--file-path {log_file} --artifact-type run_log 2>&1 || true; "
+        # Upload the workspace archive
+        "echo '=== Uploading workspace archive ===' && "
+        ".venv/bin/python -u upload_folder.py "
         f"--folder-path {WORKSPACE_PATH}/AE-Scientist/research_pipeline/workspaces "
         "--artifact-type workspace_archive "
-        "--archive-name workspace.zip"
+        "--archive-name workspace.zip 2>&1"
+        f" ) 2>&1 | tee -a {upload_log_file}"
     )
     ssh_command = [
         "ssh",
@@ -138,22 +125,18 @@ def _upload_runpod_artifacts_via_ssh_sync(
             command=ssh_command,
             timeout_seconds=ARTIFACT_UPLOAD_TIMEOUT_SECONDS,
         )
-        if result.returncode != 0:
-            logger.warning(
-                "Pod artifacts upload via SSH failed for run %s (trigger=%s, exit %s): %s",
+        # Log combined output (stdout + stderr) for visibility
+        combined_output = (result.stdout or "") + (result.stderr or "")
+        if combined_output.strip():
+            log_level = logging.WARNING if result.returncode != 0 else logging.INFO
+            logger.log(
+                log_level,
+                "Pod artifacts upload for run %s (trigger=%s, exit=%s):\n%s",
                 run_id,
                 trigger,
                 result.returncode,
-                (result.stderr or "").strip(),
+                combined_output.strip(),
             )
-        else:
-            if result.stdout:
-                logger.info(
-                    "Pod artifacts upload output for run %s (trigger=%s): %s",
-                    run_id,
-                    trigger,
-                    result.stdout.strip(),
-                )
     except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         logger.exception(
             "Error uploading pod artifacts for run %s (trigger=%s): %s", run_id, trigger, exc

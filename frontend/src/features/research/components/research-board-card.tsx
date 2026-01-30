@@ -17,6 +17,7 @@ export interface ResearchBoardCardProps {
   createdAt: string;
   artifactsCount: number;
   errorMessage: string | null;
+  parentRunId: string | null;
 }
 
 export function ResearchBoardCard({
@@ -32,10 +33,15 @@ export function ResearchBoardCard({
   createdAt,
   artifactsCount,
   errorMessage,
+  parentRunId,
 }: ResearchBoardCardProps) {
   return (
     <div className="group rounded-xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80">
-      <ResearchBoardCardHeader displayRunId={displayRunId} status={status} />
+      <ResearchBoardCardHeader
+        displayRunId={displayRunId}
+        status={status}
+        parentRunId={parentRunId}
+      />
       <ResearchBoardCardBody
         ideaTitle={ideaTitle}
         ideaMarkdown={ideaMarkdown}

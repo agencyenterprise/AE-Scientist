@@ -174,7 +174,7 @@ class OpenAIService(LangChainLLMService):
         api_key = settings.OPENAI_API_KEY
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        logger.info("Initializing OpenAI model '%s'", model_id)
+        logger.debug("Initializing OpenAI model '%s'", model_id)
         return ChatOpenAI(
             model=model_id,
             api_key=SecretStr(api_key),
@@ -188,7 +188,9 @@ class OpenAIService(LangChainLLMService):
         blocks: List[Dict[str, Any]] = []
         for attachment in image_attachments:
             try:
-                image_url = self.s3_service.generate_download_url(attachment.s3_key)
+                image_url = self.s3_service.generate_download_url(
+                    attachment.s3_key, expires_in=3600
+                )
                 blocks.append(
                     {
                         "type": "image_url",

@@ -1,0 +1,79 @@
+# Refine Research Paper Based on Review Feedback
+
+You are refining a research paper based on automated review feedback.
+
+**CRITICAL: This is a fully automated run.** You are running in non-interactive mode. Do NOT ask the user for input, feedback, or confirmation. Proceed autonomously with reasonable defaults.
+
+## Current Paper Location
+
+The paper LaTeX source is at: `{{ latex_folder }}/template.tex`
+The current compiled PDF is at: `{{ current_pdf_path }}`
+
+## Review Feedback
+
+### Page Count Information
+{{ page_info }}
+
+### Figure Usage Analysis
+
+**Figures referenced in paper**: {{ used_figures }}
+**Available figures NOT used**: {{ unused_figures }}
+**Invalid figure references (files don't exist)**: {{ invalid_figures }}
+
+### chktex Warnings
+
+```
+{{ chktex_output }}
+```
+
+### VLM Figure/Caption Review
+
+The following is an automated review of each figure's quality, caption accuracy, and how well it's referenced in the text:
+
+```
+{{ vlm_caption_review }}
+```
+
+### Duplicate Figure Analysis
+
+```
+{{ vlm_duplicate_analysis }}
+```
+
+{% if vlm_selection_review %}
+### Figure Selection Review
+
+Analysis of whether each figure adds sufficient value given page limits:
+
+```
+{{ vlm_selection_review }}
+```
+{% endif %}
+
+## Your Task
+
+1. **Read the current paper**: Review `{{ latex_folder }}/template.tex`
+2. **Address the feedback**:
+   - Fix any chktex warnings
+   - Improve figure captions based on VLM review
+   - Better integrate figure references into the text
+   - Remove or consolidate duplicate/redundant figures
+   - Consider adding unused figures if they provide value
+   - Remove invalid figure references
+   - Adjust content to meet page limit if needed
+3. **Recompile**: Run `cd {{ latex_folder }} && pdflatex -interaction=nonstopmode template.tex && bibtex template && pdflatex -interaction=nonstopmode template.tex && pdflatex -interaction=nonstopmode template.tex`
+4. **Verify**: Ensure the paper compiles without errors
+
+## Guidelines
+
+- Maintain scientific accuracy and objectivity
+- Do not remove important content just to meet page limits - consider moving to appendix
+- Ensure all figure references are valid
+- Improve caption quality to be self-contained and informative
+- Make sure figures are discussed meaningfully in the text
+
+## Output
+
+The refined paper should be saved to `{{ latex_folder }}/template.tex` and compiled to `{{ latex_folder }}/template.pdf`.
+
+Begin refining the paper now.

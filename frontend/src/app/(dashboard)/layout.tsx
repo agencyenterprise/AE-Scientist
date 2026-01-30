@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "AE Scientist",
   description:
-    "Monitor AI scientist hypotheses, runs, validations, and artifacts powered by MongoDB state.",
+    "Transform conversations into research proposals and automatically run multi-stage experiments to generate publication-ready papers.",
 };
 
 export const dynamic = "force-dynamic";

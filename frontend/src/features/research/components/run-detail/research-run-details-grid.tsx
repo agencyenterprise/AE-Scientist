@@ -49,6 +49,19 @@ export function ResearchRunDetailsGrid({ run, conversationId }: ResearchRunDetai
             </dd>
           </div>
         )}
+        {run.parent_run_id && (
+          <div>
+            <dt className="text-xs text-slate-400">Seeded From</dt>
+            <dd>
+              <a
+                href={`/research/${run.parent_run_id}`}
+                className="text-sm text-emerald-400 hover:text-emerald-300"
+              >
+                View Parent Run
+              </a>
+            </dd>
+          </div>
+        )}
       </dl>
     </div>
   );

@@ -3,7 +3,6 @@ Launches the research pipeline on RunPod and injects refined ideas/configuration
 """
 
 import asyncio
-import base64
 import logging
 import math
 import os
@@ -11,6 +10,7 @@ from typing import Any, NamedTuple, cast
 
 import httpx
 
+from .code_packager import get_code_tarball_info
 from .runpod_initialization import (
     CONTAINER_DISK_GB,
     WORKSPACE_DISK_GB,
@@ -382,6 +382,7 @@ async def launch_research_pipeline_run(
     requested_by_first_name: str,
     gpu_types: list[str],
     parent_run_id: str | None,
+    webhook_token: str,
 ) -> PodLaunchInfo:
     runpod_api_key = os.environ.get("RUNPOD_API_KEY")
     if not runpod_api_key:
@@ -393,7 +394,7 @@ async def launch_research_pipeline_run(
     telemetry_block: dict[str, str] = {
         "run_id": run_id,
         "webhook_url": env.telemetry_webhook_url,
-        "webhook_token": env.telemetry_webhook_token,
+        "webhook_token": webhook_token,
     }
     logger.info(
         "Launching research pipeline run_id=%s with config=%s (telemetry url=%s)",
@@ -409,6 +410,9 @@ async def launch_research_pipeline_run(
     idea_b64 = encode_multiline(idea_text)
     config_b64 = encode_multiline(config_text)
 
+    # Get code tarball info (URL and commit hash)
+    tarball_info = get_code_tarball_info()
+
     docker_cmd = build_remote_script(
         env=env,
         idea_filename=idea_filename,
@@ -417,16 +421,14 @@ async def launch_research_pipeline_run(
         config_content_b64=config_b64,
         run_id=run_id,
         has_previous_run=True if parent_run_id else False,
+        webhook_token=webhook_token,
+        commit_hash=tarball_info.commit_hash,
     )
 
     creator = RunPodManager(api_key=runpod_api_key)
-    github_key_b64 = base64.b64encode(env.git_deploy_key.encode()).decode()
-    runpod_repo_branch = os.environ.get("RUN_POD_REPO_BRANCH", "main")
+
     pod_env = {
-        "GIT_SSH_KEY_B64": github_key_b64,
-        "REPO_NAME": "AE-Scientist",
-        "REPO_ORG": "agencyenterprise",
-        "REPO_BRANCH": runpod_repo_branch,
+        "CODE_TARBALL_URL": tarball_info.url,
     }
     if parent_run_id:
         pod_env["HAS_PREVIOUS_RUN"] = "true"

@@ -81,10 +81,9 @@ def make_vlm_call(
     logger.debug("VLM make_vlm_call - system_message: %s", system_message)
     for idx, message in enumerate(messages):
         logger.debug(
-            "VLM make_vlm_call - request message %s: %s - %s",
+            "VLM make_vlm_call - request message %s: %s",
             idx,
             message.type,
-            message.content,
         )
     chat = init_chat_model(
         model=model,

@@ -45,7 +45,7 @@ async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> Bill
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid offset")
 
     user = get_current_user(request)
-    logger.info("Wallet requested for user_id=%s (limit=%s offset=%s)", user.id, limit, offset)
+    logger.debug("Wallet requested for user_id=%s (limit=%s offset=%s)", user.id, limit, offset)
     service = _get_service()
     wallet, transactions = await service.get_wallet(user_id=user.id, limit=limit, offset=offset)
     transaction_models = [
@@ -68,7 +68,7 @@ async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> Bill
 async def list_credit_packs(request: Request) -> CreditPackListResponse:
     """Expose the configured Stripe price IDs and their associated credit amounts."""
     user = get_current_user(request)
-    logger.info("Credit packs requested by user_id=%s", user.id)
+    logger.debug("Credit packs requested by user_id=%s", user.id)
     service = _get_service()
     packs = [
         CreditPackModel(
@@ -90,7 +90,7 @@ async def create_checkout_session(
 ) -> CheckoutSessionCreateResponse:
     """Create a Stripe Checkout session for the requested price ID."""
     user = get_current_user(request)
-    logger.info("Creating checkout session for user_id=%s price_id=%s", user.id, payload.price_id)
+    logger.debug("Creating checkout session for user_id=%s price_id=%s", user.id, payload.price_id)
     service = _get_service()
     checkout_url = await service.create_checkout_session(
         user=user,
@@ -98,7 +98,7 @@ async def create_checkout_session(
         success_url=str(payload.success_url),
         cancel_url=str(payload.cancel_url),
     )
-    logger.info(
+    logger.debug(
         "Stripe checkout session created for user_id=%s price_id=%s", user.id, payload.price_id
     )
     return CheckoutSessionCreateResponse(checkout_url=cast(HttpUrl, checkout_url))
@@ -130,7 +130,7 @@ async def stream_wallet(request: Request) -> StreamingResponse:
 
         while True:
             if await request.is_disconnected():
-                logger.info("Wallet SSE client disconnected for user_id=%s", user.id)
+                logger.debug("Wallet SSE client disconnected for user_id=%s", user.id)
                 break
 
             balance = await db.get_user_wallet_balance(user.id)
@@ -177,7 +177,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         )
     try:
         event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
-        logger.info("Stripe webhook event received: %s", event["type"])
+        logger.debug("Stripe webhook event received: %s", event["type"])
         await service.handle_webhook(event)
     except ValueError as exc:
         logger.warning("Stripe webhook signature invalid: %s", exc)

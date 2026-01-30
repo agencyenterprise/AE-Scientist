@@ -110,6 +110,7 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     start_deadline_at: run.start_deadline_at ?? null,
     termination_status,
     termination_last_error: terminationRaw.termination_last_error ?? null,
+    parent_run_id: (run as unknown as { parent_run_id?: string | null }).parent_run_id ?? null,
   };
 }
 
@@ -233,6 +234,12 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     return next as ResearchRunDetails["code_executions"];
   })();
 
+  const childConversations =
+    "child_conversations" in data
+      ? ((data as { child_conversations?: ResearchRunDetails["child_conversations"] })
+          .child_conversations ?? [])
+      : [];
+
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
@@ -247,6 +254,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,
     code_executions: initialCodeExecutions,
+    child_conversations: childConversations,
   };
 }
 

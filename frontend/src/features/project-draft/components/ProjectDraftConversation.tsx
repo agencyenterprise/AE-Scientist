@@ -32,7 +32,7 @@ interface ProjectDraftConversationProps {
 
 export function ProjectDraftConversation({
   conversationId,
-  conversation,
+  conversation: _conversation,
   isLocked,
   currentProjectDraft,
   onProjectDraftUpdate,
@@ -50,7 +50,6 @@ export function ProjectDraftConversation({
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputMessage, setInputMessage] = useState("");
-  const hasAutoTriggeredRef = useRef(false);
 
   // Check if project draft is currently being generated
   const isGenerating = isIdeaGenerating(currentProjectDraft || null);
@@ -68,7 +67,9 @@ export function ProjectDraftConversation({
   } = useConversationContext();
 
   // Custom hooks for state management
-  const { messages, setMessages, isLoadingHistory } = useChatMessages({ conversationId });
+  const { messages, setMessages, isLoadingHistory, isPollingEmptyMessage } = useChatMessages({
+    conversationId,
+  });
 
   const {
     pendingFiles,
@@ -122,47 +123,6 @@ export function ProjectDraftConversation({
     setIsStreaming(isStreaming);
   }, [isStreaming, setIsStreaming]);
 
-  // Auto-trigger streaming for seeded conversations with unanswered review feedback
-  useEffect(() => {
-    // Check if already triggered
-    if (hasAutoTriggeredRef.current) return;
-
-    // Check if conversation is seeded from a research run
-    const isSeededFromRun = conversation.url.startsWith("seeded://run/");
-    if (!isSeededFromRun) return;
-
-    // Wait for messages to load
-    if (isLoadingHistory) return;
-
-    // Check if there are messages
-    if (messages.length === 0) return;
-
-    // Check if last message is from user (unanswered)
-    const lastMessage = messages[messages.length - 1];
-    const hasUnansweredUserMessage = lastMessage && lastMessage.role === "user";
-    if (!hasUnansweredUserMessage) return;
-
-    // Check if model is ready
-    if (!currentModel || !currentProvider) return;
-
-    // Check if not already streaming
-    if (isStreaming) return;
-
-    // Mark as triggered and auto-send the last user message
-    hasAutoTriggeredRef.current = true;
-
-    // Auto-trigger streaming response to the user's message
-    sendMessage(lastMessage.content);
-  }, [
-    conversation.url,
-    isLoadingHistory,
-    messages,
-    currentModel,
-    currentProvider,
-    isStreaming,
-    sendMessage,
-  ]);
-
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && pendingFiles.length === 0) return;
 
@@ -177,6 +137,33 @@ export function ProjectDraftConversation({
     await sendMessage(message);
   }, [inputMessage, pendingFiles.length, sendMessage]);
 
+  // Auto-trigger for seeded conversations with unanswered user messages
+  // Track which message sequence number we've auto-responded to, to prevent double-triggering
+  const autoTriggeredSequenceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Only run after chat history has loaded and we're not already streaming
+    if (isLoadingHistory || isStreaming) {
+      return;
+    }
+
+    // Check if the last message is a user message (unanswered)
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") {
+      // (If it's an empty assistant message, polling will handle it)
+      return;
+    }
+
+    // Check if we've already auto-triggered for this message
+    if (autoTriggeredSequenceRef.current === lastMessage.sequence_number) {
+      return;
+    }
+
+    // Auto-trigger the streaming response
+    autoTriggeredSequenceRef.current = lastMessage.sequence_number;
+    sendMessage("");
+  }, [messages, isLoadingHistory, isStreaming, sendMessage]);
+
   return (
     <div className="flex flex-col h-full max-w-full overflow-x-hidden">
       {/* Messages Area */}
@@ -187,6 +174,7 @@ export function ProjectDraftConversation({
         streamingContent={streamingContent}
         statusMessage={statusMessage}
         isVisible={isVisible}
+        isPollingEmptyMessage={isPollingEmptyMessage}
       />
 
       {/* Input Area or Generating Message (lock banner is rendered by parent tab) */}

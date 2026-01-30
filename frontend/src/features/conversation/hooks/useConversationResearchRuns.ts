@@ -2,8 +2,8 @@
 
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/shared/lib/api-client";
-import type { ConversationResponse } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
+import { isErrorResponse } from "@/shared/lib/api-adapters";
 import type {
   ResearchRunSummary,
   UseConversationResearchRunsReturn,
@@ -16,10 +16,14 @@ import type {
 async function fetchConversationResearchRuns(
   conversationId: number
 ): Promise<ResearchRunSummary[]> {
-  const data = await apiFetch<ConversationResponse>(`/conversations/${conversationId}`);
+  const { data, error } = await api.GET("/api/conversations/{conversation_id}", {
+    params: { path: { conversation_id: conversationId } },
+  });
+  if (error || isErrorResponse(data)) throw new Error("Failed to fetch conversation research runs");
   // Sort by created_at descending (newest first)
   return (data.research_runs ?? []).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    (a: ResearchRunSummary, b: ResearchRunSummary) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }
 

@@ -187,6 +187,8 @@ class PodTerminationStore(Protocol):
         error: str,
     ) -> None: ...
 
+    async def reset_stale_termination_leases(self) -> int: ...
+
 
 class PodTerminationWorker:
     def __init__(
@@ -205,6 +207,17 @@ class PodTerminationWorker:
 
     async def run(self, *, stop_event: asyncio.Event) -> None:
         lease_owner = f"pipeline_monitor:{os.getpid()}"
+
+        # Reset any in_progress terminations from previous workers that may have
+        # died (e.g., due to deployment). This ensures orphaned jobs are reclaimed.
+        db = cast("PodTerminationStore", get_database())
+        reset_count = await db.reset_stale_termination_leases()
+        if reset_count > 0:
+            logger.info(
+                "Reset %s stale termination lease(s) from previous worker(s).",
+                reset_count,
+            )
+
         logger.info(
             "Pod termination worker started (max_concurrency=%s max_attempts=%s lease_owner=%s lease_seconds=%s stuck_seconds=%s).",
             self._max_concurrency,

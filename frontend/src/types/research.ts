@@ -20,6 +20,7 @@ export interface ResearchRunListItemApi {
   error_message: string | null;
   conversation_id: number;
   conversation_url: string | null;
+  parent_run_id: string | null;
 }
 
 export interface ResearchRunListResponseApi {
@@ -45,6 +46,7 @@ export interface ResearchRun {
   errorMessage: string | null;
   conversationId: number;
   conversationUrl: string | null;
+  parentRunId: string | null;
 }
 
 export interface ResearchRunListResponse {
@@ -92,6 +94,7 @@ export interface ResearchRunInfoApi {
   start_deadline_at: string | null;
   termination_status: ResearchRunTerminationStatus;
   termination_last_error: string | null;
+  parent_run_id: string | null;
 }
 
 export interface StageProgressApi {
@@ -174,6 +177,13 @@ export interface StageSkipWindowApi {
   closed_reason: string | null;
 }
 
+export interface ChildConversationInfo {
+  conversation_id: number;
+  title: string;
+  created_at: string;
+  status: string;
+}
+
 export interface ResearchRunDetailsApi {
   run: ResearchRunInfoApi;
   stage_progress: StageProgressApi[];
@@ -186,6 +196,7 @@ export interface ResearchRunDetailsApi {
   best_node_selections?: BestNodeSelectionApi[];
   stage_skip_windows?: StageSkipWindowApi[];
   code_executions: Partial<Record<RunType, ResearchRunCodeExecution>>;
+  child_conversations?: ChildConversationInfo[];
 }
 
 // Frontend types (camelCase) - using same structure for SSE compatibility
@@ -209,6 +220,7 @@ export interface ResearchRunInfo {
   start_deadline_at: string | null;
   termination_status: ResearchRunTerminationStatus;
   termination_last_error: string | null;
+  parent_run_id: string | null;
 }
 
 export interface TerminationStatusData {
@@ -356,6 +368,7 @@ export interface ResearchRunDetails {
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
   code_executions: Partial<Record<RunType, ResearchRunCodeExecution>>;
+  child_conversations?: ChildConversationInfo[];
 }
 
 export interface TreeVizItemApi {
@@ -464,4 +477,22 @@ export function isReview(
   response: LlmReviewResponse | LlmReviewNotFoundResponse
 ): response is LlmReviewResponse {
   return "exists" in response ? response.exists !== false : true;
+}
+
+// ==========================================
+// Run Tree Types (for ancestor/descendant tree)
+// ==========================================
+
+export interface RunTreeNode {
+  run_id: string;
+  idea_title: string;
+  status: string;
+  created_at: string | null;
+  parent_run_id: string | null;
+  conversation_id: number;
+  is_current: boolean;
+}
+
+export interface RunTreeResponse {
+  nodes: RunTreeNode[];
 }

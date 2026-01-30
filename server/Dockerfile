@@ -35,8 +35,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
+# Copy dependency files (from server/ since build context is repo root)
+COPY server/pyproject.toml server/uv.lock ./
 
 # Install Python dependencies with uv (exclude dev dependencies)
 RUN uv sync --frozen --no-dev
@@ -44,11 +44,15 @@ RUN uv sync --frozen --no-dev
 # Install Playwright browsers
 RUN uv run playwright install firefox chromium webkit
 
-# Copy application code
-COPY . .
+# Copy server application code
+COPY server/ .
+
+# Copy research_pipeline for tarball creation
+COPY research_pipeline/ /research_pipeline/
+ENV RESEARCH_PIPELINE_PATH=/research_pipeline
 
 # Expose port
 EXPOSE 8000
 
-# Start the application (run migrations first)
-CMD ["sh", "-c", "uv run migrate.py upgrade && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 10"]
+# Start the application (run migrations, upload code tarball, then start uvicorn)
+CMD ["sh", "-c", "uv run migrate.py upgrade && uv run python upload_code_tarball.py && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 10"]

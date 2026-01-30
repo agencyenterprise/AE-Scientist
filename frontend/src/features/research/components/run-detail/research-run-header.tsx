@@ -62,7 +62,7 @@ export function ResearchRunHeader({
               Terminating
             </span>
           )}
-          {terminationStatus === "terminated" && (
+          {terminationStatus === "terminated" && status !== "completed" && (
             <span className="inline-flex items-center rounded-full border border-slate-500/40 bg-slate-500/10 px-3 py-1 text-sm font-medium text-slate-200">
               Terminated
             </span>
@@ -74,19 +74,16 @@ export function ResearchRunHeader({
           )}
           <button
             onClick={() => router.push(`/research/${runId}/narrative`)}
-            className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 px-3 py-2 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"
+            className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/40 py-1 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"
           >
             <BookOpen className="h-4 w-4" />
-            Narrative View
-            <span className="ml-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
-              BETA
-            </span>
+            Narrative
           </button>
           {canSeedIdea && onSeedNewIdea && (
             <button
               onClick={onSeedNewIdea}
               disabled={seedPending}
-              className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/40 py-1 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
               title="Create a new idea based on this run"
             >
               {seedPending ? (
@@ -97,7 +94,7 @@ export function ResearchRunHeader({
               ) : (
                 <>
                   <Sprout className="h-4 w-4" />
-                  Seed New Idea
+                  Seed
                 </>
               )}
             </button>
@@ -106,7 +103,7 @@ export function ResearchRunHeader({
             <button
               onClick={onStopRun}
               disabled={stopPending}
-              className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-red-500/40 py-1 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {stopPending ? (
                 <>
@@ -116,7 +113,7 @@ export function ResearchRunHeader({
               ) : (
                 <>
                   <StopCircle className="h-4 w-4" />
-                  Stop Run
+                  Stop
                 </>
               )}
             </button>

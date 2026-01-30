@@ -98,3 +98,25 @@ class ChatMessagesMixin(ConnectionProvider):
                 )
                 rows = await cursor.fetchall()
                 return [ChatMessageData(**row) for row in rows]
+
+    async def update_chat_message_content(self, message_id: int, content: str) -> bool:
+        """Update the content of an existing chat message."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "UPDATE chat_messages SET content = %s WHERE id = %s",
+                    (content, message_id),
+                )
+                await conn.commit()
+                return bool(cursor.rowcount > 0)
+
+    async def delete_chat_message(self, message_id: int) -> bool:
+        """Delete a chat message."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "DELETE FROM chat_messages WHERE id = %s",
+                    (message_id,),
+                )
+                await conn.commit()
+                return bool(cursor.rowcount > 0)

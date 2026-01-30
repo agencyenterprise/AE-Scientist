@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, RootModel
 from app.models.conversations import ConversationResponse
 from app.models.ideas import Idea
 from app.models.research_pipeline import (
+    ChildConversationInfo,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunBestNodeSelection,
@@ -253,6 +254,10 @@ class ResearchRunInitialEventData(BaseModel):
     code_executions: dict[RunType, ResearchRunCodeExecution] = Field(
         default_factory=dict,
         description="Latest code execution snapshot per run_type for the run.",
+    )
+    child_conversations: List[ChildConversationInfo] = Field(
+        default_factory=list,
+        description="Conversations that were seeded from this run.",
     )
 
 

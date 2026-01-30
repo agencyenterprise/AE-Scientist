@@ -70,7 +70,7 @@ class GrokService(OpenAIService):
         )
 
     def _build_chat_model(self, *, model_id: str) -> ChatOpenAI:
-        logger.info("Initializing Grok model '%s'", model_id)
+        logger.debug("Initializing Grok model '%s'", model_id)
         return ChatOpenAI(
             model=model_id,
             api_key=SecretStr(self._xai_api_key),

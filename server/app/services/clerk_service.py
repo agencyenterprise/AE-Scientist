@@ -60,7 +60,7 @@ class ClerkService:
                 self.jwks_url = f"https://{domain}/.well-known/jwks.json"
                 self.jwks_client = PyJWKClient(self.jwks_url)
                 self._is_configured = True
-                logger.info("Clerk service initialized successfully")
+                logger.debug("Clerk service initialized successfully")
             else:
                 logger.warning("Invalid CLERK_PUBLISHABLE_KEY format")
         except Exception as e:
@@ -103,7 +103,7 @@ class ClerkService:
                 logger.warning("JWT missing 'sub' claim (user_id)")
                 return None
 
-            logger.info(f"JWT verified successfully for user: {user_id}")
+            logger.debug(f"JWT verified successfully for user: {user_id}")
 
             # Get full user details from Clerk API
             user = self.client.users.get(user_id=user_id)
@@ -130,7 +130,7 @@ class ClerkService:
                 or "User",
             }
 
-            logger.info(f"Successfully verified Clerk user: {user_info['email']}")
+            logger.debug(f"Successfully verified Clerk user: {user_info['email']}")
             return user_info
 
         except jwt.ExpiredSignatureError:

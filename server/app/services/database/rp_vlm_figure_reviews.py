@@ -51,11 +51,12 @@ class ResearchPipelineVlmFigureReviewsMixin(ConnectionProvider):
 
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
-                # Build batch insert
-                values = []
+                placeholders = []
+                flat_values = []
                 for review in reviews:
-                    values.append(
-                        (
+                    placeholders.append("(%s, %s, %s, %s, %s, %s, %s, %s)")
+                    flat_values.extend(
+                        [
                             run_id,
                             review["figure_name"],
                             review["img_description"],
@@ -64,19 +65,18 @@ class ResearchPipelineVlmFigureReviewsMixin(ConnectionProvider):
                             review["figrefs_review"],
                             review.get("source_path"),
                             created_at,
-                        )
+                        ]
                     )
 
-                await cursor.executemany(
-                    """
+                query = f"""
                     INSERT INTO rp_vlm_figure_reviews
                         (run_id, figure_name, img_description, img_review, caption_review,
                          figrefs_review, source_path, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES {', '.join(placeholders)}
                     RETURNING id
-                    """,
-                    values,
-                )
+                """
+
+                await cursor.execute(query, flat_values)
                 results = await cursor.fetchall()
                 if not results:
                     raise ValueError("Failed to insert VLM figure reviews")

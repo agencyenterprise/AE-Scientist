@@ -316,9 +316,8 @@ AWS_ACCESS_KEY_ID="your-aws-access-key"             # For file uploads
 AWS_SECRET_ACCESS_KEY="your-aws-secret"             # For file uploads
 AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
 
-# Research pipeline telemetry (optional webhooks from the experiment runner)
+# Research pipeline configuration
 TELEMETRY_WEBHOOK_URL="https://your-backend-host/api/research-pipeline/events"
-TELEMETRY_WEBHOOK_TOKEN="your_shared_secret_token"
 HF_TOKEN="your_huggingface_token"
 
 # Research pipeline monitor settings (all required)
@@ -399,11 +398,13 @@ Use this to exercise the research pipeline flow without provisioning a real RunP
 - Start the fake RunPod server in a separate terminal:
   - Set `FAKE_RUNPOD_PORT`, `FAKE_RUNPOD_BASE_URL`, and `FAKE_RUNPOD_GRAPHQL_URL`.
   - Run `make fake-runpod`.
+  - **Speed up testing** with `make fake-runpod SPEED=N` where N is the speed multiplier (e.g., `SPEED=10` runs 10× faster with wait times reduced to 10%).
 - Point the launcher at the fake endpoint via `FAKE_RUNPOD_BASE_URL` (and `FAKE_RUNPOD_GRAPHQL_URL`).
 - Behavior:
   - Exposes `/pods`, `/pods/{id}`, `/billing/pods`, and `/graphql` with the same shape the real RunPod API uses.
-  - Creates a per-run fake runner that finishes in ~5 minutes, emitting:
-    - `run-started`, heartbeats every 10s, stage progress (4 stages × 3 iterations), substage-completed, logs, and `run-finished`.
+  - Creates a per-run fake runner that finishes in ~10 minutes (or faster with `SPEED`), emitting:
+    - `run-started`, heartbeats, stage progress (4 stages × 3 iterations), substage-completed, logs, and `run-finished`.
+    - Token usage, hardware stats, figure reviews, and LLM review webhooks.
     - One small fake artifact uploaded to S3 and recorded in `rp_artifacts`.
   - Pod metadata uses `pod_id=fake-...`, `publicIp=127.0.0.1`, `portMappings={"22": "0"}` so readiness checks pass; SSH log upload is effectively skipped.
 

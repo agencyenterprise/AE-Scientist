@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { ConversationDetail, Idea, IdeaGetResponse } from "@/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import type { ConversationDetail, Idea } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
 import { constants } from "@/shared/lib/config";
 import { isIdeaGenerating } from "../utils/versionUtils";
 
@@ -27,15 +27,7 @@ export interface UseProjectDraftDataReturn {
   /** Whether an update is in progress */
   isUpdating: boolean;
   /** Update the project draft with new data */
-  updateProjectDraft: (ideaData: {
-    title: string;
-    short_hypothesis: string;
-    related_work: string;
-    abstract: string;
-    experiments: string[];
-    expected_outcome: string;
-    risk_factors_and_limitations: string[];
-  }) => Promise<void>;
+  updateProjectDraft: (ideaData: { title: string; idea_markdown: string }) => Promise<void>;
 }
 
 /**
@@ -66,22 +58,21 @@ export function useProjectDraftData({
   const [isUpdating, setIsUpdating] = useState(false);
 
   const updateProjectDraft = useCallback(
-    async (ideaData: {
-      title: string;
-      short_hypothesis: string;
-      related_work: string;
-      abstract: string;
-      experiments: string[];
-      expected_outcome: string;
-      risk_factors_and_limitations: string[];
-    }): Promise<void> => {
+    async (ideaData: { title: string; idea_markdown: string }): Promise<void> => {
       setIsUpdating(true);
       try {
-        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`, {
-          method: "PATCH",
+        const { data, error } = await api.PATCH("/api/conversations/{conversation_id}/idea", {
+          params: { path: { conversation_id: conversation.id } },
           body: ideaData,
         });
-        setProjectDraft(result.idea);
+
+        if (error) {
+          throw new Error("Failed to update idea");
+        }
+
+        if (data && "idea" in data) {
+          setProjectDraft((data.idea as Idea) || null);
+        }
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to update idea:", error);
@@ -96,17 +87,18 @@ export function useProjectDraftData({
   // Load initial data
   useEffect(() => {
     const loadData = async (): Promise<void> => {
-      try {
-        const draftResult = await apiFetch<IdeaGetResponse>(
-          `/conversations/${conversation.id}/idea`
-        );
-        setProjectDraft(draftResult.idea);
-      } catch (error) {
+      const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
+        params: { path: { conversation_id: conversation.id } },
+      });
+
+      if (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to load data:", error);
-      } finally {
-        setIsLoading(false);
+      } else if (data && "idea" in data) {
+        setProjectDraft((data.idea as Idea) || null);
       }
+
+      setIsLoading(false);
     };
 
     loadData();
@@ -115,19 +107,24 @@ export function useProjectDraftData({
   // Poll for idea updates when idea is being generated
   useEffect(() => {
     const checkAndPoll = async () => {
-      try {
-        const result = await apiFetch<IdeaGetResponse>(`/conversations/${conversation.id}/idea`);
-        const draft = result.idea;
-        setProjectDraft(draft);
+      const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
+        params: { path: { conversation_id: conversation.id } },
+      });
 
-        // Only continue polling if idea is still being generated
-        if (isIdeaGenerating(draft)) {
-          return true; // Continue polling
-        }
-      } catch (error) {
+      if (error) {
         // eslint-disable-next-line no-console
         console.error("Polling error:", error);
+        return false; // Stop polling
       }
+
+      const draft = data && "idea" in data ? (data.idea as Idea) : null;
+      setProjectDraft(draft);
+
+      // Only continue polling if idea is still being generated
+      if (isIdeaGenerating(draft)) {
+        return true; // Continue polling
+      }
+
       return false; // Stop polling
     };
 

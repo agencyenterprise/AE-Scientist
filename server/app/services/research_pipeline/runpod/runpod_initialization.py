@@ -45,15 +45,9 @@ def get_pod_name(*, user_name: str, run_id: str) -> str:
 
 @dataclass
 class RunPodEnvironment:
-    git_deploy_key: str
     openai_api_key: str
     hf_token: str
     telemetry_webhook_url: str
-    telemetry_webhook_token: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    aws_region: str
-    aws_s3_bucket_name: str
     sentry_dsn: str
     sentry_environment: str
 
@@ -70,15 +64,9 @@ def load_runpod_environment() -> RunPodEnvironment:
         return value or ""
 
     return RunPodEnvironment(
-        git_deploy_key=_require("GIT_DEPLOY_KEY").replace("\\n", "\n"),
         openai_api_key=_require("OPENAI_API_KEY"),
         hf_token=_require("HF_TOKEN"),
         telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
-        telemetry_webhook_token=_require("TELEMETRY_WEBHOOK_TOKEN"),
-        aws_access_key_id=_require("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=_require("AWS_SECRET_ACCESS_KEY"),
-        aws_region=_require("AWS_REGION"),
-        aws_s3_bucket_name=_require("AWS_S3_BUCKET_NAME"),
         sentry_dsn=_optional("SENTRY_DSN"),
         sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
     )
@@ -91,7 +79,7 @@ def prepare_config_text(*, title: str, idea_filename: str, telemetry: dict[str, 
             f"{CONFIG_TEMPLATE_PATH}. Ensure the file exists."
         )
     config = OmegaConf.load(CONFIG_TEMPLATE_PATH)
-    logger.info(
+    logger.debug(
         "Preparing pipeline config from %s with title=%s, desc_file=%s",
         CONFIG_TEMPLATE_PATH,
         title,
@@ -160,30 +148,13 @@ def _codex_installation_commands() -> list[str]:
     ]
 
 
-def _aws_credentials_setup_commands(*, env: RunPodEnvironment) -> list[str]:
-    return [
-        "# === AWS Credentials Setup ===",
-        'echo "Creating ~/.aws/credentials..."',
-        "mkdir -p ~/.aws",
-        "chmod 700 ~/.aws",
-        "cat > ~/.aws/credentials << 'EOF'",
-        "[default]",
-        f"aws_access_key_id={env.aws_access_key_id}",
-        f"aws_secret_access_key={env.aws_secret_access_key}",
-        "EOF",
-        "chmod 600 ~/.aws/credentials",
-        "",
-    ]
-
-
 def _download_parent_run_data_commands() -> list[str]:
     return [
         "# === Download Parent Run Data ===",
         'if [ "${HAS_PREVIOUS_RUN:-false}" = "true" ] && [ -n "${PARENT_RUN_ID:-}" ]; then',
         '  echo "Downloading parent run data from ${PARENT_RUN_ID}..."',
         '  mkdir -p "${PREVIOUS_RUN_DATA_PATH}"',
-        '  s3_uri="s3://${AWS_S3_BUCKET_NAME}/research-pipeline/${PARENT_RUN_ID}/*"',
-        f'  s5cmd sync "${{s3_uri}}" "${{PREVIOUS_RUN_DATA_PATH}}/" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
+        f'  python download_parent_run.py --parent-run-id "${{PARENT_RUN_ID}}" --output "${{PREVIOUS_RUN_DATA_PATH}}" >{WORKSPACE_PATH}/parent_run_download.log 2>&1 &',
         '  echo "Started parent run data download in background (pid=$!)"',
         "else",
         '  echo "No parent run data to download"',
@@ -214,11 +185,16 @@ def _inject_refined_idea_and_config_commands(
 def _pytorch_cuda_test_command() -> list[str]:
     return [
         'send_init_status "Initializing PyTorch"',
-        "python - <<'PY' || { echo \"❌ PyTorch CUDA initialization failed\"; exit 1; }",
+        "python - <<'PY'",
         "import torch",
         "torch.cuda.set_device(0)",
         "print('✅ PyTorch device initialized successfully')",
         "PY",
+        "if [ $? -ne 0 ]; then",
+        '  echo "❌ PyTorch CUDA initialization failed"',
+        '  send_gpu_failure "PyTorch CUDA initialization failed - GPU may be unavailable or defective"',
+        "  exit 1",
+        "fi",
         "",
     ]
 
@@ -233,6 +209,16 @@ def _upload_scrubbed_run_config_commands(*, config_filename: str) -> list[str]:
         "else",
         "  echo 'Sanitized config is empty; skipping upload.'",
         "fi",
+    ]
+
+
+def _upload_commit_hash_commands(*, commit_hash: str) -> list[str]:
+    return [
+        "# === Upload Commit Hash ===",
+        "commit_hash_path=/tmp/commit_hash.txt",
+        f'echo "{commit_hash}" > "$commit_hash_path"',
+        f'python upload_file.py --file-path "$commit_hash_path" --artifact-type commit_hash >{WORKSPACE_PATH}/commit_hash_upload.log 2>&1 &',
+        'echo "Started commit_hash upload (pid=$!)"',
     ]
 
 
@@ -279,9 +265,11 @@ def build_remote_script(
     config_content_b64: str,
     run_id: str,
     has_previous_run: bool,
+    webhook_token: str,
+    commit_hash: str,
 ) -> str:
     telemetry_url = shlex.quote(env.telemetry_webhook_url.strip())
-    telemetry_token = shlex.quote(env.telemetry_webhook_token)
+    telemetry_token = shlex.quote(webhook_token)
     run_id_quoted = shlex.quote(run_id)
     script_parts: list[str] = [
         "set -euo pipefail",
@@ -299,8 +287,25 @@ def build_remote_script(
         "  fi",
         '  msg="$1"',
         '  msg="${msg//\\"/\\\\\\"}"',
-        '  payload="{\\"run_id\\":\\"${RUN_ID}\\",\\"message\\":\\"${msg}\\"}"',
-        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/initialization-progress" \\',
+        '  payload="{\\"message\\":\\"${msg}\\"}"',
+        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/${RUN_ID}/initialization-progress" \\',
+        '    -H "Authorization: Bearer ${TELEMETRY_WEBHOOK_TOKEN}" \\',
+        '    -H "Content-Type: application/json" \\',
+        '    --data "${payload}" >/dev/null 2>&1 || true',
+        "}",
+        "",
+        "# Function to notify server of GPU failure so it can restart quickly",
+        "send_gpu_failure() {",
+        '  if [ -z "${TELEMETRY_WEBHOOK_URL:-}" ] || [ -z "${TELEMETRY_WEBHOOK_TOKEN:-}" ] || [ -z "${RUN_ID:-}" ]; then',
+        "    return 0",
+        "  fi",
+        "  if ! command -v curl >/dev/null 2>&1; then",
+        "    return 0",
+        "  fi",
+        '  msg="$1"',
+        '  msg="${msg//\\"/\\\\\\"}"',
+        '  payload="{\\"required_gpus\\":1,\\"available_gpus\\":0,\\"message\\":\\"${msg}\\"}"',
+        '  curl -sS -X POST "${TELEMETRY_WEBHOOK_URL%/}/${RUN_ID}/gpu-shortage" \\',
         '    -H "Authorization: Bearer ${TELEMETRY_WEBHOOK_TOKEN}" \\',
         '    -H "Content-Type: application/json" \\',
         '    --data "${payload}" >/dev/null 2>&1 || true',
@@ -311,16 +316,15 @@ def build_remote_script(
     env_file_lines = [
         f"OPENAI_API_KEY={env.openai_api_key}",
         f"HF_TOKEN={env.hf_token}",
-        f"AWS_ACCESS_KEY_ID={env.aws_access_key_id}",
-        f"AWS_SECRET_ACCESS_KEY={env.aws_secret_access_key}",
-        f"AWS_REGION={env.aws_region}",
-        f"AWS_S3_BUCKET_NAME={env.aws_s3_bucket_name}",
-        "DATASETS_AWS_FOLDER=datasets",
-        f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
+        f"TELEMETRY_WEBHOOK_URL={env.telemetry_webhook_url}",
+        f"TELEMETRY_WEBHOOK_TOKEN={webhook_token}",
         f"RUN_ID={run_id}",
         f"{DISK_STATS_ENV_NAME}={hw_stats_paths}",
         f"PIPELINE_WORKSPACE_DISK_CAPACITY_BYTES={WORKSPACE_DISK_GB * 1024**3}",
         f"PIPELINE_WORKSPACE_PATH={WORKSPACE_PATH}",
+        # Dataset configuration (not AWS credentials, just paths/folder names)
+        f"DATASETS_LOCAL_DIR={WORKSPACE_PATH}/datasets",
+        "DATASETS_AWS_FOLDER=datasets",
     ]
     if has_previous_run:
         env_file_lines.append('HAS_PREVIOUS_RUN="true"')
@@ -333,11 +337,15 @@ def build_remote_script(
         "# === GPU Validation ===",
         'send_init_status "Validating GPU"',
         'echo "Validating GPU..."',
-        'nvidia-smi || { echo "❌ nvidia-smi failed"; exit 1; }',
+        "if ! nvidia-smi; then",
+        '  echo "❌ nvidia-smi failed"',
+        '  send_gpu_failure "nvidia-smi failed - GPU driver or hardware issue"',
+        "  exit 1",
+        "fi",
         'echo "✅ GPU validated"',
         "",
     ]
-    script_parts += ['send_init_status "Cloning repository"', ""]
+    script_parts += ['send_init_status "Downloading code"', ""]
     script_parts += _repository_setup_commands()
     script_parts += ['send_init_status "Installing packages"', ""]
     script_parts += _python_packages_installation_commands()
@@ -358,7 +366,6 @@ def build_remote_script(
         "set +a",
         "",
     ]
-    script_parts += _aws_credentials_setup_commands(env=env)
     script_parts += _inject_refined_idea_and_config_commands(
         idea_filename=idea_filename,
         idea_content_b64=idea_content_b64,
@@ -369,6 +376,7 @@ def build_remote_script(
     script_parts += _pytorch_cuda_test_command()
     script_parts += _download_parent_run_data_commands()
     script_parts += _upload_scrubbed_run_config_commands(config_filename=config_filename)
+    script_parts += _upload_commit_hash_commands(commit_hash=commit_hash)
     script_parts += _launch_research_pipeline_commands(config_filename=config_filename)
     script_parts += _await_external_cleanup_commands()
     return "\n".join(script_parts).strip()
