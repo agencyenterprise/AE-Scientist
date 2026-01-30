@@ -1,7 +1,8 @@
 # Installation
 install:
 	@echo "📦 Installing ae-paper-review dependencies..."
-	VIRTUAL_ENV= uv pip install -e ".[dev]"
+	@[ -d .venv ] || uv venv --quiet
+	uv pip install -e ".[dev]"
 
 # Linting
 lint:
