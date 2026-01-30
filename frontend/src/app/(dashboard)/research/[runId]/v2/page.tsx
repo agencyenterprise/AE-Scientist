@@ -16,7 +16,7 @@ import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
 import { PageCard } from "@/shared/components/PageCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
@@ -59,7 +59,12 @@ export default function ResearchRunDetailV2Page() {
 
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
     queryKey: ["researchRunMeta", runId],
-    queryFn: () => apiFetch(`/research-runs/${runId}/`),
+    queryFn: async () => {
+      const { data } = await api.GET("/api/research-runs/{run_id}/", {
+        params: { path: { run_id: runId } },
+      });
+      return data as unknown as ResearchRunListItemApi;
+    },
     enabled: !!runId,
     staleTime: 60 * 1000,
   });
@@ -80,7 +85,12 @@ export default function ResearchRunDetailV2Page() {
 
   const { data: costDetails, isLoading: isLoadingCost } = useQuery<ResearchRunCostResponse>({
     queryKey: ["researchRunCost", runId],
-    queryFn: () => apiFetch(`/research-runs/${runId}/costs`),
+    queryFn: async () => {
+      const { data } = await api.GET("/api/research-runs/{run_id}/costs", {
+        params: { path: { run_id: runId } },
+      });
+      return data as ResearchRunCostResponse;
+    },
     enabled: !!runId,
     refetchInterval: 10000,
   });
