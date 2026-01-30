@@ -4232,6 +4232,22 @@ export interface components {
              * @description Parent run ID if this run's conversation was seeded from a previous run
              */
             parent_run_id?: string | null;
+            /**
+             * Restart Count
+             * @description Number of times this run has been restarted due to pod failures
+             * @default 0
+             */
+            restart_count: number;
+            /**
+             * Last Restart At
+             * @description ISO timestamp of the last pod restart
+             */
+            last_restart_at?: string | null;
+            /**
+             * Last Restart Reason
+             * @description Reason for the last restart (heartbeat_timeout or container_died)
+             */
+            last_restart_reason?: string | null;
         };
         /** ResearchRunInitialEvent */
         ResearchRunInitialEvent: {

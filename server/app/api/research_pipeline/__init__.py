@@ -5,14 +5,11 @@ from fastapi import APIRouter
 # Re-export commonly used items for backwards compatibility
 from .auth import ResearchRunStore, resolve_run_owner_first_name, verify_run_auth
 from .file_uploads import router as file_uploads_router
-from .gpu_retry import (
+from .research_pipeline_webhooks import (
     BYTES_PER_GB,
     LOW_FREE_DISK_THRESHOLD_BYTES,
-    RetryIdeaPayload,
-    build_retry_gpu_preferences,
     record_disk_usage_event,
     resolve_partition_capacity_bytes,
-    retry_run_after_gpu_shortage,
 )
 from .research_pipeline_webhooks import router as webhooks_router
 from .schemas import (
@@ -87,14 +84,11 @@ __all__ = [
     "ResearchRunStore",
     "resolve_run_owner_first_name",
     "verify_run_auth",
-    # GPU retry
+    # Disk usage
     "BYTES_PER_GB",
     "LOW_FREE_DISK_THRESHOLD_BYTES",
-    "RetryIdeaPayload",
-    "build_retry_gpu_preferences",
     "record_disk_usage_event",
     "resolve_partition_capacity_bytes",
-    "retry_run_after_gpu_shortage",
     # Schemas - Event payloads
     "ArtifactUploadedEvent",
     "ArtifactUploadedPayload",

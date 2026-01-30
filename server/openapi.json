@@ -8964,6 +8964,36 @@
             ],
             "title": "Parent Run Id",
             "description": "Parent run ID if this run's conversation was seeded from a previous run"
+          },
+          "restart_count": {
+            "type": "integer",
+            "title": "Restart Count",
+            "description": "Number of times this run has been restarted due to pod failures",
+            "default": 0
+          },
+          "last_restart_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Restart At",
+            "description": "ISO timestamp of the last pod restart"
+          },
+          "last_restart_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Restart Reason",
+            "description": "Reason for the last restart (heartbeat_timeout or container_died)"
           }
         },
         "type": "object",

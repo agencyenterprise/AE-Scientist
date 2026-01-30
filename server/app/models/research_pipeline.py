@@ -118,6 +118,18 @@ class ResearchRunInfo(ResearchRunSummary):
         None,
         description="Parent run ID if this run's conversation was seeded from a previous run",
     )
+    restart_count: int = Field(
+        0,
+        description="Number of times this run has been restarted due to pod failures",
+    )
+    last_restart_at: Optional[str] = Field(
+        None,
+        description="ISO timestamp of the last pod restart",
+    )
+    last_restart_reason: Optional[str] = Field(
+        None,
+        description="Reason for the last restart (heartbeat_timeout or container_died)",
+    )
 
     @staticmethod
     def from_db_record(
@@ -164,6 +176,9 @@ class ResearchRunInfo(ResearchRunSummary):
             termination_status=termination_status,
             termination_last_error=termination_last_error,
             parent_run_id=parent_run_id,
+            restart_count=run.restart_count,
+            last_restart_at=run.last_restart_at.isoformat() if run.last_restart_at else None,
+            last_restart_reason=run.last_restart_reason,
         )
 
 

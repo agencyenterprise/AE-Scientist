@@ -3,10 +3,12 @@
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import cast
+from typing import Sequence, cast
 
+import sentry_sdk
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.research_pipeline_runs import _generate_run_webhook_token
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.models.research_pipeline import (
     LlmReviewResponse,
@@ -39,17 +41,15 @@ from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstage
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
 from app.services.narrator.narrator_service import ingest_narration_event
+from app.services.research_pipeline.pod_restart import attempt_pod_restart
 from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
     publish_termination_status_event,
 )
+from app.services.research_pipeline.runpod import get_supported_gpu_types
+from app.services.research_pipeline.runpod.runpod_initialization import WORKSPACE_PATH
 
 from .auth import ResearchRunStore, verify_run_auth
-from .gpu_retry import (
-    record_disk_usage_event,
-    resolve_partition_capacity_bytes,
-    retry_run_after_gpu_shortage,
-)
 from .schemas import (
     ArtifactUploadedPayload,
     BestNodeSelectionPayload,
@@ -75,6 +75,80 @@ from .schemas import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# -----------------------------------------------------------------------------
+# Disk Usage Helpers
+# -----------------------------------------------------------------------------
+
+LOW_FREE_DISK_THRESHOLD_BYTES = 50 * 1024**3
+BYTES_PER_GB = 1024**3
+
+
+def resolve_partition_capacity_bytes(
+    *,
+    container_disk_gb: int | None,
+    volume_disk_gb: int | None,
+    partition: str,
+) -> int | None:
+    """Resolve the total capacity in bytes for a given partition."""
+    normalized = partition if partition == "/" else partition.rstrip("/")
+    if not normalized:
+        normalized = "/"
+    if normalized == "/":
+        capacity_gb = container_disk_gb
+    elif normalized == WORKSPACE_PATH:
+        capacity_gb = volume_disk_gb
+    else:
+        return None
+    if capacity_gb is None:
+        return None
+    return int(capacity_gb) * BYTES_PER_GB
+
+
+async def record_disk_usage_event(
+    *,
+    db: ResearchRunStore,
+    run_id: str,
+    partitions: Sequence[DiskUsagePartition],
+    occurred_at: datetime,
+    event_type: str,
+) -> None:
+    """Record disk usage event and warn on low disk space."""
+    if not partitions:
+        return
+    partitions_payload = []
+    low_free_partitions: list[tuple[str, int]] = []
+    for partition in partitions:
+        free_bytes = max(partition.total_bytes - partition.used_bytes, 0)
+        partitions_payload.append(
+            {
+                "partition": partition.partition,
+                "total_bytes": partition.total_bytes,
+                "used_bytes": partition.used_bytes,
+                "free_bytes": free_bytes,
+            }
+        )
+        if free_bytes < LOW_FREE_DISK_THRESHOLD_BYTES:
+            low_free_partitions.append((partition.partition, free_bytes))
+    await db.insert_research_pipeline_run_event(
+        run_id=run_id,
+        event_type=event_type,
+        metadata={"partitions": partitions_payload},
+        occurred_at=occurred_at,
+    )
+    if low_free_partitions:
+        details = ", ".join(
+            f"{name}={free_bytes / (1024**3):.1f} GiB free"
+            for name, free_bytes in low_free_partitions
+        )
+        message = f"Low disk space detected for run {run_id}: {details}"
+        logger.warning(message)
+        sentry_sdk.capture_message(message, level="warning")
+
+
+# -----------------------------------------------------------------------------
+# Webhook Endpoints
+# -----------------------------------------------------------------------------
 
 
 def _next_stream_event_id() -> int:
@@ -969,8 +1043,8 @@ async def ingest_gpu_shortage(
     run_id: str,
     payload: GPUShortagePayload,
     _: None = Depends(verify_run_auth),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
-    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
@@ -986,13 +1060,8 @@ async def ingest_gpu_shortage(
         payload.required_gpus,
         payload.available_gpus,
     )
-    await db.update_research_pipeline_run(
-        run_id=run_id,
-        status="failed",
-        error_message=failure_reason,
-        last_heartbeat_at=now,
-        heartbeat_failures=0,
-    )
+
+    # Record the GPU shortage event
     await db.insert_research_pipeline_run_event(
         run_id=run_id,
         event_type="gpu_shortage",
@@ -1003,29 +1072,44 @@ async def ingest_gpu_shortage(
         },
         occurred_at=now,
     )
-    await db.insert_research_pipeline_run_event(
-        run_id=run_id,
-        event_type="status_changed",
-        metadata={
-            "from_status": run.status,
-            "to_status": "failed",
-            "reason": "gpu_shortage",
-            "message": failure_reason,
-        },
-        occurred_at=now,
-    )
-    termination = await db.enqueue_research_pipeline_run_termination(
-        run_id=run_id,
-        trigger="gpu_shortage",
-    )
-    publish_termination_status_event(run_id=run_id, termination=termination)
-    notify_termination_requested()
-    await retry_run_after_gpu_shortage(
+
+    # Attempt to restart with any available GPU type
+    webhook_token, webhook_token_hash = _generate_run_webhook_token()
+    restarted = await attempt_pod_restart(
         db=db,
-        failed_run_id=run_id,
-        failed_run_gpu_type=run.gpu_type,
-        idea_version_id=run.idea_version_id,
+        run=run,
+        reason="gpu_shortage",
+        gpu_types=get_supported_gpu_types(),
+        webhook_token=webhook_token,
+        webhook_token_hash=webhook_token_hash,
     )
+
+    if not restarted:
+        # Max restart attempts exceeded - fail the run permanently
+        await db.update_research_pipeline_run(
+            run_id=run_id,
+            status="failed",
+            error_message=f"{failure_reason} (after {run.restart_count} restart attempt(s))",
+            last_heartbeat_at=now,
+            heartbeat_failures=0,
+        )
+        await db.insert_research_pipeline_run_event(
+            run_id=run_id,
+            event_type="status_changed",
+            metadata={
+                "from_status": run.status,
+                "to_status": "failed",
+                "reason": "gpu_shortage",
+                "message": failure_reason,
+            },
+            occurred_at=now,
+        )
+        termination = await db.enqueue_research_pipeline_run_termination(
+            run_id=run_id,
+            trigger="gpu_shortage",
+        )
+        publish_termination_status_event(run_id=run_id, termination=termination)
+        notify_termination_requested()
 
 
 @router.post("/{run_id}/token-usage", status_code=status.HTTP_204_NO_CONTENT)

@@ -1089,6 +1089,24 @@ class ResearchRunInfo(BaseModel):
             title="Parent Run Id",
         ),
     ] = None
+    restart_count: Annotated[
+        int | None,
+        Field(
+            description="Number of times this run has been restarted due to pod failures",
+            title="Restart Count",
+        ),
+    ] = 0
+    last_restart_at: Annotated[
+        str | None,
+        Field(description="ISO timestamp of the last pod restart", title="Last Restart At"),
+    ] = None
+    last_restart_reason: Annotated[
+        str | None,
+        Field(
+            description="Reason for the last restart (heartbeat_timeout or container_died)",
+            title="Last Restart Reason",
+        ),
+    ] = None
 
 
 class ResearchRunInitializationStatusData(BaseModel):
