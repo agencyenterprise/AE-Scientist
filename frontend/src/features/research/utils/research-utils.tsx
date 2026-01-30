@@ -121,7 +121,7 @@ interface StatusBadgeSizeConfig {
 
 const STATUS_BADGE_SIZES: Record<StatusBadgeSize, StatusBadgeSizeConfig> = {
   sm: { container: "gap-1.5 px-3 py-1.5 text-xs", icon: "h-3.5 w-3.5" },
-  lg: { container: "gap-2 px-4 py-2 text-sm", icon: "h-5 w-5" },
+  lg: { container: "gap-2 w-28 justify-center py-1 text-sm", icon: "h-4 w-4" },
 };
 
 /**
