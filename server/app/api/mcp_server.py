@@ -206,7 +206,7 @@ async def handle_tools_call(params: dict | None, user: UserData) -> dict:
         run_id, pod_info = await create_and_launch_research_run(
             idea_data=cast(IdeaPayloadSource, idea_data),
             requested_by_first_name=requester_first_name,
-            gpu_types=[gpu_types[0]],  # Use first available GPU type
+            gpu_types=gpu_types,  # Pass all GPU types for fallback
             conversation_id=conversation_id,
             parent_run_id=None,
         )
