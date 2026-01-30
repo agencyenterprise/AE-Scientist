@@ -1,0 +1,187 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plug } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/shared/components/ui/dialog";
+import { Button } from "@/shared/components/ui/button";
+import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
+import { config } from "@/shared/lib/config";
+import {
+  fetchMCPApiKey,
+  generateMCPApiKey,
+  revokeMCPApiKey,
+  type MCPApiKeyGeneratedResponse,
+} from "../api";
+
+interface MCPIntegrationModalProps {
+  trigger?: React.ReactNode;
+}
+
+export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const apiKeyQuery = useQuery({
+    queryKey: ["mcp-integration", "key"],
+    queryFn: fetchMCPApiKey,
+    enabled: open,
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: generateMCPApiKey,
+    onSuccess: (data: MCPApiKeyGeneratedResponse) => {
+      setNewlyGeneratedKey(data.api_key);
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["mcp-integration", "key"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: revokeMCPApiKey,
+    onSuccess: () => {
+      setNewlyGeneratedKey(null);
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["mcp-integration", "key"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+
+  const hasKey = apiKeyQuery.data?.has_key ?? false;
+  const maskedKey = apiKeyQuery.data?.masked_key;
+  const displayKey = newlyGeneratedKey ?? maskedKey ?? "";
+
+  // Build the MCP add-json command
+  const mcpServerUrl = `${config.apiBaseUrl}/mcp`;
+  const mcpAddJsonCommand = newlyGeneratedKey
+    ? `claude mcp add-json research-pipeline '{"type":"http","url":"${mcpServerUrl}","headers":{"Authorization":"Bearer ${newlyGeneratedKey}"}}'`
+    : "";
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      // Reset state when modal closes
+      setNewlyGeneratedKey(null);
+      setError(null);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <button className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white flex items-center gap-2">
+            <Plug className="h-4 w-4" />
+            Integrate with Claude
+          </button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Integrate with Claude Code</DialogTitle>
+          <DialogDescription>
+            Connect AE Scientist to Claude Code to run research pipelines directly from your
+            terminal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          {error && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          {/* API Key Section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-foreground">API Key</h3>
+
+            {apiKeyQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            ) : hasKey || newlyGeneratedKey ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground overflow-x-auto">
+                    {displayKey}
+                  </code>
+                  {newlyGeneratedKey && (
+                    <CopyToClipboardButton text={newlyGeneratedKey} label="Copy API key" />
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => generateMutation.mutate()}
+                    disabled={generateMutation.isPending}
+                  >
+                    {generateMutation.isPending ? "Generating..." : "Regenerate Key"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => revokeMutation.mutate()}
+                    disabled={revokeMutation.isPending}
+                    className="text-red-400 border-red-500/60 hover:bg-red-500/10"
+                  >
+                    {revokeMutation.isPending ? "Revoking..." : "Revoke Key"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+              >
+                {generateMutation.isPending ? "Generating..." : "Generate API Key"}
+              </Button>
+            )}
+          </div>
+
+          {/* Setup Instructions */}
+          {newlyGeneratedKey && (
+            <div className="space-y-3 pt-2 border-t border-border">
+              <h3 className="text-sm font-medium text-foreground">Setup Instructions</h3>
+              <p className="text-sm text-muted-foreground">
+                Run this command in your terminal to add AE Scientist to Claude Code:
+              </p>
+
+              <div className="relative">
+                <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
+                  {mcpAddJsonCommand}
+                </pre>
+                <div className="absolute right-2 top-2">
+                  <CopyToClipboardButton text={mcpAddJsonCommand} label="Copy command" />
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                After running the command, you can use the{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">run_pipeline</code>{" "}
+                tool in Claude Code to start research runs.
+              </p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

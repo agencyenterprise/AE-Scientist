@@ -64,7 +64,9 @@ export function RunCostTab({
           {run.updated_at && (
             <div>
               <dt className="text-xs text-slate-400">
-                {run.status === "completed" || run.status === "failed" ? "Completed at" : "Updated at"}
+                {run.status === "completed" || run.status === "failed"
+                  ? "Completed at"
+                  : "Updated at"}
               </dt>
               <dd className="font-mono text-sm text-white">
                 {new Date(run.updated_at).toLocaleString()}

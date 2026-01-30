@@ -34,6 +34,7 @@ class UserData(NamedTuple):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    mcp_api_key: Optional[str] = None
 
 
 def should_give_free_credits(email: str) -> bool:
@@ -79,7 +80,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET email = EXCLUDED.email,
                             name = EXCLUDED.name,
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
                         """
                 if clerk_user_id is not None
                 else """
@@ -89,7 +90,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET name = EXCLUDED.name,
                             clerk_user_id = COALESCE(users.clerk_user_id, EXCLUDED.clerk_user_id),
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
                         """
             )
             async with self.aget_connection() as conn:
@@ -141,7 +142,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                name,
                                is_active,
                                created_at,
-                               updated_at
+                               updated_at,
+                               mcp_api_key
                         FROM users
                         WHERE clerk_user_id = %s
                           AND is_active = TRUE
@@ -175,7 +177,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                name,
                                is_active,
                                created_at,
-                               updated_at
+                               updated_at,
+                               mcp_api_key
                         FROM users
                         WHERE email = %s
                           AND is_active = TRUE
@@ -209,7 +212,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                name,
                                is_active,
                                created_at,
-                               updated_at
+                               updated_at,
+                               mcp_api_key
                         FROM users
                         WHERE id = %s
                         """,
@@ -252,7 +256,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                             updated_at    = NOW()
                         WHERE id = %s
                           AND is_active = TRUE
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
                         """,
                         (email, name, clerk_user_id, user_id),
                     )
@@ -306,7 +310,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at
+                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.mcp_api_key
                         FROM users u
                                  JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
@@ -372,7 +376,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at
+                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
                         FROM users
                         WHERE is_active = TRUE
                         ORDER BY name ASC
@@ -383,3 +387,89 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
         except Exception as e:
             logger.exception(f"Error listing users: {e}")
             return []
+
+    async def get_user_by_mcp_api_key(self, mcp_api_key: str) -> Optional[UserData]:
+        """
+        Get user by MCP API key.
+
+        Args:
+            mcp_api_key: The MCP API key
+
+        Returns:
+            User data if found, None otherwise
+        """
+        try:
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        SELECT id,
+                               clerk_user_id,
+                               email,
+                               name,
+                               is_active,
+                               created_at,
+                               updated_at,
+                               mcp_api_key
+                        FROM users
+                        WHERE mcp_api_key = %s
+                          AND is_active = TRUE
+                        """,
+                        (mcp_api_key,),
+                    )
+                    result = await cursor.fetchone()
+                    return UserData(**result) if result else None
+        except Exception as e:
+            logger.exception(f"Error getting user by MCP API key: {e}")
+            return None
+
+    async def set_user_mcp_api_key(self, user_id: int, mcp_api_key: Optional[str]) -> bool:
+        """
+        Set or clear the MCP API key for a user.
+
+        Args:
+            user_id: Database user ID
+            mcp_api_key: The API key to set, or None to clear
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            async with self.aget_connection() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        UPDATE users
+                        SET mcp_api_key = %s,
+                            updated_at = NOW()
+                        WHERE id = %s AND is_active = TRUE
+                        """,
+                        (mcp_api_key, user_id),
+                    )
+                    return cursor.rowcount > 0
+        except Exception as e:
+            logger.exception(f"Error setting MCP API key: {e}")
+            return False
+
+    async def get_user_mcp_api_key(self, user_id: int) -> Optional[str]:
+        """
+        Get the MCP API key for a user.
+
+        Args:
+            user_id: Database user ID
+
+        Returns:
+            The API key if set, None otherwise
+        """
+        try:
+            async with self.aget_connection() as conn:
+                async with conn.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        "SELECT mcp_api_key FROM users WHERE id = %s AND is_active = TRUE",
+                        (user_id,),
+                    )
+                    result = await cursor.fetchone()
+                    return result["mcp_api_key"] if result else None
+        except Exception as e:
+            logger.exception(f"Error getting MCP API key: {e}")
+            return None

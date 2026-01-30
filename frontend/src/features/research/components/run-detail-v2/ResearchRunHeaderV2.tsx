@@ -110,7 +110,9 @@ export function ResearchRunHeaderV2({
               ) : (
                 <Sprout className="h-4 w-4" />
               )}
-              <span className="hidden sm:inline">{seedPending ? "Seeding..." : "Seed New Idea"}</span>
+              <span className="hidden sm:inline">
+                {seedPending ? "Seeding..." : "Seed New Idea"}
+              </span>
             </Button>
           )}
 

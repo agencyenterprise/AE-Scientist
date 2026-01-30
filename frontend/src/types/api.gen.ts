@@ -703,6 +703,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mcp-integration/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Mcp Api Key
+         * @description Get the current user's MCP API key (masked).
+         */
+        get: operations["get_mcp_api_key_api_mcp_integration_key_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Mcp Api Key
+         * @description Revoke the current user's MCP API key.
+         */
+        delete: operations["revoke_mcp_api_key_api_mcp_integration_key_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp-integration/generate-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate Mcp Api Key
+         * @description Generate a new MCP API key for the current user (replaces existing).
+         */
+        post: operations["generate_mcp_api_key_api_mcp_integration_generate_key_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public-config": {
         parameters: {
             query?: never;
@@ -1641,6 +1685,26 @@ export interface paths {
         get: operations["list_users_api_users__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mcp Endpoint
+         * @description Main MCP JSON-RPC endpoint.
+         */
+        post: operations["mcp_endpoint_mcp_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3117,6 +3181,38 @@ export interface components {
              * @description ISO timestamp when the review was created
              */
             created_at: string;
+        };
+        /**
+         * MCPApiKeyGeneratedResponse
+         * @description Response after generating a new API key.
+         */
+        MCPApiKeyGeneratedResponse: {
+            /** Api Key */
+            api_key: string;
+            /** Masked Key */
+            masked_key: string;
+        };
+        /**
+         * MCPApiKeyResponse
+         * @description Response containing the MCP API key status.
+         */
+        MCPApiKeyResponse: {
+            /** Has Key */
+            has_key: boolean;
+            /** Api Key */
+            api_key?: string | null;
+            /** Masked Key */
+            masked_key?: string | null;
+        };
+        /**
+         * MCPApiKeyRevokedResponse
+         * @description Response after revoking an API key.
+         */
+        MCPApiKeyRevokedResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
         };
         /**
          * ManualIdeaSeedRequest
@@ -6786,6 +6882,66 @@ export interface operations {
             };
         };
     };
+    get_mcp_api_key_api_mcp_integration_key_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPApiKeyResponse"];
+                };
+            };
+        };
+    };
+    revoke_mcp_api_key_api_mcp_integration_key_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPApiKeyRevokedResponse"];
+                };
+            };
+        };
+    };
+    generate_mcp_api_key_api_mcp_integration_generate_key_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPApiKeyGeneratedResponse"];
+                };
+            };
+        };
+    };
     get_public_config_api_public_config_get: {
         parameters: {
             query?: never;
@@ -8421,6 +8577,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserListResponse"];
+                };
+            };
+        };
+    };
+    mcp_endpoint_mcp_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

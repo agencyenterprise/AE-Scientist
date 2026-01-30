@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { MCPIntegrationModal } from "@/features/mcp-integration/components/MCPIntegrationModal";
 
 function getInitials(name: string): string {
   return name
@@ -67,6 +68,7 @@ export function UserProfileDropdown() {
                 >
                   Billing &amp; Credits
                 </button>
+                <MCPIntegrationModal />
                 <button
                   onClick={() => {
                     logout();
