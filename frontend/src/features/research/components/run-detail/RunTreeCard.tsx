@@ -1,6 +1,6 @@
 "use client";
 
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { RunTreeNode, RunTreeResponse } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Circle, GitBranch, Loader2, XCircle } from "lucide-react";
@@ -154,7 +154,13 @@ function TreeNodeDisplay({ item }: TreeNodeDisplayProps) {
 export function RunTreeCard({ runId }: RunTreeCardProps) {
   const { data, isLoading, error } = useQuery<RunTreeResponse>({
     queryKey: ["runTree", runId],
-    queryFn: () => apiFetch(`/research-runs/${runId}/tree`),
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/research-runs/{run_id}/tree", {
+        params: { path: { run_id: runId } },
+      });
+      if (error) throw new Error("Failed to load run tree");
+      return data as RunTreeResponse;
+    },
     enabled: !!runId,
     staleTime: 60 * 1000,
   });

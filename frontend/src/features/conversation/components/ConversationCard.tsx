@@ -7,7 +7,6 @@ import type { Components } from "react-markdown";
 import { ExternalLink } from "lucide-react";
 
 import type { Conversation } from "@/shared/lib/api-adapters";
-import type { SearchResult as SearchHit } from "@/types";
 
 interface SearchMatch {
   contentType: "conversation" | "imported_chat" | "draft_chat" | "project_draft";
@@ -357,15 +356,4 @@ export function ConversationCard({
       </div>
     </div>
   );
-}
-
-export function toSearchMatchFromHit(hit: SearchHit, query: string): SearchMatch {
-  return {
-    contentType: hit.content_type as SearchMatch["contentType"],
-    snippetMarkdown: hit.content_snippet,
-    query,
-    score: hit.score,
-    createdAt: hit.created_at,
-    createdByUserName: hit.created_by_user_name,
-  };
 }

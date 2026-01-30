@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
-import type { Idea, IdeaVersion, IdeaVersionsResponse } from "@/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import type { Idea, IdeaVersion } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
 import {
   getComparisonVersion,
   getNextVersion,
@@ -71,14 +71,18 @@ export function useVersionManagement({
 
   // Load idea versions
   const loadVersions = useCallback(async (): Promise<void> => {
-    try {
-      const result = await apiFetch<IdeaVersionsResponse>(
-        `/conversations/${conversationId}/idea/versions`
-      );
-      setAllVersions(result.versions);
-    } catch (error) {
+    const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea/versions", {
+      params: { path: { conversation_id: parseInt(conversationId, 10) } },
+    });
+
+    if (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to load versions:", error);
+      return;
+    }
+
+    if (data && "versions" in data) {
+      setAllVersions((data.versions as IdeaVersion[]) || []);
     }
   }, [conversationId]);
 

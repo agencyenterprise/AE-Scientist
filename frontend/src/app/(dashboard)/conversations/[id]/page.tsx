@@ -2,7 +2,7 @@
 
 import { ConversationView } from "@/features/conversation/components/ConversationView";
 import { useDashboard } from "@/features/dashboard/contexts/DashboardContext";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ConversationDetail, ConversationCostResponse } from "@/types";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -31,14 +31,21 @@ export default function ConversationPage({ params }: ConversationPageProps) {
       setIsLoading(true);
 
       try {
-        const [conversationDetail, costs] = await Promise.all([
-          apiFetch<ConversationDetail>(`/conversations/${id}`),
-          apiFetch<ConversationCostResponse>(`/conversations/${id}/costs`),
+        const [conversationResult, costsResult] = await Promise.all([
+          api.GET("/api/conversations/{conversation_id}", {
+            params: { path: { conversation_id: id } },
+          }),
+          api.GET("/api/conversations/{conversation_id}/costs", {
+            params: { path: { conversation_id: id } },
+          }),
         ]);
 
-        setSelectedConversation(conversationDetail);
-        setCostDetails(costs);
-        return conversationDetail;
+        if (conversationResult.error) throw new Error("Failed to load conversation");
+        if (costsResult.error) throw new Error("Failed to load costs");
+
+        setSelectedConversation(conversationResult.data as ConversationDetail);
+        setCostDetails(costsResult.data as ConversationCostResponse);
+        return conversationResult.data as ConversationDetail;
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error("Failed to load conversation detail:", error);
@@ -71,10 +78,11 @@ export default function ConversationPage({ params }: ConversationPageProps) {
   const refreshCostDetails = useCallback(async () => {
     if (conversationId === null) return;
     try {
-      const costs = await apiFetch<ConversationCostResponse>(
-        `/conversations/${conversationId}/costs`
-      );
-      setCostDetails(costs);
+      const { data: costs, error } = await api.GET("/api/conversations/{conversation_id}/costs", {
+        params: { path: { conversation_id: conversationId } },
+      });
+      if (error) throw new Error("Failed to refresh cost details");
+      setCostDetails(costs as ConversationCostResponse);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("Failed to refresh cost details:", error);

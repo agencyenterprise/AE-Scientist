@@ -1,8 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/shared/lib/api-client";
-import type { Idea, IdeaGetResponse } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
+import { isErrorResponse } from "@/shared/lib/api-adapters";
+import type { Idea } from "@/types";
 import type { UseSelectedIdeaDataReturn } from "../types/ideation-queue.types";
 
 /**
@@ -17,8 +18,11 @@ export function useSelectedIdeaData(conversationId: number | null): UseSelectedI
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["selected-idea", conversationId],
     queryFn: async () => {
-      const response = await apiFetch<IdeaGetResponse>(`/conversations/${conversationId}/idea`);
-      return response.idea;
+      const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
+        params: { path: { conversation_id: conversationId! } },
+      });
+      if (error || isErrorResponse(data)) throw new Error("Failed to fetch idea");
+      return data.idea;
     },
     // CRITICAL: Disable query when no selection
     enabled: conversationId !== null,

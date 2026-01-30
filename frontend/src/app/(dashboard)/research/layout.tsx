@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useState, useRef } from "react";
 
 import { ProtectedRoute } from "@/shared/components/ProtectedRoute";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRun } from "@/shared/lib/api-adapters";
 import { convertApiResearchRunList } from "@/shared/lib/api-adapters";
 import type { ResearchRunListResponseApi } from "@/types/research";
@@ -51,22 +51,19 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
     setIsLoading(true);
     try {
       const offset = (currentPage - 1) * pageSize;
-      const params = new URLSearchParams({
-        limit: String(pageSize),
-        offset: String(offset),
+
+      const { data: apiResponse, error } = await api.GET("/api/research-runs/", {
+        params: {
+          query: {
+            limit: pageSize,
+            offset: offset,
+            search: searchTerm || undefined,
+            status: statusFilter && statusFilter !== "all" ? statusFilter : undefined,
+          },
+        },
       });
-
-      if (searchTerm) {
-        params.set("search", searchTerm);
-      }
-      if (statusFilter && statusFilter !== "all") {
-        params.set("status", statusFilter);
-      }
-
-      const apiResponse = await apiFetch<ResearchRunListResponseApi>(
-        `/research-runs/?${params.toString()}`
-      );
-      const data = convertApiResearchRunList(apiResponse);
+      if (error) throw new Error("Failed to load research runs");
+      const data = convertApiResearchRunList(apiResponse as unknown as ResearchRunListResponseApi);
       setResearchRuns(data.items);
       setTotalCount(apiResponse.total);
     } catch {

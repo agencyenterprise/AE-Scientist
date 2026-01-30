@@ -86,8 +86,5 @@ export interface ConversationListParams {
 
 export type ConversationDetail = ConversationResponse & { cacheTimestamp?: number };
 
-// Search types still local; keep exporting
-export * from "./search";
-
 // Research types
 export * from "./research";

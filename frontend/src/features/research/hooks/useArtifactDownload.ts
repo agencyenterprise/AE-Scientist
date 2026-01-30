@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ArtifactPresignedUrlResponse } from "@/types/research";
 
 interface UseArtifactDownloadOptions {
@@ -35,9 +35,22 @@ export function useArtifactDownload({
 
     try {
       // Fetch presigned URL from backend
-      const response = await apiFetch<ArtifactPresignedUrlResponse>(
-        `/conversations/${conversationId}/idea/research-run/${runId}/artifacts/${artifactId}/presign`
+      const { data, error: fetchError } = await api.GET(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/artifacts/{artifact_id}/presign",
+        {
+          params: {
+            path: {
+              conversation_id: conversationId,
+              run_id: runId,
+              artifact_id: artifactId,
+            },
+          },
+        }
       );
+
+      if (fetchError) throw new Error("Failed to fetch presigned URL");
+
+      const response = data as ArtifactPresignedUrlResponse;
 
       // Redirect browser to presigned URL (triggers download)
       // window.location.href = response.url;

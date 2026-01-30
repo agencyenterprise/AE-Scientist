@@ -45,6 +45,21 @@ const eslintConfig = [
       "no-debugger": "error",
       "prefer-const": "error",
       "no-var": "error",
+
+      // Encourage typed API client usage
+      "no-restricted-imports": [
+        "warn",
+        {
+          paths: [
+            {
+              name: "@/shared/lib/api-client",
+              importNames: ["apiFetch"],
+              message:
+                "Prefer using the typed client from '@/shared/lib/api-client-typed' which validates paths at compile time. Use: import { api } from '@/shared/lib/api-client-typed'; const { data } = await api.GET('/api/...');",
+            },
+          ],
+        },
+      ],
     },
   },
   // Prevent JavaScript files

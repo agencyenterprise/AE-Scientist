@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchGpuTypesResponse } from "@/types";
 
 interface UseGpuSelectionResult {
@@ -21,9 +21,9 @@ export function useGpuSelection(): UseGpuSelectionResult {
   const refreshGpuTypes = useCallback(async (): Promise<void> => {
     setIsGpuTypeLoading(true);
     try {
-      const response = await apiFetch<ResearchGpuTypesResponse>(
-        "/conversations/research/gpu-types"
-      );
+      const { data, error } = await api.GET("/api/conversations/research/gpu-types");
+      if (error) throw new Error("Failed to fetch GPU types");
+      const response = data as ResearchGpuTypesResponse;
       const list = response.gpu_types ?? [];
       const prices = response.gpu_prices ?? {};
       setGpuTypes(list);

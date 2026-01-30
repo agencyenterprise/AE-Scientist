@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, ApiError } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
-import type { ResearchRunAcceptedResponse } from "@/types";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 /**
@@ -34,21 +33,16 @@ export function useLaunchResearch(conversationId: number | null) {
     }
     setIsLaunching(true);
     try {
-      const response = await apiFetch<ResearchRunAcceptedResponse>(
-        `/conversations/${conversationId}/idea/research-run`,
+      const { data, error, response } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run",
         {
-          method: "POST",
-          body: {
-            gpu_type: selectedGpuType,
-          },
+          params: { path: { conversation_id: conversationId } },
+          body: { gpu_type: selectedGpuType },
         }
       );
-      setIsLaunchModalOpen(false);
-      router.push(`/research/${response.run_id}`);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 402) {
-          const info = parseInsufficientCreditsError(error.data);
+      if (error) {
+        if (response.status === 402) {
+          const info = parseInsufficientCreditsError(error as unknown);
           const message =
             info?.message ||
             (info?.required
@@ -56,18 +50,17 @@ export function useLaunchResearch(conversationId: number | null) {
               : "Insufficient credits to launch research.");
           throw new Error(message);
         }
-        if (error.status === 400) {
+        if (response.status === 400) {
+          const errorObj = error as unknown as Record<string, unknown>;
           const detailValue =
-            error.data &&
-            typeof error.data === "object" &&
-            typeof (error.data as { detail?: unknown }).detail === "string"
-              ? (error.data as { detail: string }).detail
-              : undefined;
+            errorObj && typeof errorObj.detail === "string" ? errorObj.detail : undefined;
           const message = detailValue ?? "Failed to launch research run.";
           throw new Error(message);
         }
+        throw new Error("Failed to launch research run");
       }
-      throw error;
+      setIsLaunchModalOpen(false);
+      router.push(`/research/${data.run_id}`);
     } finally {
       setIsLaunching(false);
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { apiFetch } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import type { LlmReviewResponse, LlmReviewNotFoundResponse } from "@/types/research";
 import { isReview } from "@/types/research";
 
@@ -53,10 +53,18 @@ export function useReviewData({
     setNotFound(false);
 
     try {
-      const response = await apiFetch<LlmReviewResponse | LlmReviewNotFoundResponse>(
-        `/conversations/${conversationId}/idea/research-run/${runId}/review`
+      const { data, error: fetchError } = await api.GET(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/review",
+        {
+          params: {
+            path: { conversation_id: conversationId, run_id: runId },
+          },
+        }
       );
 
+      if (fetchError) throw new Error("Failed to fetch review");
+
+      const response = data as LlmReviewResponse | LlmReviewNotFoundResponse;
       if (isReview(response)) {
         setReview(response);
       } else {

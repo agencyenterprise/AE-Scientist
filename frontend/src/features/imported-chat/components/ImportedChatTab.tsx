@@ -16,7 +16,7 @@ import {
 
 import type { ConversationDetail } from "@/types";
 import type { ErrorResponse } from "@/types";
-import { apiFetch, ApiError } from "@/shared/lib/api-client";
+import { api } from "@/shared/lib/api-client-typed";
 import { extractSummary } from "@/shared/lib/api-adapters";
 import type { UpdateSummaryRequest } from "@/shared/lib/api-adapters";
 
@@ -98,25 +98,15 @@ export function ImportedChatTab({
     let pollInterval: NodeJS.Timeout | null = null;
 
     const fetchSummary = async (): Promise<void> => {
-      try {
-        const data = await apiFetch<{ summary?: string } | ErrorResponse>(
-          `/conversations/${conversation.id}/imported_chat_summary`
-        );
-        if (!("error" in data)) {
-          const s = extractSummary(data);
-          setSummary(s ?? "");
-          setIsGenerating(false);
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
-        } else if (!isCancelled) {
-          setSummary("");
-          setIsGenerating(false);
+      const { data, error, response } = await api.GET(
+        "/api/conversations/{conversation_id}/imported_chat_summary",
+        {
+          params: { path: { conversation_id: conversation.id } },
         }
-      } catch (err) {
+      );
+      if (error) {
         // 404 means summary is still generating - start polling
-        if (err instanceof ApiError && err.status === 404 && !isCancelled) {
+        if (response?.status === 404 && !isCancelled) {
           setSummary("");
           setIsGenerating(true);
           if (!pollInterval) {
@@ -130,6 +120,19 @@ export function ImportedChatTab({
           setSummary("");
           setIsGenerating(false);
         }
+        return;
+      }
+      if (data && !("error" in data)) {
+        const s = extractSummary(data);
+        setSummary(s ?? "");
+        setIsGenerating(false);
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      } else if (!isCancelled) {
+        setSummary("");
+        setIsGenerating(false);
       }
     };
 
@@ -171,21 +174,22 @@ export function ImportedChatTab({
     }
     setIsUpdatingSummary(true);
     try {
-      const result = await apiFetch<{ summary: string } | ErrorResponse>(
-        `/conversations/${conversation.id}/summary`,
+      const { data: result, error: patchError } = await api.PATCH(
+        "/api/conversations/{conversation_id}/summary",
         {
-          method: "PATCH",
+          params: { path: { conversation_id: conversation.id } },
           body: { summary: trimmed } as UpdateSummaryRequest,
         }
       );
-      if (!("error" in result)) {
+      if (patchError) throw new Error("Summary update failed");
+      if (result && !("error" in result)) {
         setIsEditingSummary(false);
         setIsWritingSummary(false);
         setEditSummary("");
         setSummary(result.summary);
         onSummaryGenerated?.(result.summary);
       } else {
-        throw new Error(result.error ?? "Summary update failed");
+        throw new Error((result as ErrorResponse)?.error ?? "Summary update failed");
       }
     } catch (error) {
       // eslint-disable-next-line no-console

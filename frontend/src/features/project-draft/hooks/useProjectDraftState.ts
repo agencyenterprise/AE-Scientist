@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import type { ConversationDetail, Idea, ResearchRunAcceptedResponse } from "@/types";
-import { apiFetch, ApiError } from "@/shared/lib/api-client";
+import type { ConversationDetail, Idea } from "@/types";
+import { api } from "@/shared/lib/api-client-typed";
 import { useProjectDraftData } from "./use-project-draft-data";
 import { parseInsufficientCreditsError } from "@/shared/utils/credits";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
@@ -23,15 +23,7 @@ interface UseProjectDraftStateReturn {
   handleCreateProject: () => void;
   handleCloseCreateModal: () => void;
   handleConfirmCreateProject: () => Promise<void>;
-  updateProjectDraft: (ideaData: {
-    title: string;
-    short_hypothesis: string;
-    related_work: string;
-    abstract: string;
-    experiments: string[];
-    expected_outcome: string;
-    risk_factors_and_limitations: string[];
-  }) => Promise<void>;
+  updateProjectDraft: (ideaData: { title: string; idea_markdown: string }) => Promise<void>;
   gpuTypes: string[];
   gpuPrices: Record<string, number | null>;
   selectedGpuType: string | null;
@@ -80,21 +72,21 @@ export function useProjectDraftState({
       if (!selectedGpuType) {
         throw new Error("Select a GPU type before launching research.");
       }
-      const response = await apiFetch<ResearchRunAcceptedResponse>(
-        `/conversations/${conversation.id}/idea/research-run`,
+      const { data, error } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run",
         {
-          method: "POST",
+          params: { path: { conversation_id: conversation.id } },
           body: {
             gpu_type: selectedGpuType,
           },
         }
       );
-      setIsCreateModalOpen(false);
-      router.push(`/research/${response.run_id}`);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 402) {
-          const info = parseInsufficientCreditsError(error.data);
+
+      if (error) {
+        // Check for 402 (insufficient credits) - error has status in openapi-fetch
+        const errorAny = error as { status?: number; detail?: string };
+        if (errorAny.status === 402 || (typeof error === "object" && "required" in error)) {
+          const info = parseInsufficientCreditsError(error);
           const message =
             info?.message ||
             (info?.required
@@ -102,18 +94,14 @@ export function useProjectDraftState({
               : "Insufficient credits to launch research.");
           throw new Error(message);
         }
-        if (error.status === 400) {
-          const detailValue =
-            error.data &&
-            typeof error.data === "object" &&
-            typeof (error.data as { detail?: unknown }).detail === "string"
-              ? (error.data as { detail: string }).detail
-              : undefined;
-          const message = detailValue ?? "Failed to launch research run.";
-          throw new Error(message);
-        }
+        // Check for 400 (bad request)
+        const detailValue = errorAny.detail;
+        const message = detailValue ?? "Failed to launch research run.";
+        throw new Error(message);
       }
-      throw error;
+
+      setIsCreateModalOpen(false);
+      router.push(`/research/${data?.run_id}`);
     } finally {
       setIsCreatingProject(false);
     }
