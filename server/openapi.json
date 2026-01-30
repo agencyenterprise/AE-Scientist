@@ -1630,7 +1630,7 @@
           "mcp-integration"
         ],
         "summary": "Get Mcp Api Key",
-        "description": "Get the current user's MCP API key (masked).",
+        "description": "Get the current user's MCP API key.",
         "operationId": "get_mcp_api_key_api_mcp_integration_key_get",
         "responses": {
           "200": {

@@ -712,7 +712,7 @@ export interface paths {
         };
         /**
          * Get Mcp Api Key
-         * @description Get the current user's MCP API key (masked).
+         * @description Get the current user's MCP API key.
          */
         get: operations["get_mcp_api_key_api_mcp_integration_key_get"];
         put?: never;

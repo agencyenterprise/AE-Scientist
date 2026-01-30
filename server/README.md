@@ -104,20 +104,36 @@ The backend exposes:
 On the frontend, add the corresponding public variables (`NEXT_PUBLIC_*`) so the Billing page can
 display thresholds and redirect URLs.
 
-### MCP Server Integration (Claude Code)
+### MCP Server Integration (Claude Code & Cursor)
 
-AE Scientist exposes an MCP (Model Context Protocol) server that allows you to run research pipelines directly from Claude Code.
+AE Scientist exposes an MCP (Model Context Protocol) server that allows you to run research pipelines directly from Claude Code or Cursor.
 
 #### How It Works
 
-1. **Generate an API Key**: In the frontend, click your profile dropdown and select "Integrate with Claude" to generate an MCP API key.
+1. **Generate an API Key**: In the frontend, click your profile dropdown and select "MCP Integration" to generate an MCP API key.
 
-2. **Add the MCP Server to Claude Code**: Run the command shown in the modal:
+2. **Add the MCP Server**:
+
+   **For Claude Code**, run this command in your terminal:
    ```bash
    claude mcp add-json research-pipeline '{"type":"http","url":"https://your-backend-url/mcp","headers":{"Authorization":"Bearer mcp_your_api_key"}}'
    ```
 
-3. **Use the `run_pipeline` Tool**: In Claude Code, you can now use the `run_pipeline` tool to start research runs:
+   **For Cursor**, add this to your `.cursor/mcp.json` file:
+   ```json
+   {
+     "mcpServers": {
+       "research-pipeline": {
+         "url": "https://your-backend-url/mcp",
+         "headers": {
+           "Authorization": "Bearer mcp_your_api_key"
+         }
+       }
+     }
+   }
+   ```
+
+3. **Use the `run_pipeline` Tool**: You can now use the `run_pipeline` tool to start research runs:
    ```
    Use the run_pipeline tool to research "Investigating novel attention mechanisms"
    ```
@@ -137,7 +153,7 @@ The `run_pipeline` tool accepts:
 | Endpoint | Description |
 | --- | --- |
 | `POST /mcp` | MCP JSON-RPC endpoint (authenticates via Bearer token with MCP API key) |
-| `GET /api/mcp-integration/key` | Get current user's MCP API key (masked) |
+| `GET /api/mcp-integration/key` | Get current user's MCP API key |
 | `POST /api/mcp-integration/generate-key` | Generate a new MCP API key |
 | `DELETE /api/mcp-integration/key` | Revoke the current MCP API key |
 

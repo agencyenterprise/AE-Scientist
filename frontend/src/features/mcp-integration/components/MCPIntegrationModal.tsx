@@ -14,12 +14,7 @@ import {
 import { Button } from "@/shared/components/ui/button";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 import { config } from "@/shared/lib/config";
-import {
-  fetchMCPApiKey,
-  generateMCPApiKey,
-  revokeMCPApiKey,
-  type MCPApiKeyGeneratedResponse,
-} from "../api";
+import { fetchMCPApiKey, generateMCPApiKey, revokeMCPApiKey } from "../api";
 
 interface MCPIntegrationModalProps {
   trigger?: React.ReactNode;
@@ -28,7 +23,6 @@ interface MCPIntegrationModalProps {
 export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const apiKeyQuery = useQuery({
@@ -39,8 +33,7 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
 
   const generateMutation = useMutation({
     mutationFn: generateMCPApiKey,
-    onSuccess: (data: MCPApiKeyGeneratedResponse) => {
-      setNewlyGeneratedKey(data.api_key);
+    onSuccess: () => {
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["mcp-integration", "key"] });
     },
@@ -52,7 +45,6 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
   const revokeMutation = useMutation({
     mutationFn: revokeMCPApiKey,
     onSuccess: () => {
-      setNewlyGeneratedKey(null);
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["mcp-integration", "key"] });
     },
@@ -62,20 +54,29 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
   });
 
   const hasKey = apiKeyQuery.data?.has_key ?? false;
-  const maskedKey = apiKeyQuery.data?.masked_key;
-  const displayKey = newlyGeneratedKey ?? maskedKey ?? "";
+  const apiKey = apiKeyQuery.data?.api_key ?? "";
 
-  // Build the MCP add-json command
+  // Build the MCP commands
   const mcpServerUrl = `${config.apiBaseUrl}/mcp`;
-  const mcpAddJsonCommand = newlyGeneratedKey
-    ? `claude mcp add-json research-pipeline '{"type":"http","url":"${mcpServerUrl}","headers":{"Authorization":"Bearer ${newlyGeneratedKey}"}}'`
-    : "";
+  const claudeCommand = `claude mcp add-json research-pipeline '{"type":"http","url":"${mcpServerUrl}","headers":{"Authorization":"Bearer ${apiKey}"}}'`;
+  const cursorConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "research-pipeline": {
+          url: mcpServerUrl,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        },
+      },
+    },
+    null,
+    2
+  );
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
-      // Reset state when modal closes
-      setNewlyGeneratedKey(null);
       setError(null);
     }
   };
@@ -86,16 +87,16 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
         {trigger ?? (
           <button className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white flex items-center gap-2">
             <Plug className="h-4 w-4" />
-            Integrate with Claude
+            Integrate with Claude/Cursor
           </button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Integrate with Claude Code</DialogTitle>
+          <DialogTitle>MCP Integration</DialogTitle>
           <DialogDescription>
-            Connect AE Scientist to Claude Code to run research pipelines directly from your
-            terminal.
+            Connect AE Scientist to Claude Code or Cursor to run research pipelines directly from
+            your IDE.
           </DialogDescription>
         </DialogHeader>
 
@@ -112,15 +113,13 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
 
             {apiKeyQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : hasKey || newlyGeneratedKey ? (
+            ) : hasKey ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <code className="flex-1 rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground overflow-x-auto">
-                    {displayKey}
+                    {apiKey}
                   </code>
-                  {newlyGeneratedKey && (
-                    <CopyToClipboardButton text={newlyGeneratedKey} label="Copy API key" />
-                  )}
+                  <CopyToClipboardButton text={apiKey} label="Copy API key" />
                 </div>
 
                 <div className="flex gap-2">
@@ -156,29 +155,54 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
             )}
           </div>
 
-          {/* Setup Instructions */}
-          {newlyGeneratedKey && (
-            <div className="space-y-3 pt-2 border-t border-border">
-              <h3 className="text-sm font-medium text-foreground">Setup Instructions</h3>
-              <p className="text-sm text-muted-foreground">
-                Run this command in your terminal to add AE Scientist to Claude Code:
-              </p>
+          {/* Setup Instructions - only shown when key exists */}
+          {hasKey && (
+            <>
+              {/* Claude Code Setup */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <h3 className="text-sm font-medium text-foreground">Claude Code Setup</h3>
+                <p className="text-sm text-muted-foreground">
+                  Run this command in your terminal to add AE Scientist to Claude Code:
+                </p>
 
-              <div className="relative">
-                <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
-                  {mcpAddJsonCommand}
-                </pre>
-                <div className="absolute right-2 top-2">
-                  <CopyToClipboardButton text={mcpAddJsonCommand} label="Copy command" />
+                <div className="relative">
+                  <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
+                    {claudeCommand}
+                  </pre>
+                  <div className="absolute right-2 top-2">
+                    <CopyToClipboardButton text={claudeCommand} label="Copy command" />
+                  </div>
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                After running the command, you can use the{" "}
+              {/* Cursor Setup */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <h3 className="text-sm font-medium text-foreground">Cursor Setup</h3>
+                <p className="text-sm text-muted-foreground">
+                  Add this to your{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                    .cursor/mcp.json
+                  </code>{" "}
+                  file:
+                </p>
+
+                <div className="relative">
+                  <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
+                    {cursorConfig}
+                  </pre>
+                  <div className="absolute right-2 top-2">
+                    <CopyToClipboardButton text={cursorConfig} label="Copy config" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Usage note */}
+              <p className="text-xs text-muted-foreground pt-2">
+                After setup, you can use the{" "}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">run_pipeline</code>{" "}
-                tool in Claude Code to start research runs.
+                tool to start research runs.
               </p>
-            </div>
+            </>
           )}
         </div>
       </DialogContent>

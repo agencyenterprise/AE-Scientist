@@ -53,7 +53,7 @@ def _generate_mcp_api_key() -> str:
 
 @router.get("/key", response_model=MCPApiKeyResponse)
 async def get_mcp_api_key(request: Request) -> MCPApiKeyResponse:
-    """Get the current user's MCP API key (masked)."""
+    """Get the current user's MCP API key."""
     user = get_current_user(request)
     db = get_database()
 
@@ -62,6 +62,7 @@ async def get_mcp_api_key(request: Request) -> MCPApiKeyResponse:
     if api_key:
         return MCPApiKeyResponse(
             has_key=True,
+            api_key=api_key,
             masked_key=_mask_api_key(api_key),
         )
 
