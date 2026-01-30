@@ -212,9 +212,7 @@ async def handle_tools_call(params: dict | None, user: UserData) -> dict:
         )
 
         # Build the frontend URL for this run
-        frontend_url = (
-            f"{settings.FRONTEND_URL.rstrip('/')}/research/{conversation_id}/runs/{run_id}"
-        )
+        frontend_url = f"{settings.FRONTEND_URL.rstrip('/')}/research/{run_id}"
 
         logger.info(
             "MCP pipeline launched: run_id=%s user=%s title=%s",
