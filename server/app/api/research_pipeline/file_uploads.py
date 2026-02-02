@@ -95,11 +95,11 @@ async def check_artifact_exists(
     s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
 
     s3_service = get_s3_service()
-    try:
+    if s3_service.file_exists(s3_key):
         file_info = s3_service.get_file_info(s3_key=s3_key)
         exists = True
         file_size = file_info.get("content_length")
-    except Exception:
+    else:
         exists = False
         file_size = None
 
