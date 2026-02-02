@@ -20,14 +20,14 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: Qwen/Qwen2.5-VL-7B-Instruct
+  model: Qwen:Qwen2.5-VL-7B-Instruct
   temperature: 1.0
 
 # LLM settings for paper writeup
 writeup:
-  model: Qwen/Qwen2.5-VL-7B-Instruct
-  plot_model: Qwen/Qwen2.5-VL-7B-Instruct
-  citation_model: Qwen/Qwen2.5-VL-7B-Instruct
+  model: Qwen:Qwen2.5-VL-7B-Instruct
+  plot_model: Qwen:Qwen2.5-VL-7B-Instruct
+  citation_model: Qwen:Qwen2.5-VL-7B-Instruct
   temperature: 1.0
   writeup_retries: 3
   num_cite_rounds: 5
@@ -35,7 +35,7 @@ writeup:
   page_limit: 8
 
 review:
-  model: Qwen/Qwen2.5-VL-7B-Instruct
+  model: Qwen:Qwen2.5-VL-7B-Instruct
   temperature: 1.0
 
 experiment:
@@ -57,16 +57,16 @@ agent:
 
   # LLM settings for coding
   code:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: Qwen:Qwen2.5-VL-7B-Instruct
     temperature: 1.0
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: Qwen:Qwen2.5-VL-7B-Instruct
     temperature: 0.5
 
   vlm_feedback:
-    model: Qwen/Qwen2.5-VL-7B-Instruct
+    model: Qwen:Qwen2.5-VL-7B-Instruct
     temperature: 0.5
 
   search:

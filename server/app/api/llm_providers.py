@@ -53,7 +53,7 @@ def get_llm_model_by_id(provider: str, model_id: str) -> LLMModel:
 def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
     """Extract the model name and provider from a model.
 
-    Handles both 'provider/model' format (our convention) and plain model names.
+    Handles 'provider:model' format (LangChain's native format) and plain model names.
     """
     if isinstance(model, BaseChatModel):
         model_attr = getattr(model, "model", None)
@@ -65,9 +65,9 @@ def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, st
     else:
         model_str = model
 
-    # Handle provider/model format (our convention)
-    if "/" in model_str:
-        provider, model_name = model_str.split("/", 1)
+    # Handle provider:model format (LangChain's native format)
+    if ":" in model_str:
+        provider, model_name = model_str.split(":", 1)
         return model_name, provider
 
     # Fall back to LangChain's inference for plain model names

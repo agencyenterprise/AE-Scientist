@@ -14,23 +14,18 @@ from .token_tracking import TokenUsage, TrackCostCallbackHandler
 logger = logging.getLogger(__name__)
 
 
-def _create_chat_model(provider: str, model: str, temperature: float) -> BaseChatModel:
-    """Create a chat model using separate provider and model parameters.
-
-    LangChain's init_chat_model expects 'provider:model' format (with colon).
-    We combine provider and model with a colon separator.
+def _create_chat_model(model: str, temperature: float) -> BaseChatModel:
+    """Create a chat model using LangChain's native 'provider:model' format.
 
     Args:
-        provider: LLM provider (e.g., "anthropic", "openai")
-        model: Model name (e.g., "claude-sonnet-4-20250514")
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         temperature: Sampling temperature
 
     Returns:
         Configured BaseChatModel instance
     """
-    model_string = f"{provider}:{model}"
     return init_chat_model(
-        model=model_string,
+        model=model,
         temperature=temperature,
     )
 
@@ -40,7 +35,6 @@ PromptType = str | dict[str, Any] | list[Any] | None
 
 def get_batch_responses_from_llm(
     prompt: str,
-    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -49,7 +43,18 @@ def get_batch_responses_from_llm(
     n_responses: int = 1,
     usage: TokenUsage | None = None,
 ) -> tuple[list[str], list[list[BaseMessage]]]:
-    """Get multiple responses from an LLM."""
+    """Get multiple responses from an LLM.
+
+    Args:
+        prompt: The prompt to send
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        system_message: System message for the LLM
+        temperature: Sampling temperature
+        print_debug: Whether to print debug output
+        msg_history: Optional message history
+        n_responses: Number of responses to generate
+        usage: Optional token usage accumulator
+    """
     if msg_history is None:
         msg_history = []
 
@@ -58,7 +63,6 @@ def get_batch_responses_from_llm(
     for _ in range(n_responses):
         content, history = get_response_from_llm(
             prompt=prompt,
-            provider=provider,
             model=model,
             system_message=system_message,
             temperature=temperature,
@@ -73,22 +77,27 @@ def get_batch_responses_from_llm(
 
 
 def make_llm_call(
-    provider: str,
     model: str,
     temperature: float,
     system_message: str,
     prompt: list[BaseMessage],
     usage: TokenUsage | None = None,
 ) -> AIMessage:
-    """Make a single LLM call with optional token tracking."""
+    """Make a single LLM call with optional token tracking.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        temperature: Sampling temperature
+        system_message: System message for the LLM
+        prompt: List of messages to send
+        usage: Optional token usage accumulator
+    """
     messages: list[BaseMessage] = []
     if system_message:
         messages.append(SystemMessage(content=system_message))
     messages.extend(prompt)
 
-    logger.debug(
-        "LLM make_llm_call - provider=%s, model=%s, temperature=%s", provider, model, temperature
-    )
+    logger.debug("LLM make_llm_call - model=%s, temperature=%s", model, temperature)
     logger.debug("LLM make_llm_call - system_message: %s", system_message)
     for idx, message in enumerate(messages):
         logger.debug(
@@ -98,13 +107,13 @@ def make_llm_call(
             message.content,
         )
 
-    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
+    chat = _create_chat_model(model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
     )
 
-    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
     ai_message = retrying_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )
@@ -119,7 +128,6 @@ def make_llm_call(
 
 def get_response_from_llm(
     prompt: str,
-    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -127,13 +135,22 @@ def get_response_from_llm(
     msg_history: list[BaseMessage] | None = None,
     usage: TokenUsage | None = None,
 ) -> Tuple[str, list[BaseMessage]]:
-    """Get a response from an LLM."""
+    """Get a response from an LLM.
+
+    Args:
+        prompt: The prompt to send
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        system_message: System message for the LLM
+        temperature: Sampling temperature
+        print_debug: Whether to print debug output
+        msg_history: Optional message history
+        usage: Optional token usage accumulator
+    """
     if msg_history is None:
         msg_history = []
 
     new_msg_history = msg_history + [HumanMessage(content=prompt)]
     ai_message = make_llm_call(
-        provider=provider,
         model=model,
         temperature=temperature,
         system_message=system_message,
@@ -217,7 +234,6 @@ def compile_prompt_to_md(
 def get_structured_response_from_llm(
     *,
     prompt: str,
-    provider: str,
     model: str,
     system_message: PromptType | None,
     temperature: float,
@@ -226,7 +242,18 @@ def get_structured_response_from_llm(
     msg_history: list[BaseMessage] | None = None,
     usage: TokenUsage | None = None,
 ) -> Tuple[dict[str, Any], list[BaseMessage]]:
-    """Get a structured response from an LLM using a Pydantic schema."""
+    """Get a structured response from an LLM using a Pydantic schema.
+
+    Args:
+        prompt: The prompt to send
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        system_message: System message for the LLM
+        temperature: Sampling temperature
+        schema_class: Pydantic model class for structured output
+        print_debug: Whether to print debug output
+        msg_history: Optional message history
+        usage: Optional token usage accumulator
+    """
     if msg_history is None:
         msg_history = []
 
@@ -247,8 +274,7 @@ def get_structured_response_from_llm(
         for message in messages
     ]
     logger.info(
-        "LLM structured payload (provider=%s, model=%s, temperature=%s, messages=%s)",
-        provider,
+        "LLM structured payload (model=%s, temperature=%s, messages=%s)",
         model,
         temperature,
         len(message_payload),
@@ -258,10 +284,10 @@ def get_structured_response_from_llm(
         json.dumps(message_payload, ensure_ascii=False),
     )
 
-    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
 
-    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
     parsed_model = structured_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )

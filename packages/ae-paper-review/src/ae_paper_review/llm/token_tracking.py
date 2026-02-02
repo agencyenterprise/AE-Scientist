@@ -25,16 +25,21 @@ class TokenUsage:
     def add(
         self,
         *,
-        provider: str,
         model: str,
         input_tokens: int,
         cached_input_tokens: int,
         output_tokens: int,
     ) -> None:
-        """Add a single usage record."""
+        """Add a single usage record.
+
+        Args:
+            model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+            input_tokens: Number of input tokens used
+            cached_input_tokens: Number of cached input tokens
+            output_tokens: Number of output tokens used
+        """
         self.usages.append(
             {
-                "provider": provider,
                 "model": model,
                 "input_tokens": input_tokens,
                 "cached_input_tokens": cached_input_tokens,
@@ -83,11 +88,15 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
     def __init__(
         self,
         *,
-        provider: str,
         model: str,
         usage: TokenUsage | None = None,
     ) -> None:
-        self.provider = provider
+        """Initialize the callback handler.
+
+        Args:
+            model: Model string in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+            usage: Optional TokenUsage accumulator to use
+        """
         self.model = model
         self.usage = usage or TokenUsage()
 
@@ -124,7 +133,6 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                 output_tokens = _usage_value_to_int(value=usage_metadata.get("output_tokens"))
 
                 self.usage.add(
-                    provider=self.provider,
                     model=self.model,
                     input_tokens=input_tokens,
                     cached_input_tokens=cached_input_tokens,

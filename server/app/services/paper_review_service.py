@@ -25,31 +25,6 @@ from app.services.s3_service import S3Service
 logger = logging.getLogger(__name__)
 
 
-def parse_model_string(model_string: str) -> tuple[str, str]:
-    """Parse a 'provider/model' string into separate provider and model components.
-
-    Args:
-        model_string: Model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
-
-    Returns:
-        Tuple of (provider, model)
-
-    Raises:
-        ValueError: If model_string is not in the expected format
-    """
-    if "/" not in model_string:
-        raise ValueError(
-            f"Invalid model format: '{model_string}'. Expected 'provider/model' format "
-            "(e.g., 'anthropic/claude-sonnet-4-20250514')"
-        )
-    provider, model = model_string.split("/", 1)
-    if not provider or not model:
-        raise ValueError(
-            f"Invalid model format: '{model_string}'. Both provider and model must be non-empty."
-        )
-    return provider, model
-
-
 # Minimum credits required to start a paper review
 MINIMUM_CREDITS_FOR_REVIEW = 100
 
@@ -78,7 +53,6 @@ def calculate_review_cost(input_tokens: int, output_tokens: int) -> int:
 
 def _run_review_sync(
     paper_text: str,
-    provider: str,
     model: str,
     num_reviews_ensemble: int,
     num_reflections: int,
@@ -90,14 +64,12 @@ def _run_review_sync(
 
     Args:
         paper_text: The extracted text from the paper PDF
-        provider: LLM provider (e.g., "anthropic", "openai")
-        model: Model name (e.g., "claude-sonnet-4-20250514")
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         num_reviews_ensemble: Number of ensemble reviews
         num_reflections: Number of reflection rounds
     """
     return perform_review(
         text=paper_text,
-        provider=provider,
         model=model,
         temperature=1,
         num_reviews_ensemble=num_reviews_ensemble,
@@ -179,15 +151,11 @@ class PaperReviewService:
             # Load paper text from PDF (relatively fast, ok to do here)
             paper_text = load_paper(str(tmp_path))
 
-            # Parse model string into provider and model components
-            provider, model_name = parse_model_string(model)
-
             # Run the LLM review in a thread pool to avoid blocking
             result = await asyncio.to_thread(
                 _run_review_sync,
                 paper_text,
-                provider,
-                model_name,
+                model,
                 num_reviews_ensemble,
                 num_reflections,
             )

@@ -64,19 +64,26 @@ def save_cost_track(
     cached_input_tokens: int,
     output_tokens: int,
 ) -> None:
-    """Save token usage either via webhook or to file depending on environment."""
+    """Save token usage either via webhook or to file depending on environment.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        input_tokens: Number of input tokens used
+        cached_input_tokens: Number of cached input tokens
+        output_tokens: Number of output tokens used
+    """
     run_id = RUN_ID
-    model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
     if _should_use_webhook_tracking(run_id):
         save_webhook_cost_track(
-            provider=provider,
-            model_name=model_name,
+            model=model,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
         )
     else:
+        # File tracking still uses separate provider/model columns
+        model_name, provider = extract_model_name_and_provider(model)
         save_file_cost_track(
             provider=provider,
             model_name=model_name,
@@ -89,13 +96,19 @@ def save_cost_track(
 
 def save_webhook_cost_track(
     *,
-    provider: str,
-    model_name: str,
+    model: str,
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
 ) -> None:
-    """Publish token usage via webhook. Server will look up conversation_id from run_id."""
+    """Publish token usage via webhook.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        input_tokens: Number of input tokens used
+        cached_input_tokens: Number of cached input tokens
+        output_tokens: Number of output tokens used
+    """
     webhook_client = _get_webhook_client()
     if webhook_client is None:
         logging.warning("Webhook client not configured; skipping token usage tracking")
@@ -105,8 +118,7 @@ def save_webhook_cost_track(
         webhook_client.publish(
             kind="token_usage",
             payload=TokenUsageEvent(
-                provider=provider,
-                model=model_name,
+                model=model,
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
                 output_tokens=output_tokens,
@@ -210,7 +222,7 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
 def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
     """Extract the model name and provider from a model.
 
-    Handles both 'provider/model' format (our convention) and plain model names.
+    Handles 'provider:model' format (LangChain's native format) and plain model names.
     """
     if isinstance(model, BaseChatModel):
         model_attr = getattr(model, "model", None)
@@ -222,9 +234,9 @@ def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, st
     else:
         model_str = model
 
-    # Handle provider/model format (our convention)
-    if "/" in model_str:
-        provider, model_name = model_str.split("/", 1)
+    # Handle provider:model format (LangChain's native format)
+    if ":" in model_str:
+        provider, model_name = model_str.split(":", 1)
         return model_name, provider
 
     # Fall back to LangChain's inference for plain model names

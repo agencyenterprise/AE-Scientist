@@ -9,11 +9,10 @@ Example usage:
     # Load paper from PDF
     paper_text = load_paper("paper.pdf")
 
-    # Perform review - provider and model are separate parameters
+    # Perform review using "provider:model" format (LangChain native format)
     result = perform_review(
         text=paper_text,
-        provider="anthropic",
-        model="claude-sonnet-4-20250514",
+        model="anthropic:claude-sonnet-4-20250514",
         temperature=0.1,
         num_reviews_ensemble=3,
         num_reflections=2,

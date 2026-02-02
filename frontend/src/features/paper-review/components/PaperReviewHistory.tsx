@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect, useState, useRef } from "react";
 import {
   Loader2,
@@ -198,7 +199,7 @@ export function PaperReviewHistory() {
       setExpandedReviewData(result);
       setExpandedReviewId(reviewId);
     } catch (err) {
-      console.error("Failed to fetch review details:", err);
+      Sentry.captureException(err);
     } finally {
       setLoadingReviewId(null);
     }
@@ -291,9 +292,7 @@ export function PaperReviewHistory() {
                     : ""
               }`}
             >
-              <div className="flex-shrink-0">
-                {getStatusIcon(review.status, review.decision)}
-              </div>
+              <div className="flex-shrink-0">{getStatusIcon(review.status, review.decision)}</div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -316,22 +315,28 @@ export function PaperReviewHistory() {
                 <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
                   {review.status === "completed" && review.overall !== null && (
                     <span>
-                      Score: <span className={getScoreColor(review.overall)}>{review.overall}/10</span>
+                      Score:{" "}
+                      <span className={getScoreColor(review.overall)}>{review.overall}/10</span>
                     </span>
                   )}
                   <span>{review.model.split("/").pop()}</span>
-                  <span>{formatDistanceToNow(new Date(review.created_at), { addSuffix: true })}</span>
+                  <span>
+                    {formatDistanceToNow(new Date(review.created_at), { addSuffix: true })}
+                  </span>
                 </div>
               </div>
 
-              {isLoading && <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-slate-400" />}
-              {!isLoading && !isInProgress && isClickable && (
-                isExpanded ? (
+              {isLoading && (
+                <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-slate-400" />
+              )}
+              {!isLoading &&
+                !isInProgress &&
+                isClickable &&
+                (isExpanded ? (
                   <ChevronDown className="h-5 w-5 flex-shrink-0 text-slate-400" />
                 ) : (
                   <ChevronRight className="h-5 w-5 flex-shrink-0 text-slate-600" />
-                )
-              )}
+                ))}
               {isInProgress && (
                 <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-amber-400" />
               )}

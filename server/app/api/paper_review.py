@@ -118,7 +118,7 @@ async def create_paper_review(
     request: Request,
     response: Response,
     file: UploadFile = File(..., description="PDF file to review"),
-    model: str = Form(..., description="LLM model to use for review (provider/model format)"),
+    model: str = Form(..., description="LLM model to use for review (provider:model format)"),
     num_reviews_ensemble: int = Form(
         ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
     ),

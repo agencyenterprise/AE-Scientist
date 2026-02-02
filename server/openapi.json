@@ -4798,7 +4798,7 @@
           "model": {
             "type": "string",
             "title": "Model",
-            "description": "LLM model to use for review (provider/model format)"
+            "description": "LLM model to use for review (provider:model format)"
           },
           "num_reviews_ensemble": {
             "type": "integer",
@@ -12202,10 +12202,6 @@
       },
       "TokenUsageEvent": {
         "properties": {
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
           "model": {
             "type": "string",
             "title": "Model"
@@ -12225,7 +12221,6 @@
         },
         "type": "object",
         "required": [
-          "provider",
           "model",
           "input_tokens",
           "cached_input_tokens",

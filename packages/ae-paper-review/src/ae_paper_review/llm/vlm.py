@@ -57,14 +57,21 @@ def _build_vlm_messages(
 
 
 def make_vlm_call(
-    provider: str,
     model: str,
     temperature: float,
     system_message: str,
     prompt: list[BaseMessage],
     usage: TokenUsage | None = None,
 ) -> AIMessage:
-    """Make a single VLM call with optional token tracking."""
+    """Make a single VLM call with optional token tracking.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        temperature: Sampling temperature
+        system_message: System message for the VLM
+        prompt: List of messages to send
+        usage: Optional token usage accumulator
+    """
     history = prompt[:-1]
     last = prompt[-1] if prompt else HumanMessage(content="")
     user_content = last.content
@@ -81,9 +88,7 @@ def make_vlm_call(
             HumanMessage(content=str(user_content)),
         ]
 
-    logger.debug(
-        "VLM make_vlm_call - provider=%s, model=%s, temperature=%s", provider, model, temperature
-    )
+    logger.debug("VLM make_vlm_call - model=%s, temperature=%s", model, temperature)
     logger.debug("VLM make_vlm_call - system_message: %s", system_message)
     for idx, message in enumerate(messages):
         logger.debug(
@@ -92,13 +97,13 @@ def make_vlm_call(
             message.type,
         )
 
-    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
+    chat = _create_chat_model(model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
     )
 
-    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
     ai_message = retrying_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )
@@ -114,7 +119,6 @@ def make_vlm_call(
 def get_response_from_vlm(
     msg: str,
     image_paths: str | list[str],
-    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -123,7 +127,19 @@ def get_response_from_vlm(
     max_images: int = 25,
     usage: TokenUsage | None = None,
 ) -> Tuple[str, list[BaseMessage]]:
-    """Get response from vision-language model."""
+    """Get response from vision-language model.
+
+    Args:
+        msg: The message to send
+        image_paths: Path(s) to image file(s)
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        system_message: System message for the VLM
+        temperature: Sampling temperature
+        print_debug: Whether to print debug output
+        msg_history: Optional message history
+        max_images: Maximum number of images to include
+        usage: Optional token usage accumulator
+    """
     if msg_history is None:
         msg_history = []
 
@@ -138,7 +154,6 @@ def get_response_from_vlm(
 
     new_msg_history = msg_history + [messages[-1]]
     ai_message = make_vlm_call(
-        provider=provider,
         model=model,
         temperature=temperature,
         system_message=system_message,
@@ -169,7 +184,6 @@ def get_structured_response_from_vlm(
     *,
     msg: str,
     image_paths: str | list[str],
-    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -179,7 +193,20 @@ def get_structured_response_from_vlm(
     max_images: int = 25,
     usage: TokenUsage | None = None,
 ) -> Tuple[BaseModel, list[BaseMessage]]:
-    """Get structured response from vision-language model."""
+    """Get structured response from vision-language model.
+
+    Args:
+        msg: The message to send
+        image_paths: Path(s) to image file(s)
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        system_message: System message for the VLM
+        temperature: Sampling temperature
+        schema_class: Pydantic model class for structured output
+        print_debug: Whether to print debug output
+        msg_history: Optional message history
+        max_images: Maximum number of images to include
+        usage: Optional token usage accumulator
+    """
     if msg_history is None:
         msg_history = []
 
@@ -193,10 +220,10 @@ def get_structured_response_from_vlm(
     )
 
     new_msg_history = msg_history + [messages[-1]]
-    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
 
-    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
     parsed = structured_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )

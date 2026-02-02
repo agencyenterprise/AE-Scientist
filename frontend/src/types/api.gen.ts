@@ -1983,7 +1983,7 @@ export interface components {
             file: string;
             /**
              * Model
-             * @description LLM model to use for review (provider/model format)
+             * @description LLM model to use for review (provider:model format)
              */
             model: string;
             /**
@@ -5764,8 +5764,6 @@ export interface components {
         };
         /** TokenUsageEvent */
         TokenUsageEvent: {
-            /** Provider */
-            provider: string;
             /** Model */
             model: string;
             /** Input Tokens */

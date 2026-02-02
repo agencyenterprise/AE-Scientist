@@ -14,21 +14,15 @@ logger = logging.getLogger("ai-scientist")
 
 
 def _create_chat_model(model: str, temperature: float) -> BaseChatModel:
-    """Create a chat model, handling 'provider/model' format.
-
-    LangChain's init_chat_model expects 'provider:model' format (with colon).
-    We accept 'provider/model' (with slash) and convert it.
+    """Create a chat model using LangChain's native 'provider:model' format.
 
     Args:
-        model: Model identifier, either "provider/model" or just "model"
+        model: Model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         temperature: Sampling temperature
 
     Returns:
         Configured BaseChatModel instance
     """
-    # Convert provider/model to provider:model format that LangChain expects
-    if "/" in model:
-        model = model.replace("/", ":", 1)
     return init_chat_model(
         model=model,
         temperature=temperature,

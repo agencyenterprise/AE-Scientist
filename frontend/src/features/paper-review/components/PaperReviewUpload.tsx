@@ -322,7 +322,9 @@ export function PaperReviewUpload() {
             <CheckCircle className="h-5 w-5" />
             <span className="font-medium">Review Complete</span>
             {(selectedFile || currentReviewFilename) && (
-              <span className="text-slate-400">for {selectedFile?.name || currentReviewFilename}</span>
+              <span className="text-slate-400">
+                for {selectedFile?.name || currentReviewFilename}
+              </span>
             )}
           </div>
           <button
@@ -350,9 +352,7 @@ export function PaperReviewUpload() {
       <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-12">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-amber-400" />
         <p className="text-lg font-medium text-white">{statusText}</p>
-        <p className="mt-2 text-sm text-slate-400">
-          {selectedFile?.name || currentReviewFilename}
-        </p>
+        <p className="mt-2 text-sm text-slate-400">{selectedFile?.name || currentReviewFilename}</p>
         <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
           <Clock className="h-3 w-3" />
           <span>This process runs in the background - you can refresh the page safely</span>

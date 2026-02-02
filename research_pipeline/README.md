@@ -199,15 +199,15 @@ python launch_scientist_bfts.py <config_file>
 - Configure all writeup and aggregation settings inside the `writeup` section of your YAML config. Example:
   ```
   writeup:
-    model: gpt-5
-    plot_model: gpt-5
-    citation_model: gpt-5
+    model: openai:gpt-5
+    plot_model: openai:gpt-5
+    citation_model: openai:gpt-5
     temperature: 0.8
     writeup_retries: 3
     num_cite_rounds: 5
   ```
-- `model`: LLM for drafting the paper.
-- `plot_model`: LLM used for plot aggregation.
+- `model`: LLM for drafting the paper (format: `provider:model`, e.g., `openai:gpt-5`, `anthropic:claude-sonnet-4-20250514`). Uses LangChain's native format.
+- `plot_model`: LLM used for plot aggregation (format: `provider:model`).
 - `citation_model`: LLM used for citation gathering (falls back to `model` when omitted).
 - `temperature`: Sampling temperature shared across citation, drafting, and reflection steps.
 - `writeup_retries`: Maximum number of writeup attempts.

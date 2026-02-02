@@ -19,14 +19,14 @@ exec:
 generate_report: True
 # LLM settings for final report from journal
 report:
-  model: gpt-5.2
+  model: openai:gpt-5.2
   temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
 
 # LLM settings for paper writeup
 writeup:
-  model: gpt-5.2
-  plot_model: gpt-5.2
-  citation_model: gpt-5.2
+  model: openai:gpt-5.2
+  plot_model: openai:gpt-5.2
+  citation_model: openai:gpt-5.2
   temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
   writeup_retries: 3
   num_cite_rounds: 5
@@ -34,7 +34,7 @@ writeup:
   page_limit: 8
 
 review:
-  model: gpt-5.2
+  model: openai:gpt-5.2
   temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
 
 experiment:
@@ -56,16 +56,16 @@ agent:
 
   # LLM settings for coding
   code:
-    model: gpt-5.2
+    model: openai:gpt-5.2
     temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
 
   # LLM settings for evaluating program output / tracebacks
   feedback:
-    model: gpt-5.2
+    model: openai:gpt-5.2
     temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
 
   vlm_feedback:
-    model: gpt-5.2
+    model: openai:gpt-5.2
     temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
 
   search:

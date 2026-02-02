@@ -205,8 +205,7 @@ class RunCompletedPayload(BaseModel):
 
 
 class TokenUsageEvent(BaseModel):
-    provider: str
-    model: str
+    model: str  # In "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
     input_tokens: int
     cached_input_tokens: int
     output_tokens: int
