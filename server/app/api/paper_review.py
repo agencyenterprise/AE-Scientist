@@ -96,6 +96,13 @@ class PaperReviewDetailResponse(BaseModel):
     credits_charged: int = Field(0, description="Credits charged for this review")
 
 
+class PaperDownloadResponse(BaseModel):
+    """Response with a temporary download URL for the paper PDF."""
+
+    download_url: str = Field(..., description="Temporary signed URL to download the PDF")
+    filename: str = Field(..., description="Original filename of the PDF")
+
+
 class PendingReviewSummary(BaseModel):
     """Summary of a pending/processing review."""
 
@@ -315,3 +322,43 @@ async def get_paper_review(
         logger.exception("Failed to get paper review")
         response.status_code = 500
         return ErrorResponse(error="Failed to get review", detail=str(e))
+
+
+@router.get("/{review_id}/download", response_model=None)
+async def get_paper_download_url(
+    review_id: int,
+    request: Request,
+    response: Response,
+) -> Union[PaperDownloadResponse, ErrorResponse]:
+    """
+    Get a temporary download URL for the reviewed paper PDF.
+
+    Returns a signed URL that expires after 1 hour. Only returns URLs
+    for papers owned by the authenticated user.
+    """
+    current_user = get_current_user(request)
+
+    try:
+        service = get_paper_review_service()
+        result = await service.get_paper_download_url(
+            review_id=review_id,
+            user_id=current_user.id,
+        )
+
+        if not result:
+            response.status_code = 404
+            return ErrorResponse(
+                error="Paper not found",
+                detail="The requested paper does not exist or you don't have access to it",
+            )
+
+        download_url, filename = result
+        return PaperDownloadResponse(
+            download_url=download_url,
+            filename=filename,
+        )
+
+    except Exception as e:
+        logger.exception("Failed to get paper download URL")
+        response.status_code = 500
+        return ErrorResponse(error="Failed to get download URL", detail=str(e))

@@ -459,6 +459,35 @@ class PaperReviewService:
             for review in reviews
         ]
 
+    async def get_paper_download_url(
+        self, *, review_id: int, user_id: int
+    ) -> tuple[str, str] | None:
+        """Get a temporary download URL for the reviewed paper PDF.
+
+        Args:
+            review_id: ID of the review
+            user_id: ID of the user (for authorization)
+
+        Returns:
+            Tuple of (download_url, filename) if found and owned by user, None otherwise
+        """
+        db = get_database()
+        review = await db.get_paper_review_by_id(review_id)
+
+        if not review or review.user_id != user_id:
+            return None
+
+        if not review.s3_key:
+            return None
+
+        # Generate a temporary download URL (valid for 1 hour)
+        download_url = self._s3_service.generate_download_url(
+            s3_key=review.s3_key,
+            expires_in=3600,
+        )
+
+        return (download_url, review.original_filename or "paper.pdf")
+
 
 # Global service instance
 _paper_review_service: PaperReviewService | None = None

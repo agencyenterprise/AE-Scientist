@@ -10,7 +10,11 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
+  Download,
+  Loader2,
 } from "lucide-react";
+import { config } from "@/shared/lib/config";
+import { withAuthHeaders } from "@/shared/lib/session-token";
 
 // Local types until API types are generated
 export interface ReviewContent {
@@ -127,18 +131,55 @@ function CollapsibleSection({
 
 export function PaperReviewResult({ review }: PaperReviewResultProps) {
   const content = review.review;
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const headers = withAuthHeaders(new Headers());
+      const response = await fetch(`${config.apiUrl}/paper-reviews/${review.id}/download`, {
+        headers,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await response.json();
+      // Open the download URL in a new tab (it's a signed S3 URL)
+      window.open(data.download_url, "_blank");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       {/* Decision Banner */}
       <div
-        className={`flex items-center gap-3 rounded-lg border p-4 ${getDecisionColor(content.decision)}`}
+        className={`flex items-center justify-between rounded-lg border p-4 ${getDecisionColor(content.decision)}`}
       >
-        {getDecisionIcon(content.decision)}
-        <div>
-          <div className="font-semibold">{content.decision}</div>
-          <div className="text-sm opacity-80">Credits charged: {review.credits_charged}</div>
+        <div className="flex items-center gap-3">
+          {getDecisionIcon(content.decision)}
+          <div>
+            <div className="font-semibold">{content.decision}</div>
+            <div className="text-sm opacity-80">Credits charged: {review.credits_charged}</div>
+          </div>
         </div>
+        <button
+          onClick={handleDownload}
+          disabled={isDownloading}
+          className="flex items-center gap-2 rounded-lg border border-current px-3 py-1.5 text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+          title="Download original paper"
+        >
+          {isDownloading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          <span>Download PDF</span>
+        </button>
       </div>
 
       {/* Summary */}

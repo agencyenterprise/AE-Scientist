@@ -1745,6 +1745,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/paper-reviews/{review_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Paper Download Url
+         * @description Get a temporary download URL for the reviewed paper PDF.
+         *
+         *     Returns a signed URL that expires after 1 hour. Only returns URLs
+         *     for papers owned by the authenticated user.
+         */
+        get: operations["get_paper_download_url_api_paper_reviews__review_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/": {
         parameters: {
             query?: never;
@@ -8745,6 +8768,37 @@ export interface operations {
         };
     };
     get_paper_review_api_paper_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_paper_download_url_api_paper_reviews__review_id__download_get: {
         parameters: {
             query?: never;
             header?: never;

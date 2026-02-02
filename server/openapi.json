@@ -4411,6 +4411,47 @@
         }
       }
     },
+    "/api/paper-reviews/{review_id}/download": {
+      "get": {
+        "tags": [
+          "paper-reviews"
+        ],
+        "summary": "Get Paper Download Url",
+        "description": "Get a temporary download URL for the reviewed paper PDF.\n\nReturns a signed URL that expires after 1 hour. Only returns URLs\nfor papers owned by the authenticated user.",
+        "operationId": "get_paper_download_url_api_paper_reviews__review_id__download_get",
+        "parameters": [
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/": {
       "get": {
         "tags": [
