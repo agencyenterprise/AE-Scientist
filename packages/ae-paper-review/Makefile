@@ -16,10 +16,5 @@ lint:
 	VIRTUAL_ENV= uv run --no-sync vulture src --min-confidence 80
 	@echo "✅ Linting complete"
 
-# Testing
-test:
-	@echo "🧪 Running ae-paper-review tests..."
-	VIRTUAL_ENV= uv run --no-sync python -m pytest tests
-	@echo "✅ Tests complete"
 
-.PHONY: install lint test
+.PHONY: install lint

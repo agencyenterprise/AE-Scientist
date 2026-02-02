@@ -312,29 +312,6 @@ AWS_S3_BUCKET_NAME="your_s3_bucket_name_here"
 # Create/recreate test database manually
 make create-test-db
 
-# Run all tests
-make test
-```
-
-## Available Scripts
-
-### Makefile Commands
-```bash
-make help            # Show all available commands
-make venv-backend    # Create Python virtual environment
-make lint            # Lint both frontend and backend
-make lint-frontend   # Lint frontend code only
-make lint-backend    # Lint backend code (uses venv)
-make format          # Format both frontend and backend code
-make format-frontend # Format frontend code only
-make format-backend  # Format backend code (uses venv)
-make install         # Install all dependencies
-make dev-frontend    # Start frontend development server
-make dev-backend     # Start backend development server (uses venv)
-make migrate-db      # Apply all pending database migrations
-make create-test-db  # Create fresh test database and apply migrations
-make test-backend    # Run backend tests with isolated test database
-make test            # Run all tests
 ```
 
 ## Environment Variables

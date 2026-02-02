@@ -18,12 +18,6 @@ lint:
 	VIRTUAL_ENV= uv run --no-sync python ../linter/check_inline_imports.py --target-dir . --exclude playground
 	@echo "✅ Linting complete"
 
-# Testing
-test:
-	@echo "🧪 Running server tests..."
-	VIRTUAL_ENV= uv run python -m pytest tests
-	@echo "✅ Tests complete"
-
 # Development server
 dev: migrate gen-api-types
 	@echo "🚀 Starting server development server with DEBUG logging..."
@@ -51,5 +45,5 @@ migrate:
 	@echo "📊 Running database migrations..."
 	VIRTUAL_ENV= uv run migrate.py upgrade
 
-.PHONY: install lint test dev export-openapi gen-api-types migrate fake-runpod
+.PHONY: install lint dev export-openapi gen-api-types migrate fake-runpod
 

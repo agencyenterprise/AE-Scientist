@@ -32,12 +32,12 @@ gen-api-types:
 lint:
 	@echo "🔍 Linting research_pipeline..."
 	@echo "🎨 Auto-formatting research_pipeline..."
-	VIRTUAL_ENV= uv run --no-sync black . --exclude 'workspaces|\.venv|ai_scientist/api_types.py'
-	VIRTUAL_ENV= uv run --no-sync isort . --skip-glob 'workspaces/*' --skip-glob '.venv/*' --skip-glob 'ai_scientist/api_types.py'
-	VIRTUAL_ENV= uv run --no-sync ruff check . --exclude workspaces,.venv,ai_scientist/example_code.py,ai_scientist/api_types.py
-	VIRTUAL_ENV= uv run --no-sync mypy . --exclude '^(workspaces|\.venv|ai_scientist/example_code.py|ai_scientist/api_types.py)'
+	VIRTUAL_ENV= uv run --no-sync black . --exclude 'workspaces|\.venv|ai_scientist/api_types.py|vulture_whitelist.py'
+	VIRTUAL_ENV= uv run --no-sync isort . --skip-glob 'workspaces/*' --skip-glob '.venv/*' --skip-glob 'ai_scientist/api_types.py' --skip-glob 'vulture_whitelist.py'
+	VIRTUAL_ENV= uv run --no-sync ruff check . --exclude workspaces,.venv,ai_scientist/example_code.py,ai_scientist/api_types.py,vulture_whitelist.py
+	VIRTUAL_ENV= uv run --no-sync mypy . --exclude '^(workspaces|\.venv|ai_scientist/example_code.py|ai_scientist/api_types.py|vulture_whitelist.py)'
 	VIRTUAL_ENV= uv run --no-sync pyright --project pyproject.toml
-	VIRTUAL_ENV= uv run --no-sync vulture ai_scientist/ --exclude ai_scientist/api_types.py,ai_scientist/example_code.py --min-confidence 80
+	VIRTUAL_ENV= uv run --no-sync vulture ai_scientist/ vulture_whitelist.py --exclude ai_scientist/api_types.py,ai_scientist/example_code.py --min-confidence 50
 	VIRTUAL_ENV= uv run --no-sync python ../linter/check_inline_imports.py --target-dir . --exclude workspaces
 	@echo "✅ Linting complete"
 

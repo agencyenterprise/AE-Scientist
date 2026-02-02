@@ -133,6 +133,7 @@ exclude = [
 ignore = [
     "ai_scientist/example_code.py",
     "ai_scientist/api_types.py",  # auto-generated from OpenAPI spec
+    "vulture_whitelist.py",  # vulture-specific syntax not valid Python
 ]
 
 [tool.ruff]

@@ -9,7 +9,6 @@ from ..codex.node_result_contract import NodeResultContractContext, is_non_empty
 from ..config import Config as AppConfig
 from ..journal import Journal
 from ..prompts.render import render_lines, render_text
-from ..stage_identifiers import StageIdentifier
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,6 @@ def propose_next_ablation_idea(
 
 
 class Stage4Ablation(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE4.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Conduct systematic component analysis that reveals the contribution of each part\n"
         "- Use the same datasets you used from the previous stage"

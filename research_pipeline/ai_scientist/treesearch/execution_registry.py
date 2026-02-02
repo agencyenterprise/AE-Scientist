@@ -271,14 +271,6 @@ def clear_execution(execution_id: str) -> None:
     clear_shared_entry(execution_id=execution_id)
 
 
-def has_active_execution(execution_id: str) -> bool:
-    with _lock:
-        entry = _entries.get(execution_id)
-        is_active = entry is not None and entry.status == "running"
-    logger.debug("has_active_execution(%s) -> %s", execution_id, is_active)
-    return is_active
-
-
 def list_active_executions(*, stage_name: Optional[str] = None) -> list[str]:
     """Return IDs of executions that are currently running, optionally filtered by stage."""
     with _lock:

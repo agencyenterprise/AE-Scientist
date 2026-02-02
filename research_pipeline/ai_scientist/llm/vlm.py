@@ -3,7 +3,7 @@ import io
 import logging
 from typing import Any, Tuple
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from PIL import Image
 from pydantic import BaseModel
 
@@ -52,53 +52,6 @@ def _build_vlm_messages(
     # LangChain HumanMessage content supports multi-part content as a list
     messages.append(HumanMessage(content=content_blocks))  # type: ignore[arg-type]
     return messages
-
-
-def make_vlm_call(
-    model: str,
-    temperature: float,
-    system_message: str,
-    prompt: list[BaseMessage],
-) -> AIMessage:
-    # In the VLM path, prompt already includes the image-bearing user message.
-    # We rebuild LangChain messages from that history.
-    history = prompt[:-1]
-    last = prompt[-1] if prompt else HumanMessage(content="")
-    user_content = last.content
-    # user_content may already be a list of content blocks (text + image_url)
-    if isinstance(user_content, list):
-        messages: list[BaseMessage] = []
-        if system_message:
-            messages.append(SystemMessage(content=system_message))
-        messages.extend(history)
-        messages.append(HumanMessage(content=user_content))  # multi-part content
-    else:
-        messages = [
-            SystemMessage(content=system_message),
-            HumanMessage(content=str(user_content)),
-        ]
-    logger.debug("VLM make_vlm_call - model=%s, temperature=%s", model, temperature)
-    logger.debug("VLM make_vlm_call - system_message: %s", system_message)
-    for idx, message in enumerate(messages):
-        logger.debug(
-            "VLM make_vlm_call - request message %s: %s",
-            idx,
-            message.type,
-        )
-    chat = _create_chat_model(model=model, temperature=temperature)
-    retrying_chat = chat.with_retry(
-        retry_if_exception_type=(Exception,),
-        stop_after_attempt=3,
-    )
-    ai_message = retrying_chat.invoke(
-        messages, config={"callbacks": [TrackCostCallbackHandler(model)]}
-    )
-    logger.debug(
-        "VLM make_vlm_call - response: %s - %s",
-        ai_message.type,
-        ai_message.content,
-    )
-    return ai_message
 
 
 def get_structured_response_from_vlm(

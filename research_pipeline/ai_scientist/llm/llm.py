@@ -5,7 +5,6 @@ from typing import Any, Tuple, TypeVar, cast
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 
 from .token_tracker import TrackCostCallbackHandler
@@ -33,41 +32,6 @@ PromptType = str | dict[str, Any] | list[Any] | None
 FunctionCallType = dict[str, Any]
 OutputType = str | FunctionCallType
 TStructured = TypeVar("TStructured", bound=BaseModel)
-
-
-def make_llm_call(
-    model: str,
-    temperature: float,
-    system_message: str,
-    prompt: list[BaseMessage],
-) -> AIMessage:
-    messages: list[BaseMessage] = []
-    if system_message:
-        messages.append(SystemMessage(content=system_message))
-    messages.extend(prompt)
-    logger.debug("LLM make_llm_call - model=%s, temperature=%s", model, temperature)
-    logger.debug("LLM make_llm_call - system_message: %s", system_message)
-    for idx, message in enumerate(messages):
-        logger.debug(
-            "LLM make_llm_call - request message %s: %s - %s",
-            idx,
-            message.type,
-            message.content,
-        )
-    chat = _create_chat_model(model=model, temperature=temperature)
-    retrying_chat = chat.with_retry(
-        retry_if_exception_type=(Exception,),
-        stop_after_attempt=3,
-    )
-    ai_message = retrying_chat.invoke(
-        messages, config={"callbacks": [TrackCostCallbackHandler(model)]}
-    )
-    logger.debug(
-        "LLM make_llm_call - response: %s - %s",
-        ai_message.type,
-        ai_message.content,
-    )
-    return ai_message
 
 
 def compile_prompt_to_md(
@@ -260,44 +224,6 @@ def _invoke_langchain_query(
         ai_message.content,
     )
     return str(ai_message.content)
-
-
-def _invoke_structured_langchain_query(
-    *,
-    system_message: PromptType | None,
-    user_message: PromptType | None,
-    model: str,
-    temperature: float,
-) -> dict[str, Any]:
-    messages = _build_messages_for_query(
-        system_message=system_message,
-        user_message=user_message,
-    )
-    logger.debug(
-        "LLM _invoke_structured_langchain_query - model=%s, temperature=%s",
-        model,
-        temperature,
-    )
-    logger.debug("LLM _invoke_structured_langchain_query - compiled messages:")
-    for idx, message in enumerate(messages):
-        logger.debug(
-            "LLM _invoke_structured_langchain_query - message %s: %s - %s",
-            idx,
-            message.type,
-            message.content,
-        )
-    chat = _create_chat_model(model=model, temperature=temperature)
-    retrying_chat = chat.with_retry(
-        retry_if_exception_type=(Exception,),
-        stop_after_attempt=3,
-    )
-    parser = JsonOutputParser()
-    structured_chain = retrying_chat | parser
-    parsed: dict[str, Any] = structured_chain.invoke(
-        messages, config={"callbacks": [TrackCostCallbackHandler(model)]}
-    )
-    logger.debug("LLM _invoke_structured_langchain_query - parsed JSON: %s", parsed)
-    return parsed
 
 
 def structured_query_with_schema(

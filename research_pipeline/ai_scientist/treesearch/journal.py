@@ -70,13 +70,6 @@ class Node(DataClassJsonMixin):
     parse_exc_info: dict | None = field(default=None, kw_only=True)
     parse_exc_stack: list[tuple] | None = field(default=None, kw_only=True)
 
-    # ---- plot execution info ----
-    plot_term_out: list[str] | None = field(default=None, kw_only=True)
-    plot_exec_time: float | None = field(default=None, kw_only=True)
-    plot_exc_type: str | None = field(default=None, kw_only=True)
-    plot_exc_info: dict | None = field(default=None, kw_only=True)
-    plot_exc_stack: list[tuple] | None = field(default=None, kw_only=True)
-
     # ---- evaluation ----
     # post-execution result analysis (findings/feedback)
     analysis: str | None = field(default=None, kw_only=True)
@@ -178,14 +171,6 @@ class Node(DataClassJsonMixin):
         self.exc_type = getattr(exec_result, "exc_type", None)
         self.exc_info = getattr(exec_result, "exc_info", None)
         self.exc_stack = getattr(exec_result, "exc_stack", None)
-
-    def absorb_plot_exec_result(self, plot_exec_result: object) -> None:
-        """Absorb the result of executing the plotting code from this node."""
-        self.plot_term_out = getattr(plot_exec_result, "term_out", None)
-        self.plot_exec_time = getattr(plot_exec_result, "exec_time", None)
-        self.plot_exc_type = getattr(plot_exec_result, "exc_type", None)
-        self.plot_exc_info = getattr(plot_exec_result, "exc_info", None)
-        self.plot_exc_stack = getattr(plot_exec_result, "exc_stack", None)
 
     @property
     def term_out(self) -> str:
@@ -429,10 +414,6 @@ class Journal:
             if node.id == node_id:
                 return node
         return None
-
-    def get_metric_history(self) -> list[MetricValue]:
-        """Return a list of all metric values in the journal."""
-        return [n.metric for n in self.nodes if n.metric is not None]
 
     def _compute_nodes_state_signature(self) -> str:
         """
