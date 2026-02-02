@@ -19,6 +19,7 @@ from urllib.parse import quote
 from ae_paper_review import ReviewResult, load_paper, perform_review
 from psycopg import AsyncConnection
 
+from app.config import settings
 from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
 from app.services.database import PaperReviewStatus, get_database
 from app.services.s3_service import S3Service
@@ -32,31 +33,51 @@ _PAPER_REVIEW_RECOVERY_LOCK_KEY_2 = 991801
 # How long a review can be in pending/processing before it's considered stale
 _STALE_REVIEW_THRESHOLD_MINUTES = 15
 
-
 # Minimum credits required to start a paper review
 MINIMUM_CREDITS_FOR_REVIEW = 100
 
-# Cost per 1M input tokens (in credits)
-INPUT_TOKEN_COST_PER_MILLION = 30
-
-# Cost per 1M output tokens (in credits)
-OUTPUT_TOKEN_COST_PER_MILLION = 150
+# Credit conversion: $10 USD = 200 credits, so 1 credit = 5 cents
+CENTS_PER_CREDIT = 5
 
 
-def calculate_review_cost(input_tokens: int, output_tokens: int) -> int:
-    """Calculate the credit cost for a review based on token usage.
+def calculate_review_cost(
+    *,
+    model: str,
+    input_tokens: int,
+    cached_input_tokens: int,
+    output_tokens: int,
+) -> int:
+    """Calculate the credit cost for a review based on token usage and model pricing.
+
+    Uses the actual model pricing from JSON_MODEL_PRICE_PER_MILLION_IN_CENTS config.
 
     Args:
-        input_tokens: Total input tokens used
+        model: Model in "provider:model" format (e.g., "openai:gpt-5.2")
+        input_tokens: Total input tokens used (non-cached)
+        cached_input_tokens: Number of cached input tokens
         output_tokens: Total output tokens used
 
     Returns:
-        Credit cost (rounded up to nearest integer)
+        Credit cost (rounded to nearest integer, minimum 1 credit)
     """
-    input_cost = (input_tokens / 1_000_000) * INPUT_TOKEN_COST_PER_MILLION
-    output_cost = (output_tokens / 1_000_000) * OUTPUT_TOKEN_COST_PER_MILLION
-    total_cost = input_cost + output_cost
-    return max(1, int(total_cost + 0.5))  # Round to nearest, minimum 1 credit
+    # Get prices in cents per 1M tokens
+    input_price_cents = settings.LLM_PRICING.get_input_price(model)
+    cached_input_price_cents = settings.LLM_PRICING.get_cached_input_price(model)
+    output_price_cents = settings.LLM_PRICING.get_output_price(model)
+
+    # Calculate non-cached input tokens
+    non_cached_input_tokens = input_tokens - cached_input_tokens
+
+    # Calculate cost in cents
+    input_cost_cents = (non_cached_input_tokens / 1_000_000) * input_price_cents
+    cached_cost_cents = (cached_input_tokens / 1_000_000) * cached_input_price_cents
+    output_cost_cents = (output_tokens / 1_000_000) * output_price_cents
+    total_cost_cents = input_cost_cents + cached_cost_cents + output_cost_cents
+
+    # Convert cents to credits
+    credits = total_cost_cents / CENTS_PER_CREDIT
+
+    return max(1, int(credits + 0.5))  # Round to nearest, minimum 1 credit
 
 
 def _run_review_sync(
@@ -172,10 +193,12 @@ class PaperReviewService:
             token_usages = result.token_usage_detailed
             total_usage = result.token_usage
 
-            # Calculate cost
+            # Calculate cost based on actual model pricing
             cost = calculate_review_cost(
-                input_tokens=total_usage["input_tokens"],
-                output_tokens=total_usage["output_tokens"],
+                model=model,
+                input_tokens=total_usage.input_tokens,
+                cached_input_tokens=total_usage.cached_input_tokens,
+                output_tokens=total_usage.output_tokens,
             )
 
             # Store the review results
@@ -216,8 +239,8 @@ class PaperReviewService:
                 metadata={
                     "paper_review_id": review_id,
                     "model": model,
-                    "input_tokens": total_usage["input_tokens"],
-                    "output_tokens": total_usage["output_tokens"],
+                    "input_tokens": total_usage.input_tokens,
+                    "output_tokens": total_usage.output_tokens,
                 },
             )
 
@@ -340,9 +363,11 @@ class PaperReviewService:
 
         # Calculate credits charged from token usage
         credits_charged = 0
-        if token_usage.get("input_tokens") and token_usage.get("output_tokens"):
+        if token_usage.get("input_tokens") or token_usage.get("output_tokens"):
             credits_charged = calculate_review_cost(
+                model=review.model,
                 input_tokens=token_usage["input_tokens"],
+                cached_input_tokens=token_usage["cached_input_tokens"],
                 output_tokens=token_usage["output_tokens"],
             )
 

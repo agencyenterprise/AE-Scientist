@@ -8,10 +8,10 @@ def _validate_llm_pricing() -> None:
 
     for provider, config in LLM_PROVIDER_REGISTRY.items():
         for model_id in config.models_by_id:
-            if model_id not in pricing_data:
-                raise ValueError(
-                    f"Model '{model_id}' from provider '{provider}' not found in pricing information."
-                )
+            # Pricing data uses "provider:model" format
+            pricing_key = f"{provider}:{model_id}"
+            if pricing_key not in pricing_data:
+                raise ValueError(f"Model '{pricing_key}' not found in pricing information.")
 
 
 def validate_configuration() -> None:

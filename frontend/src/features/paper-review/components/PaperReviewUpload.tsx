@@ -357,6 +357,12 @@ export function PaperReviewUpload() {
           <Clock className="h-3 w-3" />
           <span>This process runs in the background - you can refresh the page safely</span>
         </div>
+        <button
+          onClick={handleReset}
+          className="mt-4 rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+        >
+          Start New Review
+        </button>
       </div>
     );
   }

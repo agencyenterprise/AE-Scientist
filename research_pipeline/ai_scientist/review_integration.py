@@ -15,6 +15,7 @@ import requests
 from ae_paper_review import (
     ReviewProgressEvent,
     ReviewResult,
+    TokenUsageDetail,
 )
 from ae_paper_review import detect_duplicate_figures as _detect_duplicate_figures
 from ae_paper_review import generate_vlm_img_review as _generate_vlm_img_review
@@ -69,7 +70,7 @@ def _get_webhook_client() -> WebhookClient | None:
 
 def _publish_token_usage(
     webhook_client: WebhookClient | None,
-    token_usage_detailed: list[dict[str, Any]],
+    token_usage_detailed: list[TokenUsageDetail],
 ) -> None:
     """Publish token usage records to webhook if available."""
     if not webhook_client:
@@ -80,10 +81,10 @@ def _publish_token_usage(
             webhook_client.publish(
                 kind="token_usage",
                 payload=TokenUsageEvent(
-                    model=usage_record.get("model", "unknown"),
-                    input_tokens=usage_record.get("input_tokens", 0),
-                    cached_input_tokens=usage_record.get("cached_input_tokens", 0),
-                    output_tokens=usage_record.get("output_tokens", 0),
+                    model=usage_record.model,
+                    input_tokens=usage_record.input_tokens,
+                    cached_input_tokens=usage_record.cached_input_tokens,
+                    output_tokens=usage_record.output_tokens,
                 ),
             )
         except Exception:

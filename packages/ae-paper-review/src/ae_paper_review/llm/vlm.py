@@ -61,7 +61,7 @@ def make_vlm_call(
     temperature: float,
     system_message: str,
     prompt: list[BaseMessage],
-    usage: TokenUsage | None = None,
+    usage: TokenUsage,
 ) -> AIMessage:
     """Make a single VLM call with optional token tracking.
 
@@ -122,10 +122,10 @@ def get_response_from_vlm(
     model: str,
     system_message: str,
     temperature: float,
+    usage: TokenUsage,
     print_debug: bool = False,
     msg_history: list[BaseMessage] | None = None,
     max_images: int = 25,
-    usage: TokenUsage | None = None,
 ) -> Tuple[str, list[BaseMessage]]:
     """Get response from vision-language model.
 
@@ -189,9 +189,9 @@ def get_structured_response_from_vlm(
     temperature: float,
     schema_class: type[BaseModel],
     print_debug: bool = False,
+    usage: TokenUsage,
     msg_history: list[BaseMessage] | None = None,
     max_images: int = 25,
-    usage: TokenUsage | None = None,
 ) -> Tuple[BaseModel, list[BaseMessage]]:
     """Get structured response from vision-language model.
 

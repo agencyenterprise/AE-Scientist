@@ -5,6 +5,7 @@ Database helpers for paper review token usages.
 from datetime import datetime
 from typing import List, NamedTuple
 
+from ae_paper_review import TokenUsageDetail
 from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
@@ -65,14 +66,14 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
         self,
         *,
         paper_review_id: int,
-        usages: List[dict],
+        usages: List[TokenUsageDetail],
     ) -> None:
         """Insert multiple token usage records for a paper review.
 
         Args:
             paper_review_id: The paper review ID
-            usages: List of dicts with provider, model, input_tokens,
-                    cached_input_tokens, output_tokens
+            usages: List of TokenUsageDetail with model (in "provider:model" format),
+                    input_tokens, cached_input_tokens, output_tokens
         """
         if not usages:
             return
@@ -80,6 +81,13 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 for usage in usages:
+                    # Parse provider:model format (e.g., "openai:gpt-5.2")
+                    if ":" in usage.model:
+                        provider, model = usage.model.split(":", 1)
+                    else:
+                        provider = "unknown"
+                        model = usage.model
+
                     await cursor.execute(
                         """
                         INSERT INTO paper_review_token_usages
@@ -89,11 +97,11 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
                         """,
                         (
                             paper_review_id,
-                            usage["provider"],
-                            usage["model"],
-                            usage["input_tokens"],
-                            usage.get("cached_input_tokens", 0),
-                            usage["output_tokens"],
+                            provider,
+                            model,
+                            usage.input_tokens,
+                            usage.cached_input_tokens,
+                            usage.output_tokens,
                         ),
                     )
 

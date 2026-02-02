@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from pypdf import PdfReader
 
 from .llm.llm import get_structured_response_from_llm
-from .llm.token_tracking import TokenUsage
+from .llm.token_tracking import TokenUsage, TokenUsageDetail, TokenUsageSummary
 from .models import ReviewResponseModel
 from .prompts import render_text
 
@@ -23,8 +23,8 @@ class ReviewResult:
     """Result of a paper review including the review and token usage."""
 
     review: ReviewResponseModel
-    token_usage: dict[str, int]
-    token_usage_detailed: list[dict[str, Any]]
+    token_usage: TokenUsageSummary
+    token_usage_detailed: list[TokenUsageDetail]
 
 
 # Pre-render static templates
@@ -155,6 +155,14 @@ def perform_review(
     Returns:
         ReviewResult containing the review and token usage
     """
+    logger.info(
+        "Starting paper review (model=%s, ensemble=%d, reflections=%d, paper_length=%d chars)",
+        model,
+        num_reviews_ensemble,
+        num_reflections,
+        len(text),
+    )
+
     # Create internal token usage tracker
     usage = TokenUsage()
 
@@ -218,6 +226,7 @@ Here is the paper you are asked to review:
 
     review: Optional[ReviewResponseModel] = None
     if num_reviews_ensemble > 1:
+        logger.info("Running ensemble reviews (%d reviews)", num_reviews_ensemble)
         parsed_reviews: List[ReviewResponseModel] = []
         histories: List[list[BaseMessage]] = []
         for idx in range(num_reviews_ensemble):
@@ -234,16 +243,38 @@ Here is the paper you are asked to review:
                         )
                     )
 
+                logger.info("Generating ensemble review %d/%d", idx + 1, num_reviews_ensemble)
                 parsed, history = _invoke_review_prompt(base_prompt, msg_history)
+                logger.info(
+                    "Ensemble review %d/%d complete (overall=%s, decision=%s)",
+                    idx + 1,
+                    num_reviews_ensemble,
+                    parsed.overall,
+                    parsed.decision,
+                )
                 parsed_reviews.append(parsed)
                 histories.append(history)
             except Exception as exc:
-                logger.warning("Ensemble review %s failed: %s", idx, exc)
+                logger.warning(
+                    "Ensemble review %d/%d failed: %s", idx + 1, num_reviews_ensemble, exc
+                )
 
         if parsed_reviews:
+            logger.info(
+                "Ensemble complete: %d/%d reviews succeeded, generating meta-review",
+                len(parsed_reviews),
+                num_reviews_ensemble,
+            )
             review = _get_meta_review(model, temperature, parsed_reviews, usage=usage)
             if review is None:
+                logger.info("Meta-review failed, using first ensemble review as fallback")
                 review = parsed_reviews[0]
+            else:
+                logger.info(
+                    "Meta-review complete (overall=%s, decision=%s)",
+                    review.overall,
+                    review.decision,
+                )
             parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
             for score, limits in [
                 ("Originality", (1, 4)),
@@ -277,11 +308,17 @@ Here is the paper you are asked to review:
             )
 
     if review is None:
+        logger.info("Running single review (no ensemble)")
         review, msg_history = _invoke_review_prompt(base_prompt, msg_history)
+        logger.info(
+            "Single review complete (overall=%s, decision=%s)", review.overall, review.decision
+        )
     assert review is not None
 
     if num_reflections > 1 and review is not None:
+        logger.info("Starting reflection rounds (%d total)", num_reflections)
         for reflection_round in range(num_reflections - 1):
+            logger.info("Running reflection round %d/%d", reflection_round + 2, num_reflections)
             reflection_prompt = _reviewer_reflection_prompt.format(
                 current_round=reflection_round + 2,
                 num_reflections=num_reflections,
@@ -291,12 +328,30 @@ Here is the paper you are asked to review:
                 msg_history,
             )
             review = reflection_response
+            logger.info(
+                "Reflection round %d/%d complete (overall=%s, decision=%s, continue=%s)",
+                reflection_round + 2,
+                num_reflections,
+                review.overall,
+                review.decision,
+                reflection_response.should_continue,
+            )
             if not reflection_response.should_continue:
+                logger.info("Model indicated no further reflections needed, stopping early")
                 break
+
+    total_usage = usage.get_total()
+    logger.info(
+        "Paper review complete (decision=%s, overall=%s, input_tokens=%d, output_tokens=%d)",
+        review.decision,
+        review.overall,
+        total_usage.input_tokens,
+        total_usage.output_tokens,
+    )
 
     return ReviewResult(
         review=review,
-        token_usage=usage.get_total(),
+        token_usage=total_usage,
         token_usage_detailed=usage.get_detailed(),
     )
 
@@ -448,7 +503,7 @@ def _get_meta_review(
     model: str,
     temperature: float,
     reviews: list[ReviewResponseModel],
-    usage: TokenUsage | None = None,
+    usage: TokenUsage,
 ) -> ReviewResponseModel | None:
     """Aggregate multiple reviews into a meta-review (internal function).
 

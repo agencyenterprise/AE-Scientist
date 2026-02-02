@@ -24,6 +24,7 @@ Example usage:
     print(f"Tokens used: {result.token_usage}")
 """
 
+from .llm.token_tracking import TokenUsageDetail, TokenUsageSummary
 from .llm_review import (
     ReviewProgressEvent,
     ReviewResult,
@@ -67,6 +68,9 @@ __all__ = [
     "load_review",
     "get_review_fewshot_examples",
     "ReviewProgressEvent",
+    # Token Usage
+    "TokenUsageSummary",
+    "TokenUsageDetail",
     # VLM Review
     "extract_figure_screenshots",
     "extract_abstract",

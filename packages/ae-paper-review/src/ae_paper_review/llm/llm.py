@@ -38,10 +38,10 @@ def get_batch_responses_from_llm(
     model: str,
     system_message: str,
     temperature: float,
+    usage: TokenUsage,
     print_debug: bool = True,
     msg_history: list[BaseMessage] | None = None,
     n_responses: int = 1,
-    usage: TokenUsage | None = None,
 ) -> tuple[list[str], list[list[BaseMessage]]]:
     """Get multiple responses from an LLM.
 
@@ -81,7 +81,7 @@ def make_llm_call(
     temperature: float,
     system_message: str,
     prompt: list[BaseMessage],
-    usage: TokenUsage | None = None,
+    usage: TokenUsage,
 ) -> AIMessage:
     """Make a single LLM call with optional token tracking.
 
@@ -131,9 +131,9 @@ def get_response_from_llm(
     model: str,
     system_message: str,
     temperature: float,
+    usage: TokenUsage,
     print_debug: bool = True,
     msg_history: list[BaseMessage] | None = None,
-    usage: TokenUsage | None = None,
 ) -> Tuple[str, list[BaseMessage]]:
     """Get a response from an LLM.
 
@@ -238,9 +238,9 @@ def get_structured_response_from_llm(
     system_message: PromptType | None,
     temperature: float,
     schema_class: type[BaseModel],
+    usage: TokenUsage,
     print_debug: bool = True,
     msg_history: list[BaseMessage] | None = None,
-    usage: TokenUsage | None = None,
 ) -> Tuple[dict[str, Any], list[BaseMessage]]:
     """Get a structured response from an LLM using a Pydantic schema.
 

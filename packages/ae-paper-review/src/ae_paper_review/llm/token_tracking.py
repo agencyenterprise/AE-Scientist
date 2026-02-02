@@ -6,7 +6,7 @@ The accumulated usage is returned alongside the review result.
 
 import logging
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
@@ -16,11 +16,29 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 logger = logging.getLogger(__name__)
 
 
+class TokenUsageSummary(NamedTuple):
+    """Aggregated token usage across all LLM calls."""
+
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+
+
+class TokenUsageDetail(NamedTuple):
+    """Token usage for a single LLM call."""
+
+    model: str
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+    created_at: datetime
+
+
 class TokenUsage:
     """Accumulated token usage from LLM calls."""
 
     def __init__(self) -> None:
-        self.usages: list[dict[str, Any]] = []
+        self._usages: list[TokenUsageDetail] = []
 
     def add(
         self,
@@ -38,27 +56,34 @@ class TokenUsage:
             cached_input_tokens: Number of cached input tokens
             output_tokens: Number of output tokens used
         """
-        self.usages.append(
-            {
-                "model": model,
-                "input_tokens": input_tokens,
-                "cached_input_tokens": cached_input_tokens,
-                "output_tokens": output_tokens,
-                "created_at": datetime.now(),
-            }
+        logger.debug(
+            "TokenUsage - add - model=%s, input_tokens=%d, cached_input_tokens=%d, output_tokens=%d",
+            model,
+            input_tokens,
+            cached_input_tokens,
+            output_tokens,
+        )
+        self._usages.append(
+            TokenUsageDetail(
+                model=model,
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
+                created_at=datetime.now(),
+            )
         )
 
-    def get_total(self) -> dict[str, int]:
+    def get_total(self) -> TokenUsageSummary:
         """Get total token usage across all calls."""
-        return {
-            "input_tokens": sum(u["input_tokens"] for u in self.usages),
-            "cached_input_tokens": sum(u["cached_input_tokens"] for u in self.usages),
-            "output_tokens": sum(u["output_tokens"] for u in self.usages),
-        }
+        return TokenUsageSummary(
+            input_tokens=sum(u.input_tokens for u in self._usages),
+            cached_input_tokens=sum(u.cached_input_tokens for u in self._usages),
+            output_tokens=sum(u.output_tokens for u in self._usages),
+        )
 
-    def get_detailed(self) -> list[dict[str, Any]]:
+    def get_detailed(self) -> list[TokenUsageDetail]:
         """Get detailed usage records."""
-        return list(self.usages)
+        return list(self._usages)
 
 
 def _usage_value_to_int(*, value: object) -> int:
@@ -89,7 +114,7 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
         self,
         *,
         model: str,
-        usage: TokenUsage | None = None,
+        usage: TokenUsage,
     ) -> None:
         """Initialize the callback handler.
 
@@ -98,7 +123,8 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
             usage: Optional TokenUsage accumulator to use
         """
         self.model = model
-        self.usage = usage or TokenUsage()
+        self.usage = usage
+        logger.debug("TokenUsageCallbackHandler - model=%s", model)
 
     def on_llm_end(
         self,

@@ -213,11 +213,7 @@ def extract_abstract(text: str) -> str:
 
 
 def generate_vlm_img_cap_ref_review(
-    img: Dict[str, Any],
-    abstract: str,
-    model: str,
-    temperature: float,
-    usage: TokenUsage | None = None,
+    img: Dict[str, Any], abstract: str, model: str, temperature: float, usage: TokenUsage
 ) -> ImageCaptionRefReview | None:
     """Generate a VLM review for a figure with caption and references.
 
@@ -257,10 +253,7 @@ def generate_vlm_img_cap_ref_review(
 
 
 def generate_vlm_img_review(
-    img: Dict[str, Any],
-    model: str,
-    temperature: float,
-    usage: TokenUsage | None = None,
+    img: Dict[str, Any], model: str, temperature: float, usage: TokenUsage
 ) -> Dict[str, Any] | None:
     """Generate a simple VLM review for an image.
 
@@ -291,10 +284,7 @@ def generate_vlm_img_review(
 
 
 def perform_imgs_cap_ref_review(
-    model: str,
-    pdf_path: str,
-    temperature: float,
-    usage: TokenUsage | None = None,
+    model: str, pdf_path: str, temperature: float, usage: TokenUsage
 ) -> List[FigureImageCaptionRefReview]:
     """Review all figures in a paper with caption and reference analysis.
 
@@ -336,10 +326,7 @@ def perform_imgs_cap_ref_review(
 
 
 def detect_duplicate_figures(
-    model: str,
-    pdf_path: str,
-    temperature: float,
-    usage: TokenUsage | None = None,
+    model: str, pdf_path: str, temperature: float, usage: TokenUsage
 ) -> str | Dict[str, str]:
     """Detect duplicate or similar figures in a paper.
 
@@ -400,7 +387,7 @@ def generate_vlm_img_selection_review(
     model: str,
     reflection_page_info: str,
     temperature: float,
-    usage: TokenUsage | None = None,
+    usage: TokenUsage,
 ) -> Dict[str, Any] | None:
     """Generate a VLM review for figure selection decisions.
 
@@ -442,11 +429,7 @@ def generate_vlm_img_selection_review(
 
 
 def perform_imgs_cap_ref_review_selection(
-    model: str,
-    pdf_path: str,
-    reflection_page_info: str,
-    temperature: float,
-    usage: TokenUsage | None = None,
+    model: str, pdf_path: str, reflection_page_info: str, temperature: float, usage: TokenUsage
 ) -> Dict[str, Any]:
     """Review figures for selection decisions.
 
