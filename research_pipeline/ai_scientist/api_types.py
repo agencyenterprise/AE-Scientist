@@ -37,6 +37,17 @@ class ActiveNode(BaseModel):
     ] = "main_execution"
 
 
+class ArtifactExistsRequest(BaseModel):
+    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    filename: Annotated[str, Field(title="Filename")]
+
+
+class ArtifactExistsResponse(BaseModel):
+    exists: Annotated[bool, Field(title="Exists")]
+    s3_key: Annotated[str, Field(title="S3 Key")]
+    file_size: Annotated[int | None, Field(title="File Size")] = None
+
+
 class ArtifactPresignedUrlResponse(BaseModel):
     url: Annotated[
         str,

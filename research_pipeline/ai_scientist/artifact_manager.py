@@ -24,6 +24,8 @@ from tenacity import (
 )
 
 from ai_scientist.api_types import (
+    ArtifactExistsRequest,
+    ArtifactExistsResponse,
     ArtifactUploadedEvent,
     MultipartUploadCompleteRequest,
     MultipartUploadInitRequest,
@@ -348,6 +350,38 @@ class PresignedUrlUploader:
         wait=wait_exponential(multiplier=1, max=10),
         reraise=True,
     )
+    def check_artifact_exists(
+        self,
+        *,
+        artifact_type: str,
+        filename: str,
+    ) -> ArtifactExistsResponse:
+        """Check if an artifact already exists in S3.
+
+        Returns:
+            ArtifactExistsResponse with exists, s3_key, and file_size fields
+        """
+        url = f"{self._webhook_base_url}/{self._run_id}/artifact-exists"
+        headers = {
+            "Authorization": f"Bearer {self._webhook_token}",
+            "Content-Type": "application/json",
+        }
+        request_payload = ArtifactExistsRequest(
+            artifact_type=artifact_type,
+            filename=filename,
+        )
+        response = requests.post(
+            url, headers=headers, json=request_payload.model_dump(), timeout=30
+        )
+        response.raise_for_status()
+        return ArtifactExistsResponse.model_validate(response.json())
+
+    @retry(
+        retry=retry_if_exception_type(requests.RequestException),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, max=10),
+        reraise=True,
+    )
     def _request_presigned_url(
         self,
         *,
@@ -475,6 +509,34 @@ class ArtifactPublisher:
                 spec.path,
             )
             return
+
+        # Check if artifact already exists with same size (skip duplicate uploads)
+        local_file_size = request.local_path.stat().st_size
+        try:
+            exists_response = self._uploader.check_artifact_exists(
+                artifact_type=request.artifact_type,
+                filename=request.filename,
+            )
+            if exists_response.exists and exists_response.file_size == local_file_size:
+                logger.info(
+                    "Skipping upload of %s artifact - already exists in S3 with same size (%d bytes)",
+                    spec.artifact_type,
+                    local_file_size,
+                )
+                return
+            if exists_response.exists:
+                logger.info(
+                    "Artifact %s exists but size differs (local=%d, s3=%s) - re-uploading",
+                    spec.artifact_type,
+                    local_file_size,
+                    exists_response.file_size,
+                )
+        except Exception:
+            logger.warning(
+                "Failed to check if artifact %s exists; proceeding with upload",
+                spec.artifact_type,
+                exc_info=True,
+            )
 
         logger.info("Uploading %s artifact from %s", spec.artifact_type, spec.path)
         s3_key, file_type, file_size = self._uploader.upload(request=request)

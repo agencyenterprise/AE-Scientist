@@ -2889,6 +2889,68 @@
         }
       }
     },
+    "/api/research-pipeline/events/{run_id}/artifact-exists": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Check Artifact Exists",
+        "description": "Check if an artifact already exists in S3 and return its size.",
+        "operationId": "check_artifact_exists_api_research_pipeline_events__run_id__artifact_exists_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactExistsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactExistsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/{run_id}/multipart-upload-init": {
       "post": {
         "tags": [
@@ -4640,6 +4702,53 @@
         ],
         "title": "ActiveNode",
         "description": "Represents a node currently executing in the research pipeline."
+      },
+      "ArtifactExistsRequest": {
+        "properties": {
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "filename"
+        ],
+        "title": "ArtifactExistsRequest"
+      },
+      "ArtifactExistsResponse": {
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "s3_key": {
+            "type": "string",
+            "title": "S3 Key"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exists",
+          "s3_key"
+        ],
+        "title": "ArtifactExistsResponse"
       },
       "ArtifactPresignedUrlResponse": {
         "properties": {
