@@ -13,6 +13,7 @@ from app.config import settings
 from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.database import DatabaseManager
+from app.services.paper_review_service import recover_stale_paper_reviews
 from app.services.research_pipeline.monitor import pipeline_monitor
 from app.services.research_pipeline.runpod import get_supported_gpu_types, warm_gpu_price_cache
 from app.validation import validate_configuration
@@ -75,6 +76,9 @@ validate_configuration()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Recover any paper reviews that were interrupted by a previous server restart
+    await recover_stale_paper_reviews()
+
     await pipeline_monitor.start()
     asyncio.create_task(
         coro=warm_gpu_price_cache(gpu_types=get_supported_gpu_types()),

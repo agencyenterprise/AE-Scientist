@@ -13,16 +13,24 @@ import logging
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 from ae_paper_review import ReviewResult, load_paper, perform_review
+from psycopg import AsyncConnection
 
 from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
 from app.services.database import PaperReviewStatus, get_database
 from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
+
+# Advisory lock keys for paper review recovery (unique pair)
+_PAPER_REVIEW_RECOVERY_LOCK_KEY_1 = 184467
+_PAPER_REVIEW_RECOVERY_LOCK_KEY_2 = 991801
+
+# How long a review can be in pending/processing before it's considered stale
+_STALE_REVIEW_THRESHOLD_MINUTES = 15
 
 
 # Minimum credits required to start a paper review
@@ -246,7 +254,7 @@ class PaperReviewService:
         model: str,
         num_reviews_ensemble: int,
         num_reflections: int,
-    ) -> dict[str, Any]:
+    ) -> tuple[int, str]:
         """Start a paper review asynchronously.
 
         Creates a pending review record, uploads the PDF, and starts
@@ -261,7 +269,7 @@ class PaperReviewService:
             num_reflections: Number of reflection rounds
 
         Returns:
-            Dict containing review_id and status
+            Tuple of (review_id, status)
 
         Raises:
             HTTPException: If user has insufficient credits
@@ -310,10 +318,7 @@ class PaperReviewService:
             )
         )
 
-        return {
-            "review_id": review_id,
-            "status": PaperReviewStatus.PENDING.value,
-        }
+        return (review_id, PaperReviewStatus.PENDING.value)
 
     async def get_review(self, *, review_id: int, user_id: int) -> dict[str, Any] | None:
         """Get a paper review by ID.
@@ -440,3 +445,69 @@ def get_paper_review_service() -> PaperReviewService:
     if _paper_review_service is None:
         _paper_review_service = PaperReviewService()
     return _paper_review_service
+
+
+async def _try_acquire_recovery_lock(conn: AsyncConnection[object]) -> bool:
+    """Try to acquire the advisory lock for paper review recovery.
+
+    Uses pg_try_advisory_lock which returns immediately (non-blocking).
+    Only one server instance will succeed in acquiring the lock.
+    """
+    try:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT pg_try_advisory_lock(%s, %s)",
+                (_PAPER_REVIEW_RECOVERY_LOCK_KEY_1, _PAPER_REVIEW_RECOVERY_LOCK_KEY_2),
+            )
+            row = cast("tuple[object, ...] | None", await cursor.fetchone())
+            if row is None:
+                return False
+            return bool(row[0])
+    except Exception:
+        logger.exception("Failed to acquire paper review recovery lock")
+        return False
+
+
+async def _release_recovery_lock(conn: AsyncConnection[object]) -> None:
+    """Release the advisory lock for paper review recovery."""
+    try:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT pg_advisory_unlock(%s, %s)",
+                (_PAPER_REVIEW_RECOVERY_LOCK_KEY_1, _PAPER_REVIEW_RECOVERY_LOCK_KEY_2),
+            )
+    except Exception:
+        logger.exception("Failed to release paper review recovery lock")
+
+
+async def recover_stale_paper_reviews() -> None:
+    """Mark stale paper reviews as failed on server startup.
+
+    This function uses a PostgreSQL advisory lock to ensure only one server
+    instance performs the recovery, even when multiple instances start
+    simultaneously.
+
+    Reviews that have been in pending/processing status for longer than
+    _STALE_REVIEW_THRESHOLD_MINUTES are marked as failed.
+    """
+    db = get_database()
+
+    async with db.aget_connection() as conn:
+        lock_acquired = await _try_acquire_recovery_lock(conn)
+        if not lock_acquired:
+            logger.debug("Another server instance is handling paper review recovery, skipping.")
+            return
+
+        try:
+            count = await db.mark_stale_reviews_as_failed(
+                stale_threshold_minutes=_STALE_REVIEW_THRESHOLD_MINUTES
+            )
+            if count > 0:
+                logger.info(
+                    "Marked %d stale paper review(s) as failed during startup recovery.",
+                    count,
+                )
+            else:
+                logger.debug("No stale paper reviews found during startup recovery.")
+        finally:
+            await _release_recovery_lock(conn)

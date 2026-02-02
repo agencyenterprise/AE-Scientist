@@ -287,3 +287,36 @@ class PaperReviewsMixin(ConnectionProvider):
                 await cursor.execute(query, (user_id, limit, offset))
                 rows = await cursor.fetchall() or []
         return [PaperReview(**row) for row in rows]
+
+    async def mark_stale_reviews_as_failed(self, stale_threshold_minutes: int = 15) -> int:
+        """Mark paper reviews stuck in pending/processing as failed.
+
+        This is used on server startup to clean up reviews that were interrupted
+        by a server restart.
+
+        Args:
+            stale_threshold_minutes: Reviews older than this many minutes in
+                pending/processing status will be marked as failed.
+
+        Returns:
+            Number of reviews marked as failed.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET status = %s,
+                        error_message = %s
+                    WHERE status IN (%s, %s)
+                      AND created_at < NOW() - INTERVAL '%s minutes'
+                    """,
+                    (
+                        PaperReviewStatus.FAILED.value,
+                        "Review interrupted by server restart. Please try again.",
+                        PaperReviewStatus.PENDING.value,
+                        PaperReviewStatus.PROCESSING.value,
+                        stale_threshold_minutes,
+                    ),
+                )
+                return cursor.rowcount or 0

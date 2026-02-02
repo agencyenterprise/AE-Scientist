@@ -162,7 +162,7 @@ async def create_paper_review(
     # Start review (returns immediately)
     try:
         service = get_paper_review_service()
-        result = await service.start_review(
+        review_id, status = await service.start_review(
             user_id=current_user.id,
             pdf_content=pdf_content,
             original_filename=file.filename,
@@ -173,8 +173,8 @@ async def create_paper_review(
 
         response.status_code = 202  # Accepted
         return PaperReviewStartedResponse(
-            review_id=result["review_id"],
-            status=result["status"],
+            review_id=review_id,
+            status=status,
         )
 
     except Exception as e:
