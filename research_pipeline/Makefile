@@ -9,7 +9,8 @@ install:
 gen-api-types:
 	@echo "🧬 Generating Python API types from OpenAPI schema..."
 	$(MAKE) -C ../server export-openapi
-	VIRTUAL_ENV= uv run datamodel-codegen \
+	@# Add venv bin to PATH so datamodel-codegen can find ruff
+	PATH="$(CURDIR)/.venv/bin:$$PATH" VIRTUAL_ENV= uv run datamodel-codegen \
 		--input ../server/openapi.json \
 		--output ai_scientist/api_types.py \
 		--output-model-type pydantic_v2.BaseModel \
