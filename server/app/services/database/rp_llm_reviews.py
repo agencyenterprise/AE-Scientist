@@ -17,18 +17,18 @@ class LlmReview(NamedTuple):
     summary: str
     strengths: list
     weaknesses: list
-    originality: float
-    quality: float
-    clarity: float
-    significance: float
+    originality: int
+    quality: int
+    clarity: int
+    significance: int
     questions: list
     limitations: list
     ethical_concerns: bool
-    soundness: float
-    presentation: float
-    contribution: float
-    overall: float
-    confidence: float
+    soundness: int
+    presentation: int
+    contribution: int
+    overall: int
+    confidence: int
     decision: str
     source_path: Optional[str]
     created_at: datetime
@@ -44,18 +44,18 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
         summary: str,
         strengths: list,
         weaknesses: list,
-        originality: float,
-        quality: float,
-        clarity: float,
-        significance: float,
+        originality: int,
+        quality: int,
+        clarity: int,
+        significance: int,
         questions: list,
         limitations: list,
         ethical_concerns: bool,
-        soundness: float,
-        presentation: float,
-        contribution: float,
-        overall: float,
-        confidence: float,
+        soundness: int,
+        presentation: int,
+        contribution: int,
+        overall: int,
+        confidence: int,
         decision: str,
         source_path: Optional[str] = None,
         created_at: Optional[datetime] = None,

@@ -6,6 +6,30 @@ on:
     branches: [ main ]
 
 jobs:
+  lint-ae-paper-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install ae-paper-review dependencies
+        run: |
+          cd packages/ae-paper-review && uv venv && uv pip install -e ".[dev]"
+
+      - name: Lint ae-paper-review (black, isort, ruff, mypy, pyright)
+        run: |
+          make lint-ae-paper-review
+
   lint-research:
     runs-on: ubuntu-latest
     steps:
@@ -24,7 +48,7 @@ jobs:
 
       - name: Install research_pipeline dependencies
         run: |
-          cd research_pipeline && uv sync --frozen
+          cd research_pipeline && uv sync --frozen && uv pip install -e ../packages/ae-paper-review
 
       - name: Lint research_pipeline (black, isort, ruff, mypy)
         run: |
@@ -48,7 +72,7 @@ jobs:
 
       - name: Install server dependencies
         run: |
-          cd server && uv sync --frozen
+          cd server && uv sync --frozen && uv pip install -e ../packages/ae-paper-review
 
       - name: Lint server (black, isort, ruff, mypy)
         run: |
@@ -100,11 +124,11 @@ jobs:
 
       - name: Install server dependencies
         run: |
-          cd server && uv sync --frozen
+          cd server && uv sync --frozen && uv pip install -e ../packages/ae-paper-review
 
       - name: Install research_pipeline dependencies
         run: |
-          cd research_pipeline && uv sync --frozen --dev
+          cd research_pipeline && uv sync --frozen --dev && uv pip install -e ../packages/ae-paper-review
 
       - name: Install frontend dependencies
         run: |

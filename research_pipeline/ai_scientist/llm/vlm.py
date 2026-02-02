@@ -3,11 +3,11 @@ import io
 import logging
 from typing import Any, Tuple
 
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from PIL import Image
 from pydantic import BaseModel
 
+from .llm import _create_chat_model
 from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
@@ -54,107 +54,6 @@ def _build_vlm_messages(
     return messages
 
 
-def make_vlm_call(
-    model: str,
-    temperature: float,
-    system_message: str,
-    prompt: list[BaseMessage],
-) -> AIMessage:
-    # In the VLM path, prompt already includes the image-bearing user message.
-    # We rebuild LangChain messages from that history.
-    history = prompt[:-1]
-    last = prompt[-1] if prompt else HumanMessage(content="")
-    user_content = last.content
-    # user_content may already be a list of content blocks (text + image_url)
-    if isinstance(user_content, list):
-        messages: list[BaseMessage] = []
-        if system_message:
-            messages.append(SystemMessage(content=system_message))
-        messages.extend(history)
-        messages.append(HumanMessage(content=user_content))  # multi-part content
-    else:
-        messages = [
-            SystemMessage(content=system_message),
-            HumanMessage(content=str(user_content)),
-        ]
-    logger.debug("VLM make_vlm_call - model=%s, temperature=%s", model, temperature)
-    logger.debug("VLM make_vlm_call - system_message: %s", system_message)
-    for idx, message in enumerate(messages):
-        logger.debug(
-            "VLM make_vlm_call - request message %s: %s",
-            idx,
-            message.type,
-        )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
-    retrying_chat = chat.with_retry(
-        retry_if_exception_type=(Exception,),
-        stop_after_attempt=3,
-    )
-    ai_message = retrying_chat.invoke(
-        messages, config={"callbacks": [TrackCostCallbackHandler(model)]}
-    )
-    logger.debug(
-        "VLM make_vlm_call - response: %s - %s",
-        ai_message.type,
-        ai_message.content,
-    )
-    return ai_message
-
-
-def get_response_from_vlm(
-    msg: str,
-    image_paths: str | list[str],
-    model: str,
-    system_message: str,
-    temperature: float,
-    print_debug: bool = False,
-    msg_history: list[BaseMessage] | None = None,
-    max_images: int = 25,
-) -> Tuple[str, list[BaseMessage]]:
-    """Get response from vision-language model."""
-    if msg_history is None:
-        msg_history = []
-
-    paths_list = [image_paths] if isinstance(image_paths, str) else list(image_paths)
-    messages = _build_vlm_messages(
-        system_message=system_message,
-        history=msg_history,
-        msg=msg,
-        image_paths=paths_list,
-        max_images=max_images,
-    )
-
-    # For LangChain-native history, we store the last user message as a HumanMessage.
-    new_msg_history = msg_history + [messages[-1]]
-    ai_message = make_vlm_call(
-        model=model,
-        temperature=temperature,
-        system_message=system_message,
-        prompt=new_msg_history,
-    )
-    content_str = str(ai_message.content)
-    full_history = new_msg_history + [ai_message]
-
-    if print_debug:
-        logger.debug("%s", "")
-        logger.debug("%s VLM START %s", "*" * 20, "*" * 20)
-        for idx, message in enumerate(full_history):
-            logger.debug(
-                "%s, %s: %s",
-                idx,
-                message.type,
-                message.content,
-            )
-        logger.debug("%s", content_str)
-        logger.debug("%s VLM END %s", "*" * 21, "*" * 21)
-        logger.debug("%s", "")
-
-    return content_str, full_history
-
-
 def get_structured_response_from_vlm(
     *,
     msg: str,
@@ -178,10 +77,7 @@ def get_structured_response_from_vlm(
         max_images=max_images,
     )
     new_msg_history = msg_history + [messages[-1]]
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
     parsed = structured_chat.invoke(
         messages, config={"callbacks": [TrackCostCallbackHandler(model)]}

@@ -52,7 +52,7 @@ def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> P
     if not venv_dir.exists():
         _run_uv(
             args=["venv", "--system-site-packages", str(venv_dir)],
-            timeout_seconds=600,
+            timeout_seconds=1800,
             extra_env={},
             cwd=workspace_dir,
         )
@@ -139,6 +139,9 @@ class CodexCliRunner:
 
     def _build_argv(self) -> list[str]:
         """Build codex CLI command arguments."""
+        # Codex CLI expects just the model name, not the provider:model format.
+        # Extract just the model name (e.g., "gpt-5.2" from "openai:gpt-5.2")
+        model_name = self._model.split(":", 1)[1] if ":" in self._model else self._model
         return [
             "codex",
             "exec",
@@ -146,7 +149,7 @@ class CodexCliRunner:
             "--skip-git-repo-check",
             "--json",
             "--model",
-            self._model,
+            model_name,
             # Provide the prompt via stdin to avoid OS argv limits (E2BIG).
             # Codex treats "-" as "read instructions from stdin".
             "-",

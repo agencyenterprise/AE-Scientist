@@ -1332,15 +1332,15 @@ class FakeRunner:
             "Limited to specific domain",
             "Requires significant computational resources",
         ]
-        originality = 3.5
-        quality = 3.0
-        clarity = 3.5
-        significance = 3.0
-        soundness = 3.0
-        presentation = 3.5
-        contribution = 3.0
-        overall = 7.0
-        confidence = 4.0
+        originality = 3
+        quality = 3
+        clarity = 4
+        significance = 3
+        soundness = 3
+        presentation = 4
+        contribution = 3
+        overall = 7
+        confidence = 4
         decision = "Accept"
         ethical_concerns = False
         source_path = None

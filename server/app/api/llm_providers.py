@@ -51,13 +51,24 @@ def get_llm_model_by_id(provider: str, model_id: str) -> LLMModel:
 
 
 def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
+    """Extract the model name and provider from a model.
+
+    Handles 'provider:model' format (LangChain's native format) and plain model names.
+    """
     if isinstance(model, BaseChatModel):
         model_attr = getattr(model, "model", None)
         if model_attr is None:
             model_attr = getattr(model, "model_name", None)
         if model_attr is None:
             raise ValueError(f"Model {model} has no model or model_name attribute")
-        model_name = str(model_attr)
+        model_str = str(model_attr)
     else:
-        model_name = model
-    return _parse_model(model_name, None)
+        model_str = model
+
+    # Handle provider:model format (LangChain's native format)
+    if ":" in model_str:
+        provider, model_name = model_str.split(":", 1)
+        return model_name, provider
+
+    # Fall back to LangChain's inference for plain model names
+    return _parse_model(model_str, None)

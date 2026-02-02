@@ -1,7 +1,12 @@
+"""Research-pipeline specific token tracking functions.
+
+This module provides token tracking that publishes via webhooks or to files,
+specific to the research_pipeline's telemetry system.
+"""
+
 import csv
 import logging
 import os
-import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -59,18 +64,26 @@ def save_cost_track(
     cached_input_tokens: int,
     output_tokens: int,
 ) -> None:
+    """Save token usage either via webhook or to file depending on environment.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        input_tokens: Number of input tokens used
+        cached_input_tokens: Number of cached input tokens
+        output_tokens: Number of output tokens used
+    """
     run_id = RUN_ID
-    model_name, provider = extract_model_name_and_provider(model)
     now = datetime.now()
     if _should_use_webhook_tracking(run_id):
         save_webhook_cost_track(
-            provider=provider,
-            model_name=model_name,
+            model=model,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
         )
     else:
+        # File tracking still uses separate provider/model columns
+        model_name, provider = extract_model_name_and_provider(model)
         save_file_cost_track(
             provider=provider,
             model_name=model_name,
@@ -83,25 +96,29 @@ def save_cost_track(
 
 def save_webhook_cost_track(
     *,
-    provider: str,
-    model_name: str,
+    model: str,
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
 ) -> None:
-    """Publish token usage via webhook. Server will look up conversation_id from run_id."""
+    """Publish token usage via webhook.
+
+    Args:
+        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        input_tokens: Number of input tokens used
+        cached_input_tokens: Number of cached input tokens
+        output_tokens: Number of output tokens used
+    """
     webhook_client = _get_webhook_client()
     if webhook_client is None:
         logging.warning("Webhook client not configured; skipping token usage tracking")
         return
 
     try:
-        # Note: Server will look up conversation_id from run_id
         webhook_client.publish(
             kind="token_usage",
             payload=TokenUsageEvent(
-                provider=provider,
-                model=model_name,
+                model=model,
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
                 output_tokens=output_tokens,
@@ -120,6 +137,7 @@ def save_file_cost_track(
     output_tokens: int,
     now: datetime,
 ) -> None:
+    """Save token usage to a CSV file."""
     file_path = Path(os.environ.get("WORKSPACE_DIR") or "") / "cost_track.csv"
     file_path.parent.mkdir(parents=True, exist_ok=True)
     if not file_path.exists():
@@ -150,17 +168,20 @@ def save_file_cost_track(
 
 
 class TrackCostCallbackHandler(BaseCallbackHandler):
-    def __init__(self, model: str | None = None):
+    """Callback handler that tracks token costs via webhook or file."""
+
+    def __init__(self, model: str | None = None) -> None:
         self.model = model
 
     def on_llm_end(
         self,
         response: LLMResult,
         *,
-        run_id: UUID,  # noqa: ARG002
-        parent_run_id: UUID | None = None,  # noqa: ARG002
-        **kwargs: Any,  # noqa: ANN401, ARG002
-    ) -> Any:  # noqa: ANN401
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: object,
+    ) -> None:
+        del run_id, parent_run_id, kwargs  # Required by interface but unused
         try:
             if not response.generations:
                 return
@@ -195,19 +216,28 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                     output_tokens=output_tokens,
                 )
         except Exception:
-            traceback.print_exc()
-            logging.warning("Token tracking failed; continuing without tracking")
+            logging.warning("Token tracking failed; continuing without tracking", exc_info=True)
 
 
 def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
-    """Extract the model name and provider from a model."""
+    """Extract the model name and provider from a model.
+
+    Handles 'provider:model' format (LangChain's native format) and plain model names.
+    """
     if isinstance(model, BaseChatModel):
         model_attr = getattr(model, "model", None)
         if model_attr is None:
             model_attr = getattr(model, "model_name", None)
         if model_attr is None:
             raise ValueError(f"Model {model} has no model or model_name attribute")
-        model_name = str(model_attr)
+        model_str = str(model_attr)
     else:
-        model_name = model
-    return _parse_model(model_name, None)
+        model_str = model
+
+    # Handle provider:model format (LangChain's native format)
+    if ":" in model_str:
+        provider, model_name = model_str.split(":", 1)
+        return model_name, provider
+
+    # Fall back to LangChain's inference for plain model names
+    return _parse_model(model_str, None)

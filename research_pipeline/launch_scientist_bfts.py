@@ -27,16 +27,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, Protocol, cast
 
+from ae_paper_review import ReviewResponseModel, ReviewResult, load_paper
 from omegaconf import OmegaConf
 
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.perform_citations import gather_citations
-from ai_scientist.perform_llm_review import ReviewResponseModel, load_paper, perform_review
 from ai_scientist.perform_plotting import aggregate_plots
-from ai_scientist.perform_vlm_review import perform_imgs_cap_ref_review
 from ai_scientist.perform_writeup import perform_writeup
-from ai_scientist.review_context import build_auto_review_context
+from ai_scientist.review_integration import (
+    build_auto_review_context,
+    perform_imgs_cap_ref_review,
+    perform_review,
+)
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
 from ai_scientist.sentry_config import set_sentry_run_context
 from ai_scientist.telemetry import (
@@ -826,12 +829,9 @@ def run_review_stage(
         event_callback=event_callback,
         run_id=run_id,
     )
-    if isinstance(review_result, tuple):
-        review: ReviewResponseModel = review_result[0]
-    else:
-        review = review_result
-    if not isinstance(review, ReviewResponseModel):
-        raise TypeError("perform_review must return ReviewResponseModel")
+    if not isinstance(review_result, ReviewResult):
+        raise TypeError("perform_review must return ReviewResult")
+    review: ReviewResponseModel = review_result.review
     review_img_cap_ref = perform_imgs_cap_ref_review(
         model=review_model,
         pdf_path=pdf_path,

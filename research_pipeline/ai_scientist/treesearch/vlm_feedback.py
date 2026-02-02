@@ -5,8 +5,7 @@ from typing import Any, Callable, List
 
 from pydantic import BaseModel, Field
 
-from ai_scientist.llm import structured_query_with_schema
-from ai_scientist.llm.vlm import get_structured_response_from_vlm
+from ai_scientist.llm import get_structured_response_from_vlm, structured_query_with_schema
 
 from .config import Config as AppConfig
 from .events import BaseEvent, RunLogEvent

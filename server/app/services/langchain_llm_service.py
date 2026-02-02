@@ -154,7 +154,7 @@ class LangChainLLMService(BaseLLMService, ABC):
 
     @abstractmethod
     def _build_chat_model(self, *, model_id: str) -> BaseChatModel:
-        """Return a LangChain chat model for the given provider/model id."""
+        """Return a LangChain chat model for the given provider:model id."""
 
     @abstractmethod
     def render_image_attachments(

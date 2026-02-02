@@ -12,13 +12,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, cast
 
 from ai_scientist.perform_citations import gather_citations
-from ai_scientist.perform_vlm_review import (
+from ai_scientist.prompts.render import render_text
+from ai_scientist.review_integration import (
     detect_duplicate_figures,
     generate_vlm_img_review,
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
 )
-from ai_scientist.prompts.render import render_text
 from ai_scientist.treesearch.codex.codex_cli_runner import CodexCliRunner
 from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
 from ai_scientist.writeup_artifacts import (

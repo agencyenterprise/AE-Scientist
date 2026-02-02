@@ -8,6 +8,7 @@ export const PromptTypes = {
   IDEA_CHAT: "idea_chat",
   IDEA_GENERATION: "idea_generation",
   IMPORTED_CHAT_SUMMARY: "imported_chat_summary",
+  PAPER_REVIEW: "paper_review",
 } as const;
 
 export type PromptType = (typeof PromptTypes)[keyof typeof PromptTypes];

@@ -25,7 +25,10 @@ def _parse_price_map(raw_value: str) -> Dict[str, int]:
 
 
 class LLMPricing:
-    """Provides access to LLM pricing information."""
+    """Provides access to LLM pricing information.
+
+    Prices are looked up using the "provider:model" format (e.g., "openai:gpt-5.2").
+    """
 
     _pricing_data: Dict[str, Dict[str, int]]
 
@@ -41,10 +44,10 @@ class LLMPricing:
             raise ValueError("JSON_MODEL_PRICE_PER_MILLION_IN_CENTS is not a valid JSON string.")
 
         self._pricing_data = {}
-        for models in pricing_data.values():
+        for provider, models in pricing_data.items():
             if not isinstance(models, dict):
                 continue
-            for model_id, prices in models.items():
+            for model_name, prices in models.items():
                 if not isinstance(prices, dict):
                     continue
                 sanitized: Dict[str, int] = {}
@@ -53,51 +56,56 @@ class LLMPricing:
                         sanitized[str(price_key)] = int(price_value)
                     except (TypeError, ValueError):
                         continue
-                self._pricing_data[str(model_id)] = sanitized
+                # Store with "provider:model" key
+                key = f"{provider}:{model_name}"
+                self._pricing_data[key] = sanitized
 
-    def get_input_price(self, model_id: str) -> int:
+    def get_input_price(self, model: str) -> int:
         """
         Get the input price for a specific model.
 
         Args:
-            model_id: The ID of the model to get the price for.
+            model: Model in "provider:model" format (e.g., "openai:gpt-5.2").
 
         Returns:
             The price for the model in cents, for 1 million tokens, for input.
         """
         try:
-            return int(self._pricing_data[model_id]["input"])
+            return int(self._pricing_data[model]["input"])
         except KeyError:
-            raise ValueError(f"Input price not found for model '{model_id}'.")
+            raise ValueError(f"Input price not found for model '{model}'.")
 
-    def get_cached_input_price(self, model_id: str) -> int:
+    def get_cached_input_price(self, model: str) -> int:
         """
         Get the cached-input price for a specific model.
 
         Falls back to the normal input price when cached-input pricing is not configured.
+
+        Args:
+            model: Model in "provider:model" format (e.g., "openai:gpt-5.2").
         """
         try:
-            cached = self._pricing_data[model_id].get("cached_input")
+            cached = self._pricing_data[model].get("cached_input")
         except KeyError:
-            raise ValueError(f"Pricing not found for model '{model_id}'.")
+            raise ValueError(f"Pricing not found for model '{model}'.")
         if cached is None:
-            return self.get_input_price(model_id=model_id)
+            return self.get_input_price(model=model)
         return int(cached)
 
-    def get_output_price(self, model_id: str) -> int:
+    def get_output_price(self, model: str) -> int:
         """
         Get the output price for a specific model.
 
         Args:
-            model_id: The ID of the model to get the price for.
+            model: Model in "provider:model" format (e.g., "openai:gpt-5.2").
 
         Returns:
             The price for the model in cents, for 1 million tokens, for output.
         """
         try:
-            return int(self._pricing_data[model_id]["output"])
+            return int(self._pricing_data[model]["output"])
         except KeyError:
-            raise ValueError(f"Output price not found for model '{model_id}'.")
+            raise ValueError(f"Output price not found for model '{model}'.")
 
 
 class Settings:

@@ -1669,6 +1669,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/paper-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Paper Reviews
+         * @description List paper reviews for the authenticated user.
+         *
+         *     Returns a paginated list of review summaries including status.
+         */
+        get: operations["list_paper_reviews_api_paper_reviews_get"];
+        put?: never;
+        /**
+         * Create Paper Review
+         * @description Submit a paper for review.
+         *
+         *     Upload a PDF file to start an asynchronous review process. The endpoint
+         *     returns immediately with a review ID that can be used to poll for results.
+         *
+         *     Requires authentication. Credits will be charged when the review completes.
+         */
+        post: operations["create_paper_review_api_paper_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper-reviews/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pending Reviews
+         * @description Get all pending or processing reviews for the authenticated user.
+         *
+         *     Use this endpoint to check if there are any reviews in progress.
+         */
+        get: operations["get_pending_reviews_api_paper_reviews_pending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper-reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Paper Review
+         * @description Get a specific paper review by ID.
+         *
+         *     Only returns reviews owned by the authenticated user.
+         *     Poll this endpoint to check if a review has completed.
+         */
+        get: operations["get_paper_review_api_paper_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper-reviews/{review_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Paper Download Url
+         * @description Get a temporary download URL for the reviewed paper PDF.
+         *
+         *     Returns a signed URL that expires after 1 hour. Only returns URLs
+         *     for papers owned by the authenticated user.
+         */
+        get: operations["get_paper_download_url_api_paper_reviews__review_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/": {
         parameters: {
             query?: never;
@@ -1896,6 +1995,30 @@ export interface components {
             balance: number;
             /** Transactions */
             transactions: components["schemas"]["CreditTransactionModel"][];
+        };
+        /** Body_create_paper_review_api_paper_reviews_post */
+        Body_create_paper_review_api_paper_reviews_post: {
+            /**
+             * File
+             * Format: binary
+             * @description PDF file to review
+             */
+            file: string;
+            /**
+             * Model
+             * @description LLM model to use for review (provider:model format)
+             */
+            model: string;
+            /**
+             * Num Reviews Ensemble
+             * @description Number of ensemble reviews (1-5)
+             */
+            num_reviews_ensemble: number;
+            /**
+             * Num Reflections
+             * @description Number of reflection rounds (1-3)
+             */
+            num_reflections: number;
         };
         /** Body_upload_file_api_conversations__conversation_id__files_post */
         Body_upload_file_api_conversations__conversation_id__files_post: {
@@ -5664,8 +5787,6 @@ export interface components {
         };
         /** TokenUsageEvent */
         TokenUsageEvent: {
-            /** Provider */
-            provider: string;
             /** Model */
             model: string;
             /** Input Tokens */
@@ -8536,6 +8657,153 @@ export interface operations {
             header?: never;
             path: {
                 run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_paper_reviews_api_paper_reviews_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_paper_review_api_paper_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_paper_review_api_paper_reviews_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pending_reviews_api_paper_reviews_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_paper_review_api_paper_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_paper_download_url_api_paper_reviews__review_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: number;
             };
             cookie?: never;
         };

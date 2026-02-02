@@ -7,14 +7,12 @@ from ..codex.node_result_contract import NodeResultContractContext
 from ..config import Config as AppConfig
 from ..journal import Journal, Node
 from ..prompts.render import render_lines, render_text
-from ..stage_identifiers import StageIdentifier
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
 
 
 class Stage3Plotting(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE3.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Explore novel improvements\n"
         "- Come up with experiments to reveal new insights\n"

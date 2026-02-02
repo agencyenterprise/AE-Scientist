@@ -19,8 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple
 
-from pydantic import BaseModel
-
 from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
@@ -55,12 +53,7 @@ class RunOutcome:
     message: str
 
 
-class SubstageGoalResponse(BaseModel):
-    goals: str
-
-
 class StageClass(Protocol):
-    MAIN_STAGE_SLUG: str
     DEFAULT_GOALS: str
 
 
@@ -201,7 +194,6 @@ class AgentManager:
             journal=journal,
             workspace_dir=self.workspace_dir,
             event_callback=self.event_callback,
-            best_nodes_by_stage={},
         )
         return self._stage_impl_from_meta(stage_meta=stage_meta, context=ctx)
 

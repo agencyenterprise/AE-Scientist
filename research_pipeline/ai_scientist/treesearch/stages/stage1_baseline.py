@@ -7,14 +7,12 @@ from ..codex.node_result_contract import NodeResultContractContext
 from ..config import Config as AppConfig
 from ..journal import Journal
 from ..prompts.render import render_text
-from ..stage_identifiers import StageIdentifier
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
 
 
 class Stage1Baseline(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE1.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Focus on getting basic working implementation\n"
         "- Use a dataset appropriate to the experiment\n"

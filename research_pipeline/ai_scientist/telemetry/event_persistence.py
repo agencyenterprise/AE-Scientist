@@ -22,7 +22,6 @@ from ai_scientist.api_types import (
     GPUShortagePayload,
     HardwareStatsPartition,
     HardwareStatsPayload,
-    InitializationProgressPayload,
     RunFinishedPayload,
 )
 from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceRecord
@@ -142,10 +141,6 @@ class WebhookClient:
     def publish_run_started(self) -> Future[None]:
         logger.info("Publishing run started event for run_id=%s", self._run_id)
         return self._post(path="/run-started", payload={})
-
-    def publish_initialization_progress(self, *, message: str) -> Future[None]:
-        payload = InitializationProgressPayload(message=message)
-        return self._post(path="/initialization-progress", payload=payload.model_dump())
 
     def publish_run_finished(
         self,

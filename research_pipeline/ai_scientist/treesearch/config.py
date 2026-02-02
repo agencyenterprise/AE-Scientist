@@ -243,14 +243,6 @@ def prep_cfg(cfg: object) -> Config:
     return cfg_obj
 
 
-def print_cfg(cfg: Config) -> None:
-    try:
-        logger.info(OmegaConf.to_yaml(OmegaConf.structured(cfg)))
-    except Exception:
-        # Fallback to a basic print if structured conversion fails
-        logger.info(str(cfg))
-
-
 def load_task_desc(cfg: Config) -> str:
     """Load task description markdown and return as string."""
     desc_path = Path(cfg.desc_file)

@@ -9,7 +9,6 @@ from ..codex.node_result_contract import NodeResultContractContext, is_non_empty
 from ..config import Config as AppConfig
 from ..journal import Journal
 from ..prompts.render import render_lines, render_text
-from ..stage_identifiers import StageIdentifier
 from .base import Stage, StageCompletionEvaluation
 
 logger = logging.getLogger(__name__)
@@ -78,7 +77,6 @@ def propose_next_hyperparam_idea(
 
 
 class Stage2Tuning(Stage):
-    MAIN_STAGE_SLUG: ClassVar[str] = StageIdentifier.STAGE2.slug
     DEFAULT_GOALS: ClassVar[str] = (
         "- Change hyperparameters such as learning rate, number of epochs, batch size, etc. to improve the performance\n"
         "- DO NOT change the model architecture from the previous stage\n"

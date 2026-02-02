@@ -114,18 +114,18 @@ class ReviewCompletedEvent(BaseModel):
     summary: str
     strengths: List[str]
     weaknesses: List[str]
-    originality: float
-    quality: float
-    clarity: float
-    significance: float
+    originality: int
+    quality: int
+    clarity: int
+    significance: int
     questions: List[str]
     limitations: List[str]
     ethical_concerns: bool
-    soundness: float
-    presentation: float
-    contribution: float
-    overall: float
-    confidence: float
+    soundness: int
+    presentation: int
+    contribution: int
+    overall: int
+    confidence: int
     decision: str
     source_path: Optional[str]
     created_at: str
@@ -205,8 +205,7 @@ class RunCompletedPayload(BaseModel):
 
 
 class TokenUsageEvent(BaseModel):
-    provider: str
-    model: str
+    model: str  # In "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
     input_tokens: int
     cached_input_tokens: int
     output_tokens: int

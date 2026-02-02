@@ -17,6 +17,7 @@ from app.api.ideas import router as ideas_router
 from app.api.llm_defaults import router as llm_defaults_router
 from app.api.llm_prompts import router as llm_prompts_router
 from app.api.mcp_integration import router as mcp_integration_router
+from app.api.paper_review import router as paper_review_router
 from app.api.public_config import router as public_config_router
 from app.api.research_pipeline import router as rp_events_router
 from app.api.research_pipeline_event_stream import router as rp_event_stream_router
@@ -49,4 +50,5 @@ router.include_router(rp_runs_router)
 router.include_router(run_tree_router)
 router.include_router(research_runs_router)
 router.include_router(narrator_router)
+router.include_router(paper_review_router)
 router.include_router(users_router)

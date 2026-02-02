@@ -114,15 +114,34 @@ def _should_exclude(path: Path, base_path: Path) -> bool:
     return False
 
 
-def _create_tarball(research_pipeline_path: Path) -> bytes:
-    """Create a tarball of the research_pipeline directory, excluding unnecessary files.
+def _get_ae_paper_review_path() -> Path | None:
+    """Get the path to the ae-paper-review package.
 
-    The tarball uses the path structure AE-Scientist/research_pipeline/... so that
-    when extracted to /workspace/, it creates /workspace/AE-Scientist/research_pipeline/.
+    Returns None if the package directory doesn't exist.
+    """
+    repo_root = Path(__file__).resolve().parents[5]
+    package_path = repo_root / "packages" / "ae-paper-review"
+    if package_path.exists():
+        return package_path
+    logger.warning("ae-paper-review package not found at %s", package_path)
+    return None
+
+
+def _create_tarball(research_pipeline_path: Path) -> bytes:
+    """Create a tarball of the research_pipeline and ae-paper-review directories.
+
+    The tarball uses the path structure:
+    - AE-Scientist/research_pipeline/...
+    - AE-Scientist/packages/ae-paper-review/...
+
+    When extracted to /workspace/, it creates:
+    - /workspace/AE-Scientist/research_pipeline/
+    - /workspace/AE-Scientist/packages/ae-paper-review/
     """
     buffer = io.BytesIO()
 
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        # Add research_pipeline files
         for item in research_pipeline_path.rglob("*"):
             if item.is_file() and not _should_exclude(item, research_pipeline_path):
                 arcname = (
@@ -130,6 +149,22 @@ def _create_tarball(research_pipeline_path: Path) -> bytes:
                 )
                 tar.add(item, arcname=arcname)
                 logger.debug("Added to tarball: %s", arcname)
+
+        # Add ae-paper-review package files
+        ae_paper_review_path = _get_ae_paper_review_path()
+        if ae_paper_review_path:
+            for item in ae_paper_review_path.rglob("*"):
+                if item.is_file() and not _should_exclude(item, ae_paper_review_path):
+                    arcname = (
+                        f"AE-Scientist/packages/ae-paper-review/"
+                        f"{item.relative_to(ae_paper_review_path)}"
+                    )
+                    tar.add(item, arcname=arcname)
+                    logger.debug("Added to tarball: %s", arcname)
+        else:
+            logger.warning(
+                "ae-paper-review package not found; tarball will not include shared review package"
+            )
 
     buffer.seek(0)
     return buffer.read()

@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, List, Tuple
 
 from pydantic import BaseModel
 
 from ..config import Config
 from ..events import BaseEvent
-from ..journal import Journal, Node
+from ..journal import Journal
 from ..stage_identifiers import StageIdentifier
 
 
@@ -44,7 +44,6 @@ class StageContext:
     journal: Journal
     workspace_dir: Path
     event_callback: Callable[[BaseEvent], None]
-    best_nodes_by_stage: Dict[int, Node]
 
     @property
     def stage_name(self) -> str:
@@ -69,17 +68,11 @@ class Stage:
     def stage_identifier(self) -> StageIdentifier:
         return self._stage_identifier
 
-    def prepare_substage(self) -> bool:
-        return True
-
     def evaluate_substage_completion(self) -> Tuple[bool, str]:
         raise NotImplementedError
 
     def evaluate_stage_completion(self) -> Tuple[bool, str]:
         raise NotImplementedError
-
-    def best_carryover_nodes(self) -> Dict[int, Node]:
-        return self._context.best_nodes_by_stage
 
     def reset_skip_state(self) -> None:
         """Reset can_be_skipped + reason state."""

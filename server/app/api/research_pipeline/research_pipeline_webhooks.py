@@ -8,6 +8,7 @@ from typing import Sequence, cast
 import sentry_sdk
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.llm_providers import extract_model_name_and_provider
 from app.api.research_pipeline_runs import _generate_run_webhook_token
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.models.research_pipeline import (
@@ -1146,11 +1147,13 @@ async def ingest_token_usage(
         return
     conversation_id = idea_version.conversation_id
 
+    model_name, provider = extract_model_name_and_provider(event.model)
+
     # Insert into database
     await db.create_llm_token_usage(
         conversation_id=conversation_id,
-        provider=event.provider,
-        model=event.model,
+        provider=provider,
+        model=model_name,
         input_tokens=event.input_tokens,
         cached_input_tokens=event.cached_input_tokens,
         output_tokens=event.output_tokens,

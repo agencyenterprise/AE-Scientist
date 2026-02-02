@@ -32,42 +32,8 @@ def is_list_of_strings(*, value: object) -> bool:
     return all(isinstance(x, str) for x in value)
 
 
-def validate_plot_analyses(*, value: object) -> list[str]:
-    if not isinstance(value, list):
-        return ["plot_analyses must be a list"]
-    errors: list[str] = []
-    for idx, entry in enumerate(value):
-        if not isinstance(entry, dict):
-            errors.append(f"plot_analyses[{idx}] must be an object/dict")
-            continue
-        analysis = entry.get("analysis")
-        if not is_non_empty_string(value=analysis):
-            errors.append(f"plot_analyses[{idx}].analysis must be a non-empty string")
-    return errors
-
-
 def codex_node_result_contract_prompt_lines_common() -> list[str]:
     return render_lines(template_name="contracts/common.txt.j2", context={})
-
-
-def _validate_metric(*, value: object) -> list[str]:
-    if not isinstance(value, dict):
-        return ["metric must be an object/dict"]
-    errors: list[str] = []
-    name = value.get("name")
-    maximize = value.get("maximize")
-    description = value.get("description")
-    metric_value = value.get("value")
-
-    if not is_non_empty_string(value=name):
-        errors.append("metric.name must be a non-empty string")
-    if not isinstance(maximize, bool):
-        errors.append("metric.maximize must be a boolean")
-    if not is_non_empty_string(value=description):
-        errors.append("metric.description must be a non-empty string")
-    if metric_value is not None and not isinstance(metric_value, (int, float)):
-        errors.append("metric.value must be a number (int/float) or null")
-    return errors
 
 
 def _unexpected_node_result_keys(*, node_result: dict[str, object]) -> list[str]:

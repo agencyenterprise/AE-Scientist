@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ae_paper_review import FigureImageCaptionRefReview, ReviewResponseModel
+
 from ai_scientist.api_types import (
     FigureReviewEvent,
     FigureReviewsEvent,
     ReviewCompletedEvent,
 )
-from ai_scientist.perform_llm_review import ReviewResponseModel
-from ai_scientist.perform_vlm_review import FigureImageCaptionRefReview
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,6 @@ class ReviewResponseRecorder:
         self, *, review: ReviewResponseModel, source_path: Path | None = None
     ) -> None:
         """Publish review via webhook. Database persistence handled by server."""
-        payload = review.model_dump()
         source_value = str(source_path) if source_path is not None else None
         created_at = datetime.now(timezone.utc).isoformat()
 
@@ -45,22 +44,22 @@ class ReviewResponseRecorder:
                 self._webhook_client.publish(
                     kind="review_completed",
                     payload=ReviewCompletedEvent(
-                        summary=review.Summary,
-                        strengths=payload.get("Strengths", []),
-                        weaknesses=payload.get("Weaknesses", []),
-                        originality=float(review.Originality),
-                        quality=float(review.Quality),
-                        clarity=float(review.Clarity),
-                        significance=float(review.Significance),
-                        questions=payload.get("Questions", []),
-                        limitations=payload.get("Limitations", []),
-                        ethical_concerns=review.Ethical_Concerns,
-                        soundness=float(review.Soundness),
-                        presentation=float(review.Presentation),
-                        contribution=float(review.Contribution),
-                        overall=float(review.Overall),
-                        confidence=float(review.Confidence),
-                        decision=review.Decision,
+                        summary=review.summary,
+                        strengths=review.strengths,
+                        weaknesses=review.weaknesses,
+                        originality=review.originality,
+                        quality=review.quality,
+                        clarity=review.clarity,
+                        significance=review.significance,
+                        questions=review.questions,
+                        limitations=review.limitations,
+                        ethical_concerns=review.ethical_concerns,
+                        soundness=review.soundness,
+                        presentation=review.presentation,
+                        contribution=review.contribution,
+                        overall=review.overall,
+                        confidence=review.confidence,
+                        decision=review.decision,
                         source_path=source_value,
                         created_at=created_at,
                     ),
@@ -100,10 +99,10 @@ class FigureReviewRecorder:
                 review_events = [
                     FigureReviewEvent(
                         figure_name=review.figure_name,
-                        img_description=review.review.Img_description,
-                        img_review=review.review.Img_review,
-                        caption_review=review.review.Caption_review,
-                        figrefs_review=review.review.Figrefs_review,
+                        img_description=review.review.img_description,
+                        img_review=review.review.img_review,
+                        caption_review=review.review.caption_review,
+                        figrefs_review=review.review.figrefs_review,
                         source_path=source_value,
                     )
                     for review in reviews
