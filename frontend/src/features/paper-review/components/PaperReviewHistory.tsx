@@ -115,7 +115,11 @@ function getScoreColor(score: number | null): string {
   return "text-red-400";
 }
 
-export function PaperReviewHistory() {
+interface PaperReviewHistoryProps {
+  refreshKey?: number;
+}
+
+export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
   const [reviews, setReviews] = useState<PaperReviewSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -241,7 +245,7 @@ export function PaperReviewHistory() {
         clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, []);
+  }, [refreshKey]);
 
   if (isLoading) {
     return (

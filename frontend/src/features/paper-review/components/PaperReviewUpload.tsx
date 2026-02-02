@@ -51,7 +51,11 @@ interface ReviewDetailResponse {
 
 const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
-export function PaperReviewUpload() {
+interface PaperReviewUploadProps {
+  onStartNewReview?: () => void;
+}
+
+export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -311,6 +315,8 @@ export function PaperReviewUpload() {
     setCurrentReviewId(null);
     setCurrentReviewFilename(null);
     setCurrentReviewStatus(null);
+    // Notify parent to refresh the history list
+    onStartNewReview?.();
   };
 
   // Show result if review is complete
