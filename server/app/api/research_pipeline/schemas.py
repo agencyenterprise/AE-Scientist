@@ -360,3 +360,14 @@ class DatasetUploadUrlResponse(BaseModel):
     upload_url: str
     s3_key: str
     expires_in: int
+
+
+class ArtifactExistsRequest(BaseModel):
+    artifact_type: str
+    filename: str
+
+
+class ArtifactExistsResponse(BaseModel):
+    exists: bool
+    s3_key: str
+    file_size: Optional[int] = None

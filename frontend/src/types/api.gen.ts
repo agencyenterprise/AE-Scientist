@@ -1141,6 +1141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/{run_id}/artifact-exists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Artifact Exists
+         * @description Check if an artifact already exists in S3 and return its size.
+         */
+        post: operations["check_artifact_exists_api_research_pipeline_events__run_id__artifact_exists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/{run_id}/multipart-upload-init": {
         parameters: {
             query?: never;
@@ -1898,6 +1918,22 @@ export interface components {
              * @default main_execution
              */
             run_type: string;
+        };
+        /** ArtifactExistsRequest */
+        ArtifactExistsRequest: {
+            /** Artifact Type */
+            artifact_type: string;
+            /** Filename */
+            filename: string;
+        };
+        /** ArtifactExistsResponse */
+        ArtifactExistsResponse: {
+            /** Exists */
+            exists: boolean;
+            /** S3 Key */
+            s3_key: string;
+            /** File Size */
+            file_size?: number | null;
         };
         /**
          * ArtifactPresignedUrlResponse
@@ -7836,6 +7872,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PresignedUploadUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_artifact_exists_api_research_pipeline_events__run_id__artifact_exists_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactExistsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactExistsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -10,6 +10,8 @@ from app.services.s3_service import get_s3_service
 
 from .auth import ResearchRunStore, verify_run_auth
 from .schemas import (
+    ArtifactExistsRequest,
+    ArtifactExistsResponse,
     DatasetFileInfo,
     DatasetUploadUrlRequest,
     DatasetUploadUrlResponse,
@@ -75,6 +77,45 @@ async def get_presigned_upload_url(
         upload_url=upload_url,
         s3_key=s3_key,
         expires_in=PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    )
+
+
+@router.post("/{run_id}/artifact-exists", response_model=ArtifactExistsResponse)
+async def check_artifact_exists(
+    run_id: str,
+    payload: ArtifactExistsRequest,
+    _: None = Depends(verify_run_auth),
+) -> ArtifactExistsResponse:
+    """Check if an artifact already exists in S3 and return its size."""
+    db = cast(ResearchRunStore, get_database())
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+
+    s3_service = get_s3_service()
+    try:
+        file_info = s3_service.get_file_info(s3_key=s3_key)
+        exists = True
+        file_size = file_info.get("content_length")
+    except Exception:
+        exists = False
+        file_size = None
+
+    logger.debug(
+        "Artifact exists check: run=%s type=%s filename=%s exists=%s size=%s",
+        run_id,
+        payload.artifact_type,
+        payload.filename,
+        exists,
+        file_size,
+    )
+
+    return ArtifactExistsResponse(
+        exists=exists,
+        s3_key=s3_key,
+        file_size=file_size,
     )
 
 
