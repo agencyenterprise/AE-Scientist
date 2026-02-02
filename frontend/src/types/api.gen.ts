@@ -764,6 +764,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public-config/best-paper-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Best Paper Download Url
+         * @description Generate a temporary signed URL for downloading the best paper example.
+         *     The URL expires after 1 hour.
+         */
+        get: operations["get_best_paper_download_url_api_public_config_best_paper_url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/{run_id}/stage-progress": {
         parameters: {
             query?: never;
@@ -7116,6 +7137,28 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: number;
+                    };
+                };
+            };
+        };
+    };
+    get_best_paper_download_url_api_public_config_best_paper_url_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };

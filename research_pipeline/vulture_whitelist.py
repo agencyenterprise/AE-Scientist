@@ -51,5 +51,6 @@ _.load_json  # serialize.py - multiple overloads
 # Telemetry methods (called dynamically)
 _.publish_run_started  # event_persistence.py
 _.publish_run_finished  # event_persistence.py
+_.publish_initialization_progress  # event_persistence.py
 _.publish_heartbeat  # event_persistence.py
 _.publish_gpu_shortage  # event_persistence.py

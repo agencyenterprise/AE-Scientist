@@ -1713,6 +1713,32 @@
         }
       }
     },
+    "/api/public-config/best-paper-url": {
+      "get": {
+        "tags": [
+          "public-config"
+        ],
+        "summary": "Get Best Paper Download Url",
+        "description": "Generate a temporary signed URL for downloading the best paper example.\nThe URL expires after 1 hour.",
+        "operationId": "get_best_paper_download_url_api_public_config_best_paper_url_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Get Best Paper Download Url Api Public Config Best Paper Url Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/{run_id}/stage-progress": {
       "post": {
         "tags": [
