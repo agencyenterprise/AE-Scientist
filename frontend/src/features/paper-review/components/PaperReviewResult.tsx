@@ -74,6 +74,62 @@ const SCORE_METRICS: ScoreMetric[] = [
   { label: "Confidence", key: "confidence", max: 5 },
 ];
 
+// Label mappings for scores
+const LABELS_LOW_TO_HIGH: Record<number, string> = {
+  1: "Low",
+  2: "Medium",
+  3: "High",
+  4: "Very high",
+};
+
+const LABELS_POOR_TO_EXCELLENT: Record<number, string> = {
+  1: "Poor",
+  2: "Fair",
+  3: "Good",
+  4: "Excellent",
+};
+
+const LABELS_OVERALL: Record<number, string> = {
+  1: "Very Strong Reject",
+  2: "Strong Reject",
+  3: "Reject",
+  4: "Borderline Reject",
+  5: "Borderline Accept",
+  6: "Weak Accept",
+  7: "Accept",
+  8: "Strong Accept",
+  9: "Very Strong Accept",
+  10: "Award Quality",
+};
+
+const LABELS_CONFIDENCE: Record<number, string> = {
+  1: "Educated guess",
+  2: "Uncertain",
+  3: "Fairly confident",
+  4: "Confident",
+  5: "Absolutely certain",
+};
+
+function getScoreLabel(key: keyof ReviewContent, score: number): string {
+  switch (key) {
+    case "originality":
+    case "quality":
+    case "clarity":
+    case "significance":
+      return LABELS_LOW_TO_HIGH[score] || "";
+    case "soundness":
+    case "presentation":
+    case "contribution":
+      return LABELS_POOR_TO_EXCELLENT[score] || "";
+    case "overall":
+      return LABELS_OVERALL[score] || "";
+    case "confidence":
+      return LABELS_CONFIDENCE[score] || "";
+    default:
+      return "";
+  }
+}
+
 function getDecisionColor(decision: string): string {
   const d = decision.toLowerCase();
   if (d.includes("accept")) return "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
@@ -194,6 +250,7 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
           {SCORE_METRICS.map(metric => {
             const score = content[metric.key] as number;
+            const label = getScoreLabel(metric.key, score);
             return (
               <div
                 key={metric.label}
@@ -204,6 +261,7 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
                   {score}
                   <span className="text-sm font-normal text-slate-500">/{metric.max}</span>
                 </div>
+                {label && <div className="mt-1 text-xs text-slate-500">{label}</div>}
               </div>
             );
           })}

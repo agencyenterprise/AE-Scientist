@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { PaperReviewUpload } from "@/features/paper-review/components/PaperReviewUpload";
 import { PaperReviewHistory } from "@/features/paper-review/components/PaperReviewHistory";
+import { PaperReviewHowItWorks } from "@/features/paper-review/components/PaperReviewHowItWorks";
 import { PageCard } from "@/shared/components/PageCard";
 
 export default function PaperReviewPage() {
@@ -24,6 +25,8 @@ export default function PaperReviewPage() {
             weaknesses, and recommendations.
           </p>
           <PaperReviewUpload onStartNewReview={handleStartNewReview} />
+
+          <PaperReviewHowItWorks className="mt-6" />
         </div>
       </PageCard>
 

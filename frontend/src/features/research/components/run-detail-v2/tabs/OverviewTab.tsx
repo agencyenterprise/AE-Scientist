@@ -9,6 +9,19 @@ import type { ArtifactMetadata, LlmReviewResponse, ResearchRunInfo } from "@/typ
 import { cn } from "@/shared/lib/utils";
 import { ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
 
+const LABELS_OVERALL: Record<number, string> = {
+  1: "Very Strong Reject",
+  2: "Strong Reject",
+  3: "Reject",
+  4: "Borderline Reject",
+  5: "Borderline Accept",
+  6: "Weak Accept",
+  7: "Accept",
+  8: "Strong Accept",
+  9: "Very Strong Accept",
+  10: "Award Quality",
+};
+
 interface OverviewTabProps {
   run: ResearchRunInfo;
   conversationId: number | null;
@@ -129,6 +142,7 @@ function EvaluationSummary({
             {review.overall}
             <span className="text-sm text-slate-400 font-normal">/10</span>
           </p>
+          <p className="text-xs text-slate-500">{LABELS_OVERALL[review.overall] || ""}</p>
         </div>
         <div>
           <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Decision</p>

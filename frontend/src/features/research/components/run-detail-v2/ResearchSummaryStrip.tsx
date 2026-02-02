@@ -5,6 +5,19 @@ import { getCurrentStageLabel } from "../../utils/research-utils";
 import type { LlmReviewResponse } from "@/types/research";
 import { CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
 
+const LABELS_OVERALL: Record<number, string> = {
+  1: "Very Strong Reject",
+  2: "Strong Reject",
+  3: "Reject",
+  4: "Borderline Reject",
+  5: "Borderline Accept",
+  6: "Weak Accept",
+  7: "Accept",
+  8: "Strong Accept",
+  9: "Very Strong Accept",
+  10: "Award Quality",
+};
+
 interface ResearchSummaryStripProps {
   status: string;
   currentStage: string | null;
@@ -121,16 +134,22 @@ export function ResearchSummaryStrip({
           {reviewLoading ? (
             <span className="text-sm text-slate-400">Loading...</span>
           ) : review ? (
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "text-sm font-bold",
-                  review.decision === "Accept" ? "text-emerald-400" : "text-red-400"
-                )}
-              >
-                {review.decision === "Accept" ? "PASS" : "FAIL"}
-              </span>
-              <span className="text-sm font-semibold text-yellow-400">{review.overall}/10</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "text-sm font-bold",
+                    review.decision === "Accept" ? "text-emerald-400" : "text-red-400"
+                  )}
+                >
+                  {review.decision === "Accept" ? "PASS" : "FAIL"}
+                </span>
+                <span className="text-sm font-semibold text-yellow-400">
+                  {review.overall}
+                  <span className="text-xs font-normal text-slate-400">/10</span>
+                </span>
+              </div>
+              <span className="text-xs text-slate-500">{LABELS_OVERALL[review.overall] || ""}</span>
             </div>
           ) : (
             <span className="text-sm text-slate-400">-</span>

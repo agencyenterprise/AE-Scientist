@@ -84,16 +84,19 @@ Train Stage-1 → Stage-2 as before to obtain θ₁ and θ₂. Evaluate retentio
 - **Rare token selection bias:** Mitigation: use multiple rare-token sets; include synthetic multi-token strings as control`;
 
 // Scores from the best paper analysis
+// For 1-4 scales: 4=Excellent, 3=Good, 2=Fair, 1=Poor
+// For Overall (1-10): 9-10=Award level, 7-8=Strong Accept, 6=Solid Accept, 4-5=Borderline, 1-3=Reject
+// For Confidence (1-5): 5=Absolutely certain, 4=Confident, 3=Fairly confident, 2=Uncertain, 1=Educated guess
 const SCORES = [
-  { label: "Originality", value: 3, max: 4 },
-  { label: "Quality", value: 3, max: 4 },
-  { label: "Clarity", value: 3, max: 4 },
-  { label: "Significance", value: 3, max: 4 },
-  { label: "Soundness", value: 3, max: 4 },
-  { label: "Presentation", value: 3, max: 4 },
-  { label: "Contribution", value: 3, max: 4 },
-  { label: "Overall", value: 6, max: 10 },
-  { label: "Confidence", value: 3, max: 5 },
+  { label: "Originality", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Quality", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Clarity", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Significance", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Soundness", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Presentation", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Contribution", value: 3, max: 4, displayLabel: "Good" },
+  { label: "Overall", value: 6, displayLabel: "Solid Accept" },
+  { label: "Confidence", value: 3, displayLabel: "Fairly confident" },
 ];
 
 const SUMMARY = `The paper studies a controlled "token forgetting" phenomenon in sequential fine-tuning when checkpoint selection is driven only by the current objective. Using distilgpt2, Stage 1 "installs" 8 synthetic strings that each map to a single new token id, reaching perfect held-out next-token accuracy on carrier prompts. Stage 2 fine-tunes on WikiText-2 while excluding these installed tokens and selects the checkpoint solely by minimum Stage-2 validation loss; retention is evaluated only after this selection and drops substantially (reported 1.0 → 0.479 micro accuracy in the main run). The core scientific question is where forgetting lives causally: in the readout pathway ("head": final layer norm LN_f and unembedding W_U) versus in upper-layer residual-stream features ("body") and their alignment with the head.`;
@@ -320,8 +323,13 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
                 </div>
                 <div className="text-lg font-bold text-amber-300">
                   {metric.value}
-                  <span className="text-sm text-slate-500 font-normal">/{metric.max}</span>
+                  {"max" in metric && (
+                    <span className="text-sm text-slate-500 font-normal">/{metric.max}</span>
+                  )}
                 </div>
+                {"displayLabel" in metric && (
+                  <div className="text-xs text-slate-400 mt-0.5">{metric.displayLabel}</div>
+                )}
               </div>
             ))}
           </div>

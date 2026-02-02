@@ -5,6 +5,59 @@ import type { LlmReviewResponse } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import { BarChart3, FileText, ThumbsUp, ThumbsDown, HelpCircle, AlertTriangle } from "lucide-react";
 
+// Label mappings for scores
+const LABELS_LOW_TO_HIGH: Record<number, string> = {
+  1: "Low",
+  2: "Medium",
+  3: "High",
+  4: "Very high",
+};
+
+const LABELS_POOR_TO_EXCELLENT: Record<number, string> = {
+  1: "Poor",
+  2: "Fair",
+  3: "Good",
+  4: "Excellent",
+};
+
+const LABELS_OVERALL: Record<number, string> = {
+  1: "Very Strong Reject",
+  2: "Strong Reject",
+  3: "Reject",
+  4: "Borderline Reject",
+  5: "Borderline Accept",
+  6: "Weak Accept",
+  7: "Accept",
+  8: "Strong Accept",
+  9: "Very Strong Accept",
+  10: "Award Quality",
+};
+
+const LABELS_CONFIDENCE: Record<number, string> = {
+  1: "Educated guess",
+  2: "Uncertain",
+  3: "Fairly confident",
+  4: "Confident",
+  5: "Absolutely certain",
+};
+
+type ScoreType = "low_to_high" | "poor_to_excellent" | "overall" | "confidence";
+
+function getScoreLabel(type: ScoreType, score: number): string {
+  switch (type) {
+    case "low_to_high":
+      return LABELS_LOW_TO_HIGH[score] || "";
+    case "poor_to_excellent":
+      return LABELS_POOR_TO_EXCELLENT[score] || "";
+    case "overall":
+      return LABELS_OVERALL[score] || "";
+    case "confidence":
+      return LABELS_CONFIDENCE[score] || "";
+    default:
+      return "";
+  }
+}
+
 interface EvaluationTabProps {
   review: LlmReviewResponse | null;
   reviewLoading: boolean;
@@ -37,15 +90,60 @@ export function EvaluationTab({
             <h2 className="text-lg font-semibold text-white">Detailed Scores</h2>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <ScoreItem label="Originality" value={review.originality} maxValue={4} />
-            <ScoreItem label="Quality" value={review.quality} maxValue={4} />
-            <ScoreItem label="Clarity" value={review.clarity} maxValue={4} />
-            <ScoreItem label="Significance" value={review.significance} maxValue={4} />
-            <ScoreItem label="Soundness" value={review.soundness} maxValue={4} />
-            <ScoreItem label="Presentation" value={review.presentation} maxValue={4} />
-            <ScoreItem label="Contribution" value={review.contribution} maxValue={4} />
-            <ScoreItem label="Overall" value={review.overall} maxValue={10} />
-            <ScoreItem label="Confidence" value={review.confidence} maxValue={5} />
+            <ScoreItem
+              label="Originality"
+              value={review.originality}
+              maxValue={4}
+              semanticLabel={getScoreLabel("low_to_high", review.originality)}
+            />
+            <ScoreItem
+              label="Quality"
+              value={review.quality}
+              maxValue={4}
+              semanticLabel={getScoreLabel("low_to_high", review.quality)}
+            />
+            <ScoreItem
+              label="Clarity"
+              value={review.clarity}
+              maxValue={4}
+              semanticLabel={getScoreLabel("low_to_high", review.clarity)}
+            />
+            <ScoreItem
+              label="Significance"
+              value={review.significance}
+              maxValue={4}
+              semanticLabel={getScoreLabel("low_to_high", review.significance)}
+            />
+            <ScoreItem
+              label="Soundness"
+              value={review.soundness}
+              maxValue={4}
+              semanticLabel={getScoreLabel("poor_to_excellent", review.soundness)}
+            />
+            <ScoreItem
+              label="Presentation"
+              value={review.presentation}
+              maxValue={4}
+              semanticLabel={getScoreLabel("poor_to_excellent", review.presentation)}
+            />
+            <ScoreItem
+              label="Contribution"
+              value={review.contribution}
+              maxValue={4}
+              semanticLabel={getScoreLabel("poor_to_excellent", review.contribution)}
+            />
+            <ScoreItem
+              label="Overall"
+              value={review.overall}
+              maxValue={10}
+              semanticLabel={getScoreLabel("overall", review.overall)}
+            />
+            <ScoreItem
+              label="Confidence"
+              value={review.confidence}
+              maxValue={5}
+              semanticLabel={getScoreLabel("confidence", review.confidence)}
+            />
           </div>
         </div>
       )}
@@ -137,10 +235,12 @@ function ScoreItem({
   label,
   value,
   maxValue = 4,
+  semanticLabel,
 }: {
   label: string;
   value: number;
   maxValue?: number;
+  semanticLabel?: string;
 }) {
   const normalizedScore = (value / maxValue) * 10;
 
@@ -158,6 +258,7 @@ function ScoreItem({
         {value}
         <span className="text-xs font-normal text-slate-400">/{maxValue}</span>
       </p>
+      {semanticLabel && <p className="text-xs text-slate-500">{semanticLabel}</p>}
     </div>
   );
 }
