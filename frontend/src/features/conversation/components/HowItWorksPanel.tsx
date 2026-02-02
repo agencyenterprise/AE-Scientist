@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/shared/lib/api-client-typed";
 import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, BarChart3, Clock4, DollarSign, FileText, GitBranch } from "lucide-react";
+import { BestPaperShowcase } from "./BestPaperShowcase";
 
 const FLOW_STEPS = [
   {
@@ -167,6 +168,11 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* Best Paper Example */}
+      <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/60 p-6">
+        <BestPaperShowcase />
       </section>
     </div>
   );
