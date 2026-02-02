@@ -234,8 +234,8 @@ export function PaperReviewUpload() {
       const effectiveModel = selectedModel || currentModel;
       const effectiveProvider = selectedProvider || currentProvider;
       if (effectiveModel && effectiveProvider) {
-        // Format as "provider/model" for the API
-        formData.append("model", `${effectiveProvider}/${effectiveModel}`);
+        // Format as "provider:model" for LangChain's init_chat_model
+        formData.append("model", `${effectiveProvider}:${effectiveModel}`);
       }
 
       // Review parameters (hardcoded for now, user can't configure these yet)
