@@ -1,10 +1,55 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { FileUp, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FileUp, Loader2, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { config } from "@/shared/lib/config";
+import { withAuthHeaders } from "@/shared/lib/session-token";
+import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
+import { PromptTypes } from "@/shared/lib/prompt-types";
 import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
 
-type UploadState = "idle" | "uploading" | "reviewing" | "complete" | "error";
+type UploadState = "idle" | "uploading" | "polling" | "complete" | "error";
+
+interface PendingReview {
+  id: number;
+  status: string;
+  original_filename: string;
+  model: string;
+  created_at: string;
+}
+
+interface ReviewDetailResponse {
+  id: number;
+  status: string;
+  error_message?: string | null;
+  summary?: string | null;
+  strengths?: string[] | null;
+  weaknesses?: string[] | null;
+  originality?: number | null;
+  quality?: number | null;
+  clarity?: number | null;
+  significance?: number | null;
+  questions?: string[] | null;
+  limitations?: string[] | null;
+  ethical_concerns?: boolean | null;
+  soundness?: number | null;
+  presentation?: number | null;
+  contribution?: number | null;
+  overall?: number | null;
+  confidence?: number | null;
+  decision?: string | null;
+  original_filename: string;
+  model: string;
+  created_at: string;
+  token_usage?: {
+    input_tokens: number;
+    cached_input_tokens: number;
+    output_tokens: number;
+  } | null;
+  credits_charged?: number;
+}
+
+const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
 export function PaperReviewUpload() {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -12,6 +57,145 @@ export function PaperReviewUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reviewResult, setReviewResult] = useState<PaperReviewResponse | null>(null);
+
+  // Track the current review being polled
+  const [currentReviewId, setCurrentReviewId] = useState<number | null>(null);
+  const [currentReviewFilename, setCurrentReviewFilename] = useState<string | null>(null);
+  const [currentReviewStatus, setCurrentReviewStatus] = useState<string | null>(null);
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Model selection state
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [currentModel, setCurrentModel] = useState<string>("");
+  const [currentProvider, setCurrentProvider] = useState<string>("");
+
+  const handleModelChange = useCallback((model: string, provider: string) => {
+    setSelectedModel(model);
+    setSelectedProvider(provider);
+  }, []);
+
+  const handleDefaultsChange = useCallback((model: string, provider: string) => {
+    setCurrentModel(model);
+    setCurrentProvider(provider);
+  }, []);
+
+  // Check for pending reviews on mount
+  useEffect(() => {
+    async function checkPendingReviews() {
+      try {
+        const headers = withAuthHeaders(new Headers());
+        const response = await fetch(`${config.apiUrl}/paper-reviews/pending`, {
+          headers,
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.reviews && data.reviews.length > 0) {
+            // Resume polling for the most recent pending review
+            const pendingReview: PendingReview = data.reviews[0];
+            setCurrentReviewId(pendingReview.id);
+            setCurrentReviewFilename(pendingReview.original_filename);
+            setCurrentReviewStatus(pendingReview.status);
+            setUploadState("polling");
+          }
+        }
+      } catch {
+        // Silently ignore errors checking for pending reviews
+      }
+    }
+
+    checkPendingReviews();
+
+    // Cleanup polling on unmount
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Poll for review completion
+  useEffect(() => {
+    if (uploadState !== "polling" || !currentReviewId) {
+      return;
+    }
+
+    async function pollReviewStatus() {
+      try {
+        const headers = withAuthHeaders(new Headers());
+        const response = await fetch(`${config.apiUrl}/paper-reviews/${currentReviewId}`, {
+          headers,
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch review status");
+        }
+
+        const data: ReviewDetailResponse = await response.json();
+        setCurrentReviewStatus(data.status);
+
+        if (data.status === "completed") {
+          // Review is complete - transform to the format PaperReviewResult expects
+          const result: PaperReviewResponse = {
+            id: data.id,
+            review: {
+              summary: data.summary || "",
+              strengths: data.strengths || [],
+              weaknesses: data.weaknesses || [],
+              questions: data.questions || [],
+              limitations: data.limitations || [],
+              ethical_concerns: data.ethical_concerns || false,
+              originality: data.originality || 0,
+              quality: data.quality || 0,
+              clarity: data.clarity || 0,
+              significance: data.significance || 0,
+              soundness: data.soundness || 0,
+              presentation: data.presentation || 0,
+              contribution: data.contribution || 0,
+              overall: data.overall || 0,
+              confidence: data.confidence || 0,
+              decision: data.decision || "",
+            },
+            token_usage: data.token_usage || {
+              input_tokens: 0,
+              cached_input_tokens: 0,
+              output_tokens: 0,
+            },
+            credits_charged: data.credits_charged || 0,
+            original_filename: data.original_filename,
+            model: data.model,
+            created_at: data.created_at,
+          };
+          setReviewResult(result);
+          setUploadState("complete");
+          setCurrentReviewId(null);
+        } else if (data.status === "failed") {
+          // Review failed
+          setError(data.error_message || "Review failed");
+          setUploadState("error");
+          setCurrentReviewId(null);
+        } else {
+          // Still pending or processing - continue polling
+          pollTimeoutRef.current = setTimeout(pollReviewStatus, POLL_INTERVAL_MS);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to check review status");
+        setUploadState("error");
+        setCurrentReviewId(null);
+      }
+    }
+
+    pollReviewStatus();
+
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
+  }, [uploadState, currentReviewId]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -42,16 +226,28 @@ export function PaperReviewUpload() {
     setReviewResult(null);
 
     try {
-      setUploadState("reviewing");
-
       // Create FormData for file upload
       const formData = new FormData();
       formData.append("file", file);
 
+      // Use the selected model or fall back to current default
+      const effectiveModel = selectedModel || currentModel;
+      const effectiveProvider = selectedProvider || currentProvider;
+      if (effectiveModel && effectiveProvider) {
+        // Format as "provider/model" for the API
+        formData.append("model", `${effectiveProvider}/${effectiveModel}`);
+      }
+
+      // Review parameters (hardcoded for now, user can't configure these yet)
+      formData.append("num_reviews_ensemble", "3");
+      formData.append("num_reflections", "2");
+
       // Use fetch directly for multipart form data
-      const response = await fetch("/api/paper-reviews", {
+      const headers = withAuthHeaders(new Headers());
+      const response = await fetch(`${config.apiUrl}/paper-reviews`, {
         method: "POST",
         body: formData,
+        headers,
         credentials: "include",
       });
 
@@ -60,16 +256,19 @@ export function PaperReviewUpload() {
         throw new Error(errorData.error || errorData.detail || "Failed to submit paper for review");
       }
 
-      const result: PaperReviewResponse = await response.json();
-      setReviewResult(result);
-      setUploadState("complete");
+      // API returns immediately with review_id and status
+      const result = await response.json();
+      setCurrentReviewId(result.review_id);
+      setCurrentReviewFilename(file.name);
+      setCurrentReviewStatus(result.status);
+      setUploadState("polling");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
       setUploadState("error");
     }
   };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
@@ -85,9 +284,9 @@ export function PaperReviewUpload() {
       setSelectedFile(file);
       submitForReview(file);
     }
-  }, []);
+  };
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     const file = files?.[0];
     if (file) {
@@ -99,13 +298,19 @@ export function PaperReviewUpload() {
       setSelectedFile(file);
       submitForReview(file);
     }
-  }, []);
+  };
 
   const handleReset = () => {
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current);
+    }
     setUploadState("idle");
     setSelectedFile(null);
     setError(null);
     setReviewResult(null);
+    setCurrentReviewId(null);
+    setCurrentReviewFilename(null);
+    setCurrentReviewStatus(null);
   };
 
   // Show result if review is complete
@@ -116,7 +321,9 @@ export function PaperReviewUpload() {
           <div className="flex items-center gap-2 text-emerald-400">
             <CheckCircle className="h-5 w-5" />
             <span className="font-medium">Review Complete</span>
-            {selectedFile && <span className="text-slate-400">for {selectedFile.name}</span>}
+            {(selectedFile || currentReviewFilename) && (
+              <span className="text-slate-400">for {selectedFile?.name || currentReviewFilename}</span>
+            )}
           </div>
           <button
             onClick={handleReset}
@@ -130,18 +337,26 @@ export function PaperReviewUpload() {
     );
   }
 
-  // Show loading state
-  if (uploadState === "uploading" || uploadState === "reviewing") {
+  // Show loading/polling state
+  if (uploadState === "uploading" || uploadState === "polling") {
+    const statusText =
+      currentReviewStatus === "processing"
+        ? "Analyzing paper with AI..."
+        : currentReviewStatus === "pending"
+          ? "Starting analysis..."
+          : "Uploading paper...";
+
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-12">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-amber-400" />
-        <p className="text-lg font-medium text-white">
-          {uploadState === "uploading" ? "Uploading paper..." : "Analyzing paper..."}
+        <p className="text-lg font-medium text-white">{statusText}</p>
+        <p className="mt-2 text-sm text-slate-400">
+          {selectedFile?.name || currentReviewFilename}
         </p>
-        <p className="mt-2 text-sm text-slate-400">{selectedFile?.name}</p>
-        <p className="mt-4 text-xs text-slate-500">
-          This may take a few minutes depending on the paper length
-        </p>
+        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+          <Clock className="h-3 w-3" />
+          <span>This process runs in the background - you can refresh the page safely</span>
+        </div>
       </div>
     );
   }
@@ -166,6 +381,20 @@ export function PaperReviewUpload() {
   // Default upload state
   return (
     <div>
+      {/* Model selector */}
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-sm text-slate-400">Select AI model for review:</span>
+        <ModelSelector
+          promptType={PromptTypes.PAPER_REVIEW}
+          onModelChange={handleModelChange}
+          onDefaultsChange={handleDefaultsChange}
+          selectedModel={selectedModel}
+          selectedProvider={selectedProvider}
+          showMakeDefault={true}
+          showCapabilities={false}
+        />
+      </div>
+
       {error && (
         <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
           <AlertCircle className="h-4 w-4" />

@@ -16,15 +16,15 @@ gen-api-types:
 		--target-python-version 3.12 \
 		--use-annotated \
 		--field-constraints \
+		--input-file-type openapi \
 		--use-double-quotes \
 		--collapse-root-models \
 		--use-default-kwarg \
-		--enum-field-as-literal one
+		--enum-field-as-literal one \
+		--formatters ruff-format ruff-check
 	@# Add mypy ignore directive and remove timestamp (to avoid spurious diffs)
 	@grep -v '#   timestamp:' ai_scientist/api_types.py > ai_scientist/api_types.py.tmp && mv ai_scientist/api_types.py.tmp ai_scientist/api_types.py
 	@echo '# mypy: ignore-errors' | cat - ai_scientist/api_types.py > ai_scientist/api_types.py.tmp && mv ai_scientist/api_types.py.tmp ai_scientist/api_types.py
-	VIRTUAL_ENV= uv run black ai_scientist/api_types.py --exclude 'workspaces|\.venv'
-	VIRTUAL_ENV= uv run isort ai_scientist/api_types.py
 	@echo "✅ API types generated at ai_scientist/api_types.py"
 
 # Linting

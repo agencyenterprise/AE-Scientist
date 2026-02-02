@@ -1680,7 +1680,7 @@ export interface paths {
          * List Paper Reviews
          * @description List paper reviews for the authenticated user.
          *
-         *     Returns a paginated list of review summaries.
+         *     Returns a paginated list of review summaries including status.
          */
         get: operations["list_paper_reviews_api_paper_reviews_get"];
         put?: never;
@@ -1688,12 +1688,34 @@ export interface paths {
          * Create Paper Review
          * @description Submit a paper for review.
          *
-         *     Upload a PDF file and receive a comprehensive academic review including
-         *     scores for originality, quality, clarity, significance, and more.
+         *     Upload a PDF file to start an asynchronous review process. The endpoint
+         *     returns immediately with a review ID that can be used to poll for results.
          *
-         *     Requires authentication. Credits will be charged based on token usage.
+         *     Requires authentication. Credits will be charged when the review completes.
          */
         post: operations["create_paper_review_api_paper_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/paper-reviews/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pending Reviews
+         * @description Get all pending or processing reviews for the authenticated user.
+         *
+         *     Use this endpoint to check if there are any reviews in progress.
+         */
+        get: operations["get_pending_reviews_api_paper_reviews_pending_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1712,6 +1734,7 @@ export interface paths {
          * @description Get a specific paper review by ID.
          *
          *     Only returns reviews owned by the authenticated user.
+         *     Poll this endpoint to check if a review has completed.
          */
         get: operations["get_paper_review_api_paper_reviews__review_id__get"];
         put?: never;
@@ -1960,20 +1983,17 @@ export interface components {
             file: string;
             /**
              * Model
-             * @description LLM model to use for review
-             * @default anthropic/claude-sonnet-4-20250514
+             * @description LLM model to use for review (provider/model format)
              */
             model: string;
             /**
              * Num Reviews Ensemble
              * @description Number of ensemble reviews (1-5)
-             * @default 3
              */
             num_reviews_ensemble: number;
             /**
              * Num Reflections
              * @description Number of reflection rounds (1-3)
-             * @default 2
              */
             num_reflections: number;
         };
@@ -8702,6 +8722,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pending_reviews_api_paper_reviews_pending_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

@@ -215,6 +215,7 @@ def extract_abstract(text: str) -> str:
 def generate_vlm_img_cap_ref_review(
     img: Dict[str, Any],
     abstract: str,
+    provider: str,
     model: str,
     temperature: float,
     usage: TokenUsage | None = None,
@@ -224,7 +225,8 @@ def generate_vlm_img_cap_ref_review(
     Args:
         img: Dict with caption, images, main_text_figrefs
         abstract: Paper abstract
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         usage: Optional token usage accumulator
 
@@ -244,6 +246,7 @@ def generate_vlm_img_cap_ref_review(
         parsed, _ = get_structured_response_from_vlm(
             msg=prompt,
             image_paths=img["images"],
+            provider=provider,
             model=model,
             system_message=_reviewer_system_prompt_base,
             temperature=temperature,
@@ -258,6 +261,7 @@ def generate_vlm_img_cap_ref_review(
 
 def generate_vlm_img_review(
     img: Dict[str, Any],
+    provider: str,
     model: str,
     temperature: float,
     usage: TokenUsage | None = None,
@@ -266,7 +270,8 @@ def generate_vlm_img_review(
 
     Args:
         img: Dict with images list
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         usage: Optional token usage accumulator
 
@@ -278,6 +283,7 @@ def generate_vlm_img_review(
         parsed, _ = get_structured_response_from_vlm(
             msg=prompt,
             image_paths=img["images"],
+            provider=provider,
             model=model,
             system_message=_reviewer_system_prompt_base,
             temperature=temperature,
@@ -291,6 +297,7 @@ def generate_vlm_img_review(
 
 
 def perform_imgs_cap_ref_review(
+    provider: str,
     model: str,
     pdf_path: str,
     temperature: float,
@@ -299,7 +306,8 @@ def perform_imgs_cap_ref_review(
     """Review all figures in a paper with caption and reference analysis.
 
     Args:
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
         usage: Optional token usage accumulator
@@ -323,6 +331,7 @@ def perform_imgs_cap_ref_review(
         review = generate_vlm_img_cap_ref_review(
             img=img,
             abstract=abstract,
+            provider=provider,
             model=model,
             temperature=temperature,
             usage=usage,
@@ -336,6 +345,7 @@ def perform_imgs_cap_ref_review(
 
 
 def detect_duplicate_figures(
+    provider: str,
     model: str,
     pdf_path: str,
     temperature: float,
@@ -344,7 +354,8 @@ def detect_duplicate_figures(
     """Detect duplicate or similar figures in a paper.
 
     Args:
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
         usage: Optional token usage accumulator
@@ -383,6 +394,7 @@ def detect_duplicate_figures(
                 "Focus on content similarity, not just visual style."
             ),
             image_paths=image_paths,
+            provider=provider,
             model=model,
             system_message=system_message,
             temperature=temperature,
@@ -397,6 +409,7 @@ def detect_duplicate_figures(
 def generate_vlm_img_selection_review(
     img: Dict[str, Any],
     abstract: str,
+    provider: str,
     model: str,
     reflection_page_info: str,
     temperature: float,
@@ -407,7 +420,8 @@ def generate_vlm_img_selection_review(
     Args:
         img: Dict with caption, images, main_text_figrefs
         abstract: Paper abstract
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         reflection_page_info: Page limit information
         temperature: Sampling temperature
         usage: Optional token usage accumulator
@@ -429,6 +443,7 @@ def generate_vlm_img_selection_review(
         parsed, _ = get_structured_response_from_vlm(
             msg=prompt,
             image_paths=img["images"],
+            provider=provider,
             model=model,
             system_message=_reviewer_system_prompt_base,
             temperature=temperature,
@@ -442,6 +457,7 @@ def generate_vlm_img_selection_review(
 
 
 def perform_imgs_cap_ref_review_selection(
+    provider: str,
     model: str,
     pdf_path: str,
     reflection_page_info: str,
@@ -451,7 +467,8 @@ def perform_imgs_cap_ref_review_selection(
     """Review figures for selection decisions.
 
     Args:
-        model: VLM model identifier
+        provider: VLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         reflection_page_info: Page limit information
         temperature: Sampling temperature
@@ -476,6 +493,7 @@ def perform_imgs_cap_ref_review_selection(
         review = generate_vlm_img_selection_review(
             img=img,
             abstract=abstract,
+            provider=provider,
             model=model,
             reflection_page_info=reflection_page_info,
             temperature=temperature,

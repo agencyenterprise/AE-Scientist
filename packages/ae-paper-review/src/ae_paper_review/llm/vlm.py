@@ -5,11 +5,11 @@ import io
 import logging
 from typing import Any, Tuple
 
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from PIL import Image
 from pydantic import BaseModel
 
+from .llm import _create_chat_model
 from .token_tracking import TokenUsage, TrackCostCallbackHandler
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,7 @@ def _build_vlm_messages(
 
 
 def make_vlm_call(
+    provider: str,
     model: str,
     temperature: float,
     system_message: str,
@@ -80,7 +81,9 @@ def make_vlm_call(
             HumanMessage(content=str(user_content)),
         ]
 
-    logger.debug("VLM make_vlm_call - model=%s, temperature=%s", model, temperature)
+    logger.debug(
+        "VLM make_vlm_call - provider=%s, model=%s, temperature=%s", provider, model, temperature
+    )
     logger.debug("VLM make_vlm_call - system_message: %s", system_message)
     for idx, message in enumerate(messages):
         logger.debug(
@@ -89,16 +92,13 @@ def make_vlm_call(
             message.type,
         )
 
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
     )
 
-    callbacks = [TrackCostCallbackHandler(model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
     ai_message = retrying_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )
@@ -114,6 +114,7 @@ def make_vlm_call(
 def get_response_from_vlm(
     msg: str,
     image_paths: str | list[str],
+    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -137,6 +138,7 @@ def get_response_from_vlm(
 
     new_msg_history = msg_history + [messages[-1]]
     ai_message = make_vlm_call(
+        provider=provider,
         model=model,
         temperature=temperature,
         system_message=system_message,
@@ -167,6 +169,7 @@ def get_structured_response_from_vlm(
     *,
     msg: str,
     image_paths: str | list[str],
+    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -190,13 +193,10 @@ def get_structured_response_from_vlm(
     )
 
     new_msg_history = msg_history + [messages[-1]]
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
 
-    callbacks = [TrackCostCallbackHandler(model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
     parsed = structured_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )

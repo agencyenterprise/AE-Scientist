@@ -123,6 +123,7 @@ def _render_context_block(context: Optional[Dict[str, Any]]) -> str:
 
 def perform_review(
     text: str,
+    provider: str,
     model: str,
     temperature: float,
     *,
@@ -140,7 +141,8 @@ def perform_review(
 
     Args:
         text: The paper text to review
-        model: LLM model identifier (e.g., "anthropic/claude-sonnet-4-20250514")
+        provider: LLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         context: Optional context dict with idea_overview, paper_signals, etc.
         num_reflections: Number of reflection rounds (default 2)
@@ -206,6 +208,7 @@ Here is the paper you are asked to review:
     ) -> tuple[ReviewResponseModel, list[BaseMessage]]:
         response_dict, updated_history = get_structured_response_from_llm(
             prompt=prompt_text,
+            provider=provider,
             model=model,
             system_message=system_msg,
             temperature=temperature,
@@ -241,7 +244,7 @@ Here is the paper you are asked to review:
                 logger.warning("Ensemble review %s failed: %s", idx, exc)
 
         if parsed_reviews:
-            review = _get_meta_review(model, temperature, parsed_reviews, usage=usage)
+            review = _get_meta_review(provider, model, temperature, parsed_reviews, usage=usage)
             if review is None:
                 review = parsed_reviews[0]
             parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
@@ -445,6 +448,7 @@ Be critical and cautious in your decision, find consensus, and respect all revie
 
 
 def _get_meta_review(
+    provider: str,
     model: str,
     temperature: float,
     reviews: list[ReviewResponseModel],
@@ -453,7 +457,8 @@ def _get_meta_review(
     """Aggregate multiple reviews into a meta-review (internal function).
 
     Args:
-        model: LLM model identifier
+        provider: LLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         reviews: List of individual reviews to aggregate
         usage: Token usage accumulator
@@ -473,6 +478,7 @@ Review {i + 1}/{len(reviews)}:
     try:
         response_dict, _ = get_structured_response_from_llm(
             prompt=base_prompt,
+            provider=provider,
             model=model,
             system_message=_meta_reviewer_system_prompt.format(reviewer_count=len(reviews)),
             temperature=temperature,

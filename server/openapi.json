@@ -4266,7 +4266,7 @@
           "paper-reviews"
         ],
         "summary": "Create Paper Review",
-        "description": "Submit a paper for review.\n\nUpload a PDF file and receive a comprehensive academic review including\nscores for originality, quality, clarity, significance, and more.\n\nRequires authentication. Credits will be charged based on token usage.",
+        "description": "Submit a paper for review.\n\nUpload a PDF file to start an asynchronous review process. The endpoint\nreturns immediately with a review ID that can be used to poll for results.\n\nRequires authentication. Credits will be charged when the review completes.",
         "operationId": "create_paper_review_api_paper_reviews_post",
         "requestBody": {
           "required": true,
@@ -4304,7 +4304,7 @@
           "paper-reviews"
         ],
         "summary": "List Paper Reviews",
-        "description": "List paper reviews for the authenticated user.\n\nReturns a paginated list of review summaries.",
+        "description": "List paper reviews for the authenticated user.\n\nReturns a paginated list of review summaries including status.",
         "operationId": "list_paper_reviews_api_paper_reviews_get",
         "parameters": [
           {
@@ -4350,13 +4350,33 @@
         }
       }
     },
+    "/api/paper-reviews/pending": {
+      "get": {
+        "tags": [
+          "paper-reviews"
+        ],
+        "summary": "Get Pending Reviews",
+        "description": "Get all pending or processing reviews for the authenticated user.\n\nUse this endpoint to check if there are any reviews in progress.",
+        "operationId": "get_pending_reviews_api_paper_reviews_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/paper-reviews/{review_id}": {
       "get": {
         "tags": [
           "paper-reviews"
         ],
         "summary": "Get Paper Review",
-        "description": "Get a specific paper review by ID.\n\nOnly returns reviews owned by the authenticated user.",
+        "description": "Get a specific paper review by ID.\n\nOnly returns reviews owned by the authenticated user.\nPoll this endpoint to check if a review has completed.",
         "operationId": "get_paper_review_api_paper_reviews__review_id__get",
         "parameters": [
           {
@@ -4778,29 +4798,29 @@
           "model": {
             "type": "string",
             "title": "Model",
-            "description": "LLM model to use for review",
-            "default": "anthropic/claude-sonnet-4-20250514"
+            "description": "LLM model to use for review (provider/model format)"
           },
           "num_reviews_ensemble": {
             "type": "integer",
             "maximum": 5.0,
             "minimum": 1.0,
             "title": "Num Reviews Ensemble",
-            "description": "Number of ensemble reviews (1-5)",
-            "default": 3
+            "description": "Number of ensemble reviews (1-5)"
           },
           "num_reflections": {
             "type": "integer",
             "maximum": 3.0,
             "minimum": 1.0,
             "title": "Num Reflections",
-            "description": "Number of reflection rounds (1-3)",
-            "default": 2
+            "description": "Number of reflection rounds (1-3)"
           }
         },
         "type": "object",
         "required": [
-          "file"
+          "file",
+          "model",
+          "num_reviews_ensemble",
+          "num_reflections"
         ],
         "title": "Body_create_paper_review_api_paper_reviews_post"
       },

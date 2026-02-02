@@ -34,6 +34,31 @@ from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEve
 logger = logging.getLogger(__name__)
 
 
+def _parse_model_string(model_string: str) -> tuple[str, str]:
+    """Parse a 'provider/model' string into separate provider and model components.
+
+    Args:
+        model_string: Model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
+
+    Returns:
+        Tuple of (provider, model)
+
+    Raises:
+        ValueError: If model_string is not in the expected format
+    """
+    if "/" not in model_string:
+        raise ValueError(
+            f"Invalid model format: '{model_string}'. Expected 'provider/model' format "
+            "(e.g., 'anthropic/claude-sonnet-4-20250514')"
+        )
+    provider, model = model_string.split("/", 1)
+    if not provider or not model:
+        raise ValueError(
+            f"Invalid model format: '{model_string}'. Both provider and model must be non-empty."
+        )
+    return provider, model
+
+
 def _load_idea_json(idea_dir: str, idea_json: dict[str, Any] | None) -> dict[str, Any] | None:
     """Load idea JSON from file or return provided dict.
 
@@ -140,7 +165,7 @@ def perform_review(
 
     Args:
         text: Paper text to review
-        model: LLM model identifier
+        model: LLM model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
         temperature: Sampling temperature
         context: Optional review context
         num_reflections: Number of reflection rounds
@@ -158,10 +183,14 @@ def perform_review(
     if event_callback and run_id:
         adapted_callback = make_event_callback_adapter(run_id, event_callback)
 
+    # Parse model string into provider and model components
+    provider, model_name = _parse_model_string(model)
+
     # Perform the review (returns ReviewResult with token usage)
     result = _perform_review(
         text=text,
-        model=model,
+        provider=provider,
+        model=model_name,
         temperature=temperature,
         context=context,
         num_reflections=num_reflections,
@@ -189,18 +218,22 @@ def perform_imgs_cap_ref_review(
     with automatic webhook-based token usage publishing.
 
     Args:
-        model: VLM model identifier
+        model: VLM model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
 
     Returns:
         List of figure reviews
     """
+    # Parse model string into provider and model components
+    provider, model_name = _parse_model_string(model)
+
     # Create a usage tracker to accumulate VLM token usage
     usage = TokenUsage()
 
     reviews = _perform_imgs_cap_ref_review(
-        model=model,
+        provider=provider,
+        model=model_name,
         pdf_path=pdf_path,
         temperature=temperature,
         usage=usage,
@@ -221,16 +254,20 @@ def detect_duplicate_figures(
     """Detect duplicate figures with token tracking.
 
     Args:
-        model: VLM model identifier
+        model: VLM model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
 
     Returns:
         Analysis string or error dict
     """
+    # Parse model string into provider and model components
+    provider, model_name = _parse_model_string(model)
+
     usage = TokenUsage()
     result = _detect_duplicate_figures(
-        model=model,
+        provider=provider,
+        model=model_name,
         pdf_path=pdf_path,
         temperature=temperature,
         usage=usage,
@@ -249,16 +286,20 @@ def generate_vlm_img_review(
 
     Args:
         img: Dict with images list
-        model: VLM model identifier
+        model: VLM model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
         temperature: Sampling temperature
 
     Returns:
         Review dict or None if failed
     """
+    # Parse model string into provider and model components
+    provider, model_name = _parse_model_string(model)
+
     usage = TokenUsage()
     result = _generate_vlm_img_review(
         img=img,
-        model=model,
+        provider=provider,
+        model=model_name,
         temperature=temperature,
         usage=usage,
     )
@@ -276,7 +317,7 @@ def perform_imgs_cap_ref_review_selection(
     """Review figures for selection with token tracking.
 
     Args:
-        model: VLM model identifier
+        model: VLM model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         reflection_page_info: Page limit information
         temperature: Sampling temperature
@@ -284,9 +325,13 @@ def perform_imgs_cap_ref_review_selection(
     Returns:
         Dict mapping figure names to reviews
     """
+    # Parse model string into provider and model components
+    provider, model_name = _parse_model_string(model)
+
     usage = TokenUsage()
     result = _perform_imgs_cap_ref_review_selection(
-        model=model,
+        provider=provider,
+        model=model_name,
         pdf_path=pdf_path,
         reflection_page_info=reflection_page_info,
         temperature=temperature,

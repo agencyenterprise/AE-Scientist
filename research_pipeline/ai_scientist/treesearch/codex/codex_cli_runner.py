@@ -52,7 +52,7 @@ def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> P
     if not venv_dir.exists():
         _run_uv(
             args=["venv", "--system-site-packages", str(venv_dir)],
-            timeout_seconds=600,
+            timeout_seconds=1800,
             extra_env={},
             cwd=workspace_dir,
         )

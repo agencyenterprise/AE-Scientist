@@ -2,6 +2,7 @@
 Paper review API endpoints.
 
 Provides endpoints for submitting papers for review and retrieving results.
+Reviews are processed asynchronously in the background.
 """
 
 import logging
@@ -33,43 +34,21 @@ class TokenUsageResponse(BaseModel):
     output_tokens: int = Field(..., description="Total output tokens used")
 
 
-class ReviewContent(BaseModel):
-    """Full review content."""
-
-    summary: str = Field(..., description="Paper summary")
-    strengths: List[str] = Field(..., description="List of paper strengths")
-    weaknesses: List[str] = Field(..., description="List of paper weaknesses")
-    originality: int
-    quality: int
-    clarity: int
-    significance: int
-    questions: List[str] = Field(..., description="Questions for authors")
-    limitations: List[str] = Field(..., description="Identified limitations")
-    ethical_concerns: bool = Field(..., description="Whether ethical concerns were identified")
-    soundness: int
-    presentation: int
-    contribution: int
-    overall: int
-    confidence: int
-    decision: str = Field(..., description="Review decision (Accept/Reject/etc.)")
-
-
-class PaperReviewResponse(BaseModel):
-    """Response for a completed paper review."""
+class PaperReviewStartedResponse(BaseModel):
+    """Response when a paper review is started."""
 
     review_id: int = Field(..., description="Unique review ID")
-    review: ReviewContent = Field(..., description="Full review content")
-    token_usage: TokenUsageResponse = Field(..., description="Token usage summary")
-    credits_charged: int = Field(..., description="Credits charged for this review")
+    status: str = Field(..., description="Review status (pending)")
 
 
 class PaperReviewSummary(BaseModel):
     """Summary of a paper review for list views."""
 
     id: int = Field(..., description="Review ID")
-    summary: str = Field(..., description="Truncated summary")
-    overall: int = Field(..., description="Overall score")
-    decision: str = Field(..., description="Review decision")
+    status: str = Field(..., description="Review status")
+    summary: Optional[str] = Field(None, description="Paper summary (null if pending)")
+    overall: Optional[int] = Field(None, description="Overall score (null if pending)")
+    decision: Optional[str] = Field(None, description="Review decision (null if pending)")
     original_filename: str = Field(..., description="Original PDF filename")
     model: str = Field(..., description="Model used for review")
     created_at: str = Field(..., description="ISO timestamp of review creation")
@@ -86,26 +65,52 @@ class PaperReviewDetailResponse(BaseModel):
     """Detailed response for a single paper review."""
 
     id: int
-    summary: str
-    strengths: List[str]
-    weaknesses: List[str]
-    originality: int
-    quality: int
-    clarity: int
-    significance: int
-    questions: List[str]
-    limitations: List[str]
-    ethical_concerns: bool
-    soundness: int
-    presentation: int
-    contribution: int
-    overall: int
-    confidence: int
-    decision: str
+    status: str = Field(..., description="Review status: pending, processing, completed, failed")
+    error_message: Optional[str] = Field(None, description="Error message if status is failed")
+    summary: Optional[str] = Field(None, description="Paper summary (null if not completed)")
+    strengths: Optional[List[str]] = Field(
+        None, description="List of strengths (null if not completed)"
+    )
+    weaknesses: Optional[List[str]] = Field(
+        None, description="List of weaknesses (null if not completed)"
+    )
+    originality: Optional[int] = None
+    quality: Optional[int] = None
+    clarity: Optional[int] = None
+    significance: Optional[int] = None
+    questions: Optional[List[str]] = None
+    limitations: Optional[List[str]] = None
+    ethical_concerns: Optional[bool] = None
+    soundness: Optional[int] = None
+    presentation: Optional[int] = None
+    contribution: Optional[int] = None
+    overall: Optional[int] = None
+    confidence: Optional[int] = None
+    decision: Optional[str] = None
     original_filename: str
     model: str
     created_at: str
-    token_usage: TokenUsageResponse
+    token_usage: Optional[TokenUsageResponse] = Field(
+        None, description="Token usage (null if not completed)"
+    )
+    credits_charged: int = Field(0, description="Credits charged for this review")
+
+
+class PendingReviewSummary(BaseModel):
+    """Summary of a pending/processing review."""
+
+    id: int = Field(..., description="Review ID")
+    status: str = Field(..., description="Review status")
+    original_filename: str = Field(..., description="Original PDF filename")
+    model: str = Field(..., description="Model used for review")
+    created_at: str = Field(..., description="ISO timestamp of review creation")
+
+
+class PendingReviewsResponse(BaseModel):
+    """Response for listing pending reviews."""
+
+    reviews: List[PendingReviewSummary] = Field(..., description="List of pending reviews")
+    count: int = Field(..., description="Number of pending reviews")
 
 
 @router.post("", response_model=None)
@@ -113,30 +118,19 @@ async def create_paper_review(
     request: Request,
     response: Response,
     file: UploadFile = File(..., description="PDF file to review"),
-    model: str = Form(
-        default="anthropic/claude-sonnet-4-20250514",
-        description="LLM model to use for review",
-    ),
+    model: str = Form(..., description="LLM model to use for review (provider/model format)"),
     num_reviews_ensemble: int = Form(
-        default=3,
-        ge=1,
-        le=5,
-        description="Number of ensemble reviews (1-5)",
+        ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
     ),
-    num_reflections: int = Form(
-        default=2,
-        ge=1,
-        le=3,
-        description="Number of reflection rounds (1-3)",
-    ),
-) -> Union[PaperReviewResponse, ErrorResponse]:
+    num_reflections: int = Form(..., ge=1, le=3, description="Number of reflection rounds (1-3)"),
+) -> Union[PaperReviewStartedResponse, ErrorResponse]:
     """
     Submit a paper for review.
 
-    Upload a PDF file and receive a comprehensive academic review including
-    scores for originality, quality, clarity, significance, and more.
+    Upload a PDF file to start an asynchronous review process. The endpoint
+    returns immediately with a review ID that can be used to poll for results.
 
-    Requires authentication. Credits will be charged based on token usage.
+    Requires authentication. Credits will be charged when the review completes.
     """
     # Get authenticated user
     current_user = get_current_user(request)
@@ -165,10 +159,10 @@ async def create_paper_review(
         response.status_code = 400
         return ErrorResponse(error="Empty file", detail="The uploaded file is empty")
 
-    # Perform review
+    # Start review (returns immediately)
     try:
         service = get_paper_review_service()
-        result = await service.review_paper(
+        result = await service.start_review(
             user_id=current_user.id,
             pdf_content=pdf_content,
             original_filename=file.filename,
@@ -177,15 +171,14 @@ async def create_paper_review(
             num_reflections=num_reflections,
         )
 
-        return PaperReviewResponse(
+        response.status_code = 202  # Accepted
+        return PaperReviewStartedResponse(
             review_id=result["review_id"],
-            review=ReviewContent(**result["review"]),
-            token_usage=TokenUsageResponse(**result["token_usage"]),
-            credits_charged=result["credits_charged"],
+            status=result["status"],
         )
 
     except Exception as e:
-        logger.exception("Paper review failed")
+        logger.exception("Failed to start paper review")
         # Check if it's a payment required error
         status_code = getattr(e, "status_code", None)
         if status_code == 402:
@@ -195,7 +188,34 @@ async def create_paper_review(
                 detail="You don't have enough credits to perform this review",
             )
         response.status_code = 500
-        return ErrorResponse(error="Review failed", detail=str(e))
+        return ErrorResponse(error="Failed to start review", detail=str(e))
+
+
+@router.get("/pending", response_model=None)
+async def get_pending_reviews(
+    request: Request,
+    response: Response,
+) -> Union[PendingReviewsResponse, ErrorResponse]:
+    """
+    Get all pending or processing reviews for the authenticated user.
+
+    Use this endpoint to check if there are any reviews in progress.
+    """
+    current_user = get_current_user(request)
+
+    try:
+        service = get_paper_review_service()
+        reviews = await service.get_pending_reviews(user_id=current_user.id)
+
+        return PendingReviewsResponse(
+            reviews=[PendingReviewSummary(**r) for r in reviews],
+            count=len(reviews),
+        )
+
+    except Exception as e:
+        logger.exception("Failed to get pending reviews")
+        response.status_code = 500
+        return ErrorResponse(error="Failed to get pending reviews", detail=str(e))
 
 
 @router.get("", response_model=None)
@@ -208,7 +228,7 @@ async def list_paper_reviews(
     """
     List paper reviews for the authenticated user.
 
-    Returns a paginated list of review summaries.
+    Returns a paginated list of review summaries including status.
     """
     current_user = get_current_user(request)
 
@@ -241,6 +261,7 @@ async def get_paper_review(
     Get a specific paper review by ID.
 
     Only returns reviews owned by the authenticated user.
+    Poll this endpoint to check if a review has completed.
     """
     current_user = get_current_user(request)
 
@@ -258,28 +279,36 @@ async def get_paper_review(
                 detail="The requested review does not exist or you don't have access to it",
             )
 
+        # Build token usage if available
+        token_usage = None
+        if review.get("token_usage") and review["token_usage"].get("input_tokens"):
+            token_usage = TokenUsageResponse(**review["token_usage"])
+
         return PaperReviewDetailResponse(
             id=review["id"],
-            summary=review["summary"],
-            strengths=review["strengths"],
-            weaknesses=review["weaknesses"],
-            originality=review["originality"],
-            quality=review["quality"],
-            clarity=review["clarity"],
-            significance=review["significance"],
-            questions=review["questions"],
-            limitations=review["limitations"],
-            ethical_concerns=review["ethical_concerns"],
-            soundness=review["soundness"],
-            presentation=review["presentation"],
-            contribution=review["contribution"],
-            overall=review["overall"],
-            confidence=review["confidence"],
-            decision=review["decision"],
+            status=review["status"],
+            error_message=review.get("error_message"),
+            summary=review.get("summary") or None,
+            strengths=review.get("strengths"),
+            weaknesses=review.get("weaknesses"),
+            originality=review.get("originality"),
+            quality=review.get("quality"),
+            clarity=review.get("clarity"),
+            significance=review.get("significance"),
+            questions=review.get("questions"),
+            limitations=review.get("limitations"),
+            ethical_concerns=review.get("ethical_concerns"),
+            soundness=review.get("soundness"),
+            presentation=review.get("presentation"),
+            contribution=review.get("contribution"),
+            overall=review.get("overall"),
+            confidence=review.get("confidence"),
+            decision=review.get("decision"),
             original_filename=review["original_filename"],
             model=review["model"],
             created_at=review["created_at"],
-            token_usage=TokenUsageResponse(**review["token_usage"]),
+            token_usage=token_usage,
+            credits_charged=review.get("credits_charged", 0),
         )
 
     except Exception as e:

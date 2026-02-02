@@ -7,12 +7,11 @@ and are not part of the shared ae-paper-review package.
 import logging
 from typing import Any, TypeVar, cast
 
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 
-from .llm import get_response_from_llm
+from .llm import _create_chat_model, get_response_from_llm
 from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
@@ -131,10 +130,7 @@ def _invoke_langchain_query(
             message.type,
             message.content,
         )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     ai_message = chat.invoke(messages, config={"callbacks": [TrackCostCallbackHandler(model)]})
     logger.debug(
         "LLM _invoke_langchain_query - response: %s - %s",
@@ -169,10 +165,7 @@ def _invoke_structured_langchain_query(
             message.type,
             message.content,
         )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -195,16 +188,13 @@ def structured_query_with_schema(
     schema_class: type[TStructured],
 ) -> TStructured:
     """
-    Very thin helper around init_chat_model for structured outputs using a schema class.
+    Thin helper for structured outputs using a schema class.
     """
     messages = _build_messages_for_query(
         system_message=system_message,
         user_message=user_message,
     )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(
         schema=schema_class,
     )
@@ -243,7 +233,6 @@ def get_batch_responses_from_llm(
     msg_history: list[BaseMessage] | None = None,
     n_responses: int = 1,
 ) -> tuple[list[str], list[list[BaseMessage]]]:
-    """Get multiple responses from an LLM (re-exports from ae_paper_review with compatible signature)."""
     if msg_history is None:
         msg_history = []
 

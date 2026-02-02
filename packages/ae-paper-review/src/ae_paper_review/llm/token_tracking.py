@@ -9,8 +9,6 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from langchain.chat_models import BaseChatModel
-from langchain.chat_models.base import _parse_model
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
@@ -79,28 +77,17 @@ def _usage_value_to_int(*, value: object) -> int:
         return 0
 
 
-def extract_model_name_and_provider(model: str | BaseChatModel) -> tuple[str, str]:
-    """Extract the model name and provider from a model."""
-    if isinstance(model, BaseChatModel):
-        model_attr = getattr(model, "model", None)
-        if model_attr is None:
-            model_attr = getattr(model, "model_name", None)
-        if model_attr is None:
-            raise ValueError(f"Model {model} has no model or model_name attribute")
-        model_name = str(model_attr)
-    else:
-        model_name = model
-    return _parse_model(model_name, None)
-
-
 class TrackCostCallbackHandler(BaseCallbackHandler):
     """LangChain callback handler that accumulates token usage."""
 
     def __init__(
         self,
-        model: str | None = None,
+        *,
+        provider: str,
+        model: str,
         usage: TokenUsage | None = None,
     ) -> None:
+        self.provider = provider
         self.model = model
         self.usage = usage or TokenUsage()
 
@@ -126,11 +113,6 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                 return
             message = last_generation.message
             if isinstance(message, AIMessage):
-                model_name = self.model or message.response_metadata.get("model_name")
-                if not model_name:
-                    raise ValueError(
-                        "Model name not found in response metadata or provided in constructor"
-                    )
                 usage_metadata_raw = message.usage_metadata
                 usage_metadata: dict[str, object] = (
                     cast(dict[str, object], usage_metadata_raw) if usage_metadata_raw else {}
@@ -141,13 +123,12 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                 )
                 output_tokens = _usage_value_to_int(value=usage_metadata.get("output_tokens"))
 
-                model_name_parsed, provider = extract_model_name_and_provider(model_name)
                 self.usage.add(
-                    provider=provider,
-                    model=model_name_parsed,
+                    provider=self.provider,
+                    model=self.model,
                     input_tokens=input_tokens,
                     cached_input_tokens=cached_input_tokens,
                     output_tokens=output_tokens,
                 )
         except Exception:
-            logger.warning("Token tracking failed; continuing without tracking")
+            logger.warning("Token tracking failed; continuing without tracking", exc_info=True)

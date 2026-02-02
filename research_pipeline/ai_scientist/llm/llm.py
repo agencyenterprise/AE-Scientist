@@ -3,6 +3,7 @@ import logging
 from typing import Any, Tuple, TypeVar, cast
 
 from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
@@ -10,6 +11,28 @@ from pydantic import BaseModel
 from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
+
+
+def _create_chat_model(model: str, temperature: float) -> BaseChatModel:
+    """Create a chat model, handling 'provider/model' format.
+
+    LangChain's init_chat_model expects 'provider:model' format (with colon).
+    We accept 'provider/model' (with slash) and convert it.
+
+    Args:
+        model: Model identifier, either "provider/model" or just "model"
+        temperature: Sampling temperature
+
+    Returns:
+        Configured BaseChatModel instance
+    """
+    # Convert provider/model to provider:model format that LangChain expects
+    if "/" in model:
+        model = model.replace("/", ":", 1)
+    return init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
 
 
 PromptType = str | dict[str, Any] | list[Any] | None
@@ -66,10 +89,7 @@ def make_llm_call(
             message.type,
             message.content,
         )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -230,10 +250,7 @@ def get_structured_response_from_llm(
         "LLM structured payload detail: %s", json.dumps(message_payload, ensure_ascii=False)
     )
 
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
     parsed_model = structured_chat.invoke(
         messages, config={"callbacks": [TrackCostCallbackHandler(model)]}
@@ -304,10 +321,7 @@ def _invoke_langchain_query(
             message.type,
             message.content,
         )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     ai_message = chat.invoke(messages, config={"callbacks": [TrackCostCallbackHandler(model)]})
     logger.debug(
         "LLM _invoke_langchain_query - response: %s - %s",
@@ -341,10 +355,7 @@ def _invoke_structured_langchain_query(
             message.type,
             message.content,
         )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -367,16 +378,13 @@ def structured_query_with_schema(
     schema_class: type[TStructured],
 ) -> TStructured:
     """
-    Very thin helper around init_chat_model for structured outputs using a schema class.
+    Very thin helper for structured outputs using a schema class.
     """
     messages = _build_messages_for_query(
         system_message=system_message,
         user_message=user_message,
     )
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(
         schema=schema_class,
     )

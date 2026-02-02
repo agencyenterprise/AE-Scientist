@@ -5,6 +5,7 @@ import logging
 from typing import Any, Tuple
 
 from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 
@@ -13,11 +14,33 @@ from .token_tracking import TokenUsage, TrackCostCallbackHandler
 logger = logging.getLogger(__name__)
 
 
+def _create_chat_model(provider: str, model: str, temperature: float) -> BaseChatModel:
+    """Create a chat model using separate provider and model parameters.
+
+    LangChain's init_chat_model expects 'provider:model' format (with colon).
+    We combine provider and model with a colon separator.
+
+    Args:
+        provider: LLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
+        temperature: Sampling temperature
+
+    Returns:
+        Configured BaseChatModel instance
+    """
+    model_string = f"{provider}:{model}"
+    return init_chat_model(
+        model=model_string,
+        temperature=temperature,
+    )
+
+
 PromptType = str | dict[str, Any] | list[Any] | None
 
 
 def get_batch_responses_from_llm(
     prompt: str,
+    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -35,6 +58,7 @@ def get_batch_responses_from_llm(
     for _ in range(n_responses):
         content, history = get_response_from_llm(
             prompt=prompt,
+            provider=provider,
             model=model,
             system_message=system_message,
             temperature=temperature,
@@ -49,6 +73,7 @@ def get_batch_responses_from_llm(
 
 
 def make_llm_call(
+    provider: str,
     model: str,
     temperature: float,
     system_message: str,
@@ -61,7 +86,9 @@ def make_llm_call(
         messages.append(SystemMessage(content=system_message))
     messages.extend(prompt)
 
-    logger.debug("LLM make_llm_call - model=%s, temperature=%s", model, temperature)
+    logger.debug(
+        "LLM make_llm_call - provider=%s, model=%s, temperature=%s", provider, model, temperature
+    )
     logger.debug("LLM make_llm_call - system_message: %s", system_message)
     for idx, message in enumerate(messages):
         logger.debug(
@@ -71,16 +98,13 @@ def make_llm_call(
             message.content,
         )
 
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
     )
 
-    callbacks = [TrackCostCallbackHandler(model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
     ai_message = retrying_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )
@@ -95,6 +119,7 @@ def make_llm_call(
 
 def get_response_from_llm(
     prompt: str,
+    provider: str,
     model: str,
     system_message: str,
     temperature: float,
@@ -108,6 +133,7 @@ def get_response_from_llm(
 
     new_msg_history = msg_history + [HumanMessage(content=prompt)]
     ai_message = make_llm_call(
+        provider=provider,
         model=model,
         temperature=temperature,
         system_message=system_message,
@@ -191,6 +217,7 @@ def compile_prompt_to_md(
 def get_structured_response_from_llm(
     *,
     prompt: str,
+    provider: str,
     model: str,
     system_message: PromptType | None,
     temperature: float,
@@ -220,7 +247,8 @@ def get_structured_response_from_llm(
         for message in messages
     ]
     logger.info(
-        "LLM structured payload (model=%s, temperature=%s, messages=%s)",
+        "LLM structured payload (provider=%s, model=%s, temperature=%s, messages=%s)",
+        provider,
         model,
         temperature,
         len(message_payload),
@@ -230,13 +258,10 @@ def get_structured_response_from_llm(
         json.dumps(message_payload, ensure_ascii=False),
     )
 
-    chat = init_chat_model(
-        model=model,
-        temperature=temperature,
-    )
+    chat = _create_chat_model(provider=provider, model=model, temperature=temperature)
     structured_chat = chat.with_structured_output(schema=schema_class)
 
-    callbacks = [TrackCostCallbackHandler(model, usage=usage)]
+    callbacks = [TrackCostCallbackHandler(provider=provider, model=model, usage=usage)]
     parsed_model = structured_chat.invoke(
         messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
     )

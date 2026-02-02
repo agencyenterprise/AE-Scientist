@@ -3,8 +3,12 @@ Paper review service for standalone PDF reviews.
 
 This service orchestrates paper review using the ae-paper-review package,
 handling token tracking, database persistence, and credit charging.
+
+Reviews are processed asynchronously in the background to avoid blocking
+the main event loop.
 """
 
+import asyncio
 import logging
 import tempfile
 import uuid
@@ -12,13 +16,39 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from ae_paper_review import load_paper, perform_review
+from ae_paper_review import ReviewResult, load_paper, perform_review
 
 from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
-from app.services.database import get_database
+from app.services.database import PaperReviewStatus, get_database
 from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
+
+
+def parse_model_string(model_string: str) -> tuple[str, str]:
+    """Parse a 'provider/model' string into separate provider and model components.
+
+    Args:
+        model_string: Model identifier in "provider/model" format (e.g., "anthropic/claude-sonnet-4-20250514")
+
+    Returns:
+        Tuple of (provider, model)
+
+    Raises:
+        ValueError: If model_string is not in the expected format
+    """
+    if "/" not in model_string:
+        raise ValueError(
+            f"Invalid model format: '{model_string}'. Expected 'provider/model' format "
+            "(e.g., 'anthropic/claude-sonnet-4-20250514')"
+        )
+    provider, model = model_string.split("/", 1)
+    if not provider or not model:
+        raise ValueError(
+            f"Invalid model format: '{model_string}'. Both provider and model must be non-empty."
+        )
+    return provider, model
+
 
 # Minimum credits required to start a paper review
 MINIMUM_CREDITS_FOR_REVIEW = 100
@@ -44,6 +74,35 @@ def calculate_review_cost(input_tokens: int, output_tokens: int) -> int:
     output_cost = (output_tokens / 1_000_000) * OUTPUT_TOKEN_COST_PER_MILLION
     total_cost = input_cost + output_cost
     return max(1, int(total_cost + 0.5))  # Round to nearest, minimum 1 credit
+
+
+def _run_review_sync(
+    paper_text: str,
+    provider: str,
+    model: str,
+    num_reviews_ensemble: int,
+    num_reflections: int,
+) -> ReviewResult:
+    """Run the paper review synchronously (called in thread pool).
+
+    This function is designed to be called via asyncio.to_thread() to avoid
+    blocking the main event loop.
+
+    Args:
+        paper_text: The extracted text from the paper PDF
+        provider: LLM provider (e.g., "anthropic", "openai")
+        model: Model name (e.g., "claude-sonnet-4-20250514")
+        num_reviews_ensemble: Number of ensemble reviews
+        num_reflections: Number of reflection rounds
+    """
+    return perform_review(
+        text=paper_text,
+        provider=provider,
+        model=model,
+        temperature=1,
+        num_reviews_ensemble=num_reviews_ensemble,
+        num_reflections=num_reflections,
+    )
 
 
 class PaperReviewService:
@@ -89,57 +148,48 @@ class PaperReviewService:
         logger.debug("Uploaded paper PDF to S3: %s", s3_key)
         return s3_key
 
-    async def review_paper(
+    async def _process_review_background(
         self,
         *,
+        review_id: int,
         user_id: int,
         pdf_content: bytes,
         original_filename: str,
         model: str,
         num_reviews_ensemble: int,
         num_reflections: int,
-    ) -> dict[str, Any]:
-        """Perform a paper review and store the results.
+    ) -> None:
+        """Process a paper review in the background.
 
-        Args:
-            user_id: ID of the user requesting the review
-            pdf_content: Raw PDF file content
-            original_filename: Original filename of the uploaded PDF
-            model: LLM model to use for review
-            num_reviews_ensemble: Number of ensemble reviews
-            num_reflections: Number of reflection rounds
-
-        Returns:
-            Dict containing review_id and review results
-
-        Raises:
-            HTTPException: If user has insufficient credits
+        This method runs the blocking LLM call in a thread pool and updates
+        the database with the results.
         """
         db = get_database()
-
-        # Check user has minimum credits
-        await enforce_minimum_credits(
-            user_id=user_id,
-            required=MINIMUM_CREDITS_FOR_REVIEW,
-            action="paper_review",
-        )
-
-        # Save PDF to temporary file for processing
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
-            tmp_file.write(pdf_content)
-            tmp_path = Path(tmp_file.name)
+        tmp_path: Path | None = None
 
         try:
-            # Load paper text from PDF
+            # Update status to processing
+            await db.update_paper_review_status(review_id, PaperReviewStatus.PROCESSING)
+
+            # Save PDF to temporary file for processing
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
+                tmp_file.write(pdf_content)
+                tmp_path = Path(tmp_file.name)
+
+            # Load paper text from PDF (relatively fast, ok to do here)
             paper_text = load_paper(str(tmp_path))
 
-            # Perform the review (returns ReviewResult with token usage)
-            result = perform_review(
-                text=paper_text,
-                model=model,
-                temperature=0.1,
-                num_reviews_ensemble=num_reviews_ensemble,
-                num_reflections=num_reflections,
+            # Parse model string into provider and model components
+            provider, model_name = parse_model_string(model)
+
+            # Run the LLM review in a thread pool to avoid blocking
+            result = await asyncio.to_thread(
+                _run_review_sync,
+                paper_text,
+                provider,
+                model_name,
+                num_reviews_ensemble,
+                num_reflections,
             )
 
             # Get token usage from result
@@ -152,17 +202,10 @@ class PaperReviewService:
                 output_tokens=total_usage["output_tokens"],
             )
 
-            # Upload PDF to S3 for storage
-            s3_key = self._upload_paper_pdf(
-                user_id=user_id,
-                pdf_content=pdf_content,
-                original_filename=original_filename,
-            )
-
-            # Store review in database
+            # Store the review results
             review = result.review
-            review_id = await db.insert_paper_review(
-                user_id=user_id,
+            await db.complete_paper_review(
+                review_id=review_id,
                 summary=review.summary,
                 strengths=review.strengths,
                 weaknesses=review.weaknesses,
@@ -179,9 +222,6 @@ class PaperReviewService:
                 overall=review.overall,
                 confidence=review.confidence,
                 decision=review.decision,
-                original_filename=original_filename,
-                s3_key=s3_key,
-                model=model,
             )
 
             # Store token usages
@@ -212,16 +252,100 @@ class PaperReviewService:
                 cost,
             )
 
-            return {
-                "review_id": review_id,
-                "review": review.model_dump(),
-                "token_usage": total_usage,
-                "credits_charged": cost,
-            }
+        except Exception as e:
+            # Mark review as failed
+            error_message = str(e)
+            logger.exception(
+                "Paper review failed: review_id=%d, error=%s", review_id, error_message
+            )
+            await db.update_paper_review_status(
+                review_id,
+                PaperReviewStatus.FAILED,
+                error_message=error_message[:1000],  # Limit error message length
+            )
 
         finally:
             # Clean up temporary file
-            tmp_path.unlink(missing_ok=True)
+            if tmp_path:
+                tmp_path.unlink(missing_ok=True)
+
+    async def start_review(
+        self,
+        *,
+        user_id: int,
+        pdf_content: bytes,
+        original_filename: str,
+        model: str,
+        num_reviews_ensemble: int,
+        num_reflections: int,
+    ) -> dict[str, Any]:
+        """Start a paper review asynchronously.
+
+        Creates a pending review record, uploads the PDF, and starts
+        background processing. Returns immediately with the review ID.
+
+        Args:
+            user_id: ID of the user requesting the review
+            pdf_content: Raw PDF file content
+            original_filename: Original filename of the uploaded PDF
+            model: LLM model to use for review
+            num_reviews_ensemble: Number of ensemble reviews
+            num_reflections: Number of reflection rounds
+
+        Returns:
+            Dict containing review_id and status
+
+        Raises:
+            HTTPException: If user has insufficient credits
+        """
+        db = get_database()
+
+        # Check user has minimum credits
+        await enforce_minimum_credits(
+            user_id=user_id,
+            required=MINIMUM_CREDITS_FOR_REVIEW,
+            action="paper_review",
+        )
+
+        # Upload PDF to S3 first
+        s3_key = self._upload_paper_pdf(
+            user_id=user_id,
+            pdf_content=pdf_content,
+            original_filename=original_filename,
+        )
+
+        # Create pending review record
+        review_id = await db.create_pending_paper_review(
+            user_id=user_id,
+            original_filename=original_filename,
+            s3_key=s3_key,
+            model=model,
+        )
+
+        logger.info(
+            "Paper review started: review_id=%d, user_id=%d, model=%s",
+            review_id,
+            user_id,
+            model,
+        )
+
+        # Start background processing (fire and forget)
+        asyncio.create_task(
+            self._process_review_background(
+                review_id=review_id,
+                user_id=user_id,
+                pdf_content=pdf_content,
+                original_filename=original_filename,
+                model=model,
+                num_reviews_ensemble=num_reviews_ensemble,
+                num_reflections=num_reflections,
+            )
+        )
+
+        return {
+            "review_id": review_id,
+            "status": PaperReviewStatus.PENDING.value,
+        }
 
     async def get_review(self, *, review_id: int, user_id: int) -> dict[str, Any] | None:
         """Get a paper review by ID.
@@ -241,8 +365,18 @@ class PaperReviewService:
 
         token_usage = await db.get_total_token_usage_by_review_id(review_id)
 
+        # Calculate credits charged from token usage
+        credits_charged = 0
+        if token_usage.get("input_tokens") and token_usage.get("output_tokens"):
+            credits_charged = calculate_review_cost(
+                input_tokens=token_usage["input_tokens"],
+                output_tokens=token_usage["output_tokens"],
+            )
+
         return {
             "id": review.id,
+            "status": review.status,
+            "error_message": review.error_message,
             "summary": review.summary,
             "strengths": review.strengths,
             "weaknesses": review.weaknesses,
@@ -263,7 +397,31 @@ class PaperReviewService:
             "model": review.model,
             "created_at": review.created_at.isoformat(),
             "token_usage": token_usage,
+            "credits_charged": credits_charged,
         }
+
+    async def get_pending_reviews(self, *, user_id: int) -> list[dict[str, Any]]:
+        """Get all pending or processing reviews for a user.
+
+        Args:
+            user_id: ID of the user
+
+        Returns:
+            List of pending/processing review dicts
+        """
+        db = get_database()
+        reviews = await db.get_pending_reviews_by_user(user_id)
+
+        return [
+            {
+                "id": review.id,
+                "status": review.status,
+                "original_filename": review.original_filename,
+                "model": review.model,
+                "created_at": review.created_at.isoformat(),
+            }
+            for review in reviews
+        ]
 
     async def list_reviews(
         self,
@@ -292,6 +450,7 @@ class PaperReviewService:
         return [
             {
                 "id": review.id,
+                "status": review.status,
                 "summary": review.summary,
                 "overall": review.overall,
                 "decision": review.decision,
