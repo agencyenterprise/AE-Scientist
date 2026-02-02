@@ -38,8 +38,14 @@ WORKDIR /app
 # Copy dependency files (from server/ since build context is repo root)
 COPY server/pyproject.toml server/uv.lock ./
 
+# Copy ae-paper-review package (needed as a dependency)
+COPY packages/ae-paper-review /packages/ae-paper-review
+
 # Install Python dependencies with uv (exclude dev dependencies)
 RUN uv sync --frozen --no-dev
+
+# Install ae-paper-review package
+RUN uv pip install /packages/ae-paper-review
 
 # Install Playwright browsers
 RUN uv run playwright install firefox chromium webkit
