@@ -101,57 +101,6 @@ def make_vlm_call(
     return ai_message
 
 
-def get_response_from_vlm(
-    msg: str,
-    image_paths: str | list[str],
-    model: str,
-    system_message: str,
-    temperature: float,
-    print_debug: bool = False,
-    msg_history: list[BaseMessage] | None = None,
-    max_images: int = 25,
-) -> Tuple[str, list[BaseMessage]]:
-    """Get response from vision-language model."""
-    if msg_history is None:
-        msg_history = []
-
-    paths_list = [image_paths] if isinstance(image_paths, str) else list(image_paths)
-    messages = _build_vlm_messages(
-        system_message=system_message,
-        history=msg_history,
-        msg=msg,
-        image_paths=paths_list,
-        max_images=max_images,
-    )
-
-    # For LangChain-native history, we store the last user message as a HumanMessage.
-    new_msg_history = msg_history + [messages[-1]]
-    ai_message = make_vlm_call(
-        model=model,
-        temperature=temperature,
-        system_message=system_message,
-        prompt=new_msg_history,
-    )
-    content_str = str(ai_message.content)
-    full_history = new_msg_history + [ai_message]
-
-    if print_debug:
-        logger.debug("%s", "")
-        logger.debug("%s VLM START %s", "*" * 20, "*" * 20)
-        for idx, message in enumerate(full_history):
-            logger.debug(
-                "%s, %s: %s",
-                idx,
-                message.type,
-                message.content,
-            )
-        logger.debug("%s", content_str)
-        logger.debug("%s VLM END %s", "*" * 21, "*" * 21)
-        logger.debug("%s", "")
-
-    return content_str, full_history
-
-
 def get_structured_response_from_vlm(
     *,
     msg: str,

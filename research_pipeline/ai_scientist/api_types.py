@@ -3,10 +3,8 @@
 #   filename:  openapi.json
 
 from __future__ import annotations
-
 from enum import StrEnum
 from typing import Annotated, Any, Literal
-
 from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, RootModel
 
 
@@ -17,7 +15,9 @@ class Status(StrEnum):
 
 
 class ActiveNode(BaseModel):
-    execution_id: Annotated[str, Field(description="Unique execution ID", title="Execution Id")]
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
     status: Annotated[
         Status | None, Field(description="Current execution status", title="Status")
@@ -32,9 +32,9 @@ class ActiveNode(BaseModel):
     exec_time: Annotated[
         float | None, Field(description="Execution time in seconds", title="Exec Time")
     ] = None
-    run_type: Annotated[str | None, Field(description="Type of run", title="Run Type")] = (
-        "main_execution"
-    )
+    run_type: Annotated[
+        str | None, Field(description="Type of run", title="Run Type")
+    ] = "main_execution"
 
 
 class ArtifactPresignedUrlResponse(BaseModel):
@@ -45,7 +45,9 @@ class ArtifactPresignedUrlResponse(BaseModel):
     expires_in: Annotated[
         int, Field(description="URL expiration time in seconds", title="Expires In")
     ]
-    artifact_id: Annotated[int, Field(description="Artifact identifier", title="Artifact Id")]
+    artifact_id: Annotated[
+        int, Field(description="Artifact identifier", title="Artifact Id")
+    ]
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
 
 
@@ -191,7 +193,9 @@ class ChildConversationInfo(BaseModel):
         int, Field(description="Child conversation ID", title="Conversation Id")
     ]
     title: Annotated[str, Field(description="Child conversation title", title="Title")]
-    created_at: Annotated[str, Field(description="ISO timestamp when created", title="Created At")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp when created", title="Created At")
+    ]
     status: Annotated[str, Field(description="Conversation status", title="Status")]
 
 
@@ -268,9 +272,9 @@ class ConversationListItem(BaseModel):
     user_email: Annotated[str, Field(title="User Email")]
     idea_title: Annotated[str | None, Field(title="Idea Title")] = None
     idea_content: Annotated[str | None, Field(title="Idea Content")] = None
-    last_user_message_content: Annotated[str | None, Field(title="Last User Message Content")] = (
-        None
-    )
+    last_user_message_content: Annotated[
+        str | None, Field(title="Last User Message Content")
+    ] = None
     last_assistant_message_content: Annotated[
         str | None, Field(title="Last Assistant Message Content")
     ] = None
@@ -289,7 +293,9 @@ class ConversationListResponse(BaseModel):
 class ConversationUpdate(BaseModel):
     title: Annotated[
         str,
-        Field(description="New title for the conversation", min_length=1, title="Title"),
+        Field(
+            description="New title for the conversation", min_length=1, title="Title"
+        ),
     ]
 
 
@@ -334,9 +340,9 @@ class DatasetUploadUrlResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: Annotated[str, Field(description="Error message", title="Error")]
-    detail: Annotated[str | None, Field(description="Additional error details", title="Detail")] = (
-        None
-    )
+    detail: Annotated[
+        str | None, Field(description="Additional error details", title="Detail")
+    ] = None
 
 
 class FigureReviewEvent(BaseModel):
@@ -359,8 +365,12 @@ class FigureReviewsPayload(BaseModel):
 class FileAttachment(BaseModel):
     id: Annotated[int, Field(description="Unique attachment ID", title="Id")]
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
-    file_size: Annotated[int, Field(description="File size in bytes", title="File Size")]
-    file_type: Annotated[str, Field(description="MIME type of the file", title="File Type")]
+    file_size: Annotated[
+        int, Field(description="File size in bytes", title="File Size")
+    ]
+    file_type: Annotated[
+        str, Field(description="MIME type of the file", title="File Type")
+    ]
     s3_key: Annotated[str, Field(description="S3 storage key", title="S3 Key")]
     created_at: Annotated[
         str, Field(description="ISO format creation timestamp", title="Created At")
@@ -379,7 +389,9 @@ class FileMetadata(BaseModel):
     id: Annotated[int, Field(description="File attachment ID", title="Id")]
     s3_key: Annotated[str, Field(description="S3 storage key", title="S3 Key")]
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
-    file_size: Annotated[int, Field(description="File size in bytes", title="File Size")]
+    file_size: Annotated[
+        int, Field(description="File size in bytes", title="File Size")
+    ]
     file_type: Annotated[str, Field(description="MIME type", title="File Type")]
     conversation_id: Annotated[
         int, Field(description="Associated conversation ID", title="Conversation Id")
@@ -408,11 +420,15 @@ class HardwareStatsPartition(BaseModel):
 
 
 class HardwareStatsPayload(BaseModel):
-    partitions: Annotated[list[HardwareStatsPartition] | None, Field(title="Partitions")] = None
+    partitions: Annotated[
+        list[HardwareStatsPartition] | None, Field(title="Partitions")
+    ] = None
 
 
 class IdeaRefinementRequest(BaseModel):
-    title: Annotated[str, Field(description="Title of the research idea", title="Title")]
+    title: Annotated[
+        str, Field(description="Title of the research idea", title="Title")
+    ]
     idea_markdown: Annotated[
         str,
         Field(description="Research idea in markdown format", title="Idea Markdown"),
@@ -421,7 +437,9 @@ class IdeaRefinementRequest(BaseModel):
 
 class IdeaVersion(BaseModel):
     version_id: Annotated[int, Field(description="Version ID", title="Version Id")]
-    title: Annotated[str, Field(description="Title of the research idea", title="Title")]
+    title: Annotated[
+        str, Field(description="Title of the research idea", title="Title")
+    ]
     idea_markdown: Annotated[
         str,
         Field(description="Research idea in markdown format", title="Idea Markdown"),
@@ -459,7 +477,9 @@ class ImportChatCreateNew(BaseModel):
         str,
         Field(description="LLM provider to use", min_length=1, title="Llm Provider"),
     ]
-    duplicate_resolution: Annotated[Literal["create_new"], Field(title="Duplicate Resolution")]
+    duplicate_resolution: Annotated[
+        Literal["create_new"], Field(title="Duplicate Resolution")
+    ]
 
 
 class ImportChatPrompt(BaseModel):
@@ -474,7 +494,9 @@ class ImportChatPrompt(BaseModel):
         str,
         Field(description="LLM provider to use", min_length=1, title="Llm Provider"),
     ]
-    duplicate_resolution: Annotated[Literal["prompt"], Field(title="Duplicate Resolution")]
+    duplicate_resolution: Annotated[
+        Literal["prompt"], Field(title="Duplicate Resolution")
+    ]
 
 
 class ImportChatUpdateExisting(BaseModel):
@@ -489,7 +511,9 @@ class ImportChatUpdateExisting(BaseModel):
         str,
         Field(description="LLM provider to use", min_length=1, title="Llm Provider"),
     ]
-    duplicate_resolution: Annotated[Literal["update_existing"], Field(title="Duplicate Resolution")]
+    duplicate_resolution: Annotated[
+        Literal["update_existing"], Field(title="Duplicate Resolution")
+    ]
     target_conversation_id: Annotated[
         int,
         Field(
@@ -500,8 +524,12 @@ class ImportChatUpdateExisting(BaseModel):
 
 
 class ImportedChatMessage(BaseModel):
-    role: Annotated[str, Field(description="Message role: 'user' or 'assistant'", title="Role")]
-    content: Annotated[str, Field(description="Message content as Markdown", title="Content")]
+    role: Annotated[
+        str, Field(description="Message role: 'user' or 'assistant'", title="Role")
+    ]
+    content: Annotated[
+        str, Field(description="Message content as Markdown", title="Content")
+    ]
 
 
 class ImportedConversationSummaryUpdate(BaseModel):
@@ -518,29 +546,39 @@ class LLMDefault(BaseModel):
     llm_provider: Annotated[
         str, Field(description="LLM provider name", min_length=1, title="Llm Provider")
     ]
-    llm_model: Annotated[str, Field(description="LLM model name", min_length=1, title="Llm Model")]
+    llm_model: Annotated[
+        str, Field(description="LLM model name", min_length=1, title="Llm Model")
+    ]
 
 
 class LLMDefaultsResponse(BaseModel):
-    current_default: Annotated[LLMDefault, Field(description="Current default LLM settings")]
+    current_default: Annotated[
+        LLMDefault, Field(description="Current default LLM settings")
+    ]
 
 
 class LLMDefaultsUpdateRequest(BaseModel):
     llm_provider: Annotated[
         str, Field(description="LLM provider name", min_length=1, title="Llm Provider")
     ]
-    llm_model: Annotated[str, Field(description="LLM model name", min_length=1, title="Llm Model")]
+    llm_model: Annotated[
+        str, Field(description="LLM model name", min_length=1, title="Llm Model")
+    ]
 
 
 class LLMDefaultsUpdateResponse(BaseModel):
     message: Annotated[str, Field(description="Success message", title="Message")]
-    updated_default: Annotated[LLMDefault, Field(description="The updated default settings")]
+    updated_default: Annotated[
+        LLMDefault, Field(description="The updated default settings")
+    ]
 
 
 class LLMModel(BaseModel):
     id: Annotated[str, Field(description="Model ID", title="Id")]
     provider: Annotated[str, Field(description="LLM provider name", title="Provider")]
-    label: Annotated[str, Field(description="Human-readable model label", title="Label")]
+    label: Annotated[
+        str, Field(description="Human-readable model label", title="Label")
+    ]
     supports_images: Annotated[
         bool,
         Field(description="Whether the model supports images", title="Supports Images"),
@@ -564,12 +602,16 @@ class LLMPromptCreateRequest(BaseModel):
     ]
     system_prompt: Annotated[
         str,
-        Field(description="The system prompt text", min_length=1, title="System Prompt"),
+        Field(
+            description="The system prompt text", min_length=1, title="System Prompt"
+        ),
     ]
 
 
 class LLMPromptDeleteResponse(BaseModel):
-    message: Annotated[str, Field(description="Success or error message", title="Message")]
+    message: Annotated[
+        str, Field(description="Success or error message", title="Message")
+    ]
 
 
 class LLMPromptResponse(BaseModel):
@@ -618,7 +660,9 @@ class LlmReviewNotFoundResponse(BaseModel):
 class LlmReviewResponse(BaseModel):
     id: Annotated[int, Field(description="Unique identifier of the review", title="Id")]
     run_id: Annotated[str, Field(description="Research run identifier", title="Run Id")]
-    summary: Annotated[str, Field(description="Executive summary of the review", title="Summary")]
+    summary: Annotated[
+        str, Field(description="Executive summary of the review", title="Summary")
+    ]
     strengths: Annotated[
         list[str], Field(description="List of identified strengths", title="Strengths")
     ]
@@ -626,7 +670,9 @@ class LlmReviewResponse(BaseModel):
         list[str],
         Field(description="List of identified weaknesses", title="Weaknesses"),
     ]
-    originality: Annotated[int, Field(description="Originality score (1-4)", title="Originality")]
+    originality: Annotated[
+        int, Field(description="Originality score (1-4)", title="Originality")
+    ]
     quality: Annotated[int, Field(description="Quality score (1-4)", title="Quality")]
     clarity: Annotated[int, Field(description="Clarity score (1-4)", title="Clarity")]
     significance: Annotated[
@@ -641,16 +687,22 @@ class LlmReviewResponse(BaseModel):
     ]
     ethical_concerns: Annotated[
         bool,
-        Field(description="Whether ethical concerns were raised", title="Ethical Concerns"),
+        Field(
+            description="Whether ethical concerns were raised", title="Ethical Concerns"
+        ),
     ]
-    soundness: Annotated[int, Field(description="Soundness score (1-4)", title="Soundness")]
+    soundness: Annotated[
+        int, Field(description="Soundness score (1-4)", title="Soundness")
+    ]
     presentation: Annotated[
         int, Field(description="Presentation score (1-4)", title="Presentation")
     ]
     contribution: Annotated[
         int, Field(description="Contribution score (1-4)", title="Contribution")
     ]
-    overall: Annotated[int, Field(description="Overall quality score (1-10)", title="Overall")]
+    overall: Annotated[
+        int, Field(description="Overall quality score (1-10)", title="Overall")
+    ]
     confidence: Annotated[
         int, Field(description="Reviewer confidence score (1-5)", title="Confidence")
     ]
@@ -660,11 +712,15 @@ class LlmReviewResponse(BaseModel):
     ]
     source_path: Annotated[
         str | None,
-        Field(description="Source path or reference for the review", title="Source Path"),
+        Field(
+            description="Source path or reference for the review", title="Source Path"
+        ),
     ] = None
     created_at: Annotated[
         str,
-        Field(description="ISO timestamp when the review was created", title="Created At"),
+        Field(
+            description="ISO timestamp when the review was created", title="Created At"
+        ),
     ]
 
 
@@ -703,7 +759,9 @@ class ManualIdeaSeedRequest(BaseModel):
     ]
     llm_provider: Annotated[
         str,
-        Field(description="LLM provider identifier", min_length=1, title="Llm Provider"),
+        Field(
+            description="LLM provider identifier", min_length=1, title="Llm Provider"
+        ),
     ]
     llm_model: Annotated[
         str, Field(description="LLM model identifier", min_length=1, title="Llm Model")
@@ -717,7 +775,9 @@ class MessageResponse(BaseModel):
 class MetricInterpretation(BaseModel):
     name: Annotated[
         str,
-        Field(description="Metric name", examples=["accuracy", "f1_score"], title="Name"),
+        Field(
+            description="Metric name", examples=["accuracy", "f1_score"], title="Name"
+        ),
     ]
     value: Annotated[float, Field(description="Raw metric value", title="Value")]
     formatted: Annotated[
@@ -781,8 +841,12 @@ class MultipartUploadInitRequest(BaseModel):
     filename: Annotated[str, Field(title="Filename")]
     content_type: Annotated[str, Field(title="Content Type")]
     file_size: Annotated[int, Field(title="File Size")]
-    part_size: Annotated[int, Field(description="Size of each part in bytes", title="Part Size")]
-    num_parts: Annotated[int, Field(description="Total number of parts", title="Num Parts")]
+    part_size: Annotated[
+        int, Field(description="Size of each part in bytes", title="Part Size")
+    ]
+    num_parts: Annotated[
+        int, Field(description="Total number of parts", title="Num Parts")
+    ]
     metadata: Annotated[dict[str, str] | None, Field(title="Metadata")] = None
 
 
@@ -821,12 +885,16 @@ class NodeExecutionCompletedEvent(BaseModel):
         "node_execution_completed"
     )
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    execution_id: Annotated[str, Field(description="Unique execution ID", title="Execution Id")]
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
     status: Annotated[Status1, Field(description="Execution status", title="Status")]
-    exec_time: Annotated[float, Field(description="Execution time in seconds", title="Exec Time")]
-    run_type: Annotated[str | None, Field(description="Type of run", title="Run Type")] = (
-        "main_execution"
-    )
+    exec_time: Annotated[
+        float, Field(description="Execution time in seconds", title="Exec Time")
+    ]
+    run_type: Annotated[
+        str | None, Field(description="Type of run", title="Run Type")
+    ] = "main_execution"
 
 
 class NodeExecutionStartedEvent(BaseModel):
@@ -849,10 +917,12 @@ class NodeExecutionStartedEvent(BaseModel):
         "node_execution_started"
     )
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    execution_id: Annotated[str, Field(description="Unique execution ID", title="Execution Id")]
-    run_type: Annotated[str | None, Field(description="Type of run", title="Run Type")] = (
-        "main_execution"
-    )
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
+    run_type: Annotated[
+        str | None, Field(description="Type of run", title="Run Type")
+    ] = "main_execution"
     code_preview: Annotated[
         str | None,
         Field(description="Preview of code being executed", title="Code Preview"),
@@ -900,17 +970,21 @@ class PaperGenerationStepEvent(BaseModel):
         str | None,
         Field(description="Node ID if event relates to specific node", title="Node Id"),
     ] = None
-    type: Annotated[Literal["paper_generation_step"], Field(title="Type")] = "paper_generation_step"
+    type: Annotated[Literal["paper_generation_step"], Field(title="Type")] = (
+        "paper_generation_step"
+    )
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
     step: Annotated[Step, Field(description="Current step", title="Step")]
-    substep: Annotated[str | None, Field(description="Substep if applicable", title="Substep")] = (
-        None
-    )
+    substep: Annotated[
+        str | None, Field(description="Substep if applicable", title="Substep")
+    ] = None
     description: Annotated[
         str | None,
         Field(description="What's happening in this step", title="Description"),
     ] = None
-    progress: Annotated[float, Field(description="Overall progress (0.0-1.0)", title="Progress")]
+    progress: Annotated[
+        float, Field(description="Overall progress (0.0-1.0)", title="Progress")
+    ]
     step_progress: Annotated[
         float,
         Field(description="Progress within this step (0.0-1.0)", title="Step Progress"),
@@ -970,9 +1044,13 @@ class ResearchRunAcceptedResponse(BaseModel):
 
 class ResearchRunArtifactMetadata(BaseModel):
     id: Annotated[int, Field(description="Artifact identifier", title="Id")]
-    artifact_type: Annotated[str, Field(description="Artifact type label", title="Artifact Type")]
+    artifact_type: Annotated[
+        str, Field(description="Artifact type label", title="Artifact Type")
+    ]
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
-    file_size: Annotated[int, Field(description="File size in bytes", title="File Size")]
+    file_size: Annotated[
+        int, Field(description="File size in bytes", title="File Size")
+    ]
     file_type: Annotated[str, Field(description="MIME type", title="File Type")]
     created_at: Annotated[
         str,
@@ -989,15 +1067,23 @@ class ResearchRunArtifactMetadata(BaseModel):
 
 
 class ResearchRunBestNodeSelection(BaseModel):
-    id: Annotated[int, Field(description="Unique identifier of the reasoning record", title="Id")]
+    id: Annotated[
+        int, Field(description="Unique identifier of the reasoning record", title="Id")
+    ]
     stage: Annotated[
         str,
-        Field(description="Stage identifier where the selection happened", title="Stage"),
+        Field(
+            description="Stage identifier where the selection happened", title="Stage"
+        ),
     ]
-    node_id: Annotated[str, Field(description="Identifier of the selected node", title="Node Id")]
+    node_id: Annotated[
+        str, Field(description="Identifier of the selected node", title="Node Id")
+    ]
     reasoning: Annotated[
         str,
-        Field(description="LLM reasoning that justified the selection", title="Reasoning"),
+        Field(
+            description="LLM reasoning that justified the selection", title="Reasoning"
+        ),
     ]
     created_at: Annotated[
         str,
@@ -1038,18 +1124,26 @@ class ResearchRunErrorEvent(BaseModel):
 
 
 class ResearchRunEvent(BaseModel):
-    id: Annotated[int, Field(description="Unique identifier of the audit event", title="Id")]
+    id: Annotated[
+        int, Field(description="Unique identifier of the audit event", title="Id")
+    ]
     run_id: Annotated[
         str, Field(description="Run identifier that produced the event", title="Run Id")
     ]
-    event_type: Annotated[str, Field(description="Audit event type label", title="Event Type")]
+    event_type: Annotated[
+        str, Field(description="Audit event type label", title="Event Type")
+    ]
     metadata: Annotated[
         dict[str, Any] | None,
-        Field(description="Structured metadata captured for the event", title="Metadata"),
+        Field(
+            description="Structured metadata captured for the event", title="Metadata"
+        ),
     ] = None
     occurred_at: Annotated[
         str,
-        Field(description="ISO timestamp when the event was recorded", title="Occurred At"),
+        Field(
+            description="ISO timestamp when the event was recorded", title="Occurred At"
+        ),
     ]
 
 
@@ -1125,9 +1219,15 @@ class TerminationStatus(StrEnum):
 
 
 class ResearchRunInfo(BaseModel):
-    run_id: Annotated[str, Field(description="Unique identifier of the run", title="Run Id")]
-    status: Annotated[str, Field(description="Current status of the run", title="Status")]
-    idea_id: Annotated[int, Field(description="Idea ID associated with the run", title="Idea Id")]
+    run_id: Annotated[
+        str, Field(description="Unique identifier of the run", title="Run Id")
+    ]
+    status: Annotated[
+        str, Field(description="Current status of the run", title="Status")
+    ]
+    idea_id: Annotated[
+        int, Field(description="Idea ID associated with the run", title="Idea Id")
+    ]
     idea_version_id: Annotated[
         int,
         Field(
@@ -1142,9 +1242,9 @@ class ResearchRunInfo(BaseModel):
     pod_name: Annotated[
         str | None, Field(description="Human-friendly pod name", title="Pod Name")
     ] = None
-    gpu_type: Annotated[str | None, Field(description="Requested GPU type", title="Gpu Type")] = (
-        None
-    )
+    gpu_type: Annotated[
+        str | None, Field(description="Requested GPU type", title="Gpu Type")
+    ] = None
     cost: Annotated[
         float,
         Field(
@@ -1155,9 +1255,9 @@ class ResearchRunInfo(BaseModel):
     public_ip: Annotated[
         str | None, Field(description="Pod public IP address", title="Public Ip")
     ] = None
-    ssh_port: Annotated[str | None, Field(description="Pod SSH port mapping", title="Ssh Port")] = (
-        None
-    )
+    ssh_port: Annotated[
+        str | None, Field(description="Pod SSH port mapping", title="Ssh Port")
+    ] = None
     pod_host_id: Annotated[
         str | None, Field(description="RunPod host identifier", title="Pod Host Id")
     ] = None
@@ -1230,7 +1330,9 @@ class ResearchRunInfo(BaseModel):
     ] = 0
     last_restart_at: Annotated[
         str | None,
-        Field(description="ISO timestamp of the last pod restart", title="Last Restart At"),
+        Field(
+            description="ISO timestamp of the last pod restart", title="Last Restart At"
+        ),
     ] = None
     last_restart_reason: Annotated[
         str | None,
@@ -1261,8 +1363,12 @@ class ResearchRunInitializationStatusEvent(BaseModel):
 
 
 class ResearchRunListItem(BaseModel):
-    run_id: Annotated[str, Field(description="Unique identifier of the run", title="Run Id")]
-    status: Annotated[str, Field(description="Current status of the run", title="Status")]
+    run_id: Annotated[
+        str, Field(description="Unique identifier of the run", title="Run Id")
+    ]
+    status: Annotated[
+        str, Field(description="Current status of the run", title="Status")
+    ]
     initialization_status: Annotated[
         str,
         Field(
@@ -1270,7 +1376,9 @@ class ResearchRunListItem(BaseModel):
             title="Initialization Status",
         ),
     ]
-    idea_title: Annotated[str, Field(description="Title from the idea version", title="Idea Title")]
+    idea_title: Annotated[
+        str, Field(description="Title from the idea version", title="Idea Title")
+    ]
     idea_hypothesis: Annotated[
         str | None,
         Field(
@@ -1301,11 +1409,15 @@ class ResearchRunListItem(BaseModel):
     ]
     best_metric: Annotated[
         str | None,
-        Field(description="Best metric from latest progress event", title="Best Metric"),
+        Field(
+            description="Best metric from latest progress event", title="Best Metric"
+        ),
     ] = None
     created_by_name: Annotated[
         str,
-        Field(description="Name of the user who created the run", title="Created By Name"),
+        Field(
+            description="Name of the user who created the run", title="Created By Name"
+        ),
     ]
     created_at: Annotated[
         str,
@@ -1347,12 +1459,18 @@ class ResearchRunListResponse(BaseModel):
         list[ResearchRunListItem] | None,
         Field(description="List of research runs", title="Items"),
     ] = None
-    total: Annotated[int, Field(description="Total count of research runs", title="Total")]
+    total: Annotated[
+        int, Field(description="Total count of research runs", title="Total")
+    ]
 
 
 class ResearchRunLogEntry(BaseModel):
-    id: Annotated[int, Field(description="Unique identifier of the log event", title="Id")]
-    level: Annotated[str, Field(description="Log level (info, warn, error, ...)", title="Level")]
+    id: Annotated[
+        int, Field(description="Unique identifier of the log event", title="Id")
+    ]
+    level: Annotated[
+        str, Field(description="Log level (info, warn, error, ...)", title="Level")
+    ]
     message: Annotated[str, Field(description="Log message", title="Message")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of the log event", title="Created At")
@@ -1367,7 +1485,9 @@ class ResearchRunLogEvent(BaseModel):
 class ResearchRunPaperGenerationProgress(BaseModel):
     id: Annotated[
         int,
-        Field(description="Unique identifier of the paper generation event", title="Id"),
+        Field(
+            description="Unique identifier of the paper generation event", title="Id"
+        ),
     ]
     run_id: Annotated[str, Field(description="Research run identifier", title="Run Id")]
     step: Annotated[
@@ -1384,10 +1504,14 @@ class ResearchRunPaperGenerationProgress(BaseModel):
             title="Substep",
         ),
     ] = None
-    progress: Annotated[float, Field(description="Overall progress (0.0-1.0)", title="Progress")]
+    progress: Annotated[
+        float, Field(description="Overall progress (0.0-1.0)", title="Progress")
+    ]
     step_progress: Annotated[
         float,
-        Field(description="Progress within current step (0.0-1.0)", title="Step Progress"),
+        Field(
+            description="Progress within current step (0.0-1.0)", title="Step Progress"
+        ),
     ]
     details: Annotated[
         dict[str, Any] | None,
@@ -1398,7 +1522,9 @@ class ResearchRunPaperGenerationProgress(BaseModel):
     ] = None
     created_at: Annotated[
         str,
-        Field(description="ISO timestamp when the event was recorded", title="Created At"),
+        Field(
+            description="ISO timestamp when the event was recorded", title="Created At"
+        ),
     ]
 
 
@@ -1414,17 +1540,25 @@ class ResearchRunRunEvent(BaseModel):
 
 class ResearchRunStageProgress(BaseModel):
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    iteration: Annotated[int, Field(description="Current iteration number", title="Iteration")]
+    iteration: Annotated[
+        int, Field(description="Current iteration number", title="Iteration")
+    ]
     max_iterations: Annotated[
         int,
         Field(description="Maximum iterations for the stage", title="Max Iterations"),
     ]
-    progress: Annotated[float, Field(description="Progress percentage (0-1)", title="Progress")]
+    progress: Annotated[
+        float, Field(description="Progress percentage (0-1)", title="Progress")
+    ]
     total_nodes: Annotated[
         int, Field(description="Total nodes considered so far", title="Total Nodes")
     ]
-    buggy_nodes: Annotated[int, Field(description="Number of buggy nodes", title="Buggy Nodes")]
-    good_nodes: Annotated[int, Field(description="Number of good nodes", title="Good Nodes")]
+    buggy_nodes: Annotated[
+        int, Field(description="Number of buggy nodes", title="Buggy Nodes")
+    ]
+    good_nodes: Annotated[
+        int, Field(description="Number of good nodes", title="Good Nodes")
+    ]
     best_metric: Annotated[
         str | None,
         Field(description="Best metric reported at this stage", title="Best Metric"),
@@ -1442,7 +1576,9 @@ class ResearchRunStageProgress(BaseModel):
     ] = None
     created_at: Annotated[
         str,
-        Field(description="ISO timestamp when the event was recorded", title="Created At"),
+        Field(
+            description="ISO timestamp when the event was recorded", title="Created At"
+        ),
     ]
 
 
@@ -1458,7 +1594,9 @@ class ResearchRunStageSkipWindow(BaseModel):
     ]
     stage: Annotated[
         str,
-        Field(description="Stage identifier where skipping became possible", title="Stage"),
+        Field(
+            description="Stage identifier where skipping became possible", title="Stage"
+        ),
     ]
     opened_at: Annotated[
         str,
@@ -1466,7 +1604,9 @@ class ResearchRunStageSkipWindow(BaseModel):
     ]
     opened_reason: Annotated[
         str | None,
-        Field(description="Reason provided when the window opened", title="Opened Reason"),
+        Field(
+            description="Reason provided when the window opened", title="Opened Reason"
+        ),
     ] = None
     closed_at: Annotated[
         str | None,
@@ -1477,7 +1617,9 @@ class ResearchRunStageSkipWindow(BaseModel):
     ] = None
     closed_reason: Annotated[
         str | None,
-        Field(description="Reason provided when the window closed", title="Closed Reason"),
+        Field(
+            description="Reason provided when the window closed", title="Closed Reason"
+        ),
     ] = None
 
 
@@ -1519,7 +1661,9 @@ class ResearchRunSubstageEvent(BaseModel):
         dict[str, Any],
         Field(description="Summary payload stored for this sub-stage", title="Summary"),
     ]
-    created_at: Annotated[str, Field(description="ISO timestamp of the event", title="Created At")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of the event", title="Created At")
+    ]
 
 
 class ResearchRunSubstageEventStream(BaseModel):
@@ -1530,7 +1674,9 @@ class ResearchRunSubstageEventStream(BaseModel):
 class ResearchRunSubstageSummary(BaseModel):
     id: Annotated[
         int,
-        Field(description="Unique identifier of the sub-stage summary event", title="Id"),
+        Field(
+            description="Unique identifier of the sub-stage summary event", title="Id"
+        ),
     ]
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
     summary: Annotated[
@@ -1552,9 +1698,15 @@ class ResearchRunSubstageSummaryEvent(BaseModel):
 
 
 class ResearchRunSummary(BaseModel):
-    run_id: Annotated[str, Field(description="Unique identifier of the run", title="Run Id")]
-    status: Annotated[str, Field(description="Current status of the run", title="Status")]
-    idea_id: Annotated[int, Field(description="Idea ID associated with the run", title="Idea Id")]
+    run_id: Annotated[
+        str, Field(description="Unique identifier of the run", title="Run Id")
+    ]
+    status: Annotated[
+        str, Field(description="Current status of the run", title="Status")
+    ]
+    idea_id: Annotated[
+        int, Field(description="Idea ID associated with the run", title="Idea Id")
+    ]
     idea_version_id: Annotated[
         int,
         Field(
@@ -1569,9 +1721,9 @@ class ResearchRunSummary(BaseModel):
     pod_name: Annotated[
         str | None, Field(description="Human-friendly pod name", title="Pod Name")
     ] = None
-    gpu_type: Annotated[str | None, Field(description="Requested GPU type", title="Gpu Type")] = (
-        None
-    )
+    gpu_type: Annotated[
+        str | None, Field(description="Requested GPU type", title="Gpu Type")
+    ] = None
     cost: Annotated[
         float,
         Field(
@@ -1582,9 +1734,9 @@ class ResearchRunSummary(BaseModel):
     public_ip: Annotated[
         str | None, Field(description="Pod public IP address", title="Public Ip")
     ] = None
-    ssh_port: Annotated[str | None, Field(description="Pod SSH port mapping", title="Ssh Port")] = (
-        None
-    )
+    ssh_port: Annotated[
+        str | None, Field(description="Pod SSH port mapping", title="Ssh Port")
+    ] = None
     pod_host_id: Annotated[
         str | None, Field(description="RunPod host identifier", title="Pod Host Id")
     ] = None
@@ -1710,9 +1862,9 @@ class RunStartedEvent(BaseModel):
     ] = None
     type: Annotated[Literal["run_started"], Field(title="Type")] = "run_started"
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    gpu_type: Annotated[str | None, Field(description="GPU type allocated", title="Gpu Type")] = (
-        None
-    )
+    gpu_type: Annotated[
+        str | None, Field(description="GPU type allocated", title="Gpu Type")
+    ] = None
     cost_per_hour_cents: Annotated[
         int | None,
         Field(description="Cost per hour in cents", title="Cost Per Hour Cents"),
@@ -1784,9 +1936,9 @@ class Status8(StrEnum):
 class StageGoal(BaseModel):
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
     title: Annotated[str, Field(description="Display title", title="Title")]
-    goal: Annotated[str | None, Field(description="What we're trying to achieve", title="Goal")] = (
-        None
-    )
+    goal: Annotated[
+        str | None, Field(description="What we're trying to achieve", title="Goal")
+    ] = None
     approach: Annotated[
         str | None, Field(description="How we're approaching it", title="Approach")
     ] = None
@@ -1794,9 +1946,9 @@ class StageGoal(BaseModel):
         str | None,
         Field(description="How we know we're done", title="Success Criteria"),
     ] = None
-    status: Annotated[Status8 | None, Field(description="Current status", title="Status")] = (
-        "pending"
-    )
+    status: Annotated[
+        Status8 | None, Field(description="Current status", title="Status")
+    ] = "pending"
     started_at: Annotated[
         AwareDatetime | None,
         Field(description="When stage started", title="Started At"),
@@ -1811,9 +1963,9 @@ class StageGoal(BaseModel):
     max_iterations: Annotated[
         int | None, Field(description="Maximum iterations", title="Max Iterations")
     ] = None
-    progress: Annotated[float | None, Field(description="Progress 0.0-1.0", title="Progress")] = (
-        None
-    )
+    progress: Annotated[
+        float | None, Field(description="Progress 0.0-1.0", title="Progress")
+    ] = None
     total_nodes: Annotated[
         int | None, Field(description="Total nodes in this stage", title="Total Nodes")
     ] = 0
@@ -1835,7 +1987,9 @@ class StageProgressEvent(BaseModel):
     good_nodes: Annotated[int, Field(title="Good Nodes")]
     best_metric: Annotated[str | None, Field(title="Best Metric")] = None
     eta_s: Annotated[int | None, Field(title="Eta S")] = None
-    latest_iteration_time_s: Annotated[int | None, Field(title="Latest Iteration Time S")] = None
+    latest_iteration_time_s: Annotated[
+        int | None, Field(title="Latest Iteration Time S")
+    ] = None
 
 
 class StageProgressPayload(BaseModel):
@@ -1871,10 +2025,12 @@ class StageStartedEvent(BaseModel):
     ] = None
     type: Annotated[Literal["stage_started"], Field(title="Type")] = "stage_started"
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    stage_name: Annotated[str, Field(description="Human-readable stage name", title="Stage Name")]
-    goal: Annotated[str | None, Field(description="What we're trying to achieve", title="Goal")] = (
-        None
-    )
+    stage_name: Annotated[
+        str, Field(description="Human-readable stage name", title="Stage Name")
+    ]
+    goal: Annotated[
+        str | None, Field(description="What we're trying to achieve", title="Goal")
+    ] = None
 
 
 class SubstageCompletedEvent(BaseModel):
@@ -1898,7 +2054,9 @@ class SubstageSummaryPayload(BaseModel):
 
 
 class SummaryResponse(BaseModel):
-    summary: Annotated[str, Field(description="Generated or updated summary", title="Summary")]
+    summary: Annotated[
+        str, Field(description="Generated or updated summary", title="Summary")
+    ]
 
 
 class TerminateExecutionRequest(BaseModel):
@@ -1930,7 +2088,9 @@ class TreeVizItem(BaseModel):
     version: Annotated[
         int, Field(description="Version counter for the stored viz", title="Version")
     ]
-    viz: Annotated[dict[str, Any], Field(description="Tree visualization payload", title="Viz")]
+    viz: Annotated[
+        dict[str, Any], Field(description="Tree visualization payload", title="Viz")
+    ]
     created_at: Annotated[
         str,
         Field(description="ISO timestamp when the viz was stored", title="Created At"),
@@ -1961,7 +2121,9 @@ class UserListItem(BaseModel):
 
 
 class UserListResponse(BaseModel):
-    items: Annotated[list[UserListItem], Field(description="List of users", title="Items")]
+    items: Annotated[
+        list[UserListItem], Field(description="List of users", title="Items")
+    ]
     total: Annotated[int, Field(description="Total count of users", title="Total")]
 
 
@@ -2001,7 +2163,9 @@ class AuthStatus(BaseModel):
         bool,
         Field(description="Whether the user is authenticated", title="Authenticated"),
     ]
-    user: Annotated[AuthUser | None, Field(description="User information if authenticated")] = None
+    user: Annotated[
+        AuthUser | None, Field(description="User information if authenticated")
+    ] = None
 
 
 class BillingWalletResponse(BaseModel):
@@ -2010,7 +2174,9 @@ class BillingWalletResponse(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: Annotated[str, Field(description="Message role ('user' or 'assistant')", title="Role")]
+    role: Annotated[
+        str, Field(description="Message role ('user' or 'assistant')", title="Role")
+    ]
     content: Annotated[str, Field(description="Message content", title="Content")]
     sequence_number: Annotated[
         int, Field(description="Sequence number for ordering", title="Sequence Number")
@@ -2020,7 +2186,9 @@ class ChatMessage(BaseModel):
     ]
     sent_by_user_id: Annotated[
         int,
-        Field(description="ID of the user who sent this message", title="Sent By User Id"),
+        Field(
+            description="ID of the user who sent this message", title="Sent By User Id"
+        ),
     ]
     sent_by_user_name: Annotated[
         str,
@@ -2072,7 +2240,9 @@ class ConversationCostResponse(BaseModel):
 
 
 class ConversationImportConflictData(BaseModel):
-    conversations: Annotated[list[ConversationImportConflictItem], Field(title="Conversations")]
+    conversations: Annotated[
+        list[ConversationImportConflictItem], Field(title="Conversations")
+    ]
 
 
 class ConversationImportConflictEvent(BaseModel):
@@ -2087,7 +2257,9 @@ class ConversationImportProgressEvent(BaseModel):
 
 class ConversationResponse(BaseModel):
     id: Annotated[int, Field(description="Database ID of the conversation", title="Id")]
-    url: Annotated[str, Field(description="Original conversation share URL", title="Url")]
+    url: Annotated[
+        str, Field(description="Original conversation share URL", title="Url")
+    ]
     title: Annotated[str, Field(description="Conversation title", title="Title")]
     import_date: Annotated[
         str, Field(description="ISO format import timestamp", title="Import Date")
@@ -2108,7 +2280,9 @@ class ConversationResponse(BaseModel):
     ] = None
     user_id: Annotated[
         int,
-        Field(description="ID of the user who imported the conversation", title="User Id"),
+        Field(
+            description="ID of the user who imported the conversation", title="User Id"
+        ),
     ]
     user_name: Annotated[
         str,
@@ -2166,7 +2340,9 @@ class ConversationResponse(BaseModel):
 
 
 class ConversationUpdateResponse(BaseModel):
-    conversation: Annotated[ConversationResponse, Field(description="Updated conversation")]
+    conversation: Annotated[
+        ConversationResponse, Field(description="Updated conversation")
+    ]
 
 
 class CreditPackListResponse(BaseModel):
@@ -2182,9 +2358,9 @@ class Idea(BaseModel):
     conversation_id: Annotated[
         int, Field(description="Associated conversation ID", title="Conversation Id")
     ]
-    active_version: Annotated[IdeaVersion | None, Field(description="Currently active version")] = (
-        None
-    )
+    active_version: Annotated[
+        IdeaVersion | None, Field(description="Currently active version")
+    ] = None
     created_at: Annotated[
         str, Field(description="ISO format creation timestamp", title="Created At")
     ]
@@ -2202,7 +2378,9 @@ class IdeaUpdateResponse(BaseModel):
 
 
 class MetricCollection(BaseModel):
-    primary: Annotated[MetricInterpretation, Field(description="Primary metric being optimized")]
+    primary: Annotated[
+        MetricInterpretation, Field(description="Primary metric being optimized")
+    ]
     secondary: Annotated[
         list[MetricInterpretation] | None,
         Field(description="Additional metrics tracked", title="Secondary"),
@@ -2249,7 +2427,9 @@ class NodeResultEvent(BaseModel):
         str | None,
         Field(description="Brief description of what occurred", title="Summary"),
     ] = None
-    metrics: Annotated[MetricCollection | None, Field(description="Interpreted metrics")] = None
+    metrics: Annotated[
+        MetricCollection | None, Field(description="Interpreted metrics")
+    ] = None
     error_type: Annotated[
         str | None, Field(description="Error type if failed", title="Error Type")
     ] = None
@@ -2446,9 +2626,13 @@ class ResearchRunDetailsResponse(BaseModel):
 
 class ResearchRunInitialEventData(BaseModel):
     run: ResearchRunInfo
-    stage_progress: Annotated[list[ResearchRunStageProgress], Field(title="Stage Progress")]
+    stage_progress: Annotated[
+        list[ResearchRunStageProgress], Field(title="Stage Progress")
+    ]
     logs: Annotated[list[ResearchRunLogEntry], Field(title="Logs")]
-    substage_events: Annotated[list[ResearchRunSubstageEvent], Field(title="Substage Events")]
+    substage_events: Annotated[
+        list[ResearchRunSubstageEvent], Field(title="Substage Events")
+    ]
     substage_summaries: Annotated[
         list[ResearchRunSubstageSummary], Field(title="Substage Summaries")
     ]
@@ -2557,7 +2741,9 @@ class RunFinishedEvent(BaseModel):
     ] = None
     total_duration_seconds: Annotated[
         float | None,
-        Field(description="Total run duration in seconds", title="Total Duration Seconds"),
+        Field(
+            description="Total run duration in seconds", title="Total Duration Seconds"
+        ),
     ] = None
     stages_completed: Annotated[
         int | None,
@@ -2592,21 +2778,25 @@ class StageCompletedEvent(BaseModel):
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
     summary: Annotated[
         str | None,
-        Field(description="What was accomplished (from substage_summary)", title="Summary"),
+        Field(
+            description="What was accomplished (from substage_summary)", title="Summary"
+        ),
     ] = None
     best_node_id: Annotated[
         str | None,
         Field(description="ID of best node from this stage", title="Best Node Id"),
     ] = None
-    best_metrics: Annotated[MetricCollection | None, Field(description="Best metrics achieved")] = (
-        None
-    )
+    best_metrics: Annotated[
+        MetricCollection | None, Field(description="Best metrics achieved")
+    ] = None
     total_attempts: Annotated[
         int | None, Field(description="Total nodes explored", title="Total Attempts")
     ] = 0
     successful_attempts: Annotated[
         int | None,
-        Field(description="Nodes that completed successfully", title="Successful Attempts"),
+        Field(
+            description="Nodes that completed successfully", title="Successful Attempts"
+        ),
     ] = 0
     failed_attempts: Annotated[
         int | None, Field(description="Nodes that failed", title="Failed Attempts")
@@ -2704,20 +2894,30 @@ class ResearchRunState(BaseModel):
     current_focus: Annotated[str | None, Field(title="Current Focus")] = None
     active_nodes: Annotated[list[ActiveNode] | None, Field(title="Active Nodes")] = None
     overall_progress: Annotated[float | None, Field(title="Overall Progress")] = 0.0
-    current_stage_progress: Annotated[float | None, Field(title="Current Stage Progress")] = 0.0
+    current_stage_progress: Annotated[
+        float | None, Field(title="Current Stage Progress")
+    ] = 0.0
     best_node_id: Annotated[str | None, Field(title="Best Node Id")] = None
     best_metrics: MetricCollection | None = None
-    best_node_reasoning: Annotated[str | None, Field(title="Best Node Reasoning")] = None
+    best_node_reasoning: Annotated[str | None, Field(title="Best Node Reasoning")] = (
+        None
+    )
     artifact_ids: Annotated[list[int] | None, Field(title="Artifact Ids")] = None
     tree_viz: Annotated[dict[str, Any] | None, Field(title="Tree Viz")] = None
     created_at: Annotated[AwareDatetime, Field(title="Created At")]
     updated_at: Annotated[AwareDatetime, Field(title="Updated At")]
-    started_running_at: Annotated[AwareDatetime | None, Field(title="Started Running At")] = None
+    started_running_at: Annotated[
+        AwareDatetime | None, Field(title="Started Running At")
+    ] = None
     completed_at: Annotated[AwareDatetime | None, Field(title="Completed At")] = None
     gpu_type: Annotated[str | None, Field(title="Gpu Type")] = None
-    estimated_cost_cents: Annotated[int | None, Field(title="Estimated Cost Cents")] = None
+    estimated_cost_cents: Annotated[int | None, Field(title="Estimated Cost Cents")] = (
+        None
+    )
     actual_cost_cents: Annotated[int | None, Field(title="Actual Cost Cents")] = None
-    cost_per_hour_cents: Annotated[int | None, Field(title="Cost Per Hour Cents")] = None
+    cost_per_hour_cents: Annotated[int | None, Field(title="Cost Per Hour Cents")] = (
+        None
+    )
     error_message: Annotated[str | None, Field(title="Error Message")] = None
     version: Annotated[int | None, Field(title="Version")] = 1
 

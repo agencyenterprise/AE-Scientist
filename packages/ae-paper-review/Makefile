@@ -8,17 +8,18 @@ install:
 lint:
 	@echo "🔍 Linting ae-paper-review..."
 	@echo "🎨 Auto-formatting ae-paper-review..."
-	VIRTUAL_ENV= uv run black src --exclude '\.venv'
-	VIRTUAL_ENV= uv run isort src --skip-glob '.venv/*'
-	VIRTUAL_ENV= uv run ruff check src --exclude .venv
-	VIRTUAL_ENV= uv run mypy src --exclude '^\.venv'
-	VIRTUAL_ENV= uv run pyright src
+	VIRTUAL_ENV= uv run --no-sync black src --exclude '\.venv'
+	VIRTUAL_ENV= uv run --no-sync isort src --skip-glob '.venv/*'
+	VIRTUAL_ENV= uv run --no-sync ruff check src --exclude .venv
+	VIRTUAL_ENV= uv run --no-sync mypy src --exclude '^\.venv'
+	VIRTUAL_ENV= uv run --no-sync pyright src
+	VIRTUAL_ENV= uv run --no-sync vulture src --min-confidence 80
 	@echo "✅ Linting complete"
 
 # Testing
 test:
 	@echo "🧪 Running ae-paper-review tests..."
-	VIRTUAL_ENV= uv run python -m pytest tests
+	VIRTUAL_ENV= uv run --no-sync python -m pytest tests
 	@echo "✅ Tests complete"
 
 .PHONY: install lint test

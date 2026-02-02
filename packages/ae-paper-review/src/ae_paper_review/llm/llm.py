@@ -33,49 +33,6 @@ def _create_chat_model(model: str, temperature: float) -> BaseChatModel:
 PromptType = str | dict[str, Any] | list[Any] | None
 
 
-def get_batch_responses_from_llm(
-    prompt: str,
-    model: str,
-    system_message: str,
-    temperature: float,
-    usage: TokenUsage,
-    print_debug: bool = True,
-    msg_history: list[BaseMessage] | None = None,
-    n_responses: int = 1,
-) -> tuple[list[str], list[list[BaseMessage]]]:
-    """Get multiple responses from an LLM.
-
-    Args:
-        prompt: The prompt to send
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
-        system_message: System message for the LLM
-        temperature: Sampling temperature
-        print_debug: Whether to print debug output
-        msg_history: Optional message history
-        n_responses: Number of responses to generate
-        usage: Optional token usage accumulator
-    """
-    if msg_history is None:
-        msg_history = []
-
-    contents: list[str] = []
-    histories: list[list[BaseMessage]] = []
-    for _ in range(n_responses):
-        content, history = get_response_from_llm(
-            prompt=prompt,
-            model=model,
-            system_message=system_message,
-            temperature=temperature,
-            print_debug=print_debug,
-            msg_history=msg_history,
-            usage=usage,
-        )
-        contents.append(content)
-        histories.append(history)
-
-    return contents, histories
-
-
 def make_llm_call(
     model: str,
     temperature: float,
@@ -124,52 +81,6 @@ def make_llm_call(
         ai_message.content,
     )
     return ai_message
-
-
-def get_response_from_llm(
-    prompt: str,
-    model: str,
-    system_message: str,
-    temperature: float,
-    usage: TokenUsage,
-    print_debug: bool = True,
-    msg_history: list[BaseMessage] | None = None,
-) -> Tuple[str, list[BaseMessage]]:
-    """Get a response from an LLM.
-
-    Args:
-        prompt: The prompt to send
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
-        system_message: System message for the LLM
-        temperature: Sampling temperature
-        print_debug: Whether to print debug output
-        msg_history: Optional message history
-        usage: Optional token usage accumulator
-    """
-    if msg_history is None:
-        msg_history = []
-
-    new_msg_history = msg_history + [HumanMessage(content=prompt)]
-    ai_message = make_llm_call(
-        model=model,
-        temperature=temperature,
-        system_message=system_message,
-        prompt=new_msg_history,
-        usage=usage,
-    )
-    content = str(ai_message.content)
-    full_history = new_msg_history + [ai_message]
-
-    if print_debug:
-        logger.debug("%s", "")
-        logger.debug("%s", "*" * 20 + " LLM START " + "*" * 20)
-        for idx, message in enumerate(full_history):
-            logger.debug("%s, %s: %s", idx, message.type, message.content)
-        logger.debug("%s", content)
-        logger.debug("%s", "*" * 21 + " LLM END " + "*" * 21)
-        logger.debug("%s", "")
-
-    return content, full_history
 
 
 def compile_prompt_to_md(

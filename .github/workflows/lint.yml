@@ -162,7 +162,7 @@ jobs:
           RESEARCH_RUN_CREDITS_PER_MINUTE: "1"
           JSON_MODEL_PRICE_PER_MILLION_IN_CENTS: '{"anthropic": {"claude-sonnet-4-5": {"input": 30, "output": 150}, "claude-haiku-4-5": {"input": 10, "output": 50}, "claude-opus-4-5": {"input": 50, "output": 250}}, "grok": {"grok-4-1-fast": {"input": 20, "output": 50}, "grok-4-1-fast-non-reasoning": {"input": 20, "output": 50}, "grok-4-fast": {"input": 20, "output": 50}, "grok-4-fast-non-reasoning": {"input": 20, "output": 50}, "grok-4": {"input": 30, "output": 150}}, "openai": {"gpt-3.5-turbo": {"input": 50, "output": 150}, "gpt-4": {"input": 3000, "output": 6000}, "gpt-4-turbo": {"input": 1000, "output": 3000}, "gpt-4.1": {"input": 200, "output": 800}, "gpt-4.1-mini": {"input": 40, "output": 160}, "gpt-4.1-nano": {"input": 10, "output": 40}, "gpt-4o": {"input": 250, "output": 1000}, "gpt-4o-mini": {"input": 15, "output": 60}, "gpt-5": {"input": 125, "output": 1000}, "gpt-5-mini": {"input": 25, "output": 200}, "gpt-5-nano": {"input": 5, "output": 40}, "gpt-5.1": {"input": 125, "output": 1000}, "gpt-5.2": {"input": 175, "output": 1400}, "o1": {"input": 1500, "output": 6000}, "o1-pro": {"input": 15000, "output": 60000}, "o3": {"input": 200, "output": 800}, "o3-mini": {"input": 110, "output": 440}, "o3-pro": {"input": 2000, "output": 8000}}}'
         run: |
-          make gen-api-types lint
+          make gen-api-types
 
       - name: Check for uncommitted changes
         run: |

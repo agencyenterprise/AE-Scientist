@@ -75,6 +75,7 @@ dev = [
     "types-psutil>=7.0.0.20251001",
     "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20250913",
+    "vulture>=2.14",
 ]
 
 [tool.black]
@@ -93,6 +94,7 @@ exclude = '''
   | build
   | dist
   | outputs
+  | ai_scientist/api_types.py
 )/
 '''
 

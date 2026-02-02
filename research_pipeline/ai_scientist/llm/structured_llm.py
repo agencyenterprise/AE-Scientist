@@ -11,7 +11,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel
 
-from .llm import _create_chat_model, get_response_from_llm
+from .llm import _create_chat_model
 from .token_tracker import TrackCostCallbackHandler
 
 logger = logging.getLogger("ai-scientist")
@@ -222,32 +222,3 @@ def query(
         model=model,
         temperature=temperature,
     )
-
-
-def get_batch_responses_from_llm(
-    prompt: str,
-    model: str,
-    system_message: str,
-    temperature: float,
-    print_debug: bool = True,
-    msg_history: list[BaseMessage] | None = None,
-    n_responses: int = 1,
-) -> tuple[list[str], list[list[BaseMessage]]]:
-    if msg_history is None:
-        msg_history = []
-
-    contents: list[str] = []
-    histories: list[list[BaseMessage]] = []
-    for _ in range(n_responses):
-        content, history = get_response_from_llm(
-            prompt=prompt,
-            model=model,
-            system_message=system_message,
-            temperature=temperature,
-            print_debug=print_debug,
-            msg_history=msg_history,
-        )
-        contents.append(content)
-        histories.append(history)
-
-    return contents, histories

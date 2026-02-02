@@ -32,6 +32,7 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
     "types-requests>=2.32.0",
+    "vulture>=2.14",
 ]
 
 [tool.hatch.build.targets.wheel]
