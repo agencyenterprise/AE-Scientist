@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useState } from "react";
 import { ChevronDown, Download, FileText, Trophy } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -22,7 +23,7 @@ const SUMMARY = `The paper studies a controlled "token forgetting" phenomenon in
 
 const STRENGTHS = [
   "Clear, deployment-motivated setup: Stage-2 checkpoint selection ignores retention, matching realistic pipelines where earlier capabilities are out-of-objective and thus can silently degrade.",
-  "Causal localization is the main novelty: module swaps and targeted rollbacks manipulate disjoint parameter groups to adjudicate \"head drift\" vs \"feature drift\" more directly than representation-similarity diagnostics alone.",
+  'Causal localization is the main novelty: module swaps and targeted rollbacks manipulate disjoint parameter groups to adjudicate "head drift" vs "feature drift" more directly than representation-similarity diagnostics alone.',
   "Converging evidence in the main run: head rollback provides only modest retention recovery (~0.50) whereas body rollback restores perfect retention (1.0) but destroys Stage-2 loss.",
   "The paper connects diagnostics to interventions: the logit-drift decomposition reports the feature term dominating the head term by >10×.",
   "Includes several ablations probing training/selection knobs (weight decay sweep; optimizer moment carryover; freezing strategies; checkpoint selection criteria).",
@@ -31,7 +32,7 @@ const STRENGTHS = [
 const WEAKNESSES = [
   "Robustness is limited: the paper appears to rely heavily on single-seed point estimates for key causal claims.",
   "External validity remains uncertain: the core evidence is for synthetic single-token strings with carrier prompts on a small model (distilgpt2).",
-  "The \"head\" grouping conflates LN_f and W_U; the causal attribution within the head is less sharp.",
+  'The "head" grouping conflates LN_f and W_U; the causal attribution within the head is less sharp.',
   "Reproducibility signals are mixed: the submission does not clearly provide a public code/data link in the provided text.",
 ];
 
@@ -74,7 +75,7 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
       window.open(data.download_url, "_blank");
     } catch (error) {
       setDownloadError("Failed to download paper. Please try again.");
-      console.error("Download error:", error);
+      Sentry.captureException(error);
     } finally {
       setIsDownloading(false);
     }
@@ -138,8 +139,8 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
       </div>
       <h3 className="text-lg font-semibold text-white">Best Paper Produced</h3>
       <p className="text-slate-300 text-sm">
-        See what AE Scientist can produce. This paper received an &quot;Accept&quot; decision from our
-        automated peer review system with an overall score of 6/10.
+        See what AE Scientist can produce. This paper received an &quot;Accept&quot; decision from
+        our automated peer review system with an overall score of 6/10.
       </p>
 
       {/* Scores Grid */}
@@ -149,7 +150,9 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
             key={metric.label}
             className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3"
           >
-            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">{metric.label}</div>
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">
+              {metric.label}
+            </div>
             <div className="text-lg font-bold text-amber-300">
               {metric.value}
               <span className="text-sm text-slate-500 font-normal">/{metric.max}</span>
@@ -217,9 +220,7 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
             )}
           </button>
         </div>
-        {downloadError && (
-          <div className="mt-2 text-xs text-red-400">{downloadError}</div>
-        )}
+        {downloadError && <div className="mt-2 text-xs text-red-400">{downloadError}</div>}
       </div>
     </div>
   );
