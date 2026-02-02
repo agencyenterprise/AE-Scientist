@@ -130,7 +130,7 @@ def _python_packages_installation_commands() -> list[str]:
         f"cd {WORKSPACE_PATH}/AE-Scientist/research_pipeline/",
         "uv venv --system-site-packages",
         "source .venv/bin/activate",
-        "uv sync",
+        "uv sync --no-dev",
         "RUNPOD_INSTALL",
         "",
     ]
