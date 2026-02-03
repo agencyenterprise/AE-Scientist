@@ -33,9 +33,9 @@ import { getSessionToken } from "./session-token";
 export const api = createClient<paths>({
   // Use apiBaseUrl (not apiUrl) because generated paths include /api prefix
   baseUrl: config.apiBaseUrl,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  // Note: Don't set Content-Type here - openapi-fetch handles it automatically:
+  // - JSON bodies get "application/json"
+  // - FormData gets "multipart/form-data" with proper boundary
 });
 
 // Add auth middleware to inject session token
