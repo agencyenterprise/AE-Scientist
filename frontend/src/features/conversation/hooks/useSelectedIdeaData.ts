@@ -21,6 +21,11 @@ export function useSelectedIdeaData(conversationId: number | null): UseSelectedI
       const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
         params: { path: { conversation_id: conversationId! } },
       });
+      // 404 means idea is still being generated - return null, not an error
+      const isNotFound = error && "status" in error && error.status === 404;
+      if (isNotFound) {
+        return null;
+      }
       if (error || isErrorResponse(data)) throw new Error("Failed to fetch idea");
       return data.idea;
     },
@@ -29,6 +34,8 @@ export function useSelectedIdeaData(conversationId: number | null): UseSelectedI
     // Cache settings optimized for read-only preview
     staleTime: 60 * 1000, // 1 minute - idea content is relatively stable
     gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache for re-selections
+    // Refetch while idea is being generated (when data is null)
+    refetchInterval: query => (query.state.data === null ? 2000 : false),
   });
 
   return {

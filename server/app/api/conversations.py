@@ -291,54 +291,98 @@ async def _stream_structured_idea(
     conversation_id: int,
     user_id: int,
 ) -> AsyncGenerator[str, None]:
-    """Persist structured idea output and stream content."""
+    """Persist structured idea output and stream content.
+
+    If client disconnects mid-stream, continues processing the LLM stream
+    in background and saves the idea when complete.
+    """
     title: Optional[str] = None
     idea_markdown: Optional[str] = None
+    client_connected = True
+    idea_saved = False
 
-    async for content_chunk in idea_stream:
-        try:
-            event = json.loads(content_chunk)
-        except json.JSONDecodeError:
-            logger.warning("Received non-JSON chunk from idea stream: %s", content_chunk)
-            continue
+    async def _save_idea() -> None:
+        """Save the idea to database if we have valid data."""
+        nonlocal idea_saved
+        if idea_saved:
+            return
+        if not title or not idea_markdown:
+            logger.warning(
+                f"Cannot save idea for conversation {conversation_id}: "
+                f"missing title or content (title={bool(title)}, content={bool(idea_markdown)})"
+            )
+            return
 
-        event_type = event.get("event")
-        if event_type == "markdown_delta":
-            # Stream markdown content chunks for UI feedback
-            markdown_chunk = event.get("data")
-            if markdown_chunk:
-                yield json.dumps({"type": "markdown_delta", "data": markdown_chunk}) + "\n"
-        elif event_type == "structured_idea_data":
-            # Structured output with separate title and content
-            data = event.get("data")
-            if isinstance(data, dict):
-                title = data.get("title", "")
-                idea_markdown = data.get("content", "")
+        existing_idea = await db.get_idea_by_conversation_id(conversation_id)
+        if existing_idea is None:
+            await db.create_idea(
+                conversation_id=conversation_id,
+                title=title,
+                idea_markdown=idea_markdown,
+                created_by_user_id=user_id,
+            )
+            logger.info(f"Created idea for conversation {conversation_id}")
         else:
-            logger.debug("Ignoring unknown idea stream event: %s", event_type)
+            await db.update_idea_version(
+                idea_id=existing_idea.idea_id,
+                version_id=existing_idea.version_id,
+                title=title,
+                idea_markdown=idea_markdown,
+                is_manual_edit=False,
+            )
+            logger.info(f"Updated idea for conversation {conversation_id}")
+        idea_saved = True
 
-    # Validate we received structured data
-    if not title or not idea_markdown:
-        raise ValueError(
-            "LLM did not provide valid structured idea data (title and content required)."
+    try:
+        async for content_chunk in idea_stream:
+            try:
+                event = json.loads(content_chunk)
+            except json.JSONDecodeError:
+                logger.warning("Received non-JSON chunk from idea stream: %s", content_chunk)
+                continue
+
+            event_type = event.get("event")
+            if event_type == "markdown_delta":
+                # Stream markdown content chunks for UI feedback
+                markdown_chunk = event.get("data")
+                if markdown_chunk and client_connected:
+                    try:
+                        yield json.dumps({"type": "markdown_delta", "data": markdown_chunk}) + "\n"
+                    except (GeneratorExit, Exception) as yield_error:
+                        if client_connected:
+                            logger.info(
+                                f"Client disconnected during idea generation for conversation {conversation_id}, "
+                                f"continuing in background: {yield_error}"
+                            )
+                            client_connected = False
+            elif event_type == "structured_idea_data":
+                # Structured output with separate title and content
+                data = event.get("data")
+                if isinstance(data, dict):
+                    title = data.get("title", "")
+                    idea_markdown = data.get("content", "")
+            else:
+                logger.debug("Ignoring unknown idea stream event: %s", event_type)
+
+        # Validate we received structured data (only raise if client is still connected)
+        if client_connected and (not title or not idea_markdown):
+            raise ValueError(
+                "LLM did not provide valid structured idea data (title and content required)."
+            )
+
+    except GeneratorExit:
+        # Client disconnected - log and let finally handle saving
+        logger.info(
+            f"Client disconnected (GeneratorExit) during idea generation for conversation {conversation_id}."
         )
 
-    existing_idea = await db.get_idea_by_conversation_id(conversation_id)
-    if existing_idea is None:
-        await db.create_idea(
-            conversation_id=conversation_id,
-            title=title,
-            idea_markdown=idea_markdown,
-            created_by_user_id=user_id,
-        )
-    else:
-        await db.update_idea_version(
-            idea_id=existing_idea.idea_id,
-            version_id=existing_idea.version_id,
-            title=title,
-            idea_markdown=idea_markdown,
-            is_manual_edit=False,
-        )
+    finally:
+        # Always try to save the idea, even if client disconnected
+        # This ensures the idea is persisted regardless of client connection state
+        try:
+            await _save_idea()
+        except Exception as save_error:
+            logger.error(f"Failed to save idea in finally block: {save_error}")
 
     # Don't send "done" event here - it's sent by _generate_response_for_conversation
     # which is called after this function in the import flow
@@ -715,6 +759,62 @@ async def _stream_failure_response(
         yield chunk
 
 
+async def _run_import_generation_to_queue(
+    queue: "asyncio.Queue[Optional[str]]",
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    llm_provider: str,
+    llm_model: str,
+    imported_conversation_text: str,
+    messages: List[ImportedChatMessage],
+    user_id: int,
+) -> None:
+    """Background task to generate idea from import and write chunks to queue.
+
+    Runs independently of client connection. Writes chunks to queue for
+    streaming to client. When done, writes None to signal completion.
+    """
+    try:
+        logger.info(
+            f"Starting background import idea generation for conversation {conversation.id}"
+        )
+        async for chunk in _stream_generation_flow(
+            db=db,
+            conversation=conversation,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            imported_conversation_text=imported_conversation_text,
+            messages=messages,
+            user_id=user_id,
+        ):
+            await queue.put(chunk)
+        logger.info(
+            f"Background import idea generation completed for conversation {conversation.id}"
+        )
+    except Exception as exc:
+        logger.exception(
+            f"Background import idea generation failed for conversation {conversation.id}: {exc}"
+        )
+        try:
+            await queue.put(json.dumps({"type": "error", "data": str(exc)}) + "\n")
+        except Exception:
+            pass
+        try:
+            await _create_failure_idea(
+                db=db,
+                conversation_id=conversation.id,
+                user_id=user_id,
+                error_message=str(exc),
+            )
+        except Exception as failure_exc:
+            logger.error(f"Failed to create failure idea: {failure_exc}")
+    finally:
+        try:
+            await queue.put(None)
+        except Exception:
+            pass
+
+
 async def _stream_import_pipeline(
     import_data: ImportChatGPTConversation,
     user: UserData,
@@ -722,7 +822,16 @@ async def _stream_import_pipeline(
     llm_model: str,
     llm_provider: str,
 ) -> AsyncGenerator[str, None]:
-    """Main workflow for importing conversations, factored for readability."""
+    """Main workflow for importing conversations, factored for readability.
+
+    Uses a queue-based approach to support both:
+    1. Happy path: Client stays connected and sees streaming content
+    2. Unhappy path: Client disconnects, but generation continues in background
+
+    The LLM generation runs in a background task that writes to a queue.
+    This generator reads from the queue and yields to the client.
+    If the client disconnects, the background task continues and saves the idea.
+    """
     db = get_database()
     conversation: Optional[DBFullConversation] = None
 
@@ -764,17 +873,41 @@ async def _stream_import_pipeline(
             user_id=user.id,
         )
 
-        async for chunk in _stream_generation_flow(
-            db=db,
-            conversation=conversation,
-            llm_provider=llm_provider,
-            llm_model=llm_model,
-            imported_conversation_text=prepared_context.imported_conversation_text,
-            messages=parse_result.data.content,
-            user_id=user.id,
-        ):
-            yield chunk
-        return
+        # Create queue for communication between background task and this stream
+        queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+
+        # Start background task for LLM generation
+        # This runs independently - if client disconnects, task continues and saves idea
+        background_task = asyncio.create_task(
+            _run_import_generation_to_queue(
+                queue=queue,
+                db=db,
+                conversation=conversation,
+                llm_provider=llm_provider,
+                llm_model=llm_model,
+                imported_conversation_text=prepared_context.imported_conversation_text,
+                messages=parse_result.data.content,
+                user_id=user.id,
+            )
+        )
+        background_task.add_done_callback(
+            lambda t: (
+                logger.error(f"Background import task exception: {t.exception()}")
+                if t.exception()
+                else None
+            )
+        )
+
+        # Stream chunks from queue to client
+        # If client disconnects, GeneratorExit is raised and we exit
+        # But the background task continues running and will save the idea
+        while True:
+            queue_chunk = await queue.get()
+            if queue_chunk is None:
+                # Background task finished
+                break
+            yield queue_chunk
+
     except ImportConversationStreamError as stream_error:
         yield json.dumps(stream_error.payload) + "\n"
         return
@@ -794,18 +927,86 @@ async def _stream_import_pipeline(
     # Note: LLM costs are now charged atomically in create_llm_token_usage
 
 
+async def _run_idea_generation_to_queue(
+    queue: "asyncio.Queue[Optional[str]]",
+    db: DatabaseManager,
+    conversation: DBFullConversation,
+    llm_provider: str,
+    llm_model: str,
+    manual_title: str,
+    manual_hypothesis: str,
+    user_id: int,
+) -> None:
+    """Background task to generate idea and write chunks to queue.
+
+    Runs independently of client connection. Writes chunks to queue for
+    streaming to client. When done, writes None to signal completion.
+    The idea is saved by _stream_structured_idea when generation completes.
+    """
+    try:
+        logger.info(f"Starting background idea generation for conversation {conversation.id}")
+        async for chunk in _stream_manual_seed_flow(
+            db=db,
+            conversation=conversation,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            manual_title=manual_title,
+            manual_hypothesis=manual_hypothesis,
+            user_id=user_id,
+        ):
+            await queue.put(chunk)
+        logger.info(f"Background idea generation completed for conversation {conversation.id}")
+    except Exception as exc:
+        logger.exception(
+            f"Background idea generation failed for conversation {conversation.id}: {exc}"
+        )
+        # Write error to queue so client sees it (if still connected)
+        try:
+            await queue.put(json.dumps({"type": "error", "data": str(exc)}) + "\n")
+        except Exception:
+            pass
+        # Create failure idea so there's always an idea
+        try:
+            await _create_failure_idea(
+                db=db,
+                conversation_id=conversation.id,
+                user_id=user_id,
+                error_message=str(exc),
+            )
+        except Exception as failure_exc:
+            logger.error(f"Failed to create failure idea: {failure_exc}")
+    finally:
+        # Signal completion to the streaming consumer
+        try:
+            await queue.put(None)
+        except Exception:
+            pass
+
+
 async def _stream_manual_seed_pipeline(
     manual_data: ManualIdeaSeedRequest,
     user: UserData,
 ) -> AsyncGenerator[str, None]:
-    """Workflow for generating ideas directly from manual seed data."""
+    """Workflow for generating ideas directly from manual seed data.
+
+    Uses a queue-based approach to support both:
+    1. Happy path: Client stays connected and sees streaming content
+    2. Unhappy path: Client disconnects, but generation continues in background
+
+    The LLM generation runs in a background task that writes to a queue.
+    This generator reads from the queue and yields to the client.
+    If the client disconnects, the background task continues and saves the idea.
+    """
     db = get_database()
     conversation: Optional[DBFullConversation] = None
 
     manual_title = manual_data.idea_title.strip()
     manual_hypothesis = manual_data.idea_hypothesis.strip()
+
     try:
         yield json.dumps({"type": "state", "data": "creating_manual_seed"}) + "\n"
+
+        # 1. Create conversation
         conversation_id = await db.create_manual_conversation(
             manual_title=manual_title,
             manual_hypothesis=manual_hypothesis,
@@ -814,17 +1015,41 @@ async def _stream_manual_seed_pipeline(
         conversation = await db.get_conversation_by_id(conversation_id)
         assert conversation is not None
 
-        async for chunk in _stream_manual_seed_flow(
-            db=db,
-            conversation=conversation,
-            llm_provider=manual_data.llm_provider,
-            llm_model=manual_data.llm_model,
-            manual_title=manual_title,
-            manual_hypothesis=manual_hypothesis,
-            user_id=user.id,
-        ):
-            yield chunk
-        return
+        # 2. Create queue for communication between background task and this stream
+        queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+
+        # 3. Start background task for LLM generation
+        # This runs independently - if client disconnects, task continues and saves idea
+        background_task = asyncio.create_task(
+            _run_idea_generation_to_queue(
+                queue=queue,
+                db=db,
+                conversation=conversation,
+                llm_provider=manual_data.llm_provider,
+                llm_model=manual_data.llm_model,
+                manual_title=manual_title,
+                manual_hypothesis=manual_hypothesis,
+                user_id=user.id,
+            )
+        )
+        background_task.add_done_callback(
+            lambda t: (
+                logger.error(f"Background task exception: {t.exception()}")
+                if t.exception()
+                else None
+            )
+        )
+
+        # 4. Stream chunks from queue to client
+        # If client disconnects, GeneratorExit is raised and we exit
+        # But the background task continues running and will save the idea
+        while True:
+            queue_chunk = await queue.get()
+            if queue_chunk is None:
+                # Background task finished
+                break
+            yield queue_chunk
+
     except Exception as exc:
         logger.exception("Failed manual idea seed flow: %s", exc)
         if conversation is None:
