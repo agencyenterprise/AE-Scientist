@@ -1172,6 +1172,7 @@ async def ingest_token_usage(
             cached_input_tokens=event.cached_input_tokens,
             output_tokens=event.output_tokens,
             user_id=user_id,
+            description=f"Research run {run_id}",
         )
 
 

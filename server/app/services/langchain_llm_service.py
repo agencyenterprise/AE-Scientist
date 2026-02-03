@@ -342,7 +342,6 @@ class LangChainLLMService(BaseLLMService, ABC):
                         output_tokens=output_tokens,
                     )
                     # Charge user for LLM usage
-
                     await charge_for_llm_usage(
                         user_id=user_id,
                         conversation_id=conversation_id,
@@ -351,6 +350,7 @@ class LangChainLLMService(BaseLLMService, ABC):
                         input_tokens=input_tokens,
                         cached_input_tokens=cached_input_tokens,
                         output_tokens=output_tokens,
+                        description="Idea generation",
                     )
 
             last_chunk_metadata = getattr(chunk, "response_metadata", None)
@@ -632,6 +632,7 @@ class LangChainChatWithIdeaStream:
                                 cached_input_tokens=cached_input_tokens,
                                 output_tokens=output_tokens,
                                 user_id=user_id,
+                                description="Idea chat",
                             )
 
                     # Check if we have tool calls - if so, don't stream content

@@ -132,6 +132,7 @@ async def charge_for_llm_usage(
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
+    description: str,
 ) -> int:
     """
     Charge the user for LLM token usage.
@@ -144,6 +145,7 @@ async def charge_for_llm_usage(
         input_tokens: Number of input tokens.
         cached_input_tokens: Number of cached input tokens.
         output_tokens: Number of output tokens.
+        description: Human-readable description of what the tokens were used for.
 
     Returns:
         The cost in cents that was charged.
@@ -171,7 +173,7 @@ async def charge_for_llm_usage(
         user_id=user_id,
         amount_cents=cost_cents,
         action="llm_usage",
-        description=f"LLM usage: {model_key}",
+        description=f"{description} ({model_key})",
         metadata={
             "conversation_id": conversation_id,
             "provider": provider,

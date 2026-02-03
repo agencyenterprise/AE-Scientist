@@ -87,6 +87,7 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
+            description="Conversation summary",
         )
 
     async def _acreate_summary(self, messages_to_summarize: list[AnyMessage]) -> str:

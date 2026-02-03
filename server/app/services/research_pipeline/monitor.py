@@ -489,8 +489,8 @@ class ResearchPipelineMonitor:
 
         last_billed = run.last_billed_at or run.created_at
         elapsed_seconds = (now - last_billed).total_seconds()
-        # Only bill if at least 1 minute has passed
-        if elapsed_seconds < 60:
+        # Only bill if at least 5 minutes have passed
+        if elapsed_seconds < 300:
             return
 
         user_id = await db.get_run_owner_user_id(run.run_id)
