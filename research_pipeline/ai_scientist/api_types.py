@@ -1039,6 +1039,21 @@ class PresignedUploadUrlResponse(BaseModel):
     expires_in: Annotated[int, Field(title="Expires In")]
 
 
+class PublicConfigResponse(BaseModel):
+    pipeline_monitor_max_runtime_hours: Annotated[
+        int, Field(title="Pipeline Monitor Max Runtime Hours")
+    ]
+    min_balance_cents_for_conversation: Annotated[
+        int, Field(title="Min Balance Cents For Conversation")
+    ]
+    min_balance_cents_for_research_pipeline: Annotated[
+        int, Field(title="Min Balance Cents For Research Pipeline")
+    ]
+    min_balance_cents_for_paper_review: Annotated[
+        int, Field(title="Min Balance Cents For Paper Review")
+    ]
+
+
 class ResearchCost(BaseModel):
     run_id: Annotated[str, Field(title="Run Id")]
     cost: Annotated[float, Field(title="Cost")]

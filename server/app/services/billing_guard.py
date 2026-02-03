@@ -133,6 +133,7 @@ async def charge_for_llm_usage(
     cached_input_tokens: int,
     output_tokens: int,
     description: str,
+    run_id: str | None = None,
 ) -> int:
     """
     Charge the user for LLM token usage.
@@ -146,6 +147,7 @@ async def charge_for_llm_usage(
         cached_input_tokens: Number of cached input tokens.
         output_tokens: Number of output tokens.
         description: Human-readable description of what the tokens were used for.
+        run_id: Optional research run ID (used instead of conversation_id for source link).
 
     Returns:
         The cost in cents that was charged.
@@ -169,19 +171,24 @@ async def charge_for_llm_usage(
         return 0
 
     model_key = f"{provider}:{model}"
+    # Use run_id as the source link if provided, otherwise use conversation_id
+    metadata: dict[str, object] = {
+        "provider": provider,
+        "model": model,
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "output_tokens": output_tokens,
+    }
+    if run_id:
+        metadata["run_id"] = run_id
+    else:
+        metadata["conversation_id"] = conversation_id
     await charge_cents(
         user_id=user_id,
         amount_cents=cost_cents,
         action="llm_usage",
         description=f"{description} ({model_key})",
-        metadata={
-            "conversation_id": conversation_id,
-            "provider": provider,
-            "model": model,
-            "input_tokens": input_tokens,
-            "cached_input_tokens": cached_input_tokens,
-            "output_tokens": output_tokens,
-        },
+        metadata=metadata,
     )
 
     logger.debug(

@@ -1701,11 +1701,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "integer"
-                  },
-                  "type": "object",
-                  "title": "Response Get Public Config Api Public Config Get"
+                  "$ref": "#/components/schemas/PublicConfigResponse"
                 }
               }
             }
@@ -8568,6 +8564,35 @@
         ],
         "title": "ProgressUpdateEvent",
         "description": "Emitted periodically to show current focus.\n\nEmission Criteria:\n- Triggered by stage_progress events (every iteration)\n- Shows current iteration, focus, and progress metrics\n- Throttled to avoid overwhelming the timeline\n\nFrequency: ~10 per stage (one per iteration)"
+      },
+      "PublicConfigResponse": {
+        "properties": {
+          "pipeline_monitor_max_runtime_hours": {
+            "type": "integer",
+            "title": "Pipeline Monitor Max Runtime Hours"
+          },
+          "min_balance_cents_for_conversation": {
+            "type": "integer",
+            "title": "Min Balance Cents For Conversation"
+          },
+          "min_balance_cents_for_research_pipeline": {
+            "type": "integer",
+            "title": "Min Balance Cents For Research Pipeline"
+          },
+          "min_balance_cents_for_paper_review": {
+            "type": "integer",
+            "title": "Min Balance Cents For Paper Review"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pipeline_monitor_max_runtime_hours",
+          "min_balance_cents_for_conversation",
+          "min_balance_cents_for_research_pipeline",
+          "min_balance_cents_for_paper_review"
+        ],
+        "title": "PublicConfigResponse",
+        "description": "Public configuration values exposed to the frontend."
       },
       "ResearchCost": {
         "properties": {

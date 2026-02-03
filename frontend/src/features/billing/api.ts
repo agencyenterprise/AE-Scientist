@@ -1,6 +1,15 @@
 "use client";
 
 import { api } from "@/shared/lib/api-client-typed";
+import type { components } from "@/types/api.gen";
+
+export type PublicConfig = components["schemas"]["PublicConfigResponse"];
+
+export async function fetchPublicConfig(): Promise<PublicConfig> {
+  const { data, error } = await api.GET("/api/public-config");
+  if (error) throw new Error("Failed to fetch public config");
+  return data;
+}
 
 export interface CreditTransaction {
   id: number;

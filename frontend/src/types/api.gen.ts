@@ -4027,6 +4027,20 @@ export interface components {
             /** @description Current best metrics if available */
             current_best?: components["schemas"]["MetricCollection"] | null;
         };
+        /**
+         * PublicConfigResponse
+         * @description Public configuration values exposed to the frontend.
+         */
+        PublicConfigResponse: {
+            /** Pipeline Monitor Max Runtime Hours */
+            pipeline_monitor_max_runtime_hours: number;
+            /** Min Balance Cents For Conversation */
+            min_balance_cents_for_conversation: number;
+            /** Min Balance Cents For Research Pipeline */
+            min_balance_cents_for_research_pipeline: number;
+            /** Min Balance Cents For Paper Review */
+            min_balance_cents_for_paper_review: number;
+        };
         /** ResearchCost */
         ResearchCost: {
             /** Run Id */
@@ -7157,9 +7171,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
+                    "application/json": components["schemas"]["PublicConfigResponse"];
                 };
             };
         };

@@ -43,20 +43,16 @@ The frontend provides an intuitive interface for:
    ```bash
    # API Configuration
    NEXT_PUBLIC_API_BASE_URL="http://localhost:8000"
-   
-   # Development Settings  
+
+   # Development Settings
    NEXT_PUBLIC_ENVIRONMENT="development"
 
    # Stripe Checkout
    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_xxx"
-
-   # Minimum balance (in cents) required for major actions (mirrors backend config)
-   NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_CONVERSATION="100"       # $1.00
-   NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE="5000" # $50.00
    ```
 
    - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is required for redirecting users to Stripe Checkout.
-   - `NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_*` keep the UI in sync with backend balance thresholds (in cents) so buttons can disable before the API gate fires.
+   - Minimum balance thresholds are fetched from the backend via `/api/public-config`.
 
 ### Development
 

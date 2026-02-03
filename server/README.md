@@ -125,15 +125,6 @@ Operations are billed based on actual costs in cents. Users must maintain a mini
 - `POST /api/billing/checkout-session` – creates a Checkout session
 - `POST /api/billing/stripe-webhook` – receives Stripe events (whitelisted in auth middleware)
 
-#### Frontend Configuration
-
-Add these variables to `frontend/.env.local` for the Billing page:
-
-```bash
-NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_CONVERSATION="100"
-NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE="5000"
-```
-
 ### MCP Server Integration (Claude Code & Cursor)
 
 AE Scientist exposes an MCP (Model Context Protocol) server that allows you to run research pipelines directly from Claude Code or Cursor.

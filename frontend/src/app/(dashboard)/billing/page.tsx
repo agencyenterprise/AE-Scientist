@@ -1,15 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   createCheckoutSession,
   fetchFundingOptions,
+  fetchPublicConfig,
   fetchWallet,
   type FundingOption,
 } from "@/features/billing/api";
 import { ApiError } from "@/shared/lib/api-client";
-import { config } from "@/shared/lib/config";
+import { useAuthContext } from "@/shared/contexts/AuthContext";
 
 function formatCurrency(amountCents?: number | null, currency?: string | null): string {
   if (amountCents === undefined || amountCents === null) {
@@ -22,25 +24,59 @@ function formatCurrency(amountCents?: number | null, currency?: string | null): 
   return formatter.format(amountCents / 100);
 }
 
+function getSourceLink(metadata: Record<string, unknown>): { label: string; href: string } | null {
+  const runId = metadata.run_id as string | undefined;
+  const conversationId = metadata.conversation_id as number | undefined;
+  const paperReviewId = metadata.paper_review_id as number | undefined;
+
+  if (runId) {
+    return { label: runId, href: `/research/${runId}` };
+  }
+  if (paperReviewId) {
+    return { label: `Review #${paperReviewId}`, href: `/paper-review/${paperReviewId}` };
+  }
+  if (conversationId) {
+    return { label: `Conversation #${conversationId}`, href: `/conversations/${conversationId}` };
+  }
+  return null;
+}
+
 export default function BillingPage() {
+  const { isAuthenticated } = useAuthContext();
+
   const walletQuery = useQuery({
     queryKey: ["billing", "wallet"],
     queryFn: fetchWallet,
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
+    staleTime: 0, // Always fetch fresh data on mount
   });
   const fundingQuery = useQuery({
     queryKey: ["billing", "funding-options"],
     queryFn: fetchFundingOptions,
+    enabled: isAuthenticated,
+  });
+  const configQuery = useQuery({
+    queryKey: ["public-config"],
+    queryFn: fetchPublicConfig,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
   const [error, setError] = useState<string | null>(null);
   const [activePrice, setActivePrice] = useState<string | null>(null);
 
   const requirements = useMemo(
     () => [
-      { label: "Idea refinement", value: config.minBalanceCents.conversation },
-      { label: "Research pipeline", value: config.minBalanceCents.researchPipeline },
+      {
+        label: "Idea refinement",
+        value: configQuery.data?.min_balance_cents_for_conversation ?? 0,
+      },
+      { label: "Paper review", value: configQuery.data?.min_balance_cents_for_paper_review ?? 0 },
+      {
+        label: "Research pipeline",
+        value: configQuery.data?.min_balance_cents_for_research_pipeline ?? 0,
+      },
     ],
-    []
+    [configQuery.data]
   );
 
   const handlePurchase = async (option: FundingOption) => {
@@ -48,7 +84,7 @@ export default function BillingPage() {
     setError(null);
     setActivePrice(option.price_id);
     try {
-      const origin = typeof window !== "undefined" ? window.location.origin : config.apiBaseUrl;
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
       const { checkout_url } = await createCheckoutSession({
         price_id: option.price_id,
         success_url: `${origin}/billing?success=1`,
@@ -75,9 +111,9 @@ export default function BillingPage() {
           <div>
             <p className="text-sm text-muted-foreground">Current balance</p>
             <p className="text-3xl font-semibold text-foreground">
-              {walletQuery.isLoading
+              {!walletQuery.data || walletQuery.isFetching
                 ? "…"
-                : formatCurrency(walletQuery.data?.balance_cents ?? 0, "usd")}
+                : formatCurrency(walletQuery.data.balance_cents, "usd")}
             </p>
           </div>
           <div className="flex gap-4">
@@ -138,9 +174,9 @@ export default function BillingPage() {
 
       <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Recent transactions</h2>
-        {walletQuery.isLoading ? (
+        {!walletQuery.data || walletQuery.isFetching ? (
           <p className="mt-4 text-sm text-muted-foreground">Loading transactions…</p>
-        ) : walletQuery.data && walletQuery.data.transactions.length > 0 ? (
+        ) : walletQuery.data.transactions.length > 0 ? (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
@@ -149,6 +185,7 @@ export default function BillingPage() {
                   <th className="px-2 py-1 font-medium">Type</th>
                   <th className="px-2 py-1 font-medium">Amount</th>
                   <th className="px-2 py-1 font-medium">Description</th>
+                  <th className="px-2 py-1 font-medium">Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,6 +205,17 @@ export default function BillingPage() {
                       {formatCurrency(tx.amount_cents, "usd")}
                     </td>
                     <td className="px-2 py-2 text-muted-foreground">{tx.description ?? "—"}</td>
+                    <td className="px-2 py-2">
+                      {(() => {
+                        const source = getSourceLink(tx.metadata);
+                        if (!source) return <span className="text-muted-foreground">—</span>;
+                        return (
+                          <Link href={source.href} className="text-primary hover:underline">
+                            {source.label}
+                          </Link>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))}
               </tbody>

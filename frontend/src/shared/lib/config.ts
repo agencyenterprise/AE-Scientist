@@ -7,12 +7,6 @@ export const config = {
   // Environment
   environment: process.env.NEXT_PUBLIC_ENVIRONMENT || "development",
   stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
-  minBalanceCents: {
-    conversation: Number(process.env.NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_CONVERSATION || "100"),
-    researchPipeline: Number(
-      process.env.NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE || "5000"
-    ),
-  },
 
   // Derived values
   get apiUrl() {
