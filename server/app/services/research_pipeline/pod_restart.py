@@ -7,10 +7,10 @@ or GPU shortage is detected.
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 
 from app.api.research_pipeline_stream import publish_stream_event
+from app.config import settings
 from app.models import ResearchRunEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services.database import DatabaseManager
@@ -25,27 +25,6 @@ from app.services.research_pipeline.runpod import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Environment variable for max restart attempts (default: 2)
-MAX_RESTART_ATTEMPTS_ENV = "PIPELINE_MAX_RESTART_ATTEMPTS"
-DEFAULT_MAX_RESTART_ATTEMPTS = 2
-
-
-def get_max_restart_attempts() -> int:
-    """Get the maximum number of restart attempts from environment."""
-    raw = os.environ.get(MAX_RESTART_ATTEMPTS_ENV)
-    if raw is None:
-        return DEFAULT_MAX_RESTART_ATTEMPTS
-    try:
-        return max(0, int(raw))
-    except ValueError:
-        logger.warning(
-            "Invalid %s=%s; defaulting to %s",
-            MAX_RESTART_ATTEMPTS_ENV,
-            raw,
-            DEFAULT_MAX_RESTART_ATTEMPTS,
-        )
-        return DEFAULT_MAX_RESTART_ATTEMPTS
 
 
 async def attempt_pod_restart(
@@ -72,7 +51,7 @@ async def attempt_pod_restart(
         True if restart was initiated successfully, False if restart
         should not be attempted (max attempts exceeded, etc.)
     """
-    max_restarts = get_max_restart_attempts()
+    max_restarts = settings.research_pipeline.max_restart_attempts
 
     if run.restart_count >= max_restarts:
         logger.warning(

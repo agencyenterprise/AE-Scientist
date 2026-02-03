@@ -5,7 +5,7 @@ import * as Sentry from "@sentry/nextjs";
 import { apiStream, ApiError } from "@/shared/lib/api-client";
 import { ImportState } from "@/features/conversation-import/types/types";
 import type { SSEEvent } from "@/features/conversation-import/types/types";
-import { parseInsufficientCreditsError } from "@/shared/utils/credits";
+import { parseInsufficientBalanceError } from "@/shared/utils/costs";
 
 /**
  * Options for the streaming import hook.
@@ -87,8 +87,8 @@ export interface StreamImportResult {
   modelLimitMessage?: string;
   /** Model limit suggestion */
   modelLimitSuggestion?: string;
-  /** Whether the request failed due to insufficient credits */
-  insufficientCredits?: boolean;
+  /** Whether the request failed due to insufficient balance */
+  insufficientBalance?: boolean;
   required?: number;
   available?: number;
   action?: string;
@@ -355,17 +355,17 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
         };
       } catch (error) {
         if (error instanceof ApiError && error.status === 402) {
-          const info = parseInsufficientCreditsError(error.data);
-          const message = info?.message || "You need more credits before running this action.";
+          const info = parseInsufficientBalanceError(error.data);
+          const message = info?.message || "Insufficient balance. Please add funds to continue.";
           setIsStreaming(false);
           onEnd?.();
           onError?.(message);
           return {
             success: false,
             error: message,
-            insufficientCredits: true,
-            required: info?.required,
-            available: info?.available,
+            insufficientBalance: true,
+            required: info?.required_cents,
+            available: info?.available_cents,
             action: info?.action,
           };
         }

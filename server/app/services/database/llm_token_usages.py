@@ -4,15 +4,12 @@ LLM token usage database operations.
 Handles operations for llm_token_usages table.
 """
 
-import logging
 from datetime import datetime
 from typing import List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
 
 from .base import ConnectionProvider
-
-logger = logging.getLogger(__name__)
 
 
 class BaseLlmTokenUsage(NamedTuple):
@@ -48,7 +45,20 @@ class LlmTokenUsagesMixin(ConnectionProvider):  # pylint: disable=abstract-metho
         output_tokens: int,
         run_id: Optional[str] = None,
     ) -> int:
-        """Create a new LLM token usage record in the database."""
+        """Create a new LLM token usage record.
+
+        Args:
+            conversation_id: The conversation ID.
+            provider: LLM provider (e.g., "openai", "anthropic").
+            model: Model name (e.g., "gpt-4", "claude-3").
+            input_tokens: Number of input tokens.
+            cached_input_tokens: Number of cached input tokens.
+            output_tokens: Number of output tokens.
+            run_id: Optional research run ID.
+
+        Returns:
+            The ID of the created token usage record.
+        """
         now = datetime.now()
 
         async with self.aget_connection() as conn:

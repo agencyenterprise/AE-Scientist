@@ -41,6 +41,7 @@ from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindow
 from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
+from app.services.billing_guard import charge_for_llm_usage
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline.pod_restart import attempt_pod_restart
 from app.services.research_pipeline.pod_termination_worker import (
@@ -1159,6 +1160,19 @@ async def ingest_token_usage(
         output_tokens=event.output_tokens,
         run_id=run_id,
     )
+
+    # Charge user for LLM usage (separate from GPU costs)
+    user_id = await db.get_run_owner_user_id(run_id)
+    if user_id:
+        await charge_for_llm_usage(
+            conversation_id=conversation_id,
+            provider=provider,
+            model=model_name,
+            input_tokens=event.input_tokens,
+            cached_input_tokens=event.cached_input_tokens,
+            output_tokens=event.output_tokens,
+            user_id=user_id,
+        )
 
 
 @router.post("/{run_id}/figure-reviews", status_code=status.HTTP_204_NO_CONTENT)

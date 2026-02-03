@@ -140,17 +140,17 @@ async def handle_tools_call(params: dict | None, user: UserData) -> dict:
             "isError": True,
         }
 
-    # Check user has sufficient credits
+    # Check user has sufficient balance
     db = get_database()
-    required_credits = settings.MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE
-    if required_credits > 0:
-        balance = await db.get_user_wallet_balance(user.id)
-        if balance < required_credits:
+    required_cents = settings.billing_limits.min_balance_cents_for_research_pipeline
+    if required_cents > 0:
+        balance_cents = await db.get_user_wallet_balance(user.id)
+        if balance_cents < required_cents:
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": f"Insufficient credits. Required: {required_credits}, Available: {balance}. Please add credits at {settings.FRONTEND_URL}/billing",
+                        "text": f"Insufficient balance. Required: ${required_cents / 100:.2f}, Available: ${balance_cents / 100:.2f}. Please add funds at {settings.server.frontend_url}/billing",
                     }
                 ],
                 "isError": True,
@@ -212,7 +212,7 @@ async def handle_tools_call(params: dict | None, user: UserData) -> dict:
         )
 
         # Build the frontend URL for this run
-        frontend_url = f"{settings.FRONTEND_URL.rstrip('/')}/research/{run_id}"
+        frontend_url = f"{settings.server.frontend_url.rstrip('/')}/research/{run_id}"
 
         logger.info(
             "MCP pipeline launched: run_id=%s user=%s title=%s",

@@ -42,7 +42,7 @@ from app.services import (
     SummarizerService,
     get_database,
 )
-from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
+from app.services.billing_guard import enforce_minimum_balance
 from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
 from app.services.database.conversations import CONVERSATION_STATUSES
@@ -389,11 +389,15 @@ async def _generate_manual_seed_idea(
     asyncio.create_task(
         summarizer_service.init_chat_summary(
             conversation_id,
+            user_id,
             [ImportedChatMessage(role="user", content=user_prompt)],
         )
     )
     idea_stream = service.generate_manual_seed_idea(
-        llm_model=llm_model, user_prompt=user_prompt, conversation_id=conversation_id
+        llm_model=llm_model,
+        user_prompt=user_prompt,
+        conversation_id=conversation_id,
+        user_id=user_id,
     )
     async for chunk in _stream_structured_idea(
         db=db,
@@ -437,6 +441,7 @@ async def _generate_response_for_conversation(
 async def _handle_existing_conversation(
     db: DatabaseManager,
     existing_conversation_id: int,
+    user_id: int,
     messages: List[ImportedChatMessage],
     llm_provider: str,
     llm_model: str,
@@ -459,7 +464,7 @@ async def _handle_existing_conversation(
     # Will generate a new summarization in the background
     summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
     await asyncio.create_task(
-        summarizer_service.init_chat_summary(existing_conversation_id, messages)
+        summarizer_service.init_chat_summary(existing_conversation_id, user_id, messages)
     )
 
 
@@ -567,6 +572,7 @@ async def _create_conversation(
 async def _stream_existing_conversation_update(
     db: DatabaseManager,
     target_id: int,
+    user_id: int,
     messages: List[ImportedChatMessage],
     llm_provider: str,
     llm_model: str,
@@ -575,6 +581,7 @@ async def _stream_existing_conversation_update(
     await _handle_existing_conversation(
         db=db,
         existing_conversation_id=target_id,
+        user_id=user_id,
         messages=messages,
         llm_provider=llm_provider,
         llm_model=llm_model,
@@ -607,6 +614,7 @@ async def _stream_generation_flow(
     summarizer_service = SummarizerService.for_model(llm_provider, llm_model)
     _, latest_summary = await summarizer_service.init_chat_summary(
         conversation.id,
+        user_id,
         messages,
     )
 
@@ -740,6 +748,7 @@ async def _stream_import_pipeline(
             async for chunk in _stream_existing_conversation_update(
                 db=db,
                 target_id=decision.target_conversation_id,
+                user_id=user.id,
                 messages=parse_result.data.content,
                 llm_provider=llm_provider,
                 llm_model=llm_model,
@@ -782,6 +791,7 @@ async def _stream_import_pipeline(
         ):
             yield chunk
         return
+    # Note: LLM costs are now charged atomically in create_llm_token_usage
 
 
 async def _stream_manual_seed_pipeline(
@@ -828,6 +838,7 @@ async def _stream_manual_seed_pipeline(
         ):
             yield chunk
         return
+    # Note: LLM costs are now charged atomically in create_llm_token_usage
 
 
 @router.post(
@@ -856,21 +867,10 @@ async def import_conversation(
 
     user = get_current_user(request)
     logger.debug("User authenticated for import: %s", user.email)
-    await enforce_minimum_credits(
+    await enforce_minimum_balance(
         user_id=user.id,
-        required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
-        action="input_pipeline",
-    )
-    await charge_user_credits(
-        user_id=user.id,
-        cost=settings.CHAT_MESSAGE_CREDIT_COST,
+        required_cents=settings.billing_limits.min_balance_cents_for_conversation,
         action="conversation_import",
-        description="Conversation import request",
-        metadata={
-            "url": url,
-            "llm_provider": llm_provider,
-            "llm_model": llm_model,
-        },
     )
 
     async def generate_import_stream() -> AsyncGenerator[str, None]:
@@ -916,25 +916,17 @@ async def import_manual_seed(
     """
     user = get_current_user(request)
     logger.debug("User authenticated for manual import: %s", user.email)
-    await enforce_minimum_credits(
+    await enforce_minimum_balance(
         user_id=user.id,
-        required=settings.MIN_USER_CREDITS_FOR_CONVERSATION,
-        action="input_pipeline",
-    )
-    await charge_user_credits(
-        user_id=user.id,
-        cost=settings.CHAT_MESSAGE_CREDIT_COST,
+        required_cents=settings.billing_limits.min_balance_cents_for_conversation,
         action="manual_import",
-        description="Manual idea seed request",
-        metadata={
-            "idea_title": manual_data.idea_title.strip(),
-            "llm_provider": manual_data.llm_provider,
-            "llm_model": manual_data.llm_model,
-        },
     )
 
     async def generate_manual_stream() -> AsyncGenerator[str, None]:
-        async for chunk in _stream_manual_seed_pipeline(manual_data=manual_data, user=user):
+        async for chunk in _stream_manual_seed_pipeline(
+            manual_data=manual_data,
+            user=user,
+        ):
             yield chunk
 
     return StreamingResponse(

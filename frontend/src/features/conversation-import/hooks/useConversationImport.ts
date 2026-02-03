@@ -180,14 +180,14 @@ export function useConversationImport(
           result.modelLimitMessage || "",
           result.modelLimitSuggestion || ""
         );
-      } else if (result.insufficientCredits) {
-        const creditMessage =
+      } else if (result.insufficientBalance) {
+        const balanceMessage =
           result.error ||
           (result.required
-            ? `You need at least ${result.required} credits to refine ideas.`
-            : "Insufficient credits to refine ideas.");
-        formState.actions.setError(creditMessage);
-        onError?.(creditMessage);
+            ? `You need at least $${(result.required / 100).toFixed(2)} to refine ideas.`
+            : "Insufficient balance to refine ideas.");
+        formState.actions.setError(balanceMessage);
+        onError?.(balanceMessage);
       } else if (!result.success && result.error) {
         formState.actions.setError(result.error);
         onError?.(result.error);

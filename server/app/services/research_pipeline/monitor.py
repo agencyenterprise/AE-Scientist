@@ -18,6 +18,7 @@ from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
 from app.services.narrator.narrator_service import ingest_narration_event
+from app.services.research_pipeline.billing_retry_worker import BillingRetryWorker
 from app.services.research_pipeline.pod_restart import attempt_pod_restart
 from app.services.research_pipeline.pod_termination_worker import (
     PodTerminationWorker,
@@ -112,10 +113,7 @@ class ResearchPipelineMonitor:
         self._max_runtime = timedelta(hours=max_runtime_hours)
         self._task: Optional[asyncio.Task[None]] = None
         self._stop_event: Optional[asyncio.Event] = None
-        api_key = os.environ.get("RUNPOD_API_KEY")
-        if not api_key:
-            raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
-        self._runpod_manager: RunPodManager = RunPodManager(api_key=api_key)
+        self._runpod_manager: RunPodManager = RunPodManager(api_key=settings.runpod.api_key)
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -163,6 +161,7 @@ class ResearchPipelineMonitor:
 
             logger.info("Pipeline monitor elected leader (pid=%s).", os.getpid())
             termination_task: asyncio.Task[None] | None = None
+            billing_retry_task: asyncio.Task[None] | None = None
             try:
                 termination_task = asyncio.create_task(
                     PodTerminationWorker(
@@ -171,6 +170,10 @@ class ResearchPipelineMonitor:
                         poll_interval_seconds=self._poll_interval,
                     ).run(stop_event=stop_event),
                     name="PodTerminationDispatcher",
+                )
+                billing_retry_task = asyncio.create_task(
+                    BillingRetryWorker(db=db).run(stop_event=stop_event),
+                    name="BillingRetryWorker",
                 )
                 while not stop_event.is_set():
                     try:
@@ -186,6 +189,10 @@ class ResearchPipelineMonitor:
                     termination_task.cancel()
                     with suppress(asyncio.CancelledError):
                         await termination_task
+                if billing_retry_task is not None:
+                    billing_retry_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await billing_retry_task
                 await self._release_global_monitor_lock(conn=conn)
                 logger.info("Pipeline monitor relinquished leadership (pid=%s).", os.getpid())
             return True
@@ -469,13 +476,21 @@ class ResearchPipelineMonitor:
     async def _bill_run_if_needed(
         self, db: "ResearchRunStore", run: ResearchPipelineRun, now: datetime
     ) -> None:
-        rate = max(0, settings.RESEARCH_RUN_CREDITS_PER_MINUTE)
-        if rate == 0:
+        """Create periodic "hold" transactions for estimated GPU cost.
+
+        These holds will be reversed and replaced with the actual cost when the
+        pod terminates and we receive the final billing summary from RunPod.
+        """
+        # Convert run.cost (USD per hour) to cents
+        # run.cost is the hourly GPU cost in USD from RunPod
+        cost_per_hour_cents = int(run.cost * 100) if run.cost > 0 else 0
+        if cost_per_hour_cents <= 0:
             return
 
         last_billed = run.last_billed_at or run.created_at
-        elapsed_minutes = int((now - last_billed).total_seconds() // 60)
-        if elapsed_minutes <= 0:
+        elapsed_seconds = (now - last_billed).total_seconds()
+        # Only bill if at least 1 minute has passed
+        if elapsed_seconds < 60:
             return
 
         user_id = await db.get_run_owner_user_id(run.run_id)
@@ -483,58 +498,43 @@ class ResearchPipelineMonitor:
             logger.warning("Unable to determine owner for run %s; skipping billing.", run.run_id)
             return
 
-        available = await db.get_user_wallet_balance(user_id)
-        if available < rate:
-            await self._fail_run(
-                db,
-                run,
-                "Insufficient credits to continue research run.",
-                "insufficient_credits",
-            )
+        # Calculate estimated cost based on elapsed time and hourly rate
+        estimated_cost_cents = int((cost_per_hour_cents * elapsed_seconds) / 3600)
+        if estimated_cost_cents <= 0:
             return
 
-        billable_minutes = min(elapsed_minutes, available // rate)
-        if billable_minutes <= 0:
-            await self._fail_run(
-                db,
-                run,
-                "Insufficient credits to continue research run.",
-                "insufficient_credits",
-            )
-            return
-
-        charge_amount = billable_minutes * rate
+        # Create "hold" transaction (will be reversed at pod termination)
+        # Don't check balance or terminate - let run continue regardless
         await db.add_completed_transaction(
             user_id=user_id,
-            amount=-charge_amount,
-            transaction_type="debit",
-            description=f"Research run {run.run_id} ({billable_minutes} minute(s))",
-            metadata={"run_id": run.run_id, "minutes_billed": billable_minutes},
+            amount=-estimated_cost_cents,
+            transaction_type="hold",
+            description=f"Research run {run.run_id} GPU hold ({int(elapsed_seconds)}s)",
+            metadata={
+                "run_id": run.run_id,
+                "hold": True,
+                "estimated": True,
+                "seconds_billed": int(elapsed_seconds),
+                "cost_per_hour_cents": cost_per_hour_cents,
+            },
         )
-        new_balance = available - charge_amount
+
+        available = await db.get_user_wallet_balance(user_id)
         await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
-            event_type="billing_debit",
+            event_type="billing_hold",
             metadata={
-                "minutes_billed": billable_minutes,
-                "rate_per_minute": rate,
-                "amount_charged": charge_amount,
-                "balance": new_balance,
+                "seconds_billed": int(elapsed_seconds),
+                "cost_per_hour_cents": cost_per_hour_cents,
+                "hold_amount_cents": estimated_cost_cents,
+                "balance_cents": available,
             },
             occurred_at=now,
         )
         await db.update_research_pipeline_run(
             run_id=run.run_id,
-            last_billed_at=last_billed + timedelta(minutes=billable_minutes),
+            last_billed_at=now,
         )
-
-        if billable_minutes < elapsed_minutes:
-            await self._fail_run(
-                db,
-                run,
-                "Credits exhausted during research run.",
-                "insufficient_credits",
-            )
 
     async def _maybe_backfill_ssh_info(
         self,
@@ -633,26 +633,10 @@ class ResearchPipelineMonitor:
         )
 
 
-def _require_int(name: str) -> int:
-    value = os.environ.get(name)
-    if value is None:
-        raise RuntimeError(f"Environment variable {name} is required for pipeline monitoring.")
-    try:
-        return int(value)
-    except ValueError as exc:
-        raise RuntimeError(f"Environment variable {name} must be an integer.") from exc
-
-
-DEFAULT_POLL_INTERVAL_SECONDS = _require_int("PIPELINE_MONITOR_POLL_INTERVAL_SECONDS")
-DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = _require_int("PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS")
-DEFAULT_MAX_MISSED_HEARTBEATS = _require_int("PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS")
-DEFAULT_STARTUP_GRACE_SECONDS = _require_int("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
-DEFAULT_MAX_RUNTIME_HOURS = _require_int("PIPELINE_MONITOR_MAX_RUNTIME_HOURS")
-
 pipeline_monitor = ResearchPipelineMonitor(
-    poll_interval_seconds=DEFAULT_POLL_INTERVAL_SECONDS,
-    heartbeat_timeout_seconds=DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
-    max_missed_heartbeats=DEFAULT_MAX_MISSED_HEARTBEATS,
-    startup_grace_seconds=DEFAULT_STARTUP_GRACE_SECONDS,
-    max_runtime_hours=DEFAULT_MAX_RUNTIME_HOURS,
+    poll_interval_seconds=settings.research_pipeline.monitor_poll_interval_seconds,
+    heartbeat_timeout_seconds=settings.research_pipeline.monitor_heartbeat_timeout_seconds,
+    max_missed_heartbeats=settings.research_pipeline.monitor_max_missed_heartbeats,
+    startup_grace_seconds=settings.research_pipeline.monitor_startup_grace_seconds,
+    max_runtime_hours=settings.research_pipeline.monitor_max_runtime_hours,
 )

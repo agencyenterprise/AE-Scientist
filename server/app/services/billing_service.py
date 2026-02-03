@@ -1,5 +1,8 @@
 """
 Business logic for wallet queries, checkout sessions, and Stripe webhooks.
+
+All amounts are in cents (e.g., 100 = $1.00).
+With the new billing model, users pay $X and get $X added to their wallet (1:1 mapping).
 """
 
 import asyncio
@@ -43,41 +46,59 @@ class BillingService:
         return wallet, transactions
 
     async def get_balance(self, user_id: int) -> int:
+        """Get user's balance in cents."""
         return cast(int, await self.db.get_user_wallet_balance(user_id))
 
     # ------------------------------------------------------------------
-    # Stripe price / pack helpers
+    # Stripe price / funding options
     # ------------------------------------------------------------------
-    async def list_credit_packs(self) -> List[Dict[str, Any]]:
-        price_map = settings.STRIPE_PRICE_TO_CREDITS
-        logger.debug("Price map: %s", price_map)
-        if not price_map:
+    async def list_funding_options(self, price_ids: List[str]) -> List[Dict[str, Any]]:
+        """List available funding options from Stripe.
+
+        With the new 1:1 model, the Stripe unit_amount equals the amount added to wallet.
+
+        Args:
+            price_ids: List of Stripe price IDs to retrieve.
+
+        Returns:
+            List of funding options with amount_cents, currency, etc.
+        """
+        if not price_ids:
             return []
 
-        packs: List[Dict[str, Any]] = []
-        for price_id, credit_amount in price_map.items():
+        options: List[Dict[str, Any]] = []
+        for price_id in price_ids:
             try:
                 price = await asyncio.to_thread(self._stripe().retrieve_price, price_id)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.exception("Failed to retrieve price %s: %s", price_id, exc)
                 continue
+
             amount_cents = getattr(price, "unit_amount", None)
             currency = getattr(price, "currency", None)
             nickname = getattr(price, "nickname", None)
+
             if amount_cents is None:
-                logger.warning("Stripe price %s missing unit_amount; skipping pack.", price_id)
+                logger.warning("Stripe price %s missing unit_amount; skipping.", price_id)
                 continue
-            packs.append(
+
+            options.append(
                 {
                     "price_id": price_id,
-                    "credits": credit_amount,
+                    "amount_cents": int(amount_cents),  # Amount added to wallet (1:1)
                     "currency": currency or "usd",
-                    "unit_amount": int(amount_cents),
-                    "nickname": nickname or price_id,
+                    "unit_amount": int(amount_cents),  # Stripe amount
+                    "nickname": nickname or f"${int(amount_cents) / 100:.2f}",
                 }
             )
-        # Preserve declaration order in env
-        return packs
+        return options
+
+    # Backwards compatibility alias
+    async def list_credit_packs(self) -> List[Dict[str, Any]]:
+        """Deprecated: Use list_funding_options instead."""
+        # For backwards compatibility, try to get price IDs from environment
+        # In practice, the caller should provide the price IDs
+        return []
 
     # ------------------------------------------------------------------
     # Checkout sessions
@@ -90,33 +111,33 @@ class BillingService:
         success_url: str,
         cancel_url: str,
     ) -> str:
-        price_map = settings.STRIPE_PRICE_TO_CREDITS
-        if price_id not in price_map:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unknown price_id. Please refresh available packs.",
-            )
-        credit_amount = price_map[price_id]
-        if credit_amount <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Credit pack misconfigured."
-            )
+        """Create a Stripe checkout session.
 
+        With the new 1:1 model, the Stripe unit_amount is exactly what gets added to wallet.
+        No credit mapping needed.
+        """
         price = await asyncio.to_thread(self._stripe().retrieve_price, price_id)
         amount_cents = getattr(price, "unit_amount", None)
         currency = getattr(price, "currency", "usd")
+
         if amount_cents is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Stripe price is missing unit amount.",
             )
 
+        if amount_cents <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid price amount.",
+            )
+
         resolved_success_url = (
             success_url
-            or settings.STRIPE_CHECKOUT_SUCCESS_URL
-            or (f"{settings.FRONTEND_URL.rstrip('/')}/billing?success=1")
+            or settings.stripe.checkout_success_url
+            or (f"{settings.server.frontend_url.rstrip('/')}/billing?success=1")
         )
-        resolved_cancel_url = cancel_url or f"{settings.FRONTEND_URL.rstrip('/')}/billing"
+        resolved_cancel_url = cancel_url or f"{settings.server.frontend_url.rstrip('/')}/billing"
 
         session = await asyncio.to_thread(
             self._stripe().create_checkout_session,
@@ -132,11 +153,13 @@ class BillingService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Stripe did not return a checkout URL.",
             )
+
+        # Store checkout session - amount_added_cents equals Stripe amount (1:1)
         await self.db.create_stripe_checkout_session_record(
             user_id=user.id,
             stripe_session_id=session.id,
             price_id=price_id,
-            credit_amount=credit_amount,
+            amount_added_cents=int(amount_cents),  # 1:1 mapping
             amount_cents=int(amount_cents),
             currency=str(currency),
             metadata={"price_id": price_id},
@@ -180,17 +203,18 @@ class BillingService:
         metadata["price_id"] = updated_session.price_id
         metadata["currency"] = updated_session.currency
 
+        # Add the amount to user's wallet (1:1 with Stripe amount)
         await self.db.add_completed_transaction(
             user_id=updated_session.user_id,
-            amount=updated_session.credits,
+            amount=updated_session.amount_added_cents,  # Positive for purchase
             transaction_type="purchase",
-            description="Stripe credit purchase",
+            description="Stripe wallet funding",
             metadata=metadata,
             stripe_session_id=session_id,
         )
         logger.debug(
-            "Fulfilled Stripe session %s for user %s (%s credits).",
+            "Fulfilled Stripe session %s for user %s ($%.2f added).",
             session_id,
             updated_session.user_id,
-            updated_session.credits,
+            updated_session.amount_added_cents / 100,
         )

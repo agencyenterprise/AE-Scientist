@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   createCheckoutSession,
-  fetchCreditPacks,
+  fetchFundingOptions,
   fetchWallet,
-  type CreditPack,
+  type FundingOption,
 } from "@/features/billing/api";
 import { ApiError } from "@/shared/lib/api-client";
 import { config } from "@/shared/lib/config";
@@ -28,29 +28,29 @@ export default function BillingPage() {
     queryFn: fetchWallet,
     refetchInterval: 30_000,
   });
-  const packsQuery = useQuery({
-    queryKey: ["billing", "packs"],
-    queryFn: fetchCreditPacks,
+  const fundingQuery = useQuery({
+    queryKey: ["billing", "funding-options"],
+    queryFn: fetchFundingOptions,
   });
   const [error, setError] = useState<string | null>(null);
   const [activePrice, setActivePrice] = useState<string | null>(null);
 
   const requirements = useMemo(
     () => [
-      { label: "Idea refinement", value: config.minCredits.conversation },
-      { label: "Research pipeline", value: config.minCredits.researchPipeline },
+      { label: "Idea refinement", value: config.minBalanceCents.conversation },
+      { label: "Research pipeline", value: config.minBalanceCents.researchPipeline },
     ],
     []
   );
 
-  const handlePurchase = async (pack: CreditPack) => {
-    if (!pack.price_id) return;
+  const handlePurchase = async (option: FundingOption) => {
+    if (!option.price_id) return;
     setError(null);
-    setActivePrice(pack.price_id);
+    setActivePrice(option.price_id);
     try {
       const origin = typeof window !== "undefined" ? window.location.origin : config.apiBaseUrl;
       const { checkout_url } = await createCheckoutSession({
-        price_id: pack.price_id,
+        price_id: option.price_id,
         success_url: `${origin}/billing?success=1`,
         cancel_url: `${origin}/billing?canceled=1`,
       });
@@ -75,7 +75,9 @@ export default function BillingPage() {
           <div>
             <p className="text-sm text-muted-foreground">Current balance</p>
             <p className="text-3xl font-semibold text-foreground">
-              {walletQuery.isLoading ? "…" : (walletQuery.data?.balance ?? 0)} credits
+              {walletQuery.isLoading
+                ? "…"
+                : formatCurrency(walletQuery.data?.balance_cents ?? 0, "usd")}
             </p>
           </div>
           <div className="flex gap-4">
@@ -84,7 +86,7 @@ export default function BillingPage() {
               .map(req => (
                 <div key={req.label} className="rounded-md bg-muted px-4 py-2 text-sm">
                   <p className="text-muted-foreground">{req.label} needs</p>
-                  <p className="font-medium text-foreground">{req.value} credits</p>
+                  <p className="font-medium text-foreground">{formatCurrency(req.value, "usd")}</p>
                 </div>
               ))}
           </div>
@@ -97,35 +99,39 @@ export default function BillingPage() {
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Purchase credits</h2>
-        {packsQuery.isLoading ? (
-          <p className="mt-4 text-sm text-muted-foreground">Loading packs…</p>
-        ) : packsQuery.data && packsQuery.data.packs.length > 0 ? (
+        <h2 className="text-lg font-semibold text-foreground">Add funds</h2>
+        {fundingQuery.isLoading ? (
+          <p className="mt-4 text-sm text-muted-foreground">Loading options…</p>
+        ) : fundingQuery.data && fundingQuery.data.options.length > 0 ? (
           <div className="mt-4 grid gap-4 md:grid-cols-3">
-            {packsQuery.data.packs.map(pack => (
+            {fundingQuery.data.options.map(option => (
               <div
-                key={pack.price_id}
+                key={option.price_id}
                 className="rounded-lg border border-border bg-background p-4 shadow-sm"
               >
-                <p className="text-sm text-muted-foreground">{pack.nickname || "Credit pack"}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">
-                  {formatCurrency(pack.unit_amount, pack.currency)}
+                <p className="text-sm text-muted-foreground">
+                  {option.nickname || "Funding option"}
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">{pack.credits} credits</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">
+                  {formatCurrency(option.unit_amount, option.currency)}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Adds {formatCurrency(option.amount_cents, option.currency)} to balance
+                </p>
                 <button
                   type="button"
-                  onClick={() => handlePurchase(pack)}
-                  disabled={activePrice === pack.price_id}
+                  onClick={() => handlePurchase(option)}
+                  disabled={activePrice === option.price_id}
                   className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {activePrice === pack.price_id ? "Redirecting…" : "Buy credits"}
+                  {activePrice === option.price_id ? "Redirecting…" : "Add funds"}
                 </button>
               </div>
             ))}
           </div>
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">
-            No credit packs are configured. Contact support for assistance.
+            No funding options are configured. Contact support for assistance.
           </p>
         )}
       </section>
@@ -155,8 +161,11 @@ export default function BillingPage() {
                       })}
                     </td>
                     <td className="px-2 py-2 capitalize">{tx.transaction_type}</td>
-                    <td className="px-2 py-2 font-medium">
-                      {tx.amount >= 0 ? `+${tx.amount}` : tx.amount} credits
+                    <td
+                      className={`px-2 py-2 font-medium ${tx.amount_cents >= 0 ? "text-emerald-500" : "text-red-500"}`}
+                    >
+                      {tx.amount_cents >= 0 ? "+" : ""}
+                      {formatCurrency(tx.amount_cents, "usd")}
                     </td>
                     <td className="px-2 py-2 text-muted-foreground">{tx.description ?? "—"}</td>
                   </tr>

@@ -19,7 +19,7 @@ from app.models import ChatMessageData, ChatRequest
 from app.models.sse import ChatStreamEvent
 from app.services import SummarizerService, get_database
 from app.services.base_llm_service import FileAttachmentData
-from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
+from app.services.billing_guard import enforce_minimum_balance
 from app.services.chat_models import StreamDoneEvent
 
 router = APIRouter(prefix="/conversations")
@@ -108,9 +108,10 @@ N/A
         else:
             idea_id = idea_data.idea_id
 
-        await enforce_minimum_credits(
+        # Pre-check minimum balance before allowing chat message
+        await enforce_minimum_balance(
             user_id=user.id,
-            required=settings.CHAT_MESSAGE_CREDIT_COST,
+            required_cents=settings.billing_limits.min_balance_cents_for_chat_message,
             action="chat_message",
         )
 
@@ -142,18 +143,6 @@ N/A
             )
             actual_user_message = request_data.message
             logger.debug(f"Stored user message with ID: {user_msg_id}")
-
-            await charge_user_credits(
-                user_id=user.id,
-                cost=settings.CHAT_MESSAGE_CREDIT_COST,
-                action="chat_message",
-                description=f"Conversation {conversation_id} message",
-                metadata={
-                    "conversation_id": conversation_id,
-                    "idea_id": idea_id,
-                    "chat_message_id": user_msg_id,
-                },
-            )
 
         # Process file attachments if provided
         attached_files = []
@@ -208,6 +197,7 @@ N/A
                     )
                     await summarizer_service.add_document_to_chat_summary(
                         conversation_id=conversation_id,
+                        user_id=user.id,
                         content=content,
                         description=fa.filename,
                         document_type=doc_type,
@@ -352,10 +342,17 @@ N/A
 
             finally:
                 logger.debug(f"Adding messages to chat summary for conversation {conversation_id}")
-                await summarizer_service.add_messages_to_chat_summary(
-                    idea_id=idea_id,
-                    conversation_id=conversation_id,
-                )
+                try:
+                    await summarizer_service.add_messages_to_chat_summary(
+                        conversation_id=conversation_id,
+                        user_id=user.id,
+                        idea_id=idea_id,
+                    )
+                except Exception as summarizer_error:
+                    logger.exception(
+                        f"Error in add_messages_to_chat_summary for conversation {conversation_id}: {summarizer_error}"
+                    )
+                # Note: LLM costs are now charged atomically in create_llm_token_usage
 
         return StreamingResponse(
             generate_stream(),

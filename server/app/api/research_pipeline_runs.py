@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import logging
 import math
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol, Union, cast
@@ -36,7 +35,7 @@ from app.models import (
 )
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
-from app.services.billing_guard import enforce_minimum_credits
+from app.services.billing_guard import enforce_minimum_balance
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo
 from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
@@ -69,7 +68,7 @@ REQUESTER_NAME_FALLBACK = "Scientist"
 
 
 def _get_fake_runpod_base_url() -> str | None:
-    value = os.environ.get("FAKE_RUNPOD_BASE_URL")
+    value = settings.runpod.fake_base_url
     return value.strip() if value else None
 
 
@@ -450,9 +449,9 @@ async def submit_idea_for_research(
     if idea_data is None or idea_data.version_id is None:
         raise HTTPException(status_code=400, detail="Conversation does not have an active idea")
 
-    await enforce_minimum_credits(
+    await enforce_minimum_balance(
         user_id=user.id,
-        required=settings.MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE,
+        required_cents=settings.billing_limits.min_balance_cents_for_research_pipeline,
         action="research_pipeline",
     )
 

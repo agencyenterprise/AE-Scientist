@@ -6,7 +6,6 @@ with proper validation and secure access via temporary signed URLs.
 """
 
 import logging
-import os
 import unicodedata
 from urllib.parse import quote
 
@@ -14,6 +13,8 @@ import boto3
 import magic
 import requests
 from botocore.exceptions import ClientError, NoCredentialsError
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +40,11 @@ class S3Service:
     MAX_FILE_SIZE = 10 * 1024 * 1024
 
     def __init__(self) -> None:
-        """Initialize S3 service with AWS credentials."""
-        self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
-        self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        self.aws_region = os.getenv("AWS_REGION")
-        self.bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
-
-        if not all(
-            [self.aws_access_key_id, self.aws_secret_access_key, self.aws_region, self.bucket_name]
-        ):
-            raise ValueError(
-                "Missing required AWS configuration. Please set AWS_ACCESS_KEY_ID, "
-                "AWS_SECRET_ACCESS_KEY, AWS_REGION, and AWS_S3_BUCKET_NAME environment variables."
-            )
+        """Initialize S3 service with AWS credentials from settings."""
+        self.aws_access_key_id = settings.aws.access_key_id
+        self.aws_secret_access_key = settings.aws.secret_access_key
+        self.aws_region = settings.aws.region
+        self.bucket_name = settings.aws.s3_bucket_name
 
         try:
             self.s3_client = boto3.client(

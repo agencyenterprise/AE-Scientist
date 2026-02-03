@@ -20,11 +20,11 @@ def calculate_llm_token_usage_cost(
         llm_model = get_llm_model_by_id(tu.provider, tu.model)
         params = tu._asdict()
         params["model"] = llm_model.label
-        # LLM_PRICING uses "provider:model" format
+        # llm_pricing uses "provider:model" format
         model_key = f"{tu.provider}:{tu.model}"
         uncached_input_tokens = max(tu.input_tokens - tu.cached_input_tokens, 0)
-        input_price_cents_per_million = settings.LLM_PRICING.get_input_price(model_key)
-        cached_input_price_cents_per_million = settings.LLM_PRICING.get_cached_input_price(
+        input_price_cents_per_million = settings.llm_pricing.get_input_price(model_key)
+        cached_input_price_cents_per_million = settings.llm_pricing.get_cached_input_price(
             model_key
         )
         params["input_cost"] = (
@@ -35,7 +35,7 @@ def calculate_llm_token_usage_cost(
             / 1_000_000
         ) / 100  # in dollars
         params["output_cost"] = (
-            tu.output_tokens * settings.LLM_PRICING.get_output_price(model_key) / 1_000_000
+            tu.output_tokens * settings.llm_pricing.get_output_price(model_key) / 1_000_000
         ) / 100  # in dollars
         costs.append(LLMTokenUsageCost(**params))
     return costs

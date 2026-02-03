@@ -5,6 +5,7 @@ This module uses LangChain with SummarizationMiddleware to create and
 maintain conversation summaries for imported conversations and live chats.
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, Optional, Sequence, Tuple, cast
 
@@ -23,9 +24,14 @@ from app.api.llm_providers import (
 )
 from app.config import settings
 from app.models import ChatMessageData, ImportedChatMessage
+from app.services.billing_guard import charge_for_llm_usage
 from app.services.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+# Lock to prevent concurrent checkpointer setup (causes deadlocks on CREATE INDEX CONCURRENTLY)
+_checkpointer_setup_lock = asyncio.Lock()
+_checkpointer_setup_done = False
 
 
 class CustomSummarizationMiddleware(SummarizationMiddleware):
@@ -34,11 +40,16 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
     model: BaseChatModel
 
     def __init__(
-        self, model: BaseChatModel, conversation_id: int, **kwargs: Any  # noqa: ANN401
+        self,
+        model: BaseChatModel,
+        conversation_id: int,
+        user_id: int,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         super().__init__(model, **kwargs)
         self.model = model
         self.conversation_id = conversation_id
+        self.user_id = user_id
 
     def _build_new_messages(self, summary: str) -> list[HumanMessage]:
         return [
@@ -60,6 +71,16 @@ class CustomSummarizationMiddleware(SummarizationMiddleware):
 
         db = DatabaseManager()
         await db.create_llm_token_usage(
+            conversation_id=self.conversation_id,
+            provider=provider_name,
+            model=model_name,
+            input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens,
+        )
+        # Charge user for LLM usage
+        await charge_for_llm_usage(
+            user_id=self.user_id,
             conversation_id=self.conversation_id,
             provider=provider_name,
             model=model_name,
@@ -148,7 +169,7 @@ class SummarizerService:
 
         return SummarizerService(chat_model)
 
-    def _get_summarizer(self, conversation_id: int) -> CustomSummarizationMiddleware:
+    def _get_summarizer(self, conversation_id: int, user_id: int) -> CustomSummarizationMiddleware:
         """
         Get the summarizer middleware.
 
@@ -158,6 +179,7 @@ class SummarizerService:
         summarizer_middleware = CustomSummarizationMiddleware(
             model=self.model,
             conversation_id=conversation_id,
+            user_id=user_id,
             trigger=("fraction", 0.9),
             keep=("messages", 1),
         )
@@ -178,6 +200,7 @@ class SummarizerService:
     async def init_chat_summary(
         self,
         conversation_id: int,
+        user_id: int,
         chat_messages: list[ImportedChatMessage],
     ) -> tuple[int | None, str | None]:
         """Initialize a chat summary for a conversation with the provided chat history.
@@ -196,6 +219,7 @@ class SummarizerService:
 
             success, response = await self._manage_conversation(
                 conversation_id=conversation_id,
+                user_id=user_id,
                 new_messages=payload_messages,
             )
 
@@ -226,7 +250,7 @@ class SummarizerService:
         return None, None
 
     async def _create_chat_summary(
-        self, conversation_id: int, chat_messages: list[ChatMessageData]
+        self, conversation_id: int, user_id: int, chat_messages: list[ChatMessageData]
     ) -> int:
         """Create a chat summary conversation.
 
@@ -249,6 +273,7 @@ class SummarizerService:
 
             success, response = await self._manage_conversation(
                 conversation_id=conversation_id,
+                user_id=user_id,
                 new_messages=api_messages,
             )
 
@@ -277,7 +302,9 @@ class SummarizerService:
         recent_messages = [m for m in chat_history if m.id > latest_message_id]
         return summary_row.summary, recent_messages
 
-    async def add_messages_to_chat_summary(self, conversation_id: int, idea_id: int) -> None:
+    async def add_messages_to_chat_summary(
+        self, conversation_id: int, user_id: int, idea_id: int
+    ) -> None:
         """Add new chat messages to chat summary conversation.
 
         Loads operational chat history from the database, determines which messages
@@ -306,7 +333,7 @@ class SummarizerService:
                     for m in filtered_messages
                 ]
                 await self._create_chat_summary(
-                    conversation_id=conversation_id, chat_messages=model_messages
+                    conversation_id=conversation_id, user_id=user_id, chat_messages=model_messages
                 )
                 return
 
@@ -321,6 +348,7 @@ class SummarizerService:
             # Send new messages not already on summarizer conversation
             success, response = await self._manage_conversation(
                 conversation_id=conversation_id,
+                user_id=user_id,
                 new_messages=api_new_messages,
             )
             logger.debug(
@@ -344,9 +372,11 @@ class SummarizerService:
     async def _manage_conversation(
         self,
         conversation_id: int,
+        user_id: int,
         new_messages: list[Dict[str, str]],
     ) -> Tuple[bool, Dict[str, object]]:
         """Use LangChain with Summarizer Middleware to manage a chat summary conversation."""
+        global _checkpointer_setup_done
         summary = ""
         last_message_id = None
         try:
@@ -359,15 +389,21 @@ class SummarizerService:
                 if not filtered_new_messages:
                     return True, {"latest_summary": ""}
                 async with AsyncPostgresSaver.from_conn_string(
-                    settings.DATABASE_URL
+                    settings.database.url
                 ) as checkpointer:
-                    await checkpointer.setup()  # auto create tables in PostgresSql
+                    # Only run setup once to avoid deadlocks on CREATE INDEX CONCURRENTLY
+                    if not _checkpointer_setup_done:
+                        async with _checkpointer_setup_lock:
+                            # Double-check after acquiring lock
+                            if not _checkpointer_setup_done:
+                                await checkpointer.setup()
+                                _checkpointer_setup_done = True
 
                     # we don't need the answer, so we set a small max tokens
                     temp_max_tokens = self.model.max_tokens  # type: ignore[attr-defined]
                     self.model.max_tokens = 10  # type: ignore[attr-defined]
                     middleware_sequence: Sequence[AgentMiddleware[AgentState, None]] = [
-                        self._get_summarizer(conversation_id),
+                        self._get_summarizer(conversation_id, user_id),
                         cast(AgentMiddleware[AgentState, None], remove_model_response),
                     ]
                     agent: CompiledStateGraph = create_agent(
@@ -432,6 +468,7 @@ class SummarizerService:
     async def add_document_to_chat_summary(
         self,
         conversation_id: int,
+        user_id: int,
         content: str,
         description: str,
         document_type: str,
@@ -447,6 +484,7 @@ class SummarizerService:
         try:
             success, response = await self._manage_conversation(
                 conversation_id=conversation_id,
+                user_id=user_id,
                 new_messages=[document_message],
             )
 

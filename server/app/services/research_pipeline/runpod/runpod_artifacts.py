@@ -4,12 +4,13 @@ SSH helpers for uploading pod artifacts (logs, workspace archives) back to stora
 
 import asyncio
 import logging
-import os
 import shlex
 import subprocess
 from pathlib import Path
 
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+
+from app.config import settings
 
 from .runpod_initialization import WORKSPACE_PATH
 from .runpod_ssh import write_temp_key_file
@@ -67,14 +68,6 @@ def _upload_runpod_artifacts_via_ssh_sync(
             trigger,
         )
         return
-    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
-    if not private_key:
-        logger.info(
-            "Skipping pod artifacts upload for run %s (trigger=%s); RUN_POD_SSH_ACCESS_KEY is not configured.",
-            run_id,
-            trigger,
-        )
-        return
     logger.info(
         "Starting pod artifacts upload via SSH (run=%s trigger=%s host=%s port=%s)",
         run_id,
@@ -82,7 +75,7 @@ def _upload_runpod_artifacts_via_ssh_sync(
         host,
         port,
     )
-    key_path = write_temp_key_file(private_key)
+    key_path = write_temp_key_file(settings.runpod.ssh_access_key)
     # Source the pod's .env file which contains TELEMETRY_WEBHOOK_URL, TELEMETRY_WEBHOOK_TOKEN, and RUN_ID
     env_file = f"{WORKSPACE_PATH}/AE-Scientist/research_pipeline/.env"
     log_file = f"{WORKSPACE_PATH}/research_pipeline.log"

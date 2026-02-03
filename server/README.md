@@ -76,33 +76,63 @@ A collaborative platform that transforms LLM conversations into structured resea
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:8000
 
-### Credits & Billing
+### Billing
 
-Refinement and research runs can now be gated behind prepaid credits. Configure the following
-environment variables in `server/.env` to enable Stripe-powered top-ups:
+Operations are billed based on actual costs in cents. Users must maintain a minimum balance before starting operations. Configure the following environment variables in `server/.env`:
+
+#### Minimum Balance Requirements
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `MIN_BALANCE_CENTS_FOR_CONVERSATION` | Minimum balance (cents) before importing a conversation | 100 ($1.00) |
+| `MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE` | Minimum balance (cents) before launching a research run | 5000 ($50.00) |
+| `MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE` | Minimum balance (cents) before sending a chat message | 10 ($0.10) |
+| `MIN_BALANCE_CENTS_FOR_PAPER_REVIEW` | Minimum balance (cents) before paper review | 100 ($1.00) |
+
+#### Cost Calculation
 
 | Variable | Description |
 | --- | --- |
-| `MIN_USER_CREDITS_FOR_CONVERSATION` | Minimum credits required before a user can refine/import a conversation |
-| `MIN_USER_CREDITS_FOR_RESEARCH_PIPELINE` | Minimum credits required before launching a RunPod research run |
-| `STRIPE_SECRET_KEY` | Server-side Stripe key used for Checkout + webhook verification |
-| `STRIPE_WEBHOOK_SECRET` | Secret used to validate `checkout.session.*` events |
-| `STRIPE_CHECKOUT_SUCCESS_URL` | Optional default success redirect (defaults to `/billing?success=1`) |
-| `STRIPE_PRICE_TO_CREDITS` | JSON map of `price_id -> credits`, e.g. `{"price_small":100,"price_large":800}` |
-| `JSON_MODEL_PRICE_PER_MILLION_IN_CENTS` | JSON map of model pricing per million tokens (input/output in cents), e.g. `{"anthropic":{"claude-3-opus-20240229":{"input":1500,"output":7500}},...}` |
-| `WHITELIST_EMAILS_FREE_CREDIT` | Comma-separated list of email addresses that receive free credits upon registration |
-| `RESEARCH_RUN_CREDITS_PER_MINUTE` | Credits charged per minute for research pipeline runs |
-| `CHAT_MESSAGE_CREDIT_COST` | Credits charged per chat message |
+| `JSON_MODEL_PRICE_PER_MILLION_IN_CENTS` | JSON map of model pricing per million tokens (input/output/cached_input in cents) |
 
-The backend exposes:
+**How billing works:**
+- **Chat messages**: Charged actual LLM token cost after message completes
+- **Conversation import**: Charged actual LLM cost after import completes
+- **Research runs**: Periodic "hold" transactions during execution, then reconciled with actual RunPod billing at termination
+- **Paper review**: Charged actual LLM token cost after review completes
 
-- `GET /api/billing/wallet` – current balance + recent ledger entries
-- `GET /api/billing/packs` – configured Stripe prices and credit amounts
-- `POST /api/billing/checkout-session` – creates a Checkout session for the selected pack
+#### Stripe Configuration
+
+| Variable | Description |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Server-side Stripe key used for Checkout + webhook verification (required) |
+| `STRIPE_WEBHOOK_SECRET` | Secret used to validate `checkout.session.*` events (required) |
+| `STRIPE_CHECKOUT_SUCCESS_URL` | Success redirect URL after checkout (required) |
+| `STRIPE_PRICE_IDS` | Comma-separated list of Stripe price IDs shown as funding options (required) |
+
+**Note:** Stripe purchases now use 1:1 mapping - pay $10.00 → get 1000 cents ($10.00) in wallet balance.
+
+#### Other Billing Settings
+
+| Variable | Description |
+| --- | --- |
+| `WHITELIST_EMAILS_FREE_CREDIT` | Comma-separated list of email addresses that receive free balance upon registration |
+
+#### API Endpoints
+
+- `GET /api/billing/wallet` – current balance (in cents) + recent transactions
+- `GET /api/billing/funding-options` – available Stripe funding options
+- `POST /api/billing/checkout-session` – creates a Checkout session
 - `POST /api/billing/stripe-webhook` – receives Stripe events (whitelisted in auth middleware)
 
-On the frontend, add the corresponding public variables (`NEXT_PUBLIC_*`) so the Billing page can
-display thresholds and redirect URLs.
+#### Frontend Configuration
+
+Add these variables to `frontend/.env.local` for the Billing page:
+
+```bash
+NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_CONVERSATION="100"
+NEXT_PUBLIC_MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE="5000"
+```
 
 ### MCP Server Integration (Claude Code & Cursor)
 
@@ -334,53 +364,34 @@ make create-test-db
 
 ### Backend Configuration
 
-Copy `backend/env.example` to `backend/.env` and customize as needed:
+Copy `server/env.example` to `server/.env` and fill in your values:
 
 ```bash
-# Database Configuration (PostgreSQL - REQUIRED)
-DATABASE_URL="postgresql://ae_scientist_user:your_password@localhost:5432/ae_scientist"
-POSTGRES_USER="ae_scientist_user"
-POSTGRES_PASSWORD="your_password"
-
-# Authentication Configuration
-SESSION_EXPIRE_HOURS="24"
-FRONTEND_URL="http://localhost:3000"
-
-# API Keys (Optional - for full functionality)
-OPENAI_API_KEY="your-openai-api-key-here"          # For LLM services
-ANTHROPIC_API_KEY="your-anthropic-api-key-here"    # For Claude models
-XAI_API_KEY="your-xai-api-key-here"                # For Grok models
-AWS_ACCESS_KEY_ID="your-aws-access-key"             # For file uploads
-AWS_SECRET_ACCESS_KEY="your-aws-secret"             # For file uploads
-AWS_S3_BUCKET_NAME="your-s3-bucket"                 # For file uploads
-
-# Research pipeline configuration
-TELEMETRY_WEBHOOK_URL="https://your-backend-host/api/research-pipeline/events"
-HF_TOKEN="your_huggingface_token"
-
-# Research pipeline monitor settings (all required)
-PIPELINE_MONITOR_POLL_INTERVAL_SECONDS="60"
-PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS="60"
-PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS="5"
-PIPELINE_MONITOR_STARTUP_GRACE_SECONDS="600"
-RUNPOD_SUPPORTED_GPUS="NVIDIA GeForce RTX 5090,NVIDIA RTX PRO 6000 Blackwell Server Edition,NVIDIA GeForce RTX 3090,NVIDIA RTX A4000,NVIDIA RTX A4500,NVIDIA RTX A5000"
-RUN_POD_SSH_ACCESS_KEY="-----BEGIN OPENSSH PRIVATE KEY-----\n...replace...\n-----END OPENSSH PRIVATE KEY-----"
-FAKE_RUNPOD_BASE_URL="http://127.0.0.1:9000"          # Point RunPodManager at the fake server
-FAKE_RUNPOD_PORT="9000"                               # Port for the fake RunPod server
-FAKE_RUNPOD_GRAPHQL_URL="http://127.0.0.1:9000/graphql"
-
+cp server/env.example server/.env
 ```
+
+The `env.example` file is organized into sections with clear `[REQUIRED]` and `[OPTIONAL]` markers. Required variables will cause the server to crash at startup if missing.
+
+**Key required variables:**
+- `DATABASE_URL`, `DB_POOL_*` - PostgreSQL connection and pool settings
+- `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` - Authentication
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY` - LLM providers
+- `RUNPOD_API_KEY`, `RUNPOD_SSH_ACCESS_KEY`, `RUNPOD_SUPPORTED_GPUS` - GPU provisioning
+- `AWS_*` - S3 file storage
+- `STRIPE_*` - Billing
+- `MIN_BALANCE_CENTS_FOR_*` - Billing limits
+- `JSON_MODEL_PRICE_PER_MILLION_IN_CENTS` - LLM pricing
+- `TELEMETRY_WEBHOOK_URL`, `HF_TOKEN`, `PIPELINE_MONITOR_*`, `PIPELINE_MAX_RESTART_ATTEMPTS` - Research pipeline
+- `SERVER_AUTO_RELOAD`, `LOG_LEVEL`, `FRONTEND_URL`, `CORS_ORIGINS`, `CORS_CREDENTIALS` - Server config
+
+See `server/env.example` for the complete list with descriptions.
 
 ### Frontend Configuration
 
 Copy `frontend/env.local.example` to `frontend/.env.local`:
 
 ```bash
-# API Configuration
-NEXT_PUBLIC_API_BASE_URL="http://localhost:8000"
-
-# Development Settings  
-NEXT_PUBLIC_ENVIRONMENT="development"
+cp frontend/env.local.example frontend/.env.local
 ```
 
 ## Authentication

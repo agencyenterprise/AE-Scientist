@@ -6,13 +6,13 @@ Uses git commit hash as a cache key to avoid re-uploading the same code version.
 
 import io
 import logging
-import os
 import subprocess
 import tarfile
 import time
 from pathlib import Path
 from typing import NamedTuple
 
+from app.config import settings
 from app.services.s3_service import get_s3_service
 
 
@@ -56,9 +56,8 @@ def _get_git_commit_hash() -> str:
     3. Fallback to timestamp-based identifier
     """
     # Check Railway environment variable first (git may not be installed in container)
-    railway_commit = os.environ.get("RAILWAY_GIT_COMMIT_SHA")
-    if railway_commit:
-        return railway_commit[:12]
+    if settings.railway_git_commit_sha:
+        return settings.railway_git_commit_sha[:12]
 
     # Try git command
     try:
@@ -83,12 +82,13 @@ def _get_research_pipeline_path() -> Path:
     1. RESEARCH_PIPELINE_PATH environment variable (set in Docker)
     2. Navigate from this file to repo root (for local development)
     """
-    env_path = os.environ.get("RESEARCH_PIPELINE_PATH")
-    if env_path:
-        research_pipeline_path = Path(env_path)
+    if settings.research_pipeline.path:
+        research_pipeline_path = Path(settings.research_pipeline.path)
         if research_pipeline_path.exists():
             return research_pipeline_path
-        raise RuntimeError(f"RESEARCH_PIPELINE_PATH set but directory not found: {env_path}")
+        raise RuntimeError(
+            f"RESEARCH_PIPELINE_PATH set but directory not found: {settings.research_pipeline.path}"
+        )
 
     # Fallback for local development: navigate from this file to repo root
     repo_root = Path(__file__).resolve().parents[5]
@@ -215,7 +215,7 @@ def ensure_code_tarball_uploaded() -> str:
 
 def _is_using_fake_runpod() -> bool:
     """Check if the fake runpod is being used (for local development)."""
-    return bool(os.environ.get("FAKE_RUNPOD_BASE_URL"))
+    return settings.runpod.uses_fake_runpod
 
 
 def get_code_tarball_info() -> CodeTarballInfo:

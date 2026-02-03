@@ -436,13 +436,13 @@ class ResearchRunStreamEvent(RootModel[ResearchRunEventUnion]):
 # ----------------------------------------------------------------------------
 
 
-class WalletCreditsData(BaseModel):
-    balance: int
+class WalletBalanceData(BaseModel):
+    balance_cents: int
 
 
-class WalletCreditsEvent(BaseModel):
-    type: Literal["credits"]
-    data: WalletCreditsData
+class WalletBalanceEvent(BaseModel):
+    type: Literal["balance"]
+    data: WalletBalanceData
 
 
 class WalletHeartbeatEvent(BaseModel):
@@ -451,7 +451,7 @@ class WalletHeartbeatEvent(BaseModel):
 
 
 WalletStreamEventUnion = Annotated[
-    Union[WalletCreditsEvent, WalletHeartbeatEvent],
+    Union[WalletBalanceEvent, WalletHeartbeatEvent],
     Field(discriminator="type"),
 ]
 

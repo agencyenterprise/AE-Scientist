@@ -93,7 +93,7 @@ class PaperReviewDetailResponse(BaseModel):
     token_usage: Optional[TokenUsageResponse] = Field(
         None, description="Token usage (null if not completed)"
     )
-    credits_charged: int = Field(0, description="Credits charged for this review")
+    cost_cents: int = Field(0, description="Cost charged in cents for this review")
 
 
 class PaperDownloadResponse(BaseModel):
@@ -137,7 +137,7 @@ async def create_paper_review(
     Upload a PDF file to start an asynchronous review process. The endpoint
     returns immediately with a review ID that can be used to poll for results.
 
-    Requires authentication. Credits will be charged when the review completes.
+    Requires authentication. Costs will be charged when the review completes.
     """
     # Get authenticated user
     current_user = get_current_user(request)
@@ -191,8 +191,8 @@ async def create_paper_review(
         if status_code == 402:
             response.status_code = 402
             return ErrorResponse(
-                error="Insufficient credits",
-                detail="You don't have enough credits to perform this review",
+                error="Insufficient balance",
+                detail="You don't have enough balance to perform this review",
             )
         response.status_code = 500
         return ErrorResponse(error="Failed to start review", detail=str(e))
@@ -315,7 +315,7 @@ async def get_paper_review(
             model=review["model"],
             created_at=review["created_at"],
             token_usage=token_usage,
-            credits_charged=review.get("credits_charged", 0),
+            cost_cents=review.get("cost_cents", 0),
         )
 
     except Exception as e:

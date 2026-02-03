@@ -26,6 +26,7 @@ from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunTerminationStatusData, ResearchRunTerminationStatusEvent
 from app.services import DatabaseManager, get_database
+from app.services.billing_guard import charge_cents
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.research_pipeline.runpod import (
@@ -58,14 +59,41 @@ async def _record_pod_billing_event(
     run_id: str,
     pod_id: str,
     context: str,
-) -> None:
+) -> bool:
+    """
+    Record pod billing event and reconcile billing.
+
+    Returns True if billing was successfully charged (actual cost obtained),
+    False if billing data was empty/missing and needs retry.
+    """
     try:
         summary = await fetch_pod_billing_summary(pod_id=pod_id)
     except (RuntimeError, RunPodError):
         logger.exception("Failed to fetch billing summary for pod %s", pod_id)
-        return
-    if summary is None:
-        return
+        # Mark run as awaiting billing data so it can be retried
+        await db.update_research_pipeline_run(
+            run_id=run_id,
+            hw_billing_status="awaiting_billing_data",
+            hw_billing_last_retry_at=datetime.now(timezone.utc),
+        )
+        return False
+
+    # Check if we got empty/missing billing data from RunPod
+    if summary is None or not summary.records or summary.total_amount_usd == 0:
+        logger.warning(
+            "RunPod returned empty billing data for pod %s (run_id=%s). "
+            "Marking for billing retry.",
+            pod_id,
+            run_id,
+        )
+        # Mark run as awaiting billing data - holds remain in place
+        await db.update_research_pipeline_run(
+            run_id=run_id,
+            hw_billing_status="awaiting_billing_data",
+            hw_billing_last_retry_at=datetime.now(timezone.utc),
+        )
+        return False
+
     metadata = summary._asdict()
     metadata["records"] = [record._asdict() for record in summary.records]
     metadata["context"] = context
@@ -78,6 +106,59 @@ async def _record_pod_billing_event(
         pass
     if actual_cost_cents is not None:
         metadata["actual_cost_cents"] = actual_cost_cents
+
+    # Reconcile billing: reverse holds and charge actual cost
+    if actual_cost_cents is not None:
+        user_id = await db.get_run_owner_user_id(run_id)
+        if user_id is not None:
+            try:
+                # Reverse all "hold" transactions for this run
+                reversed_amount = await db.reverse_hold_transactions(run_id=run_id)
+                logger.debug(
+                    "Reversed %d cents in hold transactions for run %s",
+                    reversed_amount,
+                    run_id,
+                )
+                metadata["holds_reversed_cents"] = reversed_amount
+
+                # Charge the actual GPU cost
+                if actual_cost_cents > 0:
+                    await charge_cents(
+                        user_id=user_id,
+                        amount_cents=actual_cost_cents,
+                        action="research_run_gpu",
+                        description=f"Research run {run_id} GPU cost (final)",
+                        metadata={
+                            "run_id": run_id,
+                            "pod_id": pod_id,
+                            "total_amount_usd": str(total_amount),
+                        },
+                    )
+                    logger.debug(
+                        "Charged %d cents for run %s GPU cost (final)",
+                        actual_cost_cents,
+                        run_id,
+                    )
+
+                # Mark billing as successfully charged
+                await db.update_research_pipeline_run(
+                    run_id=run_id,
+                    hw_billing_status="charged",
+                )
+            except Exception as billing_error:
+                logger.exception(
+                    "Failed to reconcile billing for run %s: %s",
+                    run_id,
+                    billing_error,
+                )
+                # Mark as awaiting billing data so it can be retried
+                await db.update_research_pipeline_run(
+                    run_id=run_id,
+                    hw_billing_status="awaiting_billing_data",
+                    hw_billing_last_retry_at=datetime.now(timezone.utc),
+                )
+                return False
+
     now = datetime.now(timezone.utc)
     await db.insert_research_pipeline_run_event(
         run_id=run_id,
@@ -99,6 +180,7 @@ async def _record_pod_billing_event(
             data=run_event,
         ),
     )
+    return True
 
 
 def build_termination_status_payload(
@@ -665,3 +747,126 @@ class PodTerminationWorker:
                 ),
             ),
         )
+
+
+async def retry_billing_for_run(
+    db: DatabaseManager,
+    *,
+    run: ResearchPipelineRun,
+    max_retries: int = 10,
+) -> bool:
+    """
+    Retry fetching billing data from RunPod for a run that is awaiting billing data.
+
+    This is called by the billing retry daemon for runs where RunPod initially
+    returned empty billing data at pod termination.
+
+    Args:
+        db: Database manager instance
+        run: The research pipeline run to retry billing for
+        max_retries: Maximum number of retry attempts before falling back to estimated cost
+
+    Returns:
+        True if billing was successfully reconciled, False if retry failed or needs more retries
+    """
+    run_id = run.run_id
+    pod_id = run.pod_id
+    retry_count = run.hw_billing_retry_count + 1
+
+    logger.info(
+        "Retrying billing for run %s (pod_id=%s, attempt=%s/%s)",
+        run_id,
+        pod_id,
+        retry_count,
+        max_retries,
+    )
+
+    if not pod_id:
+        logger.warning(
+            "Cannot retry billing for run %s: no pod_id",
+            run_id,
+        )
+        # No pod means no GPU cost - mark as charged with 0 cost
+        await db.update_research_pipeline_run(
+            run_id=run_id,
+            hw_billing_status="charged",
+            hw_billing_retry_count=retry_count,
+            hw_billing_last_retry_at=datetime.now(timezone.utc),
+        )
+        return True
+
+    # Update retry tracking
+    await db.update_research_pipeline_run(
+        run_id=run_id,
+        hw_billing_retry_count=retry_count,
+        hw_billing_last_retry_at=datetime.now(timezone.utc),
+    )
+
+    # Try to get billing data from RunPod
+    billing_success = await _record_pod_billing_event(
+        db,
+        run_id=run_id,
+        pod_id=pod_id,
+        context=f"billing_retry_attempt_{retry_count}",
+    )
+
+    if billing_success:
+        logger.info(
+            "Billing retry succeeded for run %s after %s attempts",
+            run_id,
+            retry_count,
+        )
+        return True
+
+    # Check if we've exhausted retries
+    if retry_count >= max_retries:
+        logger.warning(
+            "Billing retry exhausted for run %s after %s attempts. "
+            "Falling back to estimated cost from holds.",
+            run_id,
+            max_retries,
+        )
+        # Fall back to estimated cost - the holds already reflect the estimated usage
+        # Mark as charged_estimated so we know this was a fallback
+        user_id = await db.get_run_owner_user_id(run_id)
+        if user_id is not None:
+            try:
+                # The holds are already applied, so we just need to mark them as final
+                # by NOT reversing them. We mark the run as charged_estimated.
+                await db.update_research_pipeline_run(
+                    run_id=run_id,
+                    hw_billing_status="charged_estimated",
+                )
+
+                # Record an event noting the fallback
+                now = datetime.now(timezone.utc)
+                await db.insert_research_pipeline_run_event(
+                    run_id=run_id,
+                    event_type="billing_fallback",
+                    metadata={
+                        "reason": "runpod_billing_unavailable",
+                        "retry_count": retry_count,
+                        "note": "Using estimated cost from hold transactions",
+                    },
+                    occurred_at=now,
+                )
+
+                logger.info(
+                    "Marked run %s as charged_estimated (holds retained as final cost)",
+                    run_id,
+                )
+            except Exception as fallback_error:
+                logger.exception(
+                    "Failed to apply billing fallback for run %s: %s",
+                    run_id,
+                    fallback_error,
+                )
+        return True  # We're done with this run (using estimated cost)
+
+    logger.debug(
+        "Billing retry failed for run %s, will retry later (attempt %s/%s)",
+        run_id,
+        retry_count,
+        max_retries,
+    )
+    return False

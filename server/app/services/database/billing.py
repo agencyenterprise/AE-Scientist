@@ -40,8 +40,8 @@ class StripeCheckoutSession(NamedTuple):
     stripe_session_id: str
     price_id: str
     status: str
-    credits: int
-    amount_cents: int
+    amount_added_cents: int  # Amount added to wallet (now equals Stripe amount)
+    amount_cents: int  # Stripe amount paid
     currency: str
     metadata: Dict[str, object]
     created_at: datetime
@@ -52,10 +52,15 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
     """Mixin providing billing-specific persistence helpers."""
 
     async def ensure_user_wallet_with_cursor(
-        self, *, cursor: AsyncCursor[Any], user_id: int, has_free_credits: bool
+        self, *, cursor: AsyncCursor[Any], user_id: int, receives_free_balance: bool
     ) -> None:
-        """Create a wallet row for the user if one does not yet exist."""
-        balance = 10_000 if has_free_credits else 10
+        """Create a wallet row for the user if one does not yet exist.
+
+        Balance is in cents:
+        - Free users: 50,000 cents ($500.00)
+        - Paid users: 50 cents ($0.50)
+        """
+        balance = 50_000 if receives_free_balance else 50
         await cursor.execute(
             """
             INSERT INTO billing_user_wallets (user_id, balance)
@@ -65,14 +70,14 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
             (user_id, balance),
         )
 
-    async def ensure_user_wallet(self, user_id: int, has_free_credits: bool) -> None:
+    async def ensure_user_wallet(self, user_id: int, receives_free_balance: bool) -> None:
         """Create a wallet row for the user if one does not yet exist."""
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 await self.ensure_user_wallet_with_cursor(
                     cursor=cursor,
                     user_id=user_id,
-                    has_free_credits=has_free_credits,
+                    receives_free_balance=receives_free_balance,
                 )
 
     async def get_user_wallet(self, user_id: int) -> Optional[BillingWallet]:
@@ -202,11 +207,17 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
         user_id: int,
         stripe_session_id: str,
         price_id: str,
-        credit_amount: int,
+        amount_added_cents: int,
         amount_cents: int,
         currency: str,
         metadata: Optional[Dict[str, object]] = None,
     ) -> StripeCheckoutSession:
+        """Create a record of a Stripe checkout session.
+
+        Args:
+            amount_added_cents: Amount to add to wallet (in cents) - equals Stripe amount for 1:1 mapping
+            amount_cents: Amount paid via Stripe (in cents)
+        """
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -216,7 +227,7 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                         stripe_session_id,
                         price_id,
                         status,
-                        credits,
+                        amount_added_cents,
                         amount_cents,
                         currency,
                         metadata
@@ -228,7 +239,7 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                         stripe_session_id,
                         price_id,
                         status,
-                        credits,
+                        amount_added_cents,
                         amount_cents,
                         currency,
                         metadata,
@@ -239,7 +250,7 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                         user_id,
                         stripe_session_id,
                         price_id,
-                        credit_amount,
+                        amount_added_cents,
                         amount_cents,
                         currency,
                         Jsonb(metadata or {}),
@@ -268,7 +279,7 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                         stripe_session_id,
                         price_id,
                         status,
-                        credits,
+                        amount_added_cents,
                         amount_cents,
                         currency,
                         metadata,
@@ -293,7 +304,7 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                         stripe_session_id,
                         price_id,
                         status,
-                        credits,
+                        amount_added_cents,
                         amount_cents,
                         currency,
                         metadata,
@@ -306,3 +317,79 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                 )
                 row = await cursor.fetchone()
         return StripeCheckoutSession(**row) if row else None
+
+    async def reverse_hold_transactions(self, run_id: str) -> int:
+        """Reverse all 'hold' transactions for a research run.
+
+        Creates offsetting 'hold_reversal' transactions and updates the wallet balance.
+
+        Args:
+            run_id: The research run ID to reverse holds for.
+
+        Returns:
+            Total amount (in cents) that was reversed (positive number).
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                # Find all hold transactions for this run that haven't been reversed
+                await cursor.execute(
+                    """
+                    SELECT id, user_id, amount, description
+                    FROM billing_credit_transactions
+                    WHERE transaction_type = 'hold'
+                      AND metadata->>'run_id' = %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM billing_credit_transactions r
+                          WHERE r.transaction_type = 'hold_reversal'
+                            AND r.metadata->>'reversed_transaction_id' = billing_credit_transactions.id::text
+                      )
+                    """,
+                    (run_id,),
+                )
+                holds = await cursor.fetchall() or []
+
+                if not holds:
+                    return 0
+
+                total_reversed = 0
+                for hold in holds:
+                    # Create reversal transaction (positive amount to offset the negative hold)
+                    reversal_amount = -hold["amount"]  # Negate to reverse
+                    total_reversed += reversal_amount
+
+                    await cursor.execute(
+                        """
+                        INSERT INTO billing_credit_transactions (
+                            user_id,
+                            amount,
+                            transaction_type,
+                            status,
+                            description,
+                            metadata
+                        )
+                        VALUES (%s, %s, 'hold_reversal', 'completed', %s, %s)
+                        """,
+                        (
+                            hold["user_id"],
+                            reversal_amount,
+                            f"Reversal of hold for run {run_id}",
+                            Jsonb(
+                                {
+                                    "run_id": run_id,
+                                    "reversed_transaction_id": str(hold["id"]),
+                                }
+                            ),
+                        ),
+                    )
+
+                    # Update wallet balance
+                    await cursor.execute(
+                        """
+                        UPDATE billing_user_wallets
+                        SET balance = balance + %s, updated_at = NOW()
+                        WHERE user_id = %s
+                        """,
+                        (reversal_amount, hold["user_id"]),
+                    )
+
+                return total_reversed

@@ -89,7 +89,7 @@ class AuthService:
 
             # Create our internal session (for backward compatibility)
             internal_session_token = await self.db.create_user_session(
-                user_id=user.id, expires_in_hours=settings.SESSION_EXPIRE_HOURS
+                user_id=user.id, expires_in_hours=settings.session_expire_hours
             )
             if not internal_session_token:
                 logger.error("Failed to create user session")

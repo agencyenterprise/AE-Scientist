@@ -19,10 +19,10 @@ from app.services.research_pipeline.runpod import get_supported_gpu_types, warm_
 from app.validation import validate_configuration
 
 # Initialize Sentry (must be done before FastAPI app is created)
-if settings.SENTRY_DSN and settings.RAILWAY_ENVIRONMENT_NAME != "development":
+if settings.sentry_dsn and settings.server.railway_environment_name != "development":
     sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        environment=settings.SENTRY_ENVIRONMENT or settings.RAILWAY_ENVIRONMENT_NAME,
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment or settings.server.railway_environment_name,
         traces_sample_rate=1.0,
         send_default_pii=True,
     )
@@ -31,7 +31,7 @@ if settings.SENTRY_DSN and settings.RAILWAY_ENVIRONMENT_NAME != "development":
 def configure_logging() -> None:
     """Configure logging for the application."""
     # Set logging level from environment variable
-    log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    log_level = getattr(logging, settings.server.log_level.upper(), logging.INFO)
 
     # Configure root logger
     logging.basicConfig(
@@ -64,7 +64,7 @@ def configure_logging() -> None:
     logging.getLogger("pdfplumber").setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
-    logger.info("Logging configured at %s level", settings.LOG_LEVEL)
+    logger.info("Logging configured at %s level", settings.server.log_level)
 
 
 # Configure logging before creating the app
@@ -93,7 +93,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="AE Scientist API",
-    version=settings.VERSION,
+    version=settings.server.version,
     description="Transform LLM conversations into actionable AE ideas",
     lifespan=lifespan,
 )
@@ -104,10 +104,10 @@ app.add_middleware(AuthenticationMiddleware)
 # Set up CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=settings.CORS_CREDENTIALS,
-    allow_methods=settings.CORS_METHODS,
-    allow_headers=settings.CORS_HEADERS,
+    allow_origins=list(settings.server.cors_origins),
+    allow_credentials=settings.server.cors_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Enable gzip compression for large JSON payloads while keeping SSE uncompressed
@@ -123,7 +123,7 @@ app.include_router(mcp_router)
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Get basic API information."""
-    return {"message": settings.API_TITLE}
+    return {"message": settings.server.api_title}
 
 
 @app.get("/health")

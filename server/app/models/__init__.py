@@ -7,14 +7,14 @@ This module exports all Pydantic models for data validation and API contracts.
 # Auth models
 from app.models.auth import AuthStatus, AuthUser, ServiceKey, User, UserSession
 
-# Chat models
+# Billing models
 from app.models.billing import (
     BillingWalletResponse,
     CheckoutSessionCreateRequest,
     CheckoutSessionCreateResponse,
-    CreditPackListResponse,
-    CreditPackModel,
     CreditTransactionModel,
+    FundingOptionListResponse,
+    FundingOptionModel,
 )
 from app.models.chat import ChatMessage, ChatRequest, ChatResponse
 
@@ -168,8 +168,8 @@ __all__ = [
     # Billing models
     "BillingWalletResponse",
     "CreditTransactionModel",
-    "CreditPackModel",
-    "CreditPackListResponse",
+    "FundingOptionModel",
+    "FundingOptionListResponse",
     "CheckoutSessionCreateRequest",
     "CheckoutSessionCreateResponse",
     # SSE models

@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Type
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,20 +126,12 @@ def send_execution_feedback_via_ssh(
     if not host or not port:
         logger.warning("Cannot send feedback for execution %s; missing host or port.", execution_id)
         return
-    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
-    if not private_key:
-        logger.warning(
-            "RUN_POD_SSH_ACCESS_KEY not configured; skipping feedback for execution %s",
-            execution_id,
-        )
-        return
-
     status_code, body = _perform_management_ssh_request(
         host=host,
         port=port,
         payload={"payload": payload},
         endpoint=f"/terminate/{execution_id}",
-        private_key=private_key,
+        private_key=settings.runpod.ssh_access_key,
         timeout=60,
         error_cls=TerminationRequestError,
     )
@@ -174,9 +168,6 @@ def request_stage_skip_via_ssh(
     """
     if not host or not port:
         raise RuntimeError("Cannot request stage skip; missing host or port.")
-    private_key = os.environ.get("RUN_POD_SSH_ACCESS_KEY")
-    if not private_key:
-        raise RuntimeError("RUN_POD_SSH_ACCESS_KEY not configured; cannot request stage skip.")
 
     resolved_reason = reason or "Skip stage requested via dashboard."
     status_code, body = _perform_management_ssh_request(
@@ -184,7 +175,7 @@ def request_stage_skip_via_ssh(
         port=port,
         payload={"reason": resolved_reason},
         endpoint="/skip-stage",
-        private_key=private_key,
+        private_key=settings.runpod.ssh_access_key,
         timeout=30,
         error_cls=RuntimeError,
     )

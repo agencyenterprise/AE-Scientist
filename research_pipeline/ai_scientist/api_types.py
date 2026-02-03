@@ -310,17 +310,9 @@ class ConversationUpdate(BaseModel):
     ]
 
 
-class CreditPackModel(BaseModel):
-    price_id: Annotated[str, Field(title="Price Id")]
-    credits: Annotated[int, Field(title="Credits")]
-    currency: Annotated[str, Field(title="Currency")]
-    unit_amount: Annotated[int, Field(title="Unit Amount")]
-    nickname: Annotated[str, Field(title="Nickname")]
-
-
 class CreditTransactionModel(BaseModel):
     id: Annotated[int, Field(title="Id")]
-    amount: Annotated[int, Field(title="Amount")]
+    amount_cents: Annotated[int, Field(title="Amount Cents")]
     transaction_type: Annotated[str, Field(title="Transaction Type")]
     status: Annotated[str, Field(title="Status")]
     description: Annotated[str | None, Field(title="Description")] = None
@@ -412,6 +404,14 @@ class FileMetadata(BaseModel):
 class FileUploadResponse(BaseModel):
     file: Annotated[FileMetadata, Field(description="Uploaded file metadata")]
     message: Annotated[str, Field(description="Success message", title="Message")]
+
+
+class FundingOptionModel(BaseModel):
+    price_id: Annotated[str, Field(title="Price Id")]
+    amount_cents: Annotated[int, Field(title="Amount Cents")]
+    currency: Annotated[str, Field(title="Currency")]
+    unit_amount: Annotated[int, Field(title="Unit Amount")]
+    nickname: Annotated[str, Field(title="Nickname")]
 
 
 class GPUShortagePayload(BaseModel):
@@ -2144,13 +2144,13 @@ class ValidationError(BaseModel):
     type: Annotated[str, Field(title="Error Type")]
 
 
-class WalletCreditsData(BaseModel):
-    balance: Annotated[int, Field(title="Balance")]
+class WalletBalanceData(BaseModel):
+    balance_cents: Annotated[int, Field(title="Balance Cents")]
 
 
-class WalletCreditsEvent(BaseModel):
-    type: Annotated[Literal["credits"], Field(title="Type")]
-    data: WalletCreditsData
+class WalletBalanceEvent(BaseModel):
+    type: Annotated[Literal["balance"], Field(title="Type")]
+    data: WalletBalanceData
 
 
 class WalletHeartbeatEvent(BaseModel):
@@ -2158,9 +2158,9 @@ class WalletHeartbeatEvent(BaseModel):
     data: Annotated[dict[str, Any] | None, Field(title="Data")] = None
 
 
-class WalletStreamEvent(RootModel[WalletCreditsEvent | WalletHeartbeatEvent]):
+class WalletStreamEvent(RootModel[WalletBalanceEvent | WalletHeartbeatEvent]):
     root: Annotated[
-        WalletCreditsEvent | WalletHeartbeatEvent,
+        WalletBalanceEvent | WalletHeartbeatEvent,
         Field(
             description="Root model for wallet SSE updates.",
             discriminator="type",
@@ -2180,7 +2180,7 @@ class AuthStatus(BaseModel):
 
 
 class BillingWalletResponse(BaseModel):
-    balance: Annotated[int, Field(title="Balance")]
+    balance_cents: Annotated[int, Field(title="Balance Cents")]
     transactions: Annotated[list[CreditTransactionModel], Field(title="Transactions")]
 
 
@@ -2356,8 +2356,8 @@ class ConversationUpdateResponse(BaseModel):
     ]
 
 
-class CreditPackListResponse(BaseModel):
-    packs: Annotated[list[CreditPackModel], Field(title="Packs")]
+class FundingOptionListResponse(BaseModel):
+    options: Annotated[list[FundingOptionModel], Field(title="Options")]
 
 
 class HTTPValidationError(BaseModel):

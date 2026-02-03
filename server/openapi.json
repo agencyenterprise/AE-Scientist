@@ -131,7 +131,7 @@
           "billing"
         ],
         "summary": "Get Wallet",
-        "description": "Return wallet balance plus recent transactions for the authenticated user.",
+        "description": "Return wallet balance (in cents) plus recent transactions for the authenticated user.",
         "operationId": "get_wallet_api_billing_wallet_get",
         "parameters": [
           {
@@ -184,16 +184,16 @@
         "tags": [
           "billing"
         ],
-        "summary": "List Credit Packs",
-        "description": "Expose the configured Stripe price IDs and their associated credit amounts.",
-        "operationId": "list_credit_packs_api_billing_packs_get",
+        "summary": "List Funding Options",
+        "description": "List available funding options (Stripe prices).\n\nWith the new 1:1 model, paying $X adds $X to the wallet.",
+        "operationId": "list_funding_options_api_billing_packs_get",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreditPackListResponse"
+                  "$ref": "#/components/schemas/FundingOptionListResponse"
                 }
               }
             }
@@ -207,7 +207,7 @@
           "billing"
         ],
         "summary": "Create Checkout Session",
-        "description": "Create a Stripe Checkout session for the requested price ID.",
+        "description": "Create a Stripe Checkout session for the requested price ID.\n\nWith the new 1:1 model, the Stripe amount equals the wallet credit amount.",
         "operationId": "create_checkout_session_api_billing_checkout_session_post",
         "requestBody": {
           "content": {
@@ -249,11 +249,11 @@
           "billing"
         ],
         "summary": "Stream Wallet",
-        "description": "Stream wallet balance updates for the authenticated user.\nEmits a credits event when the balance changes and a heartbeat periodically.",
+        "description": "Stream wallet balance updates for the authenticated user.\nEmits a balance event (in cents) when the balance changes and a heartbeat periodically.",
         "operationId": "stream_wallet_api_billing_wallet_stream_get",
         "responses": {
           "200": {
-            "description": "Wallet balance updates and heartbeats",
+            "description": "Wallet balance updates (in cents) and heartbeats",
             "content": {
               "application/json": {
                 "schema": {
@@ -4354,7 +4354,7 @@
           "paper-reviews"
         ],
         "summary": "Create Paper Review",
-        "description": "Submit a paper for review.\n\nUpload a PDF file to start an asynchronous review process. The endpoint\nreturns immediately with a review ID that can be used to poll for results.\n\nRequires authentication. Credits will be charged when the review completes.",
+        "description": "Submit a paper for review.\n\nUpload a PDF file to start an asynchronous review process. The endpoint\nreturns immediately with a review ID that can be used to poll for results.\n\nRequires authentication. Costs will be charged when the review completes.",
         "operationId": "create_paper_review_api_paper_reviews_post",
         "requestBody": {
           "required": true,
@@ -4944,9 +4944,9 @@
       },
       "BillingWalletResponse": {
         "properties": {
-          "balance": {
+          "balance_cents": {
             "type": "integer",
-            "title": "Balance"
+            "title": "Balance Cents"
           },
           "transactions": {
             "items": {
@@ -4958,10 +4958,11 @@
         },
         "type": "object",
         "required": [
-          "balance",
+          "balance_cents",
           "transactions"
         ],
-        "title": "BillingWalletResponse"
+        "title": "BillingWalletResponse",
+        "description": "User's wallet balance and transaction history.\n\nBalance is in cents (e.g., 1000 = $10.00)."
       },
       "Body_create_paper_review_api_paper_reviews_post": {
         "properties": {
@@ -6152,64 +6153,15 @@
         "title": "ConversationUpdateResponse",
         "description": "Response for conversation updates."
       },
-      "CreditPackListResponse": {
-        "properties": {
-          "packs": {
-            "items": {
-              "$ref": "#/components/schemas/CreditPackModel"
-            },
-            "type": "array",
-            "title": "Packs"
-          }
-        },
-        "type": "object",
-        "required": [
-          "packs"
-        ],
-        "title": "CreditPackListResponse"
-      },
-      "CreditPackModel": {
-        "properties": {
-          "price_id": {
-            "type": "string",
-            "title": "Price Id"
-          },
-          "credits": {
-            "type": "integer",
-            "title": "Credits"
-          },
-          "currency": {
-            "type": "string",
-            "title": "Currency"
-          },
-          "unit_amount": {
-            "type": "integer",
-            "title": "Unit Amount"
-          },
-          "nickname": {
-            "type": "string",
-            "title": "Nickname"
-          }
-        },
-        "type": "object",
-        "required": [
-          "price_id",
-          "credits",
-          "currency",
-          "unit_amount",
-          "nickname"
-        ],
-        "title": "CreditPackModel"
-      },
       "CreditTransactionModel": {
         "properties": {
           "id": {
             "type": "integer",
             "title": "Id"
           },
-          "amount": {
+          "amount_cents": {
             "type": "integer",
-            "title": "Amount"
+            "title": "Amount Cents"
           },
           "transaction_type": {
             "type": "string",
@@ -6253,12 +6205,13 @@
         "type": "object",
         "required": [
           "id",
-          "amount",
+          "amount_cents",
           "transaction_type",
           "status",
           "created_at"
         ],
-        "title": "CreditTransactionModel"
+        "title": "CreditTransactionModel",
+        "description": "A billing transaction record.\n\nAll amounts are in cents (e.g., 100 = $1.00)."
       },
       "DatasetFileInfo": {
         "properties": {
@@ -6572,6 +6525,57 @@
         ],
         "title": "FileUploadResponse",
         "description": "File upload response."
+      },
+      "FundingOptionListResponse": {
+        "properties": {
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/FundingOptionModel"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "options"
+        ],
+        "title": "FundingOptionListResponse",
+        "description": "List of available funding options."
+      },
+      "FundingOptionModel": {
+        "properties": {
+          "price_id": {
+            "type": "string",
+            "title": "Price Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "unit_amount": {
+            "type": "integer",
+            "title": "Unit Amount"
+          },
+          "nickname": {
+            "type": "string",
+            "title": "Nickname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "price_id",
+          "amount_cents",
+          "currency",
+          "unit_amount",
+          "nickname"
+        ],
+        "title": "FundingOptionModel",
+        "description": "A funding option (Stripe price) that users can purchase.\n\nWith the new 1:1 model, paying $X adds $X to the wallet."
       },
       "GPUShortagePayload": {
         "properties": {
@@ -12586,31 +12590,31 @@
         ],
         "title": "ValidationError"
       },
-      "WalletCreditsData": {
+      "WalletBalanceData": {
         "properties": {
-          "balance": {
+          "balance_cents": {
             "type": "integer",
-            "title": "Balance"
+            "title": "Balance Cents"
           }
         },
         "type": "object",
         "required": [
-          "balance"
+          "balance_cents"
         ],
-        "title": "WalletCreditsData"
+        "title": "WalletBalanceData"
       },
-      "WalletCreditsEvent": {
+      "WalletBalanceEvent": {
         "properties": {
           "type": {
             "type": "string",
             "enum": [
-              "credits"
+              "balance"
             ],
-            "const": "credits",
+            "const": "balance",
             "title": "Type"
           },
           "data": {
-            "$ref": "#/components/schemas/WalletCreditsData"
+            "$ref": "#/components/schemas/WalletBalanceData"
           }
         },
         "type": "object",
@@ -12618,7 +12622,7 @@
           "type",
           "data"
         ],
-        "title": "WalletCreditsEvent"
+        "title": "WalletBalanceEvent"
       },
       "WalletHeartbeatEvent": {
         "properties": {
@@ -12651,7 +12655,7 @@
       "WalletStreamEvent": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/WalletCreditsEvent"
+            "$ref": "#/components/schemas/WalletBalanceEvent"
           },
           {
             "$ref": "#/components/schemas/WalletHeartbeatEvent"
@@ -12662,7 +12666,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
-            "credits": "#/components/schemas/WalletCreditsEvent",
+            "balance": "#/components/schemas/WalletBalanceEvent",
             "heartbeat": "#/components/schemas/WalletHeartbeatEvent"
           }
         }

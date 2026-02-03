@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
 export function Header() {
   const { user } = useAuth();
   const pathname = usePathname();
-  const { balance, isLoading } = useWalletBalance();
+  const { balanceDollars, isLoading } = useWalletBalance();
 
   const isConversationsActive = pathname.startsWith("/conversations");
   const isResearchActive = pathname.startsWith("/research");
@@ -75,18 +75,15 @@ export function Header() {
         </div>
         <div className="flex items-center gap-4">
           {user && (
-            <>
-              <div className="flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200">
-                <span className="text-xs uppercase tracking-wide text-slate-400">Credits</span>
-                <span className="font-semibold text-white">{isLoading ? "…" : `${balance}`}</span>
-              </div>
-              <Link
-                href="/billing"
-                className="rounded-lg border border-emerald-500/60 px-3 py-1.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10"
-              >
-                Add Credits
-              </Link>
-            </>
+            <Link
+              href="/billing"
+              className="flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition-colors hover:border-emerald-500/60 hover:bg-slate-800"
+            >
+              <span className="text-xs uppercase tracking-wide text-slate-400">Balance</span>
+              <span className="font-semibold text-white">
+                {isLoading ? "…" : `$${balanceDollars.toFixed(2)}`}
+              </span>
+            </Link>
           )}
           <UserProfileDropdown />
         </div>

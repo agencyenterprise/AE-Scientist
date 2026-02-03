@@ -63,7 +63,7 @@ interface ReviewDetailResponse {
     cached_input_tokens: number;
     output_tokens: number;
   } | null;
-  credits_charged?: number;
+  cost_cents?: number;
 }
 
 const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds when there are pending reviews
@@ -194,7 +194,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
           cached_input_tokens: 0,
           output_tokens: 0,
         },
-        credits_charged: data.credits_charged || 0,
+        cost_cents: data.cost_cents || 0,
         original_filename: data.original_filename,
         model: data.model,
         created_at: data.created_at,

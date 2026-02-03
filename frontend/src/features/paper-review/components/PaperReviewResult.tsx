@@ -46,7 +46,7 @@ export interface PaperReviewResponse {
   id: number;
   review: ReviewContent;
   token_usage: TokenUsage;
-  credits_charged: number;
+  cost_cents: number;
   original_filename: string;
   model: string;
   created_at: string;
@@ -220,7 +220,7 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
           {getDecisionIcon(content.decision)}
           <div>
             <div className="font-semibold">{content.decision}</div>
-            <div className="text-sm opacity-80">Credits charged: {review.credits_charged}</div>
+            <div className="text-sm opacity-80">Cost: ${(review.cost_cents / 100).toFixed(2)}</div>
           </div>
         </div>
         <button

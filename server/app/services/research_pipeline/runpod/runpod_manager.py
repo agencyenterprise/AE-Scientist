@@ -5,10 +5,11 @@ Launches the research pipeline on RunPod and injects refined ideas/configuration
 import asyncio
 import logging
 import math
-import os
 from typing import Any, NamedTuple, cast
 
 import httpx
+
+from app.config import settings
 
 from .code_packager import get_code_tarball_info
 from .runpod_initialization import (
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STARTUP_GRACE_SECONDS = 600
 POD_READY_POLL_INTERVAL_SECONDS = 5
-RUNPOD_SUPPORTED_GPUS_ENV_NAME = "RUNPOD_SUPPORTED_GPUS"
 
 DEFAULT_RUNPOD_DATACENTER_IDS: tuple[str, ...] = (
     # RunPod published dataCenterIds options (full list), ordered by proximity to AWS us-east-1 (N. Virginia).
@@ -124,10 +124,8 @@ class PodBillingSummary(NamedTuple):
 class RunPodManager:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        base_url_override = os.environ.get("FAKE_RUNPOD_BASE_URL")
-        graphql_url_override = os.environ.get("FAKE_RUNPOD_GRAPHQL_URL")
-        self.base_url = base_url_override or "https://rest.runpod.io/v1"
-        self.graphql_url = graphql_url_override or "https://api.runpod.io/graphql"
+        self.base_url = settings.runpod.fake_base_url or "https://rest.runpod.io/v1"
+        self.graphql_url = settings.runpod.fake_graphql_url or "https://api.runpod.io/graphql"
 
     async def _make_request(
         self,
@@ -345,32 +343,12 @@ class RunPodManager:
 
 
 def get_pipeline_startup_grace_seconds() -> int:
-    raw_value = os.environ.get("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS")
-    if raw_value is None:
-        return DEFAULT_STARTUP_GRACE_SECONDS
-    try:
-        parsed = int(raw_value)
-    except ValueError:
-        logger.warning(
-            "Invalid PIPELINE_MONITOR_STARTUP_GRACE_SECONDS=%s; defaulting to %s seconds.",
-            raw_value,
-            DEFAULT_STARTUP_GRACE_SECONDS,
-        )
-        return DEFAULT_STARTUP_GRACE_SECONDS
-    return max(parsed, 1)
+    return max(settings.research_pipeline.monitor_startup_grace_seconds, 1)
 
 
 def get_supported_gpu_types() -> list[str]:
     """Return the GPU types that can be targeted when launching RunPod jobs."""
-    raw = os.environ.get(RUNPOD_SUPPORTED_GPUS_ENV_NAME)
-    if raw is None:
-        raise RuntimeError(f"Environment variable {RUNPOD_SUPPORTED_GPUS_ENV_NAME} is required.")
-    gpu_types = [segment.strip() for segment in raw.split(",") if segment.strip()]
-    if not gpu_types:
-        raise RuntimeError(
-            f"Environment variable {RUNPOD_SUPPORTED_GPUS_ENV_NAME} must not be empty."
-        )
-    return gpu_types
+    return list(settings.runpod.supported_gpus)
 
 
 async def launch_research_pipeline_run(
@@ -384,9 +362,6 @@ async def launch_research_pipeline_run(
     parent_run_id: str | None,
     webhook_token: str,
 ) -> PodLaunchInfo:
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
     env = load_runpod_environment()
 
     idea_filename = f"{run_id}_idea.txt"
@@ -425,7 +400,7 @@ async def launch_research_pipeline_run(
         commit_hash=tarball_info.commit_hash,
     )
 
-    creator = RunPodManager(api_key=runpod_api_key)
+    creator = RunPodManager(api_key=settings.runpod.api_key)
 
     pod_env = {
         "CODE_TARBALL_URL": tarball_info.url,
@@ -453,10 +428,7 @@ async def launch_research_pipeline_run(
 
 
 async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
-    manager = RunPodManager(api_key=runpod_api_key)
+    manager = RunPodManager(api_key=settings.runpod.api_key)
     poll_interval_seconds = POD_READY_POLL_INTERVAL_SECONDS
     startup_grace_seconds = get_pipeline_startup_grace_seconds()
     max_attempts = max(1, math.ceil(startup_grace_seconds / poll_interval_seconds))
@@ -474,10 +446,7 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
 
 
 async def terminate_pod(*, pod_id: str) -> None:
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
-    creator = RunPodManager(api_key=runpod_api_key)
+    creator = RunPodManager(api_key=settings.runpod.api_key)
     try:
         logger.info("Terminating RunPod pod %s...", pod_id)
         await creator.delete_pod(pod_id=pod_id)
@@ -488,8 +457,5 @@ async def terminate_pod(*, pod_id: str) -> None:
 
 
 async def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        raise RuntimeError("RUNPOD_API_KEY environment variable is required.")
-    manager = RunPodManager(api_key=runpod_api_key)
+    manager = RunPodManager(api_key=settings.runpod.api_key)
     return await manager.get_pod_billing_summary(pod_id=pod_id)

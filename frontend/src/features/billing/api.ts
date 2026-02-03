@@ -4,7 +4,7 @@ import { api } from "@/shared/lib/api-client-typed";
 
 export interface CreditTransaction {
   id: number;
-  amount: number;
+  amount_cents: number;
   transaction_type: string;
   status: string;
   description?: string | null;
@@ -14,20 +14,20 @@ export interface CreditTransaction {
 }
 
 export interface WalletResponse {
-  balance: number;
+  balance_cents: number;
   transactions: CreditTransaction[];
 }
 
-export interface CreditPack {
+export interface FundingOption {
   price_id: string;
-  credits: number;
+  amount_cents: number;
   currency: string;
   unit_amount: number;
   nickname: string;
 }
 
-export interface CreditPackListResponse {
-  packs: CreditPack[];
+export interface FundingOptionListResponse {
+  options: FundingOption[];
 }
 
 export async function fetchWallet(): Promise<WalletResponse> {
@@ -38,10 +38,10 @@ export async function fetchWallet(): Promise<WalletResponse> {
   return data as WalletResponse;
 }
 
-export async function fetchCreditPacks(): Promise<CreditPackListResponse> {
+export async function fetchFundingOptions(): Promise<FundingOptionListResponse> {
   const { data, error } = await api.GET("/api/billing/packs");
-  if (error) throw new Error("Failed to fetch credit packs");
-  return data as CreditPackListResponse;
+  if (error) throw new Error("Failed to fetch funding options");
+  return data as FundingOptionListResponse;
 }
 
 export async function createCheckoutSession(payload: {

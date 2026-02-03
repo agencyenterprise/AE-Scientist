@@ -7,8 +7,6 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
 
-from langchain.agents import AgentState
-from langchain.agents.middleware import after_model
 from langchain.tools import tool
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -22,13 +20,13 @@ from langchain_core.messages import (
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from langchain_core.utils.json import parse_partial_json
-from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.models import ChatMessageData, LLMModel
 from app.services.base_llm_service import BaseLLMService
 from app.services.base_llm_service import FileAttachmentData as LLMFileAttachmentData
+from app.services.billing_guard import charge_for_llm_usage
 from app.services.chat_models import (
     ChatStatus,
     StreamContentEvent,
@@ -66,46 +64,13 @@ class IdeaGenerationOutput(BaseModel):
     )
 
 
-class TrackUsageSchema(BaseModel):
-    llm_provider: str = Field(..., description="The LLM provider")
-    llm_model: str = Field(..., description="The LLM model")
-    conversation_id: int = Field(..., description="The conversation ID")
-
-
-@after_model
-async def track_usage_middleware(
-    state: AgentState, runtime: Runtime[TrackUsageSchema]
-) -> dict | None:  # noqa: ARG001
-    """Track usage metadata for the LLM model."""
-    db = get_database()
-    ctx = runtime.context
-    messages = state["messages"]
-    for message in messages:
-        if isinstance(message, AIMessage):
-            metadata = message.usage_metadata
-            if metadata:
-                input_tokens = int(cast(Any, metadata.get("input_tokens", 0)) or 0)
-                cached_input_tokens = int(cast(Any, metadata.get("cached_input_tokens", 0)) or 0)
-                output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
-
-                await db.create_llm_token_usage(
-                    conversation_id=ctx.conversation_id,
-                    provider=ctx.llm_provider,
-                    model=ctx.llm_model,
-                    input_tokens=input_tokens,
-                    cached_input_tokens=cached_input_tokens,
-                    output_tokens=output_tokens,
-                )
-    return None
-
-
 def get_idea_max_completion_tokens(model: BaseChatModel) -> int:
     model_max_output_tokens = (
-        model.profile.get("max_output_tokens", settings.IDEA_MAX_COMPLETION_TOKENS)
+        model.profile.get("max_output_tokens", settings.idea_max_completion_tokens)
         if model.profile
-        else settings.IDEA_MAX_COMPLETION_TOKENS
+        else settings.idea_max_completion_tokens
     )
-    return min(settings.IDEA_MAX_COMPLETION_TOKENS, model_max_output_tokens)
+    return min(settings.idea_max_completion_tokens, model_max_output_tokens)
 
 
 class LangChainLLMService(BaseLLMService, ABC):
@@ -282,7 +247,6 @@ class LangChainLLMService(BaseLLMService, ABC):
     async def generate_idea(
         self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
     ) -> AsyncGenerator[str, None]:
-        del user_id
         db = get_database()
         system_prompt = await get_idea_generation_prompt(db=db)
         user_prompt = render_text(
@@ -297,6 +261,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             llm_model=llm_model,
             messages=messages,
             conversation_id=conversation_id,
+            user_id=user_id,
         ):
             yield event_payload
 
@@ -310,7 +275,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         )
 
     async def generate_manual_seed_idea(
-        self, *, llm_model: str, user_prompt: str, conversation_id: int
+        self, *, llm_model: str, user_prompt: str, conversation_id: int, user_id: int
     ) -> AsyncGenerator[str, None]:
         """
         Generate an idea from a manual title and hypothesis seed.
@@ -325,6 +290,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             llm_model=llm_model,
             messages=messages,
             conversation_id=conversation_id,
+            user_id=user_id,
         ):
             yield event_payload
 
@@ -334,6 +300,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         llm_model: str,
         messages: List[BaseMessage],
         conversation_id: int,
+        user_id: int,
     ) -> AsyncGenerator[str, None]:
         """Generate idea using structured output with real-time streaming via tool calling."""
 
@@ -367,6 +334,17 @@ class LangChainLLMService(BaseLLMService, ABC):
                     )
                     output_tokens = int(cast(Any, metadata.get("output_tokens", 0)) or 0)
                     await db.create_llm_token_usage(
+                        conversation_id=conversation_id,
+                        provider=self.provider_name,
+                        model=llm_model,
+                        input_tokens=input_tokens,
+                        cached_input_tokens=cached_input_tokens,
+                        output_tokens=output_tokens,
+                    )
+                    # Charge user for LLM usage
+
+                    await charge_for_llm_usage(
+                        user_id=user_id,
                         conversation_id=conversation_id,
                         provider=self.provider_name,
                         model=llm_model,
@@ -487,7 +465,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         ]
         response = await self._model_with_token_limit(
             llm_model=llm_model.id,
-            max_output_tokens=settings.IDEA_MAX_COMPLETION_TOKENS,
+            max_output_tokens=settings.idea_max_completion_tokens,
         ).ainvoke(input=messages)
         if not isinstance(response, AIMessage):
             return ""
@@ -644,6 +622,16 @@ class LangChainChatWithIdeaStream:
                                 input_tokens=input_tokens,
                                 cached_input_tokens=cached_input_tokens,
                                 output_tokens=output_tokens,
+                            )
+
+                            await charge_for_llm_usage(
+                                conversation_id=conversation_id,
+                                provider=llm_model.provider,
+                                model=llm_model.id,
+                                input_tokens=input_tokens,
+                                cached_input_tokens=cached_input_tokens,
+                                output_tokens=output_tokens,
+                                user_id=user_id,
                             )
 
                     # Check if we have tool calls - if so, don't stream content

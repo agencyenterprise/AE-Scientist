@@ -8,7 +8,8 @@ import { apiStream } from "@/shared/lib/api-client";
 import type { WalletStreamEvent } from "@/types";
 
 interface WalletBalanceResult {
-  balance: number;
+  balance_cents: number;
+  balanceDollars: number;
   isLoading: boolean;
   refetch: () => Promise<unknown>;
 }
@@ -63,16 +64,18 @@ export function useWalletBalance(): WalletBalanceResult {
             if (!line.startsWith("data: ")) continue;
             try {
               const evt = JSON.parse(line.slice(6)) as WalletStreamEvent;
-              if (evt.type === "credits" && typeof evt.data.balance === "number") {
-                const balance = evt.data.balance;
-                queryClient.setQueryData<{ balance: number } | undefined>(
+              if (evt.type === "balance" && typeof evt.data.balance_cents === "number") {
+                const balance_cents = evt.data.balance_cents;
+                queryClient.setQueryData<{ balance_cents: number } | undefined>(
                   ["billing", "wallet-balance"],
-                  prev => ({ ...(prev ?? {}), balance })
+                  prev => ({ ...(prev ?? {}), balance_cents })
                 );
-                queryClient.setQueryData<{ balance: number; transactions?: unknown[] } | undefined>(
-                  ["billing", "wallet"],
-                  prev => ({ ...(prev ?? { transactions: [] }), balance })
-                );
+                queryClient.setQueryData<
+                  { balance_cents: number; transactions?: unknown[] } | undefined
+                >(["billing", "wallet"], prev => ({
+                  ...(prev ?? { transactions: [] }),
+                  balance_cents,
+                }));
               }
             } catch {
               // ignore malformed lines
@@ -104,8 +107,11 @@ export function useWalletBalance(): WalletBalanceResult {
     };
   }, [isAuthenticated, queryClient]);
 
+  const balance_cents = data?.balance_cents ?? 0;
+
   return {
-    balance: data?.balance ?? 0,
+    balance_cents,
+    balanceDollars: balance_cents / 100,
     isLoading,
     refetch: () => refetch(),
   };

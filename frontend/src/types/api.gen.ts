@@ -144,7 +144,7 @@ export interface paths {
         };
         /**
          * Get Wallet
-         * @description Return wallet balance plus recent transactions for the authenticated user.
+         * @description Return wallet balance (in cents) plus recent transactions for the authenticated user.
          */
         get: operations["get_wallet_api_billing_wallet_get"];
         put?: never;
@@ -163,10 +163,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Credit Packs
-         * @description Expose the configured Stripe price IDs and their associated credit amounts.
+         * List Funding Options
+         * @description List available funding options (Stripe prices).
+         *
+         *     With the new 1:1 model, paying $X adds $X to the wallet.
          */
-        get: operations["list_credit_packs_api_billing_packs_get"];
+        get: operations["list_funding_options_api_billing_packs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -187,6 +189,8 @@ export interface paths {
         /**
          * Create Checkout Session
          * @description Create a Stripe Checkout session for the requested price ID.
+         *
+         *     With the new 1:1 model, the Stripe amount equals the wallet credit amount.
          */
         post: operations["create_checkout_session_api_billing_checkout_session_post"];
         delete?: never;
@@ -205,7 +209,7 @@ export interface paths {
         /**
          * Stream Wallet
          * @description Stream wallet balance updates for the authenticated user.
-         *     Emits a credits event when the balance changes and a heartbeat periodically.
+         *     Emits a balance event (in cents) when the balance changes and a heartbeat periodically.
          */
         get: operations["stream_wallet_api_billing_wallet_stream_get"];
         put?: never;
@@ -1732,7 +1736,7 @@ export interface paths {
          *     Upload a PDF file to start an asynchronous review process. The endpoint
          *     returns immediately with a review ID that can be used to poll for results.
          *
-         *     Requires authentication. Credits will be charged when the review completes.
+         *     Requires authentication. Costs will be charged when the review completes.
          */
         post: operations["create_paper_review_api_paper_reviews_post"];
         delete?: never;
@@ -2046,10 +2050,15 @@ export interface components {
         BestNodeSelectionPayload: {
             event: components["schemas"]["BestNodeSelectionEvent"];
         };
-        /** BillingWalletResponse */
+        /**
+         * BillingWalletResponse
+         * @description User's wallet balance and transaction history.
+         *
+         *     Balance is in cents (e.g., 1000 = $10.00).
+         */
         BillingWalletResponse: {
-            /** Balance */
-            balance: number;
+            /** Balance Cents */
+            balance_cents: number;
             /** Transactions */
             transactions: components["schemas"]["CreditTransactionModel"][];
         };
@@ -2612,30 +2621,17 @@ export interface components {
             /** @description Updated conversation */
             conversation: components["schemas"]["ConversationResponse"];
         };
-        /** CreditPackListResponse */
-        CreditPackListResponse: {
-            /** Packs */
-            packs: components["schemas"]["CreditPackModel"][];
-        };
-        /** CreditPackModel */
-        CreditPackModel: {
-            /** Price Id */
-            price_id: string;
-            /** Credits */
-            credits: number;
-            /** Currency */
-            currency: string;
-            /** Unit Amount */
-            unit_amount: number;
-            /** Nickname */
-            nickname: string;
-        };
-        /** CreditTransactionModel */
+        /**
+         * CreditTransactionModel
+         * @description A billing transaction record.
+         *
+         *     All amounts are in cents (e.g., 100 = $1.00).
+         */
         CreditTransactionModel: {
             /** Id */
             id: number;
-            /** Amount */
-            amount: number;
+            /** Amount Cents */
+            amount_cents: number;
             /** Transaction Type */
             transaction_type: string;
             /** Status */
@@ -2823,6 +2819,32 @@ export interface components {
              * @description Success message
              */
             message: string;
+        };
+        /**
+         * FundingOptionListResponse
+         * @description List of available funding options.
+         */
+        FundingOptionListResponse: {
+            /** Options */
+            options: components["schemas"]["FundingOptionModel"][];
+        };
+        /**
+         * FundingOptionModel
+         * @description A funding option (Stripe price) that users can purchase.
+         *
+         *     With the new 1:1 model, paying $X adds $X to the wallet.
+         */
+        FundingOptionModel: {
+            /** Price Id */
+            price_id: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /** Currency */
+            currency: string;
+            /** Unit Amount */
+            unit_amount: number;
+            /** Nickname */
+            nickname: string;
         };
         /** GPUShortagePayload */
         GPUShortagePayload: {
@@ -5957,19 +5979,19 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /** WalletCreditsData */
-        WalletCreditsData: {
-            /** Balance */
-            balance: number;
+        /** WalletBalanceData */
+        WalletBalanceData: {
+            /** Balance Cents */
+            balance_cents: number;
         };
-        /** WalletCreditsEvent */
-        WalletCreditsEvent: {
+        /** WalletBalanceEvent */
+        WalletBalanceEvent: {
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            type: "credits";
-            data: components["schemas"]["WalletCreditsData"];
+            type: "balance";
+            data: components["schemas"]["WalletBalanceData"];
         };
         /** WalletHeartbeatEvent */
         WalletHeartbeatEvent: {
@@ -5985,7 +6007,7 @@ export interface components {
          * WalletStreamEvent
          * @description Root model for wallet SSE updates.
          */
-        WalletStreamEvent: components["schemas"]["WalletCreditsEvent"] | components["schemas"]["WalletHeartbeatEvent"];
+        WalletStreamEvent: components["schemas"]["WalletBalanceEvent"] | components["schemas"]["WalletHeartbeatEvent"];
     };
     responses: never;
     parameters: never;
@@ -6131,7 +6153,7 @@ export interface operations {
             };
         };
     };
-    list_credit_packs_api_billing_packs_get: {
+    list_funding_options_api_billing_packs_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6146,7 +6168,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreditPackListResponse"];
+                    "application/json": components["schemas"]["FundingOptionListResponse"];
                 };
             };
         };
@@ -6193,7 +6215,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Wallet balance updates and heartbeats */
+            /** @description Wallet balance updates (in cents) and heartbeats */
             200: {
                 headers: {
                     [name: string]: unknown;

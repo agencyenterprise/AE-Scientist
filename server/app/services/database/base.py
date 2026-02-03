@@ -6,37 +6,15 @@ Provides common database connection and initialization logic.
 
 import asyncio
 import logging
-import os
 from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
 from typing import Any, AsyncContextManager, AsyncIterator, Iterator, Tuple, cast
 
-from psycopg import AsyncConnection, Connection, conninfo
+from psycopg import AsyncConnection, Connection
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_env_float(value: str | None, fallback: float) -> float:
-    """Parse float threshold from environment."""
-    if value is None:
-        return fallback
-    try:
-        return float(value)
-    except ValueError:
-        logger.warning(
-            "Invalid DB pool usage threshold value '%s'; using fallback %s",
-            value,
-            fallback,
-        )
-        return fallback
-
-
-POOL_USAGE_WARN_THRESHOLD = _parse_env_float(
-    value=os.environ.get("DB_POOL_USAGE_WARN_THRESHOLD"),
-    fallback=0.8,
-)
 
 
 class ConnectionProvider:
@@ -57,11 +35,7 @@ class BaseDatabaseManager(ConnectionProvider):
     def __init__(self) -> None:
         """Initialize database manager."""
         self._conninfo = self._build_conninfo()
-        self._skip_db_connections = os.environ.get("SKIP_DB_CONNECTION", "").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+        self._skip_db_connections = settings.database.skip_connection
         if self._skip_db_connections:
             logger.debug("Skipping database connection (SKIP_DB_CONNECTION=true)")
             return
@@ -142,27 +116,17 @@ class BaseDatabaseManager(ConnectionProvider):
 
     @staticmethod
     def _pool_bounds() -> Tuple[int, int]:
-        min_conn = int(os.environ.get("DB_POOL_MIN_CONN", "1"))
-        max_conn = int(os.environ.get("DB_POOL_MAX_CONN", "10"))
-        return min_conn, max_conn
+        return settings.database.pool_min_conn, settings.database.pool_max_conn
 
     @staticmethod
     def _build_conninfo() -> str:
-        if settings.DATABASE_URL:
-            return settings.DATABASE_URL
-        return conninfo.make_conninfo(
-            host=settings.POSTGRES_HOST,
-            port=str(settings.POSTGRES_PORT),
-            dbname=settings.POSTGRES_DB,
-            user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,
-        )
+        return settings.database.url
 
     @staticmethod
     def _log_pool_usage(*, pool: ConnectionPool, action: str) -> None:
         """Log pool usage to detect spikes."""
         used, idle, max_conn, ratio = BaseDatabaseManager._calculate_pool_usage(pool=pool)
-        if ratio >= POOL_USAGE_WARN_THRESHOLD:
+        if ratio >= settings.database.pool_usage_warn_threshold:
             logger.warning(
                 "DB pool high usage (%s/%s used, %s idle) during %s",
                 used,
@@ -198,7 +162,7 @@ class BaseDatabaseManager(ConnectionProvider):
             0,
         )
         ratio = checked_out / max_size if max_size else 0.0
-        if ratio >= POOL_USAGE_WARN_THRESHOLD:
+        if ratio >= settings.database.pool_usage_warn_threshold:
             logger.warning(
                 "Async DB pool high usage (%s/%s used, %s idle) during %s",
                 checked_out,

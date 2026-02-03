@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import type { ConversationDetail, Idea } from "@/types";
 import { api } from "@/shared/lib/api-client-typed";
 import { useProjectDraftData } from "./use-project-draft-data";
-import { parseInsufficientCreditsError } from "@/shared/utils/credits";
+import { formatCentsAsDollars, parseInsufficientBalanceError } from "@/shared/utils/costs";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 interface UseProjectDraftStateProps {
@@ -83,15 +83,15 @@ export function useProjectDraftState({
       );
 
       if (error) {
-        // Check for 402 (insufficient credits) - error has status in openapi-fetch
+        // Check for 402 (insufficient balance) - error has status in openapi-fetch
         const errorAny = error as { status?: number; detail?: string };
-        if (errorAny.status === 402 || (typeof error === "object" && "required" in error)) {
-          const info = parseInsufficientCreditsError(error);
+        if (errorAny.status === 402 || (typeof error === "object" && "required_cents" in error)) {
+          const info = parseInsufficientBalanceError(error);
           const message =
             info?.message ||
-            (info?.required
-              ? `You need at least ${info.required} credits to launch research.`
-              : "Insufficient credits to launch research.");
+            (info?.required_cents
+              ? `You need at least ${formatCentsAsDollars(info.required_cents)} to launch research.`
+              : "Insufficient balance to launch research.");
           throw new Error(message);
         }
         // Check for 400 (bad request)

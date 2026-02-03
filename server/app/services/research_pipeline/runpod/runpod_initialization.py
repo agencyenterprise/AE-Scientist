@@ -4,13 +4,14 @@ Builds the initialization scripts and configuration injected into a freshly laun
 
 import base64
 import logging
-import os
 import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
 from omegaconf import OmegaConf
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -53,22 +54,12 @@ class RunPodEnvironment:
 
 
 def load_runpod_environment() -> RunPodEnvironment:
-    def _require(name: str) -> str:
-        value = os.environ.get(name)
-        if not value:
-            raise RuntimeError(f"Environment variable {name} is required to launch RunPod.")
-        return value
-
-    def _optional(name: str) -> str:
-        value = os.environ.get(name)
-        return value or ""
-
     return RunPodEnvironment(
-        openai_api_key=_require("OPENAI_API_KEY"),
-        hf_token=_require("HF_TOKEN"),
-        telemetry_webhook_url=_require("TELEMETRY_WEBHOOK_URL"),
-        sentry_dsn=_optional("SENTRY_DSN"),
-        sentry_environment=_optional("SENTRY_ENVIRONMENT") or _optional("RAILWAY_ENVIRONMENT_NAME"),
+        openai_api_key=settings.llm.openai_api_key,
+        hf_token=settings.research_pipeline.hf_token,
+        telemetry_webhook_url=settings.research_pipeline.telemetry_webhook_url,
+        sentry_dsn=settings.sentry_dsn,
+        sentry_environment=settings.sentry_environment or settings.server.railway_environment_name,
     )
 
 
@@ -254,7 +245,7 @@ def _await_external_cleanup_commands() -> list[str]:
 
 
 def _resolve_disk_stats_paths() -> str:
-    raw = os.environ.get(DISK_STATS_ENV_NAME) or DEFAULT_COLLECT_DISK_STATS_PATHS
+    raw = settings.research_pipeline.collect_disk_stats_paths or DEFAULT_COLLECT_DISK_STATS_PATHS
     paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
     sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
     return sanitized

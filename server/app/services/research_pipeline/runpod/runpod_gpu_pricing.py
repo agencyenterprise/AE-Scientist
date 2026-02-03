@@ -9,11 +9,12 @@ pulling in the rest of the RunPod pod lifecycle logic.
 
 import asyncio
 import logging
-import os
 import time
 from typing import NamedTuple, Sequence, cast
 
 import runpod  # type: ignore
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -102,14 +103,6 @@ async def get_gpu_type_prices(*, gpu_types: Sequence[str]) -> dict[str, float | 
     now = time.monotonic()
     requested = [gpu_type for gpu_type in gpu_types if gpu_type]
 
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        logger.info(
-            "RUNPOD_API_KEY missing; returning null securePrice for %s GPU types",
-            len(requested),
-        )
-        return {gpu_type: None for gpu_type in requested}
-
     cache_is_fresh = _is_cache_valid(now_monotonic=now)
     age_seconds = _cache_age_seconds(now_monotonic=now)
 
@@ -144,7 +137,7 @@ async def get_gpu_type_prices(*, gpu_types: Sequence[str]) -> dict[str, float | 
         len(missing_types),
     )
     if should_refresh:
-        await _ensure_refresh_scheduled(runpod_api_key=runpod_api_key, gpu_types=requested)
+        await _ensure_refresh_scheduled(gpu_types=requested)
     return prices_to_return
 
 
@@ -154,17 +147,13 @@ async def warm_gpu_price_cache(*, gpu_types: Sequence[str]) -> None:
 
     Intended for server startup so user-facing endpoints likely have cached prices ready.
     """
-    runpod_api_key = os.environ.get("RUNPOD_API_KEY")
-    if not runpod_api_key:
-        logger.info("Skipping RunPod GPU price warmup; RUNPOD_API_KEY missing")
-        return
     requested = [gpu_type for gpu_type in gpu_types if gpu_type]
     if not requested:
         return
-    await _ensure_refresh_scheduled(runpod_api_key=runpod_api_key, gpu_types=requested)
+    await _ensure_refresh_scheduled(gpu_types=requested)
 
 
-async def _ensure_refresh_scheduled(*, runpod_api_key: str, gpu_types: Sequence[str]) -> None:
+async def _ensure_refresh_scheduled(*, gpu_types: Sequence[str]) -> None:
     global _gpu_price_refresh_task
     async with _gpu_price_refresh_lock:
         _gpu_price_refresh_pending_types.update(gpu_types)
@@ -178,10 +167,10 @@ async def _ensure_refresh_scheduled(*, runpod_api_key: str, gpu_types: Sequence[
             "Scheduling RunPod GPU price refresh (queued=%s)",
             len(_gpu_price_refresh_pending_types),
         )
-        _gpu_price_refresh_task = asyncio.create_task(_refresh_cache(runpod_api_key=runpod_api_key))
+        _gpu_price_refresh_task = asyncio.create_task(_refresh_cache())
 
 
-async def _refresh_cache(*, runpod_api_key: str) -> None:
+async def _refresh_cache() -> None:
     global _gpu_price_refresh_task
     while True:
         async with _gpu_price_refresh_lock:
@@ -192,7 +181,7 @@ async def _refresh_cache(*, runpod_api_key: str) -> None:
 
         started_monotonic = time.monotonic()
         try:
-            fetched = await _fetch_secure_prices(runpod_api_key=runpod_api_key, gpu_types=pending)
+            fetched = await _fetch_secure_prices(gpu_types=pending)
             cache_updates = [
                 CachedGpuPrice(gpu_type=item.gpu_type, secure_price=item.secure_price)
                 for item in fetched
@@ -220,9 +209,7 @@ async def _refresh_cache(*, runpod_api_key: str) -> None:
                     _gpu_price_refresh_task = None
 
 
-async def _fetch_secure_prices(
-    *, runpod_api_key: str, gpu_types: Sequence[str]
-) -> list[FetchedGpuPrice]:
+async def _fetch_secure_prices(*, gpu_types: Sequence[str]) -> list[FetchedGpuPrice]:
     def _fetch_one_sync(gpu_type: str) -> FetchedGpuPrice:
         gpu_info = runpod.get_gpu(gpu_type)
         if not isinstance(gpu_info, dict):
@@ -239,7 +226,7 @@ async def _fetch_secure_prices(
         except (TypeError, ValueError):
             return FetchedGpuPrice(gpu_type=gpu_type, secure_price=None)
 
-    runpod.api_key = runpod_api_key
+    runpod.api_key = settings.runpod.api_key
     tasks = [asyncio.to_thread(_fetch_one_sync, gpu_type) for gpu_type in gpu_types]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

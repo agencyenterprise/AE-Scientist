@@ -4,7 +4,7 @@ from app.config import settings
 
 def _validate_llm_pricing() -> None:
     """Validate that all models in the registry have pricing information."""
-    pricing_data = settings.LLM_PRICING._pricing_data
+    pricing_data = settings.llm_pricing._pricing_data
 
     for provider, config in LLM_PROVIDER_REGISTRY.items():
         for model_id in config.models_by_id:

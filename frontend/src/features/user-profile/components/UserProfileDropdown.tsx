@@ -66,7 +66,7 @@ export function UserProfileDropdown() {
                   }}
                   className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
                 >
-                  Billing &amp; Credits
+                  Billing
                 </button>
                 <MCPIntegrationModal />
                 <button

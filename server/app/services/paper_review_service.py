@@ -20,7 +20,7 @@ from ae_paper_review import ReviewResult, load_paper, perform_review
 from psycopg import AsyncConnection
 
 from app.config import settings
-from app.services.billing_guard import charge_user_credits, enforce_minimum_credits
+from app.services.billing_guard import charge_cents, enforce_minimum_balance
 from app.services.database import PaperReviewStatus, get_database
 from app.services.s3_service import S3Service
 
@@ -33,21 +33,15 @@ _PAPER_REVIEW_RECOVERY_LOCK_KEY_2 = 991801
 # How long a review can be in pending/processing before it's considered stale
 _STALE_REVIEW_THRESHOLD_MINUTES = 15
 
-# Minimum credits required to start a paper review
-MINIMUM_CREDITS_FOR_REVIEW = 100
 
-# Credit conversion: $10 USD = 200 credits, so 1 credit = 5 cents
-CENTS_PER_CREDIT = 5
-
-
-def calculate_review_cost(
+def calculate_review_cost_cents(
     *,
     model: str,
     input_tokens: int,
     cached_input_tokens: int,
     output_tokens: int,
 ) -> int:
-    """Calculate the credit cost for a review based on token usage and model pricing.
+    """Calculate the cost for a review in cents based on token usage and model pricing.
 
     Uses the actual model pricing from JSON_MODEL_PRICE_PER_MILLION_IN_CENTS config.
 
@@ -58,12 +52,12 @@ def calculate_review_cost(
         output_tokens: Total output tokens used
 
     Returns:
-        Credit cost (rounded to nearest integer, minimum 1 credit)
+        Cost in cents (rounded to nearest integer, minimum 1 cent)
     """
     # Get prices in cents per 1M tokens
-    input_price_cents = settings.LLM_PRICING.get_input_price(model)
-    cached_input_price_cents = settings.LLM_PRICING.get_cached_input_price(model)
-    output_price_cents = settings.LLM_PRICING.get_output_price(model)
+    input_price_cents = settings.llm_pricing.get_input_price(model)
+    cached_input_price_cents = settings.llm_pricing.get_cached_input_price(model)
+    output_price_cents = settings.llm_pricing.get_output_price(model)
 
     # Calculate non-cached input tokens
     non_cached_input_tokens = input_tokens - cached_input_tokens
@@ -74,10 +68,7 @@ def calculate_review_cost(
     output_cost_cents = (output_tokens / 1_000_000) * output_price_cents
     total_cost_cents = input_cost_cents + cached_cost_cents + output_cost_cents
 
-    # Convert cents to credits
-    credits = total_cost_cents / CENTS_PER_CREDIT
-
-    return max(1, int(credits + 0.5))  # Round to nearest, minimum 1 credit
+    return max(1, int(total_cost_cents + 0.5))  # Round to nearest, minimum 1 cent
 
 
 def _run_review_sync(
@@ -194,7 +185,7 @@ class PaperReviewService:
             total_usage = result.token_usage
 
             # Calculate cost based on actual model pricing
-            cost = calculate_review_cost(
+            cost_cents = calculate_review_cost_cents(
                 model=model,
                 input_tokens=total_usage.input_tokens,
                 cached_input_tokens=total_usage.cached_input_tokens,
@@ -230,10 +221,10 @@ class PaperReviewService:
                     usages=token_usages,
                 )
 
-            # Charge user credits
-            await charge_user_credits(
+            # Charge user for the review
+            await charge_cents(
                 user_id=user_id,
-                cost=cost,
+                amount_cents=cost_cents,
                 action="paper_review",
                 description=f"Paper review: {original_filename}",
                 metadata={
@@ -245,10 +236,10 @@ class PaperReviewService:
             )
 
             logger.info(
-                "Paper review completed: review_id=%d, user_id=%d, cost=%d credits",
+                "Paper review completed: review_id=%d, user_id=%d, cost=%d cents",
                 review_id,
                 user_id,
-                cost,
+                cost_cents,
             )
 
         except Exception as e:
@@ -295,14 +286,14 @@ class PaperReviewService:
             Tuple of (review_id, status)
 
         Raises:
-            HTTPException: If user has insufficient credits
+            HTTPException: If user has insufficient balance
         """
         db = get_database()
 
-        # Check user has minimum credits
-        await enforce_minimum_credits(
+        # Check user has minimum balance
+        await enforce_minimum_balance(
             user_id=user_id,
-            required=MINIMUM_CREDITS_FOR_REVIEW,
+            required_cents=settings.billing_limits.min_balance_cents_for_paper_review,
             action="paper_review",
         )
 
@@ -361,10 +352,10 @@ class PaperReviewService:
 
         token_usage = await db.get_total_token_usage_by_review_id(review_id)
 
-        # Calculate credits charged from token usage
-        credits_charged = 0
+        # Calculate cost in cents from token usage
+        cost_cents = 0
         if token_usage.get("input_tokens") or token_usage.get("output_tokens"):
-            credits_charged = calculate_review_cost(
+            cost_cents = calculate_review_cost_cents(
                 model=review.model,
                 input_tokens=token_usage["input_tokens"],
                 cached_input_tokens=token_usage["cached_input_tokens"],
@@ -395,7 +386,7 @@ class PaperReviewService:
             "model": review.model,
             "created_at": review.created_at.isoformat(),
             "token_usage": token_usage,
-            "credits_charged": credits_charged,
+            "cost_cents": cost_cents,
         }
 
     async def get_pending_reviews(self, *, user_id: int) -> list[dict[str, Any]]:

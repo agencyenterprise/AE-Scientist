@@ -1,5 +1,7 @@
 """
-Billing API endpoints for wallet info, packs, checkout sessions, and Stripe webhooks.
+Billing API endpoints for wallet info, funding options, checkout sessions, and Stripe webhooks.
+
+All amounts are in cents (e.g., 100 = $1.00).
 """
 
 import asyncio
@@ -19,9 +21,9 @@ from app.models import (
     BillingWalletResponse,
     CheckoutSessionCreateRequest,
     CheckoutSessionCreateResponse,
-    CreditPackListResponse,
-    CreditPackModel,
     CreditTransactionModel,
+    FundingOptionListResponse,
+    FundingOptionModel,
     WalletStreamEvent,
 )
 from app.services import get_database
@@ -38,7 +40,7 @@ def _get_service() -> BillingService:
 
 @router.get("/wallet", response_model=BillingWalletResponse)
 async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWalletResponse:
-    """Return wallet balance plus recent transactions for the authenticated user."""
+    """Return wallet balance (in cents) plus recent transactions for the authenticated user."""
     if limit <= 0 or limit > 100:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid limit")
     if offset < 0:
@@ -51,7 +53,7 @@ async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> Bill
     transaction_models = [
         CreditTransactionModel(
             id=tx.id,
-            amount=tx.amount,
+            amount_cents=tx.amount,
             transaction_type=tx.transaction_type,
             status=tx.status,
             description=tx.description,
@@ -61,26 +63,30 @@ async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> Bill
         )
         for tx in transactions
     ]
-    return BillingWalletResponse(balance=wallet.balance, transactions=transaction_models)
+    return BillingWalletResponse(balance_cents=wallet.balance, transactions=transaction_models)
 
 
-@router.get("/packs", response_model=CreditPackListResponse)
-async def list_credit_packs(request: Request) -> CreditPackListResponse:
-    """Expose the configured Stripe price IDs and their associated credit amounts."""
+@router.get("/packs", response_model=FundingOptionListResponse)
+async def list_funding_options(request: Request) -> FundingOptionListResponse:
+    """List available funding options (Stripe prices).
+
+    With the new 1:1 model, paying $X adds $X to the wallet.
+    """
     user = get_current_user(request)
-    logger.debug("Credit packs requested by user_id=%s", user.id)
+    logger.debug("Funding options requested by user_id=%s", user.id)
     service = _get_service()
-    packs = [
-        CreditPackModel(
-            price_id=str(pack["price_id"]),
-            credits=int(pack["credits"]),
-            currency=str(pack["currency"]),
-            unit_amount=int(pack["unit_amount"]),
-            nickname=str(pack["nickname"]),
+
+    options = [
+        FundingOptionModel(
+            price_id=str(opt["price_id"]),
+            amount_cents=int(opt["amount_cents"]),
+            currency=str(opt["currency"]),
+            unit_amount=int(opt["unit_amount"]),
+            nickname=str(opt["nickname"]),
         )
-        for pack in await service.list_credit_packs()
+        for opt in await service.list_funding_options(list(settings.stripe.price_ids))
     ]
-    return CreditPackListResponse(packs=packs)
+    return FundingOptionListResponse(options=options)
 
 
 @router.post("/checkout-session", response_model=CheckoutSessionCreateResponse)
@@ -88,7 +94,10 @@ async def create_checkout_session(
     payload: CheckoutSessionCreateRequest,
     request: Request,
 ) -> CheckoutSessionCreateResponse:
-    """Create a Stripe Checkout session for the requested price ID."""
+    """Create a Stripe Checkout session for the requested price ID.
+
+    With the new 1:1 model, the Stripe amount equals the wallet credit amount.
+    """
     user = get_current_user(request)
     logger.debug("Creating checkout session for user_id=%s price_id=%s", user.id, payload.price_id)
     service = _get_service()
@@ -109,7 +118,7 @@ async def create_checkout_session(
     response_model=WalletStreamEvent,
     responses={
         200: {
-            "description": "Wallet balance updates and heartbeats",
+            "description": "Wallet balance updates (in cents) and heartbeats",
             "content": {
                 "text/event-stream": {"schema": {"$ref": "#/components/schemas/WalletStreamEvent"}}
             },
@@ -119,7 +128,7 @@ async def create_checkout_session(
 async def stream_wallet(request: Request) -> StreamingResponse:
     """
     Stream wallet balance updates for the authenticated user.
-    Emits a credits event when the balance changes and a heartbeat periodically.
+    Emits a balance event (in cents) when the balance changes and a heartbeat periodically.
     """
     user = get_current_user(request)
     db = get_database()
@@ -135,7 +144,8 @@ async def stream_wallet(request: Request) -> StreamingResponse:
 
             balance = await db.get_user_wallet_balance(user.id)
             if last_balance is None or balance != last_balance:
-                payload = {"type": "credits", "data": {"balance": balance}}
+                # Send balance in cents
+                payload = {"type": "balance", "data": {"balance_cents": balance}}
                 yield f"data: {json.dumps(payload)}\n\n"
                 last_balance = balance
                 last_heartbeat = datetime.now(timezone.utc)
@@ -163,7 +173,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
     payload = await request.body()
     signature = request.headers.get("stripe-signature")
     service = _get_service()
-    webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+    webhook_secret = settings.stripe.webhook_secret
     if not webhook_secret:
         logger.error("Stripe webhook secret is not configured.")
         raise HTTPException(

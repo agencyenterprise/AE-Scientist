@@ -96,6 +96,9 @@ class ResearchPipelineRun(NamedTuple):
     last_restart_reason: Optional[str]
     last_billed_at: datetime
     webhook_token_hash: Optional[str]
+    hw_billing_status: Optional[str]
+    hw_billing_last_retry_at: Optional[datetime]
+    hw_billing_retry_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -144,10 +147,11 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         container_disk_gb,
                         volume_disk_gb,
                         webhook_token_hash,
+                        hw_billing_status,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -161,6 +165,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         container_disk_gb,
                         volume_disk_gb,
                         webhook_token_hash,
+                        "pending",  # hw_billing_status starts as pending
                         now,
                         now,
                     ),
@@ -222,6 +227,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         last_restart_at: Optional[datetime] = None,
         last_restart_reason: Optional[str] = None,
         webhook_token_hash: Optional[str] = None,
+        hw_billing_status: Optional[str] = None,
+        hw_billing_last_retry_at: Optional[datetime] = None,
+        hw_billing_retry_count: Optional[int] = None,
     ) -> None:
         fields = []
         values: list[object] = []
@@ -269,6 +277,15 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         if webhook_token_hash is not None:
             fields.append("webhook_token_hash = %s")
             values.append(webhook_token_hash)
+        if hw_billing_status is not None:
+            fields.append("hw_billing_status = %s")
+            values.append(hw_billing_status)
+        if hw_billing_last_retry_at is not None:
+            fields.append("hw_billing_last_retry_at = %s")
+            values.append(hw_billing_last_retry_at)
+        if hw_billing_retry_count is not None:
+            fields.append("hw_billing_retry_count = %s")
+            values.append(hw_billing_retry_count)
         fields.append("updated_at = %s")
         values.append(datetime.now(timezone.utc))
         values.append(run_id)
@@ -525,6 +542,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             last_restart_reason=row.get("last_restart_reason"),
             last_billed_at=row.get("last_billed_at") or row["created_at"],
             webhook_token_hash=row.get("webhook_token_hash"),
+            hw_billing_status=row.get("hw_billing_status"),
+            hw_billing_last_retry_at=row.get("hw_billing_last_retry_at"),
+            hw_billing_retry_count=row.get("hw_billing_retry_count", 0),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -822,3 +842,39 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             }
             for row in rows
         ]
+
+    async def list_runs_awaiting_billing(
+        self,
+        *,
+        max_retry_count: int = 10,
+        min_retry_interval_seconds: int = 300,
+    ) -> list[ResearchPipelineRun]:
+        """
+        List runs that are awaiting billing data from RunPod.
+
+        These are terminated runs where RunPod returned empty billing data and we need
+        to retry fetching the actual costs.
+
+        Args:
+            max_retry_count: Maximum number of retries before giving up
+            min_retry_interval_seconds: Minimum seconds between retry attempts
+
+        Returns:
+            List of runs that need billing retry
+        """
+        query = """
+            SELECT * FROM research_pipeline_runs
+            WHERE hw_billing_status = 'awaiting_billing_data'
+              AND hw_billing_retry_count < %s
+              AND (
+                  hw_billing_last_retry_at IS NULL
+                  OR hw_billing_last_retry_at < NOW() - INTERVAL '%s seconds'
+              )
+            ORDER BY hw_billing_last_retry_at ASC NULLS FIRST, updated_at ASC
+            LIMIT 20
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, (max_retry_count, min_retry_interval_seconds))
+                rows = await cursor.fetchall() or []
+        return [self._row_to_run(row) for row in rows]

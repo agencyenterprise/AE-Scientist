@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api-client-typed";
-import { parseInsufficientCreditsError } from "@/shared/utils/credits";
+import { formatCentsAsDollars, parseInsufficientBalanceError } from "@/shared/utils/costs";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 /**
@@ -42,12 +42,12 @@ export function useLaunchResearch(conversationId: number | null) {
       );
       if (error) {
         if (response.status === 402) {
-          const info = parseInsufficientCreditsError(error as unknown);
+          const info = parseInsufficientBalanceError(error as unknown);
           const message =
             info?.message ||
-            (info?.required
-              ? `You need at least ${info.required} credits to launch research.`
-              : "Insufficient credits to launch research.");
+            (info?.required_cents
+              ? `You need at least ${formatCentsAsDollars(info.required_cents)} to launch research.`
+              : "Insufficient balance to launch research.");
           throw new Error(message);
         }
         if (response.status === 400) {

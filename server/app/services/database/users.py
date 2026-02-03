@@ -5,21 +5,16 @@ Provides CRUD operations for users and user sessions.
 """
 
 import logging
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import List, NamedTuple, Optional
 
-from dotenv import load_dotenv
 from psycopg.rows import dict_row
+
+from app.config import settings
 
 from .base import ConnectionProvider
 from .billing import BillingDatabaseMixin
-
-# .env path: server/.env
-# our path: server/app/services/database/users.py
-load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +32,15 @@ class UserData(NamedTuple):
     mcp_api_key: Optional[str] = None
 
 
-def should_give_free_credits(email: str) -> bool:
+def should_give_free_balance(email: str) -> bool:
     """
-    Determine if the user should be given free credits.
+    Determine if the user should be given free balance upon registration.
     """
     if email.endswith("@ae.studio") or email.endswith("@agencyenterprise.com"):
-        logger.debug(f"Giving free credits to {email}")
+        logger.debug(f"Giving free balance to {email}")
         return True
-    whitelist_emails = os.getenv("WHITELIST_EMAILS_FREE_CREDIT", "").split(",")
-    if email in whitelist_emails:
-        logger.debug(f"Giving free credits to {email}")
+    if email in settings.whitelist_emails_free_credit:
+        logger.debug(f"Giving free balance to {email}")
         return True
     return False
 
@@ -99,7 +93,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         insert_sql,
                         (clerk_user_id, email, name),
                     )
-                    has_free_credits = should_give_free_credits(email)
+                    receives_free_balance = should_give_free_balance(email)
                     result = await cursor.fetchone()
                     if result:
                         try:
@@ -107,7 +101,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                 await self.ensure_user_wallet_with_cursor(
                                     cursor=cursor,
                                     user_id=int(result["id"]),
-                                    has_free_credits=has_free_credits,
+                                    receives_free_balance=receives_free_balance,
                                 )
                         except Exception as wallet_error:  # noqa: BLE001
                             logger.exception(

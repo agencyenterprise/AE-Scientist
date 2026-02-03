@@ -21,7 +21,9 @@ BEST_PAPER_URL_EXPIRATION = 3600
 
 @router.get("")
 async def get_public_config() -> dict[str, int]:
-    return {"pipeline_monitor_max_runtime_hours": settings.PIPELINE_MONITOR_MAX_RUNTIME_HOURS}
+    return {
+        "pipeline_monitor_max_runtime_hours": settings.research_pipeline.monitor_max_runtime_hours
+    }
 
 
 @router.get("/best-paper-url")
