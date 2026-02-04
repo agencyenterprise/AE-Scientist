@@ -21,9 +21,23 @@ export function Header() {
     <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-8 py-4">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-lg font-semibold text-white">
-            AE Scientist
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/" className="text-lg font-semibold text-white">
+              AE Scientist
+            </Link>
+            <span className="hidden text-sm text-slate-500 sm:inline">·</span>
+            <span className="hidden text-sm text-slate-500 sm:inline">
+              Built by{" "}
+              <a
+                href="https://ae.studio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="!text-slate-500 hover:underline"
+              >
+                AE Studio
+              </a>
+            </span>
+          </div>
           {user && (
             <nav className="flex items-center gap-1">
               <Link
