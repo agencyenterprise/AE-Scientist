@@ -946,6 +946,18 @@ class Outcome(StrEnum):
     partial = "partial"
 
 
+class PaperDownloadResponse(BaseModel):
+    download_url: Annotated[
+        str,
+        Field(
+            description="Temporary signed URL to download the PDF", title="Download Url"
+        ),
+    ]
+    filename: Annotated[
+        str, Field(description="Original filename of the PDF", title="Filename")
+    ]
+
+
 class PaperGenerationProgressEvent(BaseModel):
     step: Annotated[str, Field(title="Step")]
     substep: Annotated[str | None, Field(title="Substep")] = None
@@ -1009,6 +1021,35 @@ class PaperGenerationStepEvent(BaseModel):
     ] = None
 
 
+class PaperReviewStartedResponse(BaseModel):
+    review_id: Annotated[int, Field(description="Unique review ID", title="Review Id")]
+    status: Annotated[str, Field(description="Review status (pending)", title="Status")]
+
+
+class PaperReviewSummary(BaseModel):
+    id: Annotated[int, Field(description="Review ID", title="Id")]
+    status: Annotated[str, Field(description="Review status", title="Status")]
+    summary: Annotated[
+        str | None,
+        Field(description="Paper summary (null if pending)", title="Summary"),
+    ] = None
+    overall: Annotated[
+        int | None,
+        Field(description="Overall score (null if pending)", title="Overall"),
+    ] = None
+    decision: Annotated[
+        str | None,
+        Field(description="Review decision (null if pending)", title="Decision"),
+    ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+
+
 class ParentRunFileInfo(BaseModel):
     s3_key: Annotated[str, Field(title="S3 Key")]
     filename: Annotated[str, Field(title="Filename")]
@@ -1023,6 +1064,26 @@ class ParentRunFilesRequest(BaseModel):
 class ParentRunFilesResponse(BaseModel):
     files: Annotated[list[ParentRunFileInfo], Field(title="Files")]
     expires_in: Annotated[int, Field(title="Expires In")]
+
+
+class PendingReviewSummary(BaseModel):
+    id: Annotated[int, Field(description="Review ID", title="Id")]
+    status: Annotated[str, Field(description="Review status", title="Status")]
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+
+
+class PendingReviewsResponse(BaseModel):
+    reviews: Annotated[
+        list[PendingReviewSummary],
+        Field(description="List of pending reviews", title="Reviews"),
+    ]
+    count: Annotated[int, Field(description="Number of pending reviews", title="Count")]
 
 
 class PresignedUploadUrlRequest(BaseModel):
@@ -2534,6 +2595,16 @@ class PaperReviewDetailResponse(BaseModel):
         int | None,
         Field(description="Cost charged in cents for this review", title="Cost Cents"),
     ] = 0
+
+
+class PaperReviewListResponse(BaseModel):
+    reviews: Annotated[
+        list[PaperReviewSummary],
+        Field(description="List of review summaries", title="Reviews"),
+    ]
+    count: Annotated[
+        int, Field(description="Number of reviews returned", title="Count")
+    ]
 
 
 class ProgressUpdateEvent(BaseModel):

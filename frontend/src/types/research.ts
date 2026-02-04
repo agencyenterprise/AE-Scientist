@@ -121,7 +121,8 @@ export type TreeVizItem = TreeVizItemApi;
 // Frontend detail types
 // ===========================================
 
-export type RunType = "codex_execution" | "runfile_execution";
+// Re-export generated type for backwards compatibility
+export type RunType = components["schemas"]["RunType"];
 
 export interface ResearchRunDetails {
   run: ResearchRunInfo;

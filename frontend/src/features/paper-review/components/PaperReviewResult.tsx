@@ -15,8 +15,12 @@ import {
 } from "lucide-react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
+import type { components } from "@/types/api.gen";
 
-// Local types until API types are generated
+// Use generated type for token usage
+export type TokenUsage = components["schemas"]["TokenUsageResponse"];
+
+// Local types for nested review structure (different from flat API response)
 export interface ReviewContent {
   summary: string;
   strengths: string[];
@@ -34,12 +38,6 @@ export interface ReviewContent {
   overall: number;
   confidence: number;
   decision: string;
-}
-
-export interface TokenUsage {
-  input_tokens: number;
-  cached_input_tokens: number;
-  output_tokens: number;
 }
 
 export interface PaperReviewResponse {

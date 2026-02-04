@@ -7,47 +7,14 @@ import { withAuthHeaders } from "@/shared/lib/session-token";
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
+import type { components } from "@/types/api.gen";
 
 type UploadState = "idle" | "uploading" | "polling" | "complete" | "error";
 
-interface PendingReview {
-  id: number;
-  status: string;
-  original_filename: string;
-  model: string;
-  created_at: string;
-}
-
-interface ReviewDetailResponse {
-  id: number;
-  status: string;
-  error_message?: string | null;
-  summary?: string | null;
-  strengths?: string[] | null;
-  weaknesses?: string[] | null;
-  originality?: number | null;
-  quality?: number | null;
-  clarity?: number | null;
-  significance?: number | null;
-  questions?: string[] | null;
-  limitations?: string[] | null;
-  ethical_concerns?: boolean | null;
-  soundness?: number | null;
-  presentation?: number | null;
-  contribution?: number | null;
-  overall?: number | null;
-  confidence?: number | null;
-  decision?: string | null;
-  original_filename: string;
-  model: string;
-  created_at: string;
-  token_usage?: {
-    input_tokens: number;
-    cached_input_tokens: number;
-    output_tokens: number;
-  } | null;
-  cost_cents?: number;
-}
+// Use generated types from OpenAPI schema
+type ReviewDetailResponse = components["schemas"]["PaperReviewDetailResponse"];
+type PendingReviewSummary = components["schemas"]["PendingReviewSummary"];
+type PaperReviewStartedResponse = components["schemas"]["PaperReviewStartedResponse"];
 
 const POLL_INTERVAL_MS = 3000; // Poll every 3 seconds
 
@@ -98,7 +65,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
           const data = await response.json();
           if (data.reviews && data.reviews.length > 0) {
             // Resume polling for the most recent pending review
-            const pendingReview: PendingReview = data.reviews[0];
+            const pendingReview: PendingReviewSummary = data.reviews[0];
             setCurrentReviewId(pendingReview.id);
             setCurrentReviewFilename(pendingReview.original_filename);
             setCurrentReviewStatus(pendingReview.status);
@@ -261,7 +228,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
       }
 
       // API returns immediately with review_id and status
-      const result = await response.json();
+      const result: PaperReviewStartedResponse = await response.json();
       setCurrentReviewId(result.review_id);
       setCurrentReviewFilename(file.name);
       setCurrentReviewStatus(result.status);

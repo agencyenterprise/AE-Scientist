@@ -3839,6 +3839,22 @@ export interface components {
              */
             exec_time?: number | null;
         };
+        /**
+         * PaperDownloadResponse
+         * @description Response with a temporary download URL for the paper PDF.
+         */
+        PaperDownloadResponse: {
+            /**
+             * Download Url
+             * @description Temporary signed URL to download the PDF
+             */
+            download_url: string;
+            /**
+             * Filename
+             * @description Original filename of the PDF
+             */
+            filename: string;
+        };
         /** PaperGenerationProgressEvent */
         PaperGenerationProgressEvent: {
             /** Step */
@@ -4004,6 +4020,84 @@ export interface components {
              */
             cost_cents: number;
         };
+        /**
+         * PaperReviewListResponse
+         * @description Response for listing paper reviews.
+         */
+        PaperReviewListResponse: {
+            /**
+             * Reviews
+             * @description List of review summaries
+             */
+            reviews: components["schemas"]["PaperReviewSummary"][];
+            /**
+             * Count
+             * @description Number of reviews returned
+             */
+            count: number;
+        };
+        /**
+         * PaperReviewStartedResponse
+         * @description Response when a paper review is started.
+         */
+        PaperReviewStartedResponse: {
+            /**
+             * Review Id
+             * @description Unique review ID
+             */
+            review_id: number;
+            /**
+             * Status
+             * @description Review status (pending)
+             */
+            status: string;
+        };
+        /**
+         * PaperReviewSummary
+         * @description Summary of a paper review for list views.
+         */
+        PaperReviewSummary: {
+            /**
+             * Id
+             * @description Review ID
+             */
+            id: number;
+            /**
+             * Status
+             * @description Review status
+             */
+            status: string;
+            /**
+             * Summary
+             * @description Paper summary (null if pending)
+             */
+            summary?: string | null;
+            /**
+             * Overall
+             * @description Overall score (null if pending)
+             */
+            overall?: number | null;
+            /**
+             * Decision
+             * @description Review decision (null if pending)
+             */
+            decision?: string | null;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+        };
         /** ParentRunFileInfo */
         ParentRunFileInfo: {
             /** S3 Key */
@@ -4026,6 +4120,53 @@ export interface components {
             files: components["schemas"]["ParentRunFileInfo"][];
             /** Expires In */
             expires_in: number;
+        };
+        /**
+         * PendingReviewSummary
+         * @description Summary of a pending/processing review.
+         */
+        PendingReviewSummary: {
+            /**
+             * Id
+             * @description Review ID
+             */
+            id: number;
+            /**
+             * Status
+             * @description Review status
+             */
+            status: string;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+        };
+        /**
+         * PendingReviewsResponse
+         * @description Response for listing pending reviews.
+         */
+        PendingReviewsResponse: {
+            /**
+             * Reviews
+             * @description List of pending reviews
+             */
+            reviews: components["schemas"]["PendingReviewSummary"][];
+            /**
+             * Count
+             * @description Number of pending reviews
+             */
+            count: number;
         };
         /** PresignedUploadUrlRequest */
         PresignedUploadUrlRequest: {
@@ -8957,7 +9098,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8985,12 +9126,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewStartedResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9019,7 +9160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PendingReviewsResponse"];
                 };
             };
         };
@@ -9072,7 +9213,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperDownloadResponse"];
                 };
             };
             /** @description Validation Error */

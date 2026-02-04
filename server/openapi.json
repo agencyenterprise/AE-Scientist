@@ -4379,11 +4379,13 @@
           }
         },
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaperReviewStartedResponse"
+                }
               }
             }
           },
@@ -4433,7 +4435,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaperReviewListResponse"
+                }
               }
             }
           },
@@ -4463,7 +4467,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PendingReviewsResponse"
+                }
               }
             }
           }
@@ -4537,7 +4543,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaperDownloadResponse"
+                }
               }
             }
           },
@@ -8199,6 +8207,27 @@
         "title": "NodeResultEvent",
         "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered when substage_event arrives with node completion\n- Includes metrics from corresponding stage_progress event\n- Emitted for each node that completes (success or failure)\n\nFrequency: 10-50 per stage (varies by stage complexity)"
       },
+      "PaperDownloadResponse": {
+        "properties": {
+          "download_url": {
+            "type": "string",
+            "title": "Download Url",
+            "description": "Temporary signed URL to download the PDF"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename of the PDF"
+          }
+        },
+        "type": "object",
+        "required": [
+          "download_url",
+          "filename"
+        ],
+        "title": "PaperDownloadResponse",
+        "description": "Response with a temporary download URL for the paper PDF."
+      },
       "PaperGenerationProgressEvent": {
         "properties": {
           "step": {
@@ -8626,6 +8655,126 @@
         "title": "PaperReviewDetailResponse",
         "description": "Detailed response for a single paper review."
       },
+      "PaperReviewListResponse": {
+        "properties": {
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/PaperReviewSummary"
+            },
+            "type": "array",
+            "title": "Reviews",
+            "description": "List of review summaries"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of reviews returned"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviews",
+          "count"
+        ],
+        "title": "PaperReviewListResponse",
+        "description": "Response for listing paper reviews."
+      },
+      "PaperReviewStartedResponse": {
+        "properties": {
+          "review_id": {
+            "type": "integer",
+            "title": "Review Id",
+            "description": "Unique review ID"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status (pending)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id",
+          "status"
+        ],
+        "title": "PaperReviewStartedResponse",
+        "description": "Response when a paper review is started."
+      },
+      "PaperReviewSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Review ID"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "Paper summary (null if pending)"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall",
+            "description": "Overall score (null if pending)"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision",
+            "description": "Review decision (null if pending)"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "original_filename",
+          "model",
+          "created_at"
+        ],
+        "title": "PaperReviewSummary",
+        "description": "Summary of a paper review for list views."
+      },
       "ParentRunFileInfo": {
         "properties": {
           "s3_key": {
@@ -8687,6 +8836,69 @@
           "expires_in"
         ],
         "title": "ParentRunFilesResponse"
+      },
+      "PendingReviewSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Review ID"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "original_filename",
+          "model",
+          "created_at"
+        ],
+        "title": "PendingReviewSummary",
+        "description": "Summary of a pending/processing review."
+      },
+      "PendingReviewsResponse": {
+        "properties": {
+          "reviews": {
+            "items": {
+              "$ref": "#/components/schemas/PendingReviewSummary"
+            },
+            "type": "array",
+            "title": "Reviews",
+            "description": "List of pending reviews"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of pending reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reviews",
+          "count"
+        ],
+        "title": "PendingReviewsResponse",
+        "description": "Response for listing pending reviews."
       },
       "PresignedUploadUrlRequest": {
         "properties": {

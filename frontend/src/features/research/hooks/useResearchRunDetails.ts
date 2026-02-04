@@ -23,6 +23,7 @@ import type {
   TerminationStatusData,
   LlmReviewResponse,
 } from "@/types/research";
+import type { ApiComponents } from "@/types";
 import { useResearchRunSSE } from "./useResearchRunSSE";
 import type { InitializationStatusData } from "./useResearchRunSSE";
 
@@ -50,13 +51,9 @@ interface UseResearchRunDetailsReturn {
   handleSeedNewIdea: () => Promise<void>;
 }
 
-interface CodeExecutionCompletionPayload {
-  execution_id: string;
-  run_type: ResearchRunCodeExecution["run_type"];
-  status: "success" | "failed";
-  exec_time: number;
-  completed_at: string;
-}
+// Use generated type for code execution completion event
+type CodeExecutionCompletionPayload =
+  ApiComponents["schemas"]["ResearchRunCodeExecutionCompletedData"];
 
 export interface StageSkipStateEntry {
   reason: string | null;
