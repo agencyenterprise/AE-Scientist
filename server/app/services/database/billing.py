@@ -241,13 +241,15 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                 if transaction_row is None:
                     raise RuntimeError(f"Failed to insert credit transaction for user {user_id}")
 
+                # Create wallet with 0 balance if it doesn't exist.
+                # The UPDATE below will add the amount, avoiding double-credit.
                 await cursor.execute(
                     """
                     INSERT INTO billing_user_wallets (user_id, balance)
-                    VALUES (%s, %s)
+                    VALUES (%s, 0)
                     ON CONFLICT (user_id) DO NOTHING
                     """,
-                    (user_id, max(amount, 0)),
+                    (user_id,),
                 )
                 await cursor.execute(
                     """
@@ -261,6 +263,13 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                 wallet_row = await cursor.fetchone()
                 if wallet_row is None:
                     raise RuntimeError(f"Failed to update wallet balance for user {user_id}")
+
+                # Notify listeners of balance change
+                new_balance = wallet_row["balance"]
+                await cursor.execute(
+                    "SELECT pg_notify('wallet_balance_changed', %s)",
+                    (f"{user_id}:{new_balance}",),
+                )
 
         return CreditTransaction(**transaction_row)
 
@@ -327,30 +336,68 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
         return StripeCheckoutSession(**row)
 
     async def update_stripe_checkout_session_status(
-        self, stripe_session_id: str, status: str
+        self,
+        stripe_session_id: str,
+        status: str,
+        *,
+        expected_status: Optional[str] = None,
     ) -> Optional[StripeCheckoutSession]:
+        """Update a Stripe checkout session status.
+
+        Args:
+            stripe_session_id: The Stripe session ID.
+            status: The new status to set.
+            expected_status: If provided, only update if current status matches.
+                This provides atomic idempotency protection against race conditions.
+
+        Returns:
+            The updated session, or None if not found or status didn't match.
+        """
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    UPDATE billing_stripe_checkout_sessions
-                    SET status = %s, updated_at = NOW()
-                    WHERE stripe_session_id = %s
-                    RETURNING
-                        id,
-                        user_id,
-                        stripe_session_id,
-                        price_id,
-                        status,
-                        amount_added_cents,
-                        amount_cents,
-                        currency,
-                        metadata,
-                        created_at,
-                        updated_at
-                    """,
-                    (status, stripe_session_id),
-                )
+                if expected_status is not None:
+                    # Atomic update: only update if current status matches expected
+                    await cursor.execute(
+                        """
+                        UPDATE billing_stripe_checkout_sessions
+                        SET status = %s, updated_at = NOW()
+                        WHERE stripe_session_id = %s AND status = %s
+                        RETURNING
+                            id,
+                            user_id,
+                            stripe_session_id,
+                            price_id,
+                            status,
+                            amount_added_cents,
+                            amount_cents,
+                            currency,
+                            metadata,
+                            created_at,
+                            updated_at
+                        """,
+                        (status, stripe_session_id, expected_status),
+                    )
+                else:
+                    await cursor.execute(
+                        """
+                        UPDATE billing_stripe_checkout_sessions
+                        SET status = %s, updated_at = NOW()
+                        WHERE stripe_session_id = %s
+                        RETURNING
+                            id,
+                            user_id,
+                            stripe_session_id,
+                            price_id,
+                            status,
+                            amount_added_cents,
+                            amount_cents,
+                            currency,
+                            metadata,
+                            created_at,
+                            updated_at
+                        """,
+                        (status, stripe_session_id),
+                    )
                 row = await cursor.fetchone()
         return StripeCheckoutSession(**row) if row else None
 
@@ -456,3 +503,39 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                     )
 
                 return total_reversed
+
+    async def get_transaction_by_stripe_refund_id(
+        self, refund_id: str
+    ) -> Optional[CreditTransaction]:
+        """Look up a transaction by Stripe refund ID for idempotency checking.
+
+        Args:
+            refund_id: The Stripe refund ID (e.g., 're_xxx').
+
+        Returns:
+            The transaction if found, None otherwise.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        user_id,
+                        amount,
+                        transaction_type,
+                        status,
+                        description,
+                        metadata,
+                        stripe_session_id,
+                        created_at,
+                        updated_at
+                    FROM billing_credit_transactions
+                    WHERE transaction_type = 'refund'
+                      AND metadata->>'refund_id' = %s
+                    LIMIT 1
+                    """,
+                    (refund_id,),
+                )
+                row = await cursor.fetchone()
+        return CreditTransaction(**row) if row else None

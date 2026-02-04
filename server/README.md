@@ -105,12 +105,50 @@ Operations are billed based on actual costs in cents. Users must maintain a mini
 
 | Variable | Description |
 | --- | --- |
-| `STRIPE_SECRET_KEY` | Server-side Stripe key used for Checkout + webhook verification (required) |
-| `STRIPE_WEBHOOK_SECRET` | Secret used to validate `checkout.session.*` events (required) |
-| `STRIPE_CHECKOUT_SUCCESS_URL` | Success redirect URL after checkout (required) |
-| `STRIPE_PRICE_IDS` | Comma-separated list of Stripe price IDs shown as funding options (required) |
+| `STRIPE_SECRET_KEY` | Server-side Stripe API key (starts with `sk_test_` or `sk_live_`) |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret (starts with `whsec_`) |
+| `STRIPE_CHECKOUT_SUCCESS_URL` | Success redirect URL after checkout (e.g., `https://yourapp.com/billing?success=1`) |
+| `STRIPE_PRICE_IDS` | Comma-separated list of Stripe Price IDs to show as funding options |
 
-**Note:** Stripe purchases now use 1:1 mapping - pay $10.00 → get 1000 cents ($10.00) in wallet balance.
+**Note:** Stripe purchases use 1:1 mapping - pay $10.00 → get 1000 cents ($10.00) in wallet balance.
+
+#### Stripe Webhook Setup
+
+1. **Create a webhook endpoint** in the [Stripe Dashboard](https://dashboard.stripe.com/webhooks):
+   - **Endpoint URL**: `https://your-domain.com/api/billing/stripe-webhook`
+   - **API version**: Use your account's default API version
+
+2. **Select the following events** to listen to:
+
+   | Event | Purpose |
+   | --- | --- |
+   | `checkout.session.completed` | Credits wallet when payment succeeds |
+   | `checkout.session.expired` | Marks abandoned checkout sessions |
+   | `refund.created` | Deducts refunded amount from wallet |
+
+3. **Copy the signing secret** (`whsec_...`) and set it as `STRIPE_WEBHOOK_SECRET`
+
+**Local development with Stripe CLI:**
+```bash
+# Install Stripe CLI, then forward webhooks to your local server
+stripe listen --forward-to localhost:8000/api/billing/stripe-webhook
+
+# The CLI will print a webhook signing secret - use it for local testing
+```
+
+#### Creating Stripe Prices
+
+Create one-time prices in the [Stripe Dashboard](https://dashboard.stripe.com/prices) or via CLI:
+```bash
+# Example: Create a $10 funding option
+stripe prices create \
+  --unit-amount 1000 \
+  --currency usd \
+  --product "prod_xxx" \
+  --nickname "\$10 Wallet Funding"
+```
+
+Add the resulting Price IDs (e.g., `price_xxx,price_yyy`) to `STRIPE_PRICE_IDS`.
 
 #### Other Billing Settings
 
