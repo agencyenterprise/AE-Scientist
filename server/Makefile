@@ -21,7 +21,7 @@ lint:
 # Development server
 dev: migrate gen-api-types
 	@echo "🚀 Starting server development server with DEBUG logging..."
-	VIRTUAL_ENV= LOG_LEVEL=DEBUG uv run -m uvicorn app.main:app --reload --reload-dir . --reload-dir ../packages/ae-paper-review
+	VIRTUAL_ENV= LOG_LEVEL=DEBUG uv run -m uvicorn app.main:app --reload --reload-dir . --reload-dir ../packages/ae-paper-review --log-config uvicorn_log_config.json
 
 # OpenAPI export
 export-openapi:
