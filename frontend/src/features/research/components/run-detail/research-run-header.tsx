@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Loader2, Sprout, StopCircle } from "lucide-react";
-import { useRouter, useParams } from "next/navigation";
+import { ArrowLeft, ExternalLink, Loader2, Sprout, StopCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
+import { Button } from "@/shared/components/ui/button";
 
 interface ResearchRunHeaderProps {
   title: string;
@@ -21,9 +22,6 @@ interface ResearchRunHeaderProps {
   seedError?: string | null;
 }
 
-/**
- * Header component for research run detail page
- */
 export function ResearchRunHeader({
   title,
   runNumber,
@@ -40,101 +38,117 @@ export function ResearchRunHeader({
   seedError = null,
 }: ResearchRunHeaderProps) {
   const router = useRouter();
-  const params = useParams();
-  const runId = params?.runId as string;
 
   const canSeedIdea = status === "completed" && conversationId !== null;
 
   return (
-    <div className="flex items-center gap-4">
-      <button
-        onClick={() => router.push("/research")}
-        className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/50 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
-      >
-        <ArrowLeft className="h-5 w-5" />
-      </button>
-      <div className="flex-1">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-white max-w-3xl">{title}</h1>
-          {getStatusBadge(status, "lg")}
-          {(terminationStatus === "requested" || terminationStatus === "in_progress") && (
-            <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-sm font-medium text-amber-200">
-              Terminating
-            </span>
+    <div className="sticky top-0 z-20 -mx-6 -mt-6 mb-4 border-b border-border bg-background/95 px-6 py-4 backdrop-blur-sm">
+      <div className="flex items-center gap-4">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={() => router.push("/research")}
+          aria-label="Back to Research Runs"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-lg font-semibold text-foreground" title={title}>
+              {title}
+            </h1>
+
+            <div className="flex items-center gap-2">
+              {getStatusBadge(status, "sm")}
+
+              {(terminationStatus === "requested" || terminationStatus === "in_progress") && (
+                <span className="inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-200">
+                  Terminating
+                </span>
+              )}
+              {terminationStatus === "terminated" && (
+                <span className="inline-flex items-center rounded-full border border-muted bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  Terminated
+                </span>
+              )}
+              {terminationStatus === "failed" && (
+                <span className="inline-flex items-center rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                  Termination failed
+                </span>
+              )}
+            </div>
+          </div>
+
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {runNumber ? `Run ${runNumber}` : "Run"} · Created {formatRelativeTime(createdAt)}
+          </p>
+        </div>
+
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {conversationId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/conversations/${conversationId}`)}
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span className="hidden sm:inline">View Idea</span>
+            </Button>
           )}
-          {terminationStatus === "terminated" && status !== "completed" && (
-            <span className="inline-flex items-center rounded-full border border-slate-500/40 bg-slate-500/10 px-3 py-1 text-sm font-medium text-slate-200">
-              Terminated
-            </span>
-          )}
-          {terminationStatus === "failed" && (
-            <span className="inline-flex items-center rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-sm font-medium text-red-200">
-              Termination failed
-            </span>
-          )}
-          <button
-            onClick={() => router.push(`/research/${runId}/narrative`)}
-            className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/40 py-1 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10"
-          >
-            <BookOpen className="h-4 w-4" />
-            Narrative
-          </button>
+
           {canSeedIdea && onSeedNewIdea && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onSeedNewIdea}
               disabled={seedPending}
-              className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/40 py-1 text-sm font-medium text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-              title="Create a new idea based on this run"
+              className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
             >
               {seedPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Seeding...
-                </>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <Sprout className="h-4 w-4" />
-                  Seed
-                </>
+                <Sprout className="h-4 w-4" />
               )}
-            </button>
+              <span className="hidden sm:inline">
+                {seedPending ? "Seeding..." : "Seed New Idea"}
+              </span>
+            </Button>
           )}
+
           {canStopRun && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onStopRun}
               disabled={stopPending}
-              className="inline-flex w-28 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-red-500/40 py-1 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
             >
               {stopPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Stopping...
-                </>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <StopCircle className="h-4 w-4" />
-                  Stop
-                </>
+                <StopCircle className="h-4 w-4" />
               )}
-            </button>
+              <span className="hidden sm:inline">{stopPending ? "Stopping..." : "Stop"}</span>
+            </Button>
           )}
         </div>
-        <p className="mt-1 text-sm text-slate-400">
-          {runNumber ? `Run ${runNumber} • ` : ""}
-          Created {formatRelativeTime(createdAt)}
-        </p>
-
-        {stopError && (
-          <p className="mt-2 text-sm text-red-400" role="alert">
-            {stopError}
-          </p>
-        )}
-        {seedError && (
-          <p className="mt-2 text-sm text-red-400" role="alert">
-            {seedError}
-          </p>
-        )}
       </div>
+
+      {(stopError || seedError) && (
+        <div className="mt-2">
+          {stopError && (
+            <p className="text-sm text-destructive" role="alert">
+              {stopError}
+            </p>
+          )}
+          {seedError && (
+            <p className="text-sm text-destructive" role="alert">
+              {seedError}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

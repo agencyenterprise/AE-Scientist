@@ -2,40 +2,41 @@
 
 import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
 import {
-  AutoEvaluationCard,
-  CostDetailsCard,
-  FinalPdfBanner,
-  ImportSourceCard,
-  InitializationStatusBanner,
-  ResearchArtifactsList,
-  ResearchLogsList,
-  ResearchPipelineStages,
-  ResearchRunDetailsGrid,
-  ResearchRunError,
   ResearchRunHeader,
-  ResearchRunStats,
-  ReviewModal,
-  RunTreeCard,
-  TreeVizCard,
+  ResearchSummaryStrip,
+  OverviewTab,
+  TreeTab,
+  ArtifactsTab,
+  LogsTab,
+  EvaluationTab,
+  RunCostTab,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
 import { getCurrentStageAndProgress } from "@/features/research/utils/research-utils";
 import { PageCard } from "@/shared/components/PageCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunListItemApi } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  GitBranch,
+  Layers,
+  Loader2,
+  Package,
+  ScrollText,
+  ShieldCheck,
+  DollarSign,
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function ResearchRunDetailPage() {
   const params = useParams();
   const router = useRouter();
   const runId = params.runId as string;
-
-  const [showReview, setShowReview] = useState(false);
 
   const {
     details,
@@ -48,9 +49,6 @@ export default function ResearchRunDetailPage() {
     stopPending,
     stopError,
     handleStopRun,
-    stageSkipState,
-    skipPendingStage,
-    handleSkipStage,
     seedPending,
     seedError,
     handleSeedNewIdea,
@@ -62,10 +60,9 @@ export default function ResearchRunDetailPage() {
   const { data: runMeta } = useQuery<ResearchRunListItemApi>({
     queryKey: ["researchRunMeta", runId],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/research-runs/{run_id}/", {
+      const { data } = await api.GET("/api/research-runs/{run_id}/", {
         params: { path: { run_id: runId } },
       });
-      if (error) throw new Error("Failed to load run metadata");
       return data as unknown as ResearchRunListItemApi;
     },
     enabled: !!runId,
@@ -89,45 +86,22 @@ export default function ResearchRunDetailPage() {
   const { data: costDetails, isLoading: isLoadingCost } = useQuery<ResearchRunCostResponse>({
     queryKey: ["researchRunCost", runId],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/research-runs/{run_id}/costs", {
+      const { data } = await api.GET("/api/research-runs/{run_id}/costs", {
         params: { path: { run_id: runId } },
       });
-      if (error) throw new Error("Failed to load run costs");
       return data as ResearchRunCostResponse;
     },
     enabled: !!runId,
     refetchInterval: 10000,
   });
 
-  // Auto-fetch evaluation data when conversationId is available
   useEffect(() => {
     if (conversationId !== null && !review && !notFound && !reviewError && !reviewLoading) {
       fetchReview();
     }
   }, [conversationId, review, notFound, reviewError, reviewLoading, fetchReview]);
 
-  const handleTerminateExecution = useCallback(
-    async (executionId: string, feedback: string) => {
-      if (!conversationId) {
-        throw new Error("Conversation not available yet. Please try again in a moment.");
-      }
-      const { error } = await api.POST(
-        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
-        {
-          params: {
-            path: {
-              conversation_id: conversationId,
-              run_id: runId,
-              execution_id: executionId,
-            },
-          },
-          body: { payload: feedback },
-        }
-      );
-      if (error) throw new Error("Failed to terminate execution");
-    },
-    [conversationId, runId]
-  );
+  const [activeTab, setActiveTab] = useState("overview");
 
   if (loading) {
     return (
@@ -157,15 +131,9 @@ export default function ResearchRunDetailPage() {
     stage_progress,
     logs,
     artifacts,
-    substage_events,
     substage_summaries = [],
     paper_generation_progress,
-    best_node_selections = [],
-    code_executions,
   } = details;
-
-  const codexExecution = code_executions?.codex_execution ?? null;
-  const runfileExecution = code_executions?.runfile_execution ?? null;
   const canStopRun =
     conversationId !== null &&
     (run.status === "running" || run.status === "initializing" || run.status === "pending");
@@ -183,12 +151,20 @@ export default function ResearchRunDetailPage() {
 
   const title = runMeta?.idea_title?.trim() || "Untitled";
 
-  // Compute current stage and progress from real-time SSE data
-  // This replicates the backend's SQL logic and updates immediately without page refresh
   const { currentStage, progress: overallProgress } = getCurrentStageAndProgress(
     stage_progress,
     paper_generation_progress
   );
+
+  const hwCostUsd =
+    hwActualCostCents !== null
+      ? hwActualCostCents / 100
+      : hwEstimatedCostCents !== null
+        ? hwEstimatedCostCents / 100
+        : null;
+  const modelCostUsd = costDetails?.total_cost ?? null;
+  const totalCostUsd =
+    hwCostUsd !== null || modelCostUsd !== null ? (hwCostUsd ?? 0) + (modelCostUsd ?? 0) : null;
 
   return (
     <PageCard>
@@ -209,117 +185,108 @@ export default function ResearchRunDetailPage() {
           seedError={seedError}
         />
 
-        <InitializationStatusBanner
-          status={run.status}
-          initializationStatus={run.initialization_status}
-        />
-
-        {run.error_message && <ResearchRunError message={run.error_message} />}
-
-        {runMeta?.conversation_id && (
-          <ImportSourceCard conversationUrl={`/conversations/${runMeta.conversation_id}`} />
-        )}
-
-        {conversationId !== null && (
-          <FinalPdfBanner artifacts={artifacts} conversationId={conversationId} runId={runId} />
-        )}
-
-        <ResearchRunStats
+        <ResearchSummaryStrip
           status={run.status}
           currentStage={currentStage}
           progress={overallProgress}
-          gpuType={run.gpu_type ?? null}
-          artifactsCount={artifacts.length}
+          review={review}
+          reviewLoading={reviewLoading}
+          totalCost={totalCostUsd}
+          isEstimatedCost={hwActualCostCents === null && hwEstimatedCostCents !== null}
+          createdAt={run.created_at}
+          updatedAt={run.updated_at}
         />
 
-        <div className="flex flew-row gap-6">
-          <div className="flex w-full sm:w-[60%]">
-            <ResearchPipelineStages
-              stageProgress={stage_progress}
-              substageEvents={substage_events}
-              substageSummaries={substage_summaries}
-              paperGenerationProgress={paper_generation_progress}
-              bestNodeSelections={best_node_selections ?? []}
-              stageSkipState={stageSkipState}
-              codexExecution={codexExecution}
-              runfileExecution={runfileExecution}
-              runStatus={run.status}
-              onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
-              onSkipStage={conversationId ? handleSkipStage : undefined}
-              skipPendingStage={skipPendingStage}
-              className="max-h-[600px] overflow-y-auto"
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-6 h-auto w-full justify-start gap-1 rounded-lg border border-border bg-muted/50 p-1">
+            <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background">
+              <Layers className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Overview</span>
+            </TabsTrigger>
+            <TabsTrigger value="stages" className="gap-1.5 data-[state=active]:bg-background">
+              <GitBranch className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Research Tree</span>
+            </TabsTrigger>
+            <TabsTrigger value="artifacts" className="gap-1.5 data-[state=active]:bg-background">
+              <Package className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Artifacts</span>
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+                {artifacts.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="gap-1.5 data-[state=active]:bg-background">
+              <ScrollText className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Logs</span>
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+                {logs.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="evaluation" className="gap-1.5 data-[state=active]:bg-background">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Evaluation</span>
+            </TabsTrigger>
+            <TabsTrigger value="runcost" className="gap-1.5 data-[state=active]:bg-background">
+              <DollarSign className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Run & Cost</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview">
+            <OverviewTab
+              run={run}
+              conversationId={conversationId}
+              runId={runId}
+              conversationUrl={
+                runMeta?.conversation_id ? `/conversations/${runMeta.conversation_id}` : null
+              }
+              artifacts={artifacts}
+              review={review}
+              reviewLoading={reviewLoading}
+              onViewEvaluation={() => setActiveTab("evaluation")}
             />
-          </div>
-          <div className="flex flex-col w-full sm:w-[40%] max-h-[600px] overflow-y-auto">
-            <ResearchRunDetailsGrid run={run} conversationId={conversationId} />
+          </TabsContent>
 
-            <div className="mt-4">
-              <RunTreeCard runId={runId} />
-            </div>
-
-            <div className="mt-4">
-              <CostDetailsCard
-                cost={costDetails ?? null}
-                isLoading={isLoadingCost}
-                hwEstimatedCostCents={hwEstimatedCostCents}
-                hwCostPerHourCents={hwCostPerHourCents}
-                hwActualCostCents={hwActualCostCents}
-              />
-            </div>
-
-            {/* Auto Evaluation Card */}
-            <div className="mt-4">
-              <AutoEvaluationCard
-                review={review}
-                loading={reviewLoading}
-                notFound={notFound}
-                error={reviewError}
-                disabled={conversationId === null}
-                onViewDetails={() => setShowReview(true)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-row items-stretch gap-6">
-          <div className="flex w-full sm:w-[60%] max-h-[600px] overflow-y-auto">
-            <ResearchLogsList logs={logs} />
-          </div>
-          <div className="flex w-full sm:w-[40%] max-h-[600px] overflow-y-auto flex-col gap-4">
-            {conversationId !== null ? (
-              <ResearchArtifactsList
-                artifacts={artifacts}
-                conversationId={conversationId}
-                runId={runId}
-              />
-            ) : (
-              <p className="text-sm text-slate-400">Conversation not yet available.</p>
-            )}
-          </div>
-        </div>
-
-        {conversationId !== null && (
-          <div className="w-full">
-            <TreeVizCard
+          <TabsContent value="stages">
+            <TreeTab
               treeViz={details.tree_viz ?? []}
               conversationId={conversationId}
               runId={runId}
               artifacts={artifacts}
               substageSummaries={substage_summaries}
             />
-          </div>
-        )}
-      </div>
+          </TabsContent>
 
-      {showReview && (
-        <ReviewModal
-          review={review}
-          notFound={notFound}
-          error={reviewError}
-          onClose={() => setShowReview(false)}
-          loading={reviewLoading}
-        />
-      )}
+          <TabsContent value="artifacts">
+            <ArtifactsTab artifacts={artifacts} conversationId={conversationId} runId={runId} />
+          </TabsContent>
+
+          <TabsContent value="logs">
+            <LogsTab logs={logs} />
+          </TabsContent>
+
+          <TabsContent value="evaluation">
+            <EvaluationTab
+              review={review}
+              reviewLoading={reviewLoading}
+              reviewNotFound={notFound}
+              reviewError={reviewError}
+              conversationId={conversationId}
+            />
+          </TabsContent>
+
+          <TabsContent value="runcost">
+            <RunCostTab
+              run={run}
+              conversationId={conversationId}
+              costDetails={costDetails ?? null}
+              isLoadingCost={isLoadingCost}
+              hwEstimatedCostCents={hwEstimatedCostCents}
+              hwCostPerHourCents={hwCostPerHourCents}
+              hwActualCostCents={hwActualCostCents}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
     </PageCard>
   );
 }

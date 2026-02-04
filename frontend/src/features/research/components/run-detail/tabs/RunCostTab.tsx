@@ -1,6 +1,6 @@
 "use client";
 
-import { CostDetailsCard } from "../../../components/run-detail/CostDetailsCard";
+import { CostDetailsCard } from "../CostDetailsCard";
 import type { ResearchRunCostResponse } from "@/types";
 import type { ResearchRunInfo } from "@/types/research";
 import { Info } from "lucide-react";

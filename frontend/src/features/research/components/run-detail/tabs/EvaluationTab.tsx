@@ -1,6 +1,6 @@
 "use client";
 
-import { AutoEvaluationCard } from "../../../components/run-detail/AutoEvaluationCard";
+import { AutoEvaluationCard } from "../AutoEvaluationCard";
 import type { LlmReviewResponse } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import { BarChart3, FileText, ThumbsUp, ThumbsDown, HelpCircle, AlertTriangle } from "lucide-react";

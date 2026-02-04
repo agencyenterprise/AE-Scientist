@@ -1,6 +1,6 @@
 "use client";
 
-import { TreeVizCard } from "../../../components/run-detail/tree-viz-card";
+import { TreeVizCard } from "../tree-viz-card";
 import type { ArtifactMetadata, SubstageSummary, TreeVizItem } from "@/types/research";
 
 interface TreeTabProps {

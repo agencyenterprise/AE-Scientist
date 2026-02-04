@@ -21,3 +21,7 @@ export { ReviewScores } from "./review/ReviewScores";
 export { ReviewAnalysis } from "./review/ReviewAnalysis";
 export { CostDetailsCard } from "./CostDetailsCard";
 export { RunTreeCard } from "./RunTreeCard";
+export { ResearchSummaryStrip } from "./ResearchSummaryStrip";
+export { StageTimeline } from "./StageTimeline";
+export { ResearchActivityFeed } from "./ResearchActivityFeed";
+export * from "./tabs";
