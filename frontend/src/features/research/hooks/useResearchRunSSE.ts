@@ -23,10 +23,9 @@ import type {
 
 export type { ResearchRunDetails };
 
-export interface InitializationStatusData {
-  initialization_status: string;
-  updated_at: string;
-}
+// Re-export generated type for backwards compatibility
+export type InitializationStatusData =
+  ApiComponents["schemas"]["ResearchRunInitializationStatusData"];
 
 interface UseResearchRunSSEOptions {
   runId: string;
@@ -58,13 +57,8 @@ interface UseResearchRunSSEReturn {
   disconnect: () => void;
 }
 
-interface CodeExecutionCompletionEvent {
-  execution_id: string;
-  run_type: ResearchRunCodeExecution["run_type"];
-  status: "success" | "failed";
-  exec_time: number;
-  completed_at: string;
-}
+// Use generated type instead of manual definition
+type CodeExecutionCompletionEvent = ApiCodeExecutionCompletedData;
 
 type InitialEventData = Extract<ResearchRunStreamEvent, { type: "initial" }>["data"];
 type InitialRunInfo = InitialEventData["run"];
@@ -433,14 +427,7 @@ export function useResearchRunSSE({
                 break;
               case "code_execution_completed":
                 if (onCodeExecutionCompleted) {
-                  const completed = event.data as ApiCodeExecutionCompletedData;
-                  onCodeExecutionCompleted({
-                    execution_id: completed.execution_id,
-                    run_type: completed.run_type ?? "codex_execution",
-                    status: completed.status,
-                    exec_time: completed.exec_time,
-                    completed_at: completed.completed_at,
-                  });
+                  onCodeExecutionCompleted(event.data as ApiCodeExecutionCompletedData);
                 }
                 break;
               case "stage_skip_window":

@@ -42,6 +42,9 @@ export type ResearchRunCodeExecution = components["schemas"]["ResearchRunCodeExe
 export type HwCostEstimateData = components["schemas"]["ResearchRunHwCostEstimateData"];
 export type HwCostActualData = components["schemas"]["ResearchRunHwCostActualData"];
 
+// Termination status
+export type TerminationStatusData = components["schemas"]["ResearchRunTerminationStatusData"];
+
 // LLM Review
 export type LlmReviewResponse = components["schemas"]["LlmReviewResponse"];
 
@@ -138,28 +141,15 @@ export interface ResearchRunDetails {
 }
 
 // ===========================================
-// SSE Event types
+// SSE Event types (re-export generated types for backwards compatibility)
 // ===========================================
 
-export interface TerminationStatusData {
-  status: ResearchRunTerminationStatus;
-  last_error?: string | null;
-}
+export type TerminationStatusStreamEvent =
+  components["schemas"]["ResearchRunTerminationStatusEvent"];
 
-export interface TerminationStatusStreamEvent {
-  type: "termination_status";
-  data: TerminationStatusData;
-}
+export type HwCostEstimateEvent = components["schemas"]["ResearchRunHwCostEstimateEvent"];
 
-export interface HwCostEstimateEvent {
-  type: "hw_cost_estimate";
-  data: HwCostEstimateData;
-}
-
-export interface HwCostActualEvent {
-  type: "hw_cost_actual";
-  data: HwCostActualData;
-}
+export type HwCostActualEvent = components["schemas"]["ResearchRunHwCostActualEvent"];
 
 // ===========================================
 // Node summary types

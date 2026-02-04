@@ -100,9 +100,8 @@ export function isErrorResponse(response: unknown): response is ErrorResponse {
 // Request types
 // ============================================================================
 
-export interface UpdateSummaryRequest {
-  summary: string;
-}
+// Re-export generated type for backwards compatibility
+export type UpdateSummaryRequest = components["schemas"]["ImportedConversationSummaryUpdate"];
 
 // Helpers for new summary API
 export function extractSummary(resp: { summary?: string } | ErrorResponse): string | null {

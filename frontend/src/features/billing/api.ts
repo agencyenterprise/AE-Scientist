@@ -9,6 +9,8 @@ export type CreditTransaction = components["schemas"]["CreditTransactionModel"];
 export type WalletResponse = components["schemas"]["BillingWalletResponse"];
 export type FundingOption = components["schemas"]["FundingOptionModel"];
 export type FundingOptionListResponse = components["schemas"]["FundingOptionListResponse"];
+export type CheckoutSessionCreateRequest = components["schemas"]["CheckoutSessionCreateRequest"];
+export type CheckoutSessionCreateResponse = components["schemas"]["CheckoutSessionCreateResponse"];
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {
   const { data, error } = await api.GET("/api/public-config");
@@ -63,14 +65,12 @@ export async function fetchFundingOptions(): Promise<FundingOptionListResponse> 
   return data as FundingOptionListResponse;
 }
 
-export async function createCheckoutSession(payload: {
-  price_id: string;
-  success_url: string;
-  cancel_url: string;
-}): Promise<{ checkout_url: string }> {
+export async function createCheckoutSession(
+  payload: CheckoutSessionCreateRequest
+): Promise<CheckoutSessionCreateResponse> {
   const { data, error } = await api.POST("/api/billing/checkout-session", {
     body: payload,
   });
   if (error) throw new Error("Failed to create checkout session");
-  return data as { checkout_url: string };
+  return data as CheckoutSessionCreateResponse;
 }
