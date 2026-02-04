@@ -7,6 +7,7 @@ All amounts are in cents (e.g., 100 = $1.00).
 import logging
 from typing import Dict, List, Optional
 
+import sentry_sdk
 from fastapi import HTTPException, status
 
 from app.config import settings
@@ -37,8 +38,14 @@ def _calculate_llm_cost_cents(token_usages: List[BaseLlmTokenUsage]) -> int:
                 model_key
             )
             output_price_cents_per_million = settings.llm_pricing.get_output_price(model_key)
-        except ValueError:
-            # If pricing not found for this model, skip it
+        except ValueError as exc:
+            # If pricing not found for this model, log to Sentry so we can add it
+            logger.warning("LLM pricing not configured for model %s: %s", model_key, exc)
+            sentry_sdk.capture_message(
+                f"LLM usage not charged - pricing not configured for model {model_key}. "
+                f"Tokens used: input={tu.input_tokens}, output={tu.output_tokens}",
+                level="error",
+            )
             continue
 
         input_cost_cents = (

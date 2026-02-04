@@ -322,6 +322,12 @@ class BillingService:
             payment_intent_id = pi if isinstance(pi, str) else (pi.id if pi else None)
         except Exception as exc:
             logger.warning("Failed to retrieve charge %s: %s", charge_id, exc)
+            sentry_sdk.capture_exception(exc)
+            sentry_sdk.capture_message(
+                f"Refund {refund_id} not processed - failed to retrieve charge {charge_id}. "
+                "Customer may have credits but refund not reflected in wallet.",
+                level="error",
+            )
             return
 
         if not payment_intent_id:
