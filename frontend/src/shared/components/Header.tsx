@@ -81,7 +81,9 @@ export function Header() {
             >
               <span className="text-xs uppercase tracking-wide text-slate-400">Balance</span>
               <span className="font-semibold text-white">
-                {isLoading ? "…" : `$${balanceDollars.toFixed(2)}`}
+                {isLoading
+                  ? "…"
+                  : `$${balanceDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               </span>
             </Link>
           )}
