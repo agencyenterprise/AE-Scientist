@@ -32,8 +32,10 @@ export function TreeVizCard({
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
 
-  // Track whether user has manually selected a stage (null = auto-follow mode)
-  const [manuallySelectedStageId, setManuallySelectedStageId] = useState<string | null>(null);
+  // Track the selected stage ID (defaults to Full Tree view)
+  const [manuallySelectedStageId, setManuallySelectedStageId] = useState<string | null>(
+    FULL_TREE_STAGE_ID
+  );
 
   // Compute the most recent stage ID
   const mostRecentStageId = useMemo(() => {
