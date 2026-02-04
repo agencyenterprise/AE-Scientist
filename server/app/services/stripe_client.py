@@ -37,3 +37,19 @@ class StripeClient:
             metadata=metadata,
             allow_promotion_codes=True,
         )
+
+    def get_checkout_session_by_payment_intent(
+        self, payment_intent_id: str
+    ) -> stripe.checkout.Session | None:
+        """Retrieve a checkout session by its payment intent ID.
+
+        Args:
+            payment_intent_id: The Stripe payment intent ID.
+
+        Returns:
+            The checkout session if found, None otherwise.
+        """
+        sessions = stripe.checkout.Session.list(payment_intent=payment_intent_id, limit=1)
+        if sessions.data:
+            return sessions.data[0]
+        return None

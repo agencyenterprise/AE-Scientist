@@ -215,14 +215,26 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         )
     try:
         event = stripe.Webhook.construct_event(payload, signature, webhook_secret)
-        logger.debug("Stripe webhook event received: %s", event["type"])
+        event_type = event["type"]
+        event_id = event.get("id", "unknown")
+        logger.info("Stripe webhook received: type=%s, event_id=%s", event_type, event_id)
         await service.handle_webhook(event)
+        logger.info(
+            "Stripe webhook processed successfully: type=%s, event_id=%s", event_type, event_id
+        )
     except ValueError as exc:
-        logger.warning("Stripe webhook signature invalid: %s", exc)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        logger.warning("Stripe webhook payload invalid (JSON decode error): %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload"
+        ) from exc
+    except stripe.SignatureVerificationError as exc:
+        logger.warning("Stripe webhook signature verification failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature"
+        ) from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("Stripe webhook handling error: %s", exc)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook error"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook processing error"
         ) from exc
     return JSONResponse({"received": True})
