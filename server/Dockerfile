@@ -61,4 +61,4 @@ ENV RESEARCH_PIPELINE_PATH=/research_pipeline
 EXPOSE 8000
 
 # Start the application (run migrations, upload code tarball, then start uvicorn)
-CMD ["sh", "-c", "uv run migrate.py upgrade && uv run python upload_code_tarball.py && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 10 --log-config uvicorn_log_config.json"]
+CMD ["sh", "-c", "uv run migrate.py upgrade && uv run python upload_code_tarball.py && uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 8 --log-config uvicorn_log_config.json"]
