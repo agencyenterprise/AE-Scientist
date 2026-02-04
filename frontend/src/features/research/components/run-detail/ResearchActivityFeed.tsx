@@ -40,6 +40,10 @@ interface StageGroup {
   progress: number;
   startTime: string | null;
   endTime: string | null;
+  /** Max iterations for this stage (from progress_update events) */
+  maxNodes: number | null;
+  /** Current iteration number */
+  currentIteration: number | null;
 }
 
 function parseSseFrame(text: string): ParsedSseFrame | null {
@@ -145,6 +149,14 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     const endTime =
       isCompleted && timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
 
+    // Get max_iterations and current iteration from progress_update events
+    let maxNodes: number | null = null;
+    let currentIteration: number | null = null;
+    if (lastProgress && "max_iterations" in lastProgress && "iteration" in lastProgress) {
+      maxNodes = lastProgress.max_iterations as number;
+      currentIteration = lastProgress.iteration as number;
+    }
+
     return {
       stageId,
       stageName: getStageName(stageId),
@@ -153,6 +165,8 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       progress,
       startTime,
       endTime,
+      maxNodes,
+      currentIteration,
     };
   });
 }
@@ -365,6 +379,11 @@ function StageSection({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-foreground">{stage.stageName}</span>
               {statusBadge[stage.status]}
+              {stage.currentIteration !== null && stage.maxNodes !== null && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
+                  {stage.currentIteration}/{stage.maxNodes} iterations
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
