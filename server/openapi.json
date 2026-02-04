@@ -265,7 +265,7 @@
           "billing"
         ],
         "summary": "Stream Wallet",
-        "description": "Stream wallet balance updates for the authenticated user.\nEmits a balance event (in cents) when the balance changes and a heartbeat periodically.",
+        "description": "Stream wallet balance updates for the authenticated user.\nUses PostgreSQL LISTEN/NOTIFY for efficient real-time updates.\nEmits a balance event (in cents) when the balance changes and a heartbeat periodically.",
         "operationId": "stream_wallet_api_billing_wallet_stream_get",
         "responses": {
           "200": {

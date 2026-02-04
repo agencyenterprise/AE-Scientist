@@ -30,6 +30,7 @@ class UserData(NamedTuple):
     created_at: datetime
     updated_at: datetime
     mcp_api_key: Optional[str] = None
+    stripe_customer_id: Optional[str] = None
 
 
 def should_give_free_balance(email: str) -> bool:
@@ -74,7 +75,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET email = EXCLUDED.email,
                             name = EXCLUDED.name,
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
                         """
                 if clerk_user_id is not None
                 else """
@@ -84,7 +85,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET name = EXCLUDED.name,
                             clerk_user_id = COALESCE(users.clerk_user_id, EXCLUDED.clerk_user_id),
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
                         """
             )
             async with self.aget_connection() as conn:
@@ -137,7 +138,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                is_active,
                                created_at,
                                updated_at,
-                               mcp_api_key
+                               mcp_api_key,
+                               stripe_customer_id
                         FROM users
                         WHERE clerk_user_id = %s
                           AND is_active = TRUE
@@ -172,7 +174,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                is_active,
                                created_at,
                                updated_at,
-                               mcp_api_key
+                               mcp_api_key,
+                               stripe_customer_id
                         FROM users
                         WHERE email = %s
                           AND is_active = TRUE
@@ -207,7 +210,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                is_active,
                                created_at,
                                updated_at,
-                               mcp_api_key
+                               mcp_api_key,
+                               stripe_customer_id
                         FROM users
                         WHERE id = %s
                         """,
@@ -250,7 +254,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                             updated_at    = NOW()
                         WHERE id = %s
                           AND is_active = TRUE
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
+                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
                         """,
                         (email, name, clerk_user_id, user_id),
                     )
@@ -304,7 +308,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.mcp_api_key
+                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.mcp_api_key, u.stripe_customer_id
                         FROM users u
                                  JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
@@ -370,7 +374,7 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key
+                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
                         FROM users
                         WHERE is_active = TRUE
                         ORDER BY name ASC
@@ -404,7 +408,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                is_active,
                                created_at,
                                updated_at,
-                               mcp_api_key
+                               mcp_api_key,
+                               stripe_customer_id
                         FROM users
                         WHERE mcp_api_key = %s
                           AND is_active = TRUE
@@ -467,3 +472,31 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
         except Exception as e:
             logger.exception(f"Error getting MCP API key: {e}")
             return None
+
+    async def set_user_stripe_customer_id(self, user_id: int, stripe_customer_id: str) -> bool:
+        """
+        Set the Stripe customer ID for a user.
+
+        Args:
+            user_id: Database user ID
+            stripe_customer_id: The Stripe customer ID to set
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            async with self.aget_connection() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        UPDATE users
+                        SET stripe_customer_id = %s,
+                            updated_at = NOW()
+                        WHERE id = %s AND is_active = TRUE
+                        """,
+                        (stripe_customer_id, user_id),
+                    )
+                    return cursor.rowcount > 0
+        except Exception as e:
+            logger.exception(f"Error setting Stripe customer ID: {e}")
+            return False

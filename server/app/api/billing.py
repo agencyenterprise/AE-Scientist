@@ -7,7 +7,6 @@ All amounts are in cents (e.g., 100 = $1.00).
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional, cast
 
 import stripe
@@ -156,6 +155,7 @@ async def create_checkout_session(
 async def stream_wallet(request: Request) -> StreamingResponse:
     """
     Stream wallet balance updates for the authenticated user.
+    Uses PostgreSQL LISTEN/NOTIFY for efficient real-time updates.
     Emits a balance event (in cents) when the balance changes and a heartbeat periodically.
     """
     user = get_current_user(request)
@@ -163,27 +163,57 @@ async def stream_wallet(request: Request) -> StreamingResponse:
 
     async def event_generator() -> AsyncGenerator[str, None]:
         last_balance: int | None = None
-        last_heartbeat = datetime.now(timezone.utc)
 
-        while True:
-            if await request.is_disconnected():
-                logger.debug("Wallet SSE client disconnected for user_id=%s", user.id)
-                break
+        # Send initial balance
+        balance = await db.get_user_wallet_balance(user.id)
+        payload = {"type": "balance", "data": {"balance_cents": balance}}
+        yield f"data: {json.dumps(payload)}\n\n"
+        last_balance = balance
 
-            balance = await db.get_user_wallet_balance(user.id)
-            if last_balance is None or balance != last_balance:
-                # Send balance in cents
-                payload = {"type": "balance", "data": {"balance_cents": balance}}
-                yield f"data: {json.dumps(payload)}\n\n"
-                last_balance = balance
-                last_heartbeat = datetime.now(timezone.utc)
+        # Get a dedicated connection for LISTEN
+        async with db.aget_connection() as conn:
+            try:
+                await conn.execute("LISTEN wallet_balance_changed")
 
-            now = datetime.now(timezone.utc)
-            if (now - last_heartbeat).total_seconds() >= 30:
-                yield 'data: {"type":"heartbeat"}\n\n'
-                last_heartbeat = now
+                while True:
+                    if await request.is_disconnected():
+                        logger.debug("Wallet SSE client disconnected for user_id=%s", user.id)
+                        break
 
-            await asyncio.sleep(5)
+                    # Wait for notification with timeout for heartbeat
+                    try:
+                        notify = await asyncio.wait_for(
+                            conn.notifies().__anext__(),
+                            timeout=30.0,
+                        )
+                        # Parse notification payload: "user_id:balance"
+                        parts = notify.payload.split(":", 1)
+                        if len(parts) == 2:
+                            notified_user_id, new_balance_str = parts
+                            if int(notified_user_id) == user.id:
+                                new_balance = int(new_balance_str)
+                                if new_balance != last_balance:
+                                    payload = {
+                                        "type": "balance",
+                                        "data": {"balance_cents": new_balance},
+                                    }
+                                    yield f"data: {json.dumps(payload)}\n\n"
+                                    last_balance = new_balance
+                    except asyncio.TimeoutError:
+                        # Send heartbeat on timeout
+                        yield 'data: {"type":"heartbeat"}\n\n'
+                    except StopAsyncIteration:
+                        # Connection closed
+                        break
+            except asyncio.CancelledError:
+                # Client disconnected - clean up gracefully
+                logger.debug("Wallet SSE cancelled for user_id=%s", user.id)
+            finally:
+                # Ensure UNLISTEN before connection returns to pool
+                try:
+                    await conn.execute("UNLISTEN wallet_balance_changed")
+                except Exception:
+                    pass  # Connection may already be closed
 
     return StreamingResponse(
         event_generator(),

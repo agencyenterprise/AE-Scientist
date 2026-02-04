@@ -216,6 +216,7 @@ export interface paths {
         /**
          * Stream Wallet
          * @description Stream wallet balance updates for the authenticated user.
+         *     Uses PostgreSQL LISTEN/NOTIFY for efficient real-time updates.
          *     Emits a balance event (in cents) when the balance changes and a heartbeat periodically.
          */
         get: operations["stream_wallet_api_billing_wallet_stream_get"];

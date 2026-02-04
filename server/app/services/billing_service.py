@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional, cast
 
+import sentry_sdk
 import stripe
 from fastapi import HTTPException, status
 from stripe import Event
@@ -92,6 +93,7 @@ class BillingService:
                 price = await asyncio.to_thread(self._stripe().retrieve_price, price_id)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.exception("Failed to retrieve price %s: %s", price_id, exc)
+                sentry_sdk.capture_exception(exc)
                 continue
 
             amount_cents = getattr(price, "unit_amount", None)
@@ -100,6 +102,10 @@ class BillingService:
 
             if amount_cents is None:
                 logger.warning("Stripe price %s missing unit_amount; skipping.", price_id)
+                sentry_sdk.capture_message(
+                    f"Stripe price {price_id} missing unit_amount",
+                    level="warning",
+                )
                 continue
 
             options.append(
@@ -168,9 +174,21 @@ class BillingService:
         )
         resolved_cancel_url = cancel_url or f"{settings.server.frontend_url.rstrip('/')}/billing"
 
+        # Get or create Stripe customer
+        stripe_customer_id = user.stripe_customer_id
+        if not stripe_customer_id:
+            customer = await asyncio.to_thread(
+                self._stripe().create_customer,
+                email=user.email,
+                name=user.name,
+            )
+            stripe_customer_id = customer.id
+            await self.db.set_user_stripe_customer_id(user.id, stripe_customer_id)
+            logger.debug("Created Stripe customer %s for user %s", stripe_customer_id, user.id)
+
         session = await asyncio.to_thread(
             self._stripe().create_checkout_session,
-            customer_email=user.email,
+            customer=stripe_customer_id,
             price_id=price_id,
             success_url=resolved_success_url,
             cancel_url=resolved_cancel_url,
@@ -204,6 +222,14 @@ class BillingService:
         if event_type == "checkout.session.completed":
             session_object = event["data"]["object"]
             session_id = session_object["id"]
+            payment_status = session_object.get("payment_status")
+            if payment_status != "paid":
+                logger.warning(
+                    "Stripe session %s completed but payment_status=%s; skipping fulfillment.",
+                    session_id,
+                    payment_status,
+                )
+                return
             await self._complete_checkout_session(session_id)
         elif event_type == "checkout.session.expired":
             session_object = event["data"]["object"]
