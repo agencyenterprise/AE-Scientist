@@ -99,6 +99,7 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     pod_id: run.pod_id ?? null,
     pod_name: run.pod_name ?? null,
     gpu_type: run.gpu_type ?? null,
+    cost: (run as unknown as { cost?: number }).cost ?? 0,
     public_ip: run.public_ip ?? null,
     ssh_port: run.ssh_port ?? null,
     pod_host_id: run.pod_host_id ?? null,
@@ -111,6 +112,11 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     termination_status,
     termination_last_error: terminationRaw.termination_last_error ?? null,
     parent_run_id: (run as unknown as { parent_run_id?: string | null }).parent_run_id ?? null,
+    restart_count: (run as unknown as { restart_count?: number }).restart_count ?? 0,
+    last_restart_at:
+      (run as unknown as { last_restart_at?: string | null }).last_restart_at ?? null,
+    last_restart_reason:
+      (run as unknown as { last_restart_reason?: string | null }).last_restart_reason ?? null,
   };
 }
 

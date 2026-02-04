@@ -3,41 +3,17 @@
 import { api } from "@/shared/lib/api-client-typed";
 import type { components } from "@/types/api.gen";
 
+// Use generated types from OpenAPI schema
 export type PublicConfig = components["schemas"]["PublicConfigResponse"];
+export type CreditTransaction = components["schemas"]["CreditTransactionModel"];
+export type WalletResponse = components["schemas"]["BillingWalletResponse"];
+export type FundingOption = components["schemas"]["FundingOptionModel"];
+export type FundingOptionListResponse = components["schemas"]["FundingOptionListResponse"];
 
 export async function fetchPublicConfig(): Promise<PublicConfig> {
   const { data, error } = await api.GET("/api/public-config");
   if (error) throw new Error("Failed to fetch public config");
   return data;
-}
-
-export interface CreditTransaction {
-  id: number;
-  amount_cents: number;
-  transaction_type: string;
-  status: string;
-  description?: string | null;
-  metadata: Record<string, unknown>;
-  stripe_session_id?: string | null;
-  created_at: string;
-}
-
-export interface WalletResponse {
-  balance_cents: number;
-  transactions: CreditTransaction[];
-  total_count: number;
-}
-
-export interface FundingOption {
-  price_id: string;
-  amount_cents: number;
-  currency: string;
-  unit_amount: number;
-  nickname: string;
-}
-
-export interface FundingOptionListResponse {
-  options: FundingOption[];
 }
 
 export const TRANSACTION_TYPES = [

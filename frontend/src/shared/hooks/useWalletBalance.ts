@@ -23,7 +23,7 @@ export function useWalletBalance(): WalletBalanceResult {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["billing", "wallet-balance"],
-    queryFn: fetchWallet,
+    queryFn: () => fetchWallet({ limit: 1 }), // Only need balance, minimal transactions
     staleTime: 30_000,
     enabled: isAuthenticated,
   });

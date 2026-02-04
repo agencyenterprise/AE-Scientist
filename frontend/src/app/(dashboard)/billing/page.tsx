@@ -30,7 +30,11 @@ function formatCurrency(amountCents?: number | null, currency?: string | null): 
   return formatter.format(amountCents / 100);
 }
 
-function getSourceLink(metadata: Record<string, unknown>): { label: string; href: string } | null {
+function getSourceLink(
+  metadata: Record<string, unknown> | undefined
+): { label: string; href: string } | null {
+  if (!metadata) return null;
+
   const runId = metadata.run_id as string | undefined;
   const conversationId = metadata.conversation_id as number | undefined;
   const paperReviewId = metadata.paper_review_id as number | undefined;

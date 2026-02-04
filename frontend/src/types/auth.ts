@@ -2,22 +2,18 @@
  * Authentication-related TypeScript types.
  */
 
-export interface User {
-  id: number;
-  email: string;
-  name: string;
-}
+import type { components } from "./api.gen";
 
+// Re-export generated types for backwards compatibility
+export type User = components["schemas"]["AuthUser"];
+export type AuthStatus = components["schemas"]["AuthStatus"];
+
+// Frontend-only types for React context state management
 export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: User | null;
   error: string | null;
-}
-
-export interface AuthStatus {
-  authenticated: boolean;
-  user?: User;
 }
 
 export interface AuthContextValue extends AuthState {

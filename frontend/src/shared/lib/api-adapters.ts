@@ -13,6 +13,7 @@ import type {
   ConversationDetail,
   FileAttachment,
 } from "@/types";
+import type { components } from "@/types/api.gen";
 
 // ============================================================================
 // Frontend-friendly types
@@ -128,19 +129,18 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     status: apiRun.status,
     initializationStatus: apiRun.initialization_status,
     ideaTitle: apiRun.idea_title,
-    ideaMarkdown: apiRun.idea_hypothesis, // Backend uses 'idea_hypothesis' but it's actually full markdown
-    currentStage: apiRun.current_stage,
-    progress: apiRun.progress,
-    gpuType: apiRun.gpu_type,
-    bestMetric: apiRun.best_metric,
+    ideaMarkdown: apiRun.idea_hypothesis ?? null, // Backend uses 'idea_hypothesis' but it's actually full markdown
+    currentStage: apiRun.current_stage ?? null,
+    progress: apiRun.progress ?? null,
+    gpuType: apiRun.gpu_type ?? null,
+    bestMetric: apiRun.best_metric ?? null,
     createdByName: apiRun.created_by_name,
     createdAt: apiRun.created_at,
     updatedAt: apiRun.updated_at,
     artifactsCount: apiRun.artifacts_count,
-    errorMessage: apiRun.error_message,
+    errorMessage: apiRun.error_message ?? null,
     conversationId: apiRun.conversation_id,
-    conversationUrl: apiRun.conversation_url,
-    parentRunId: apiRun.parent_run_id,
+    parentRunId: apiRun.parent_run_id ?? null,
   };
 }
 
@@ -148,7 +148,7 @@ export function convertApiResearchRunList(
   apiResponse: ResearchRunListResponseApi
 ): ResearchRunListResponse {
   return {
-    items: apiResponse.items.map(convertApiResearchRun),
+    items: (apiResponse.items ?? []).map(convertApiResearchRun),
     total: apiResponse.total,
   };
 }
@@ -159,14 +159,11 @@ export function convertApiResearchRunList(
 
 import { api } from "./api-client-typed";
 
-export interface UserListItem {
-  id: number;
-  email: string;
-  name: string;
-}
+// Re-export generated type for backwards compatibility
+export type UserListItem = components["schemas"]["UserListItem"];
 
 export async function fetchUsers(): Promise<UserListItem[]> {
   const { data, error } = await api.GET("/api/users/");
   if (error) throw new Error("Failed to fetch users");
-  return (data?.items as UserListItem[]) ?? [];
+  return data?.items ?? [];
 }

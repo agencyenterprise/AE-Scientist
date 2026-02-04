@@ -2105,6 +2105,18 @@ class TokenUsagePayload(BaseModel):
     event: TokenUsageEvent
 
 
+class TokenUsageResponse(BaseModel):
+    input_tokens: Annotated[
+        int, Field(description="Total input tokens used", title="Input Tokens")
+    ]
+    cached_input_tokens: Annotated[
+        int, Field(description="Cached input tokens", title="Cached Input Tokens")
+    ]
+    output_tokens: Annotated[
+        int, Field(description="Total output tokens used", title="Output Tokens")
+    ]
+
+
 class TreeVizItem(BaseModel):
     id: Annotated[int, Field(description="Tree viz identifier", title="Id")]
     run_id: Annotated[str, Field(description="Research run identifier", title="Run Id")]
@@ -2467,6 +2479,61 @@ class NodeResultEvent(BaseModel):
     exec_time: Annotated[
         float | None, Field(description="Execution time in seconds", title="Exec Time")
     ] = None
+
+
+class PaperReviewDetailResponse(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    status: Annotated[
+        str,
+        Field(
+            description="Review status: pending, processing, completed, failed",
+            title="Status",
+        ),
+    ]
+    error_message: Annotated[
+        str | None,
+        Field(description="Error message if status is failed", title="Error Message"),
+    ] = None
+    summary: Annotated[
+        str | None,
+        Field(description="Paper summary (null if not completed)", title="Summary"),
+    ] = None
+    strengths: Annotated[
+        list[str] | None,
+        Field(
+            description="List of strengths (null if not completed)", title="Strengths"
+        ),
+    ] = None
+    weaknesses: Annotated[
+        list[str] | None,
+        Field(
+            description="List of weaknesses (null if not completed)", title="Weaknesses"
+        ),
+    ] = None
+    originality: Annotated[int | None, Field(title="Originality")] = None
+    quality: Annotated[int | None, Field(title="Quality")] = None
+    clarity: Annotated[int | None, Field(title="Clarity")] = None
+    significance: Annotated[int | None, Field(title="Significance")] = None
+    questions: Annotated[list[str] | None, Field(title="Questions")] = None
+    limitations: Annotated[list[str] | None, Field(title="Limitations")] = None
+    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
+    soundness: Annotated[int | None, Field(title="Soundness")] = None
+    presentation: Annotated[int | None, Field(title="Presentation")] = None
+    contribution: Annotated[int | None, Field(title="Contribution")] = None
+    overall: Annotated[int | None, Field(title="Overall")] = None
+    confidence: Annotated[int | None, Field(title="Confidence")] = None
+    decision: Annotated[str | None, Field(title="Decision")] = None
+    original_filename: Annotated[str, Field(title="Original Filename")]
+    model: Annotated[str, Field(title="Model")]
+    created_at: Annotated[str, Field(title="Created At")]
+    token_usage: Annotated[
+        TokenUsageResponse | None,
+        Field(description="Token usage (null if not completed)"),
+    ] = None
+    cost_cents: Annotated[
+        int | None,
+        Field(description="Cost charged in cents for this review", title="Cost Cents"),
+    ] = 0
 
 
 class ProgressUpdateEvent(BaseModel):

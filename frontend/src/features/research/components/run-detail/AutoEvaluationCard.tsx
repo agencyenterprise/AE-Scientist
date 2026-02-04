@@ -39,6 +39,12 @@ const DECISION_CONFIG = {
   },
 } as const;
 
+type DecisionKey = keyof typeof VERDICT_CONFIG;
+
+function isValidDecision(decision: string): decision is DecisionKey {
+  return decision === "Accept" || decision === "Reject";
+}
+
 /**
  * AutoEvaluationCard Component
  *
@@ -140,8 +146,15 @@ export function AutoEvaluationCard({
               <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">
                 Verdict
               </div>
-              <div className={cn("text-2xl font-bold", VERDICT_CONFIG[review.decision].className)}>
-                {VERDICT_CONFIG[review.decision].label}
+              <div
+                className={cn(
+                  "text-2xl font-bold",
+                  isValidDecision(review.decision)
+                    ? VERDICT_CONFIG[review.decision].className
+                    : "text-slate-400"
+                )}
+              >
+                {isValidDecision(review.decision) ? VERDICT_CONFIG[review.decision].label : "—"}
               </div>
             </div>
 
@@ -159,7 +172,14 @@ export function AutoEvaluationCard({
               <div className="text-xs font-medium uppercase tracking-wide text-slate-400 mb-1">
                 Decision
               </div>
-              <div className={cn("text-2xl font-bold", DECISION_CONFIG[review.decision].className)}>
+              <div
+                className={cn(
+                  "text-2xl font-bold",
+                  isValidDecision(review.decision)
+                    ? DECISION_CONFIG[review.decision].className
+                    : "text-slate-400"
+                )}
+              >
                 {review.decision}
               </div>
             </div>

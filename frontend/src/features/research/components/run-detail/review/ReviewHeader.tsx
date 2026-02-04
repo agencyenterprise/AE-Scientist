@@ -24,6 +24,12 @@ const VERDICT_CONFIG = {
   },
 } as const;
 
+type DecisionKey = keyof typeof VERDICT_CONFIG;
+
+function isValidDecision(decision: string): decision is DecisionKey {
+  return decision === "Accept" || decision === "Reject";
+}
+
 /**
  * Generates markdown content from the review data
  */
@@ -127,7 +133,9 @@ function downloadMarkdown(review: LlmReviewResponse) {
  * @param onClose - Callback function when close button is clicked
  */
 export function ReviewHeader({ review, onClose }: ReviewHeaderProps) {
-  const config = VERDICT_CONFIG[review.decision];
+  const config = isValidDecision(review.decision)
+    ? VERDICT_CONFIG[review.decision]
+    : { label: "—", className: "bg-slate-500/15 text-slate-400 border border-slate-500/30" };
 
   return (
     <div className="flex items-center justify-between mb-4">

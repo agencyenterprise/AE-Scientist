@@ -1,34 +1,68 @@
 /**
  * Types for research pipeline runs
+ *
+ * This file re-exports generated types from the OpenAPI schema and defines
+ * additional frontend-specific types for transformation and UI purposes.
  */
 
-// API Response types (snake_case from backend)
-export interface ResearchRunListItemApi {
-  run_id: string;
-  status: string;
-  initialization_status: string;
-  idea_title: string;
-  idea_hypothesis: string | null; // Backend field name (contains full markdown)
-  current_stage: string | null;
-  progress: number | null;
-  gpu_type: string | null;
-  best_metric: string | null;
-  created_by_name: string;
-  created_at: string;
-  updated_at: string;
-  artifacts_count: number;
-  error_message: string | null;
-  conversation_id: number;
-  conversation_url: string | null;
-  parent_run_id: string | null;
-}
+import type { components } from "./api.gen";
 
-export interface ResearchRunListResponseApi {
-  items: ResearchRunListItemApi[];
-  total: number;
-}
+// ===========================================
+// Re-export generated API types
+// ===========================================
 
-// Frontend types (camelCase)
+// List types
+export type ResearchRunListItemApi = components["schemas"]["ResearchRunListItem"];
+export type ResearchRunListResponseApi = components["schemas"]["ResearchRunListResponse"];
+
+// Run info and details
+export type ResearchRunInfoApi = components["schemas"]["ResearchRunInfo"];
+export type ResearchRunDetailsApi = components["schemas"]["ResearchRunDetailsResponse"];
+
+// Progress and events
+export type StageProgressApi = components["schemas"]["ResearchRunStageProgress"];
+export type LogEntryApi = components["schemas"]["ResearchRunLogEntry"];
+export type SubstageEventApi = components["schemas"]["ResearchRunSubstageEvent"];
+export type SubstageSummaryApi = components["schemas"]["ResearchRunSubstageSummary"];
+export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGenerationProgress"];
+
+// Artifacts and selections
+export type ArtifactMetadataApi = components["schemas"]["ResearchRunArtifactMetadata"];
+export type BestNodeSelectionApi = components["schemas"]["ResearchRunBestNodeSelection"];
+export type StageSkipWindowApi = components["schemas"]["ResearchRunStageSkipWindow"];
+export type StageSkipWindowUpdate = components["schemas"]["ResearchRunStageSkipWindowUpdate"];
+
+// Tree visualization
+export type TreeVizItemApi = components["schemas"]["TreeVizItem"];
+
+// Code execution
+export type ResearchRunCodeExecution = components["schemas"]["ResearchRunCodeExecution"];
+
+// Cost types
+export type HwCostEstimateData = components["schemas"]["ResearchRunHwCostEstimateData"];
+export type HwCostActualData = components["schemas"]["ResearchRunHwCostActualData"];
+
+// LLM Review
+export type LlmReviewResponse = components["schemas"]["LlmReviewResponse"];
+
+// Run tree
+export type RunTreeNode = components["schemas"]["RunTreeNodeResponse"];
+export type RunTreeResponse = components["schemas"]["RunTreeResponse"];
+
+// Child conversations
+export type ChildConversationInfo = components["schemas"]["ChildConversationInfo"];
+
+// GPU types
+export type ResearchGpuTypesResponse = components["schemas"]["GpuTypeListResponse"];
+
+// Artifact URL response
+export type ArtifactPresignedUrlResponse = components["schemas"]["ArtifactPresignedUrlResponse"];
+
+// ===========================================
+// Frontend types (camelCase transformations)
+// ===========================================
+
+// Frontend types for the list view
 export interface ResearchRun {
   runId: string;
   status: string;
@@ -45,18 +79,12 @@ export interface ResearchRun {
   artifactsCount: number;
   errorMessage: string | null;
   conversationId: number;
-  conversationUrl: string | null;
   parentRunId: string | null;
 }
 
 export interface ResearchRunListResponse {
   items: ResearchRun[];
   total: number;
-}
-
-export interface ResearchGpuTypesResponse {
-  gpu_types: string[];
-  gpu_prices: Record<string, number | null>;
 }
 
 // Status type for UI styling
@@ -69,290 +97,28 @@ export type ResearchRunTerminationStatus =
   | "terminated"
   | "failed";
 
-// ==========================================
-// Research Run Detail Types (for [runId] page)
-// ==========================================
+// ===========================================
+// Aliases for snake_case types (SSE compatibility)
+// ===========================================
 
-// API Response types (snake_case from backend)
-export interface ResearchRunInfoApi {
-  run_id: string;
-  status: string;
-  initialization_status: string;
-  idea_id: number;
-  idea_version_id: number;
-  pod_id: string | null;
-  pod_name: string | null;
-  gpu_type: string | null;
-  public_ip: string | null;
-  ssh_port: string | null;
-  pod_host_id: string | null;
-  error_message: string | null;
-  last_heartbeat_at: string | null;
-  heartbeat_failures: number;
-  created_at: string;
-  updated_at: string;
-  start_deadline_at: string | null;
-  termination_status: ResearchRunTerminationStatus;
-  termination_last_error: string | null;
-  parent_run_id: string | null;
-}
+// These aliases use the generated API types directly since the frontend
+// uses snake_case for SSE event handling
+export type ResearchRunInfo = ResearchRunInfoApi;
+export type StageProgress = StageProgressApi;
+export type LogEntry = LogEntryApi;
+export type SubstageEvent = SubstageEventApi;
+export type SubstageSummary = SubstageSummaryApi;
+export type PaperGenerationEvent = PaperGenerationEventApi;
+export type ArtifactMetadata = ArtifactMetadataApi;
+export type BestNodeSelection = BestNodeSelectionApi;
+export type StageSkipWindow = StageSkipWindowApi;
+export type TreeVizItem = TreeVizItemApi;
 
-export interface StageProgressApi {
-  stage: string;
-  iteration: number;
-  max_iterations: number;
-  progress: number;
-  total_nodes: number;
-  buggy_nodes: number;
-  good_nodes: number;
-  best_metric: string | null;
-  eta_s: number | null;
-  latest_iteration_time_s: number | null;
-  created_at: string;
-}
-
-export interface LogEntryApi {
-  id: number;
-  level: string;
-  message: string;
-  created_at: string;
-}
-
-export interface NodeSummary {
-  findings: string;
-  significance: string;
-  next_steps?: string | null;
-  is_buggy: boolean;
-  metric?: string | null;
-}
-
-export interface SubstageEventApi {
-  id: number;
-  stage: string;
-  summary: NodeSummary | Record<string, unknown>; // Summary payload stored for this sub-stage
-  created_at: string;
-}
-
-export interface SubstageSummaryApi {
-  id: number;
-  stage: string;
-  summary: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface PaperGenerationEventApi {
-  id: number;
-  run_id: string;
-  step: string;
-  substep: string | null;
-  progress: number;
-  step_progress: number;
-  details: Record<string, unknown> | null;
-  created_at: string;
-}
-
-export interface ArtifactMetadataApi {
-  id: number;
-  artifact_type: string;
-  filename: string;
-  file_size: number;
-  file_type: string;
-  created_at: string;
-}
-
-export interface BestNodeSelectionApi {
-  id: number;
-  stage: string;
-  node_id: string;
-  reasoning: string;
-  created_at: string;
-}
-
-export interface StageSkipWindowApi {
-  id: number;
-  stage: string;
-  opened_at: string;
-  opened_reason: string | null;
-  closed_at: string | null;
-  closed_reason: string | null;
-}
-
-export interface ChildConversationInfo {
-  conversation_id: number;
-  title: string;
-  created_at: string;
-  status: string;
-}
-
-export interface ResearchRunDetailsApi {
-  run: ResearchRunInfoApi;
-  stage_progress: StageProgressApi[];
-  logs: LogEntryApi[];
-  substage_events: SubstageEventApi[];
-  substage_summaries?: SubstageSummaryApi[];
-  artifacts: ArtifactMetadataApi[];
-  paper_generation_progress: PaperGenerationEventApi[];
-  tree_viz: TreeVizItemApi[];
-  best_node_selections?: BestNodeSelectionApi[];
-  stage_skip_windows?: StageSkipWindowApi[];
-  code_executions: Partial<Record<RunType, ResearchRunCodeExecution>>;
-  child_conversations?: ChildConversationInfo[];
-}
-
-// Frontend types (camelCase) - using same structure for SSE compatibility
-export interface ResearchRunInfo {
-  run_id: string;
-  status: string;
-  initialization_status: string;
-  idea_id: number;
-  idea_version_id: number;
-  pod_id: string | null;
-  pod_name: string | null;
-  gpu_type: string | null;
-  public_ip: string | null;
-  ssh_port: string | null;
-  pod_host_id: string | null;
-  error_message: string | null;
-  last_heartbeat_at: string | null;
-  heartbeat_failures: number;
-  created_at: string;
-  updated_at: string;
-  start_deadline_at: string | null;
-  termination_status: ResearchRunTerminationStatus;
-  termination_last_error: string | null;
-  parent_run_id: string | null;
-}
-
-export interface TerminationStatusData {
-  status: ResearchRunTerminationStatus;
-  last_error?: string | null;
-}
-
-export interface TerminationStatusStreamEvent {
-  type: "termination_status";
-  data: TerminationStatusData;
-}
-
-export interface HwCostEstimateData {
-  hw_estimated_cost_cents: number;
-  hw_cost_per_hour_cents: number;
-  hw_started_running_at: string;
-}
-
-export interface HwCostEstimateEvent {
-  type: "hw_cost_estimate";
-  data: HwCostEstimateData;
-}
-
-export interface HwCostActualData {
-  hw_actual_cost_cents: number;
-  hw_actual_cost_updated_at: string;
-  billing_summary: Record<string, unknown>;
-}
-
-export interface HwCostActualEvent {
-  type: "hw_cost_actual";
-  data: HwCostActualData;
-}
-
-export interface StageProgress {
-  stage: string;
-  iteration: number;
-  max_iterations: number;
-  progress: number;
-  total_nodes: number;
-  buggy_nodes: number;
-  good_nodes: number;
-  best_metric: string | null;
-  eta_s: number | null;
-  latest_iteration_time_s: number | null;
-  created_at: string;
-}
-
-export interface LogEntry {
-  id: number;
-  level: string;
-  message: string;
-  created_at: string;
-}
-
-export interface SubstageEvent {
-  id: number;
-  stage: string;
-  summary: NodeSummary | Record<string, unknown>; // Summary payload stored for this sub-stage
-  created_at: string;
-}
-
-export interface SubstageSummary {
-  id: number;
-  stage: string;
-  summary: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface PaperGenerationEvent {
-  id: number;
-  run_id: string;
-  step: string;
-  substep: string | null;
-  progress: number;
-  step_progress: number;
-  details: Record<string, unknown> | null;
-  created_at: string;
-}
+// ===========================================
+// Frontend detail types
+// ===========================================
 
 export type RunType = "codex_execution" | "runfile_execution";
-
-export interface ResearchRunCodeExecution {
-  execution_id: string;
-  stage_name: string;
-  run_type: RunType;
-  code: string | null;
-  status: string;
-  started_at: string;
-  completed_at?: string | null;
-  exec_time?: number | null;
-}
-
-export interface ArtifactMetadata {
-  id: number;
-  artifact_type: string;
-  filename: string;
-  file_size: number;
-  file_type: string;
-  created_at: string;
-}
-
-export interface ArtifactPresignedUrlResponse {
-  url: string;
-  expires_in: number;
-  artifact_id: number;
-  filename: string;
-}
-
-export interface BestNodeSelection {
-  id: number;
-  stage: string;
-  node_id: string;
-  reasoning: string;
-  created_at: string;
-}
-
-export interface StageSkipWindow {
-  id: number;
-  stage: string;
-  opened_at: string;
-  opened_reason: string | null;
-  closed_at: string | null;
-  closed_reason: string | null;
-}
-
-export interface StageSkipWindowUpdate {
-  stage: string;
-  state: "opened" | "closed";
-  timestamp: string;
-  reason?: string | null;
-}
 
 export interface ResearchRunDetails {
   run: ResearchRunInfo;
@@ -371,25 +137,45 @@ export interface ResearchRunDetails {
   child_conversations?: ChildConversationInfo[];
 }
 
-export interface TreeVizItemApi {
-  id: number;
-  run_id: string;
-  stage_id: string;
-  version: number;
-  viz: unknown;
-  created_at: string;
-  updated_at: string;
+// ===========================================
+// SSE Event types
+// ===========================================
+
+export interface TerminationStatusData {
+  status: ResearchRunTerminationStatus;
+  last_error?: string | null;
 }
 
-export interface TreeVizItem {
-  id: number;
-  run_id: string;
-  stage_id: string;
-  version: number;
-  viz: unknown;
-  created_at: string;
-  updated_at: string;
+export interface TerminationStatusStreamEvent {
+  type: "termination_status";
+  data: TerminationStatusData;
 }
+
+export interface HwCostEstimateEvent {
+  type: "hw_cost_estimate";
+  data: HwCostEstimateData;
+}
+
+export interface HwCostActualEvent {
+  type: "hw_cost_actual";
+  data: HwCostActualData;
+}
+
+// ===========================================
+// Node summary types
+// ===========================================
+
+export interface NodeSummary {
+  findings: string;
+  significance: string;
+  next_steps?: string | null;
+  is_buggy: boolean;
+  metric?: string | null;
+}
+
+// ===========================================
+// Tree visualization types
+// ===========================================
 
 export interface StageZone {
   min: number;
@@ -437,32 +223,9 @@ export interface MergedTreeViz extends Omit<TreeVizItem, "stage_id" | "viz"> {
   viz: MergedTreeVizPayload;
 }
 
-// ==========================================
-// LLM Review Types (for auto-evaluation)
-// ==========================================
-
-export interface LlmReviewResponse {
-  id: number;
-  run_id: string;
-  summary: string;
-  strengths: string[];
-  weaknesses: string[];
-  originality: number;
-  quality: number;
-  clarity: number;
-  significance: number;
-  soundness: number;
-  presentation: number;
-  contribution: number;
-  overall: number;
-  confidence: number;
-  decision: "Accept" | "Reject";
-  questions: string[];
-  limitations: string[];
-  ethical_concerns: boolean;
-  source_path: string | null;
-  created_at: string;
-}
+// ===========================================
+// LLM Review helper types
+// ===========================================
 
 export interface LlmReviewNotFoundResponse {
   run_id: string;
@@ -477,22 +240,4 @@ export function isReview(
   response: LlmReviewResponse | LlmReviewNotFoundResponse
 ): response is LlmReviewResponse {
   return "exists" in response ? response.exists !== false : true;
-}
-
-// ==========================================
-// Run Tree Types (for ancestor/descendant tree)
-// ==========================================
-
-export interface RunTreeNode {
-  run_id: string;
-  idea_title: string;
-  status: string;
-  created_at: string | null;
-  parent_run_id: string | null;
-  conversation_id: number;
-  is_current: boolean;
-}
-
-export interface RunTreeResponse {
-  nodes: RunTreeNode[];
 }

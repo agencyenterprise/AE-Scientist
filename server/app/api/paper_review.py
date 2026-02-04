@@ -8,7 +8,7 @@ Reviews are processed asynchronously in the background.
 import logging
 from typing import List, Optional, Union
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user
@@ -258,12 +258,11 @@ async def list_paper_reviews(
         return ErrorResponse(error="Failed to list reviews", detail=str(e))
 
 
-@router.get("/{review_id}", response_model=None)
+@router.get("/{review_id}", response_model=PaperReviewDetailResponse)
 async def get_paper_review(
     review_id: int,
     request: Request,
-    response: Response,
-) -> Union[PaperReviewDetailResponse, ErrorResponse]:
+) -> PaperReviewDetailResponse:
     """
     Get a specific paper review by ID.
 
@@ -280,9 +279,8 @@ async def get_paper_review(
         )
 
         if not review:
-            response.status_code = 404
-            return ErrorResponse(
-                error="Review not found",
+            raise HTTPException(
+                status_code=404,
                 detail="The requested review does not exist or you don't have access to it",
             )
 
@@ -318,10 +316,11 @@ async def get_paper_review(
             cost_cents=review.get("cost_cents", 0),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get paper review")
-        response.status_code = 500
-        return ErrorResponse(error="Failed to get review", detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get review") from e
 
 
 @router.get("/{review_id}/download", response_model=None)

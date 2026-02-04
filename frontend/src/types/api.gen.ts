@@ -3931,6 +3931,79 @@ export interface components {
              */
             details?: Record<string, never> | null;
         };
+        /**
+         * PaperReviewDetailResponse
+         * @description Detailed response for a single paper review.
+         */
+        PaperReviewDetailResponse: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @description Review status: pending, processing, completed, failed
+             */
+            status: string;
+            /**
+             * Error Message
+             * @description Error message if status is failed
+             */
+            error_message?: string | null;
+            /**
+             * Summary
+             * @description Paper summary (null if not completed)
+             */
+            summary?: string | null;
+            /**
+             * Strengths
+             * @description List of strengths (null if not completed)
+             */
+            strengths?: string[] | null;
+            /**
+             * Weaknesses
+             * @description List of weaknesses (null if not completed)
+             */
+            weaknesses?: string[] | null;
+            /** Originality */
+            originality?: number | null;
+            /** Quality */
+            quality?: number | null;
+            /** Clarity */
+            clarity?: number | null;
+            /** Significance */
+            significance?: number | null;
+            /** Questions */
+            questions?: string[] | null;
+            /** Limitations */
+            limitations?: string[] | null;
+            /** Ethical Concerns */
+            ethical_concerns?: boolean | null;
+            /** Soundness */
+            soundness?: number | null;
+            /** Presentation */
+            presentation?: number | null;
+            /** Contribution */
+            contribution?: number | null;
+            /** Overall */
+            overall?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Decision */
+            decision?: string | null;
+            /** Original Filename */
+            original_filename: string;
+            /** Model */
+            model: string;
+            /** Created At */
+            created_at: string;
+            /** @description Token usage (null if not completed) */
+            token_usage?: components["schemas"]["TokenUsageResponse"] | null;
+            /**
+             * Cost Cents
+             * @description Cost charged in cents for this review
+             * @default 0
+             */
+            cost_cents: number;
+        };
         /** ParentRunFileInfo */
         ParentRunFileInfo: {
             /** S3 Key */
@@ -5904,6 +5977,27 @@ export interface components {
         /** TokenUsagePayload */
         TokenUsagePayload: {
             event: components["schemas"]["TokenUsageEvent"];
+        };
+        /**
+         * TokenUsageResponse
+         * @description Token usage summary.
+         */
+        TokenUsageResponse: {
+            /**
+             * Input Tokens
+             * @description Total input tokens used
+             */
+            input_tokens: number;
+            /**
+             * Cached Input Tokens
+             * @description Cached input tokens
+             */
+            cached_input_tokens: number;
+            /**
+             * Output Tokens
+             * @description Total output tokens used
+             */
+            output_tokens: number;
         };
         /**
          * TreeVizItem
@@ -8947,7 +9041,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewDetailResponse"];
                 };
             };
             /** @description Validation Error */

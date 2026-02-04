@@ -141,12 +141,14 @@ export function extractStageSlug(stageName: string): string | null {
  * Prefers the llm_summary field if available, otherwise JSON stringifies the summary
  */
 export function getSummaryText(summary: SubstageSummary): string {
-  if (!isRecord(summary.summary)) {
-    return JSON.stringify(summary.summary, null, 2);
+  // Type assertion needed because backend returns dict which maps to Record<string, never>
+  const summaryData = summary.summary as Record<string, unknown>;
+  if (!isRecord(summaryData)) {
+    return JSON.stringify(summaryData, null, 2);
   }
-  const llmSummary = summary.summary.llm_summary;
+  const llmSummary = summaryData.llm_summary;
   if (typeof llmSummary === "string" && llmSummary.trim().length > 0) {
     return llmSummary.trim();
   }
-  return JSON.stringify(summary.summary, null, 2);
+  return JSON.stringify(summaryData, null, 2);
 }

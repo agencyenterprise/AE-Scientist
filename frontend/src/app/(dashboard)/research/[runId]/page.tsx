@@ -216,8 +216,8 @@ export default function ResearchRunDetailPage() {
 
         {run.error_message && <ResearchRunError message={run.error_message} />}
 
-        {runMeta?.conversation_url && (
-          <ImportSourceCard conversationUrl={runMeta.conversation_url} />
+        {runMeta?.conversation_id && (
+          <ImportSourceCard conversationUrl={`/conversations/${runMeta.conversation_id}`} />
         )}
 
         {conversationId !== null && (
@@ -228,7 +228,7 @@ export default function ResearchRunDetailPage() {
           status={run.status}
           currentStage={currentStage}
           progress={overallProgress}
-          gpuType={run.gpu_type}
+          gpuType={run.gpu_type ?? null}
           artifactsCount={artifacts.length}
         />
 
