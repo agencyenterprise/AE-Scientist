@@ -39,6 +39,9 @@ def configure_logging() -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
 
+    # Clear any existing handlers to avoid duplicate logs (e.g., from uvicorn)
+    root_logger.handlers.clear()
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(log_level)
 
@@ -50,7 +53,6 @@ def configure_logging() -> None:
                 rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
             )
         )
-        root_logger.info("Using JSON formatter")
     else:
         # Human-readable format for local development
         handler.setFormatter(
@@ -59,8 +61,10 @@ def configure_logging() -> None:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-        root_logger.info("Using human-readable formatter")
     root_logger.addHandler(handler)
+
+    logger = logging.getLogger(__name__)
+    logger.info("Logging configured at %s level", settings.server.log_level)
 
     # Set specific loggers to appropriate levels
     # Reduce noise from third-party libraries
