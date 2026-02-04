@@ -145,6 +145,13 @@ export interface paths {
         /**
          * Get Wallet
          * @description Return wallet balance (in cents) plus recent transactions for the authenticated user.
+         *
+         *     Args:
+         *         limit: Maximum number of transactions to return (1-100).
+         *         offset: Number of transactions to skip.
+         *         transaction_types: Comma-separated list of transaction types to include.
+         *             Valid types: purchase, debit, refund, adjustment, hold, hold_reversal.
+         *             If not specified, returns all transaction types.
          */
         get: operations["get_wallet_api_billing_wallet_get"];
         put?: never;
@@ -2061,6 +2068,11 @@ export interface components {
             balance_cents: number;
             /** Transactions */
             transactions: components["schemas"]["CreditTransactionModel"][];
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** Body_create_paper_review_api_paper_reviews_post */
         Body_create_paper_review_api_paper_reviews_post: {
@@ -3827,6 +3839,22 @@ export interface components {
              */
             exec_time?: number | null;
         };
+        /**
+         * PaperDownloadResponse
+         * @description Response with a temporary download URL for the paper PDF.
+         */
+        PaperDownloadResponse: {
+            /**
+             * Download Url
+             * @description Temporary signed URL to download the PDF
+             */
+            download_url: string;
+            /**
+             * Filename
+             * @description Original filename of the PDF
+             */
+            filename: string;
+        };
         /** PaperGenerationProgressEvent */
         PaperGenerationProgressEvent: {
             /** Step */
@@ -3919,6 +3947,157 @@ export interface components {
              */
             details?: Record<string, never> | null;
         };
+        /**
+         * PaperReviewDetailResponse
+         * @description Detailed response for a single paper review.
+         */
+        PaperReviewDetailResponse: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @description Review status: pending, processing, completed, failed
+             */
+            status: string;
+            /**
+             * Error Message
+             * @description Error message if status is failed
+             */
+            error_message?: string | null;
+            /**
+             * Summary
+             * @description Paper summary (null if not completed)
+             */
+            summary?: string | null;
+            /**
+             * Strengths
+             * @description List of strengths (null if not completed)
+             */
+            strengths?: string[] | null;
+            /**
+             * Weaknesses
+             * @description List of weaknesses (null if not completed)
+             */
+            weaknesses?: string[] | null;
+            /** Originality */
+            originality?: number | null;
+            /** Quality */
+            quality?: number | null;
+            /** Clarity */
+            clarity?: number | null;
+            /** Significance */
+            significance?: number | null;
+            /** Questions */
+            questions?: string[] | null;
+            /** Limitations */
+            limitations?: string[] | null;
+            /** Ethical Concerns */
+            ethical_concerns?: boolean | null;
+            /** Soundness */
+            soundness?: number | null;
+            /** Presentation */
+            presentation?: number | null;
+            /** Contribution */
+            contribution?: number | null;
+            /** Overall */
+            overall?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Decision */
+            decision?: string | null;
+            /** Original Filename */
+            original_filename: string;
+            /** Model */
+            model: string;
+            /** Created At */
+            created_at: string;
+            /** @description Token usage (null if not completed) */
+            token_usage?: components["schemas"]["TokenUsageResponse"] | null;
+            /**
+             * Cost Cents
+             * @description Cost charged in cents for this review
+             * @default 0
+             */
+            cost_cents: number;
+        };
+        /**
+         * PaperReviewListResponse
+         * @description Response for listing paper reviews.
+         */
+        PaperReviewListResponse: {
+            /**
+             * Reviews
+             * @description List of review summaries
+             */
+            reviews: components["schemas"]["PaperReviewSummary"][];
+            /**
+             * Count
+             * @description Number of reviews returned
+             */
+            count: number;
+        };
+        /**
+         * PaperReviewStartedResponse
+         * @description Response when a paper review is started.
+         */
+        PaperReviewStartedResponse: {
+            /**
+             * Review Id
+             * @description Unique review ID
+             */
+            review_id: number;
+            /**
+             * Status
+             * @description Review status (pending)
+             */
+            status: string;
+        };
+        /**
+         * PaperReviewSummary
+         * @description Summary of a paper review for list views.
+         */
+        PaperReviewSummary: {
+            /**
+             * Id
+             * @description Review ID
+             */
+            id: number;
+            /**
+             * Status
+             * @description Review status
+             */
+            status: string;
+            /**
+             * Summary
+             * @description Paper summary (null if pending)
+             */
+            summary?: string | null;
+            /**
+             * Overall
+             * @description Overall score (null if pending)
+             */
+            overall?: number | null;
+            /**
+             * Decision
+             * @description Review decision (null if pending)
+             */
+            decision?: string | null;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+        };
         /** ParentRunFileInfo */
         ParentRunFileInfo: {
             /** S3 Key */
@@ -3941,6 +4120,53 @@ export interface components {
             files: components["schemas"]["ParentRunFileInfo"][];
             /** Expires In */
             expires_in: number;
+        };
+        /**
+         * PendingReviewSummary
+         * @description Summary of a pending/processing review.
+         */
+        PendingReviewSummary: {
+            /**
+             * Id
+             * @description Review ID
+             */
+            id: number;
+            /**
+             * Status
+             * @description Review status
+             */
+            status: string;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+        };
+        /**
+         * PendingReviewsResponse
+         * @description Response for listing pending reviews.
+         */
+        PendingReviewsResponse: {
+            /**
+             * Reviews
+             * @description List of pending reviews
+             */
+            reviews: components["schemas"]["PendingReviewSummary"][];
+            /**
+             * Count
+             * @description Number of pending reviews
+             */
+            count: number;
         };
         /** PresignedUploadUrlRequest */
         PresignedUploadUrlRequest: {
@@ -5894,6 +6120,27 @@ export interface components {
             event: components["schemas"]["TokenUsageEvent"];
         };
         /**
+         * TokenUsageResponse
+         * @description Token usage summary.
+         */
+        TokenUsageResponse: {
+            /**
+             * Input Tokens
+             * @description Total input tokens used
+             */
+            input_tokens: number;
+            /**
+             * Cached Input Tokens
+             * @description Cached input tokens
+             */
+            cached_input_tokens: number;
+            /**
+             * Output Tokens
+             * @description Total output tokens used
+             */
+            output_tokens: number;
+        };
+        /**
          * TreeVizItem
          * @description Stored tree visualization payload for a run stage.
          */
@@ -6140,6 +6387,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                transaction_types?: string | null;
             };
             header?: never;
             path?: never;
@@ -8850,7 +9098,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8878,12 +9126,12 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewStartedResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8912,7 +9160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PendingReviewsResponse"];
                 };
             };
         };
@@ -8934,7 +9182,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperReviewDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8965,7 +9213,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PaperDownloadResponse"];
                 };
             };
             /** @description Validation Error */

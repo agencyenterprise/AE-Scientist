@@ -18,57 +18,16 @@ import { formatDistanceToNow } from "date-fns";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
+import type { components } from "@/types/api.gen";
 
-interface PaperReviewSummary {
-  id: number;
-  status: string;
-  summary: string | null;
-  overall: number | null;
-  decision: string | null;
-  original_filename: string;
-  model: string;
-  created_at: string;
-}
-
-interface PaperReviewListResponse {
-  reviews: PaperReviewSummary[];
-  count: number;
-}
-
-interface ReviewDetailResponse {
-  id: number;
-  status: string;
-  error_message?: string | null;
-  summary?: string | null;
-  strengths?: string[] | null;
-  weaknesses?: string[] | null;
-  originality?: number | null;
-  quality?: number | null;
-  clarity?: number | null;
-  significance?: number | null;
-  questions?: string[] | null;
-  limitations?: string[] | null;
-  ethical_concerns?: boolean | null;
-  soundness?: number | null;
-  presentation?: number | null;
-  contribution?: number | null;
-  overall?: number | null;
-  confidence?: number | null;
-  decision?: string | null;
-  original_filename: string;
-  model: string;
-  created_at: string;
-  token_usage?: {
-    input_tokens: number;
-    cached_input_tokens: number;
-    output_tokens: number;
-  } | null;
-  cost_cents?: number;
-}
+// Use generated types from OpenAPI schema
+type ReviewDetailResponse = components["schemas"]["PaperReviewDetailResponse"];
+type PaperReviewSummary = components["schemas"]["PaperReviewSummary"];
+type PaperReviewListResponse = components["schemas"]["PaperReviewListResponse"];
 
 const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds when there are pending reviews
 
-function getStatusIcon(status: string, decision: string | null) {
+function getStatusIcon(status: string, decision: string | null | undefined) {
   switch (status) {
     case "pending":
     case "processing":
@@ -87,7 +46,10 @@ function getStatusIcon(status: string, decision: string | null) {
   }
 }
 
-function getStatusText(status: string, decision: string | null): { text: string; color: string } {
+function getStatusText(
+  status: string,
+  decision: string | null | undefined
+): { text: string; color: string } {
   switch (status) {
     case "pending":
       return { text: "Queued", color: "text-amber-400" };
@@ -108,8 +70,8 @@ function getStatusText(status: string, decision: string | null): { text: string;
   }
 }
 
-function getScoreColor(score: number | null): string {
-  if (score === null) return "text-slate-500";
+function getScoreColor(score: number | null | undefined): string {
+  if (score === null || score === undefined) return "text-slate-500";
   if (score >= 7) return "text-emerald-400";
   if (score >= 5) return "text-amber-400";
   return "text-red-400";

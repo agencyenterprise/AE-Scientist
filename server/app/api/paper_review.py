@@ -6,9 +6,9 @@ Reviews are processed asynchronously in the background.
 """
 
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional
 
-from fastapi import APIRouter, File, Form, Request, Response, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user
@@ -120,17 +120,16 @@ class PendingReviewsResponse(BaseModel):
     count: int = Field(..., description="Number of pending reviews")
 
 
-@router.post("", response_model=None)
+@router.post("", response_model=PaperReviewStartedResponse, status_code=202)
 async def create_paper_review(
     request: Request,
-    response: Response,
     file: UploadFile = File(..., description="PDF file to review"),
     model: str = Form(..., description="LLM model to use for review (provider:model format)"),
     num_reviews_ensemble: int = Form(
         ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
     ),
     num_reflections: int = Form(..., ge=1, le=3, description="Number of reflection rounds (1-3)"),
-) -> Union[PaperReviewStartedResponse, ErrorResponse]:
+) -> PaperReviewStartedResponse:
     """
     Submit a paper for review.
 
@@ -144,14 +143,11 @@ async def create_paper_review(
 
     # Validate file is a PDF
     if not file.filename:
-        response.status_code = 400
-        return ErrorResponse(error="No file provided", detail="Please upload a PDF file")
+        raise HTTPException(status_code=400, detail="No file provided. Please upload a PDF file.")
 
     if not file.filename.lower().endswith(".pdf"):
-        response.status_code = 400
-        return ErrorResponse(
-            error="Invalid file type",
-            detail="Only PDF files are supported",
+        raise HTTPException(
+            status_code=400, detail="Invalid file type. Only PDF files are supported."
         )
 
     # Read file content
@@ -159,12 +155,10 @@ async def create_paper_review(
         pdf_content = await file.read()
     except Exception as e:
         logger.exception("Failed to read uploaded file")
-        response.status_code = 400
-        return ErrorResponse(error="Failed to read file", detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {e}") from e
 
     if not pdf_content:
-        response.status_code = 400
-        return ErrorResponse(error="Empty file", detail="The uploaded file is empty")
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
     # Start review (returns immediately)
     try:
@@ -178,7 +172,6 @@ async def create_paper_review(
             num_reflections=num_reflections,
         )
 
-        response.status_code = 202  # Accepted
         return PaperReviewStartedResponse(
             review_id=review_id,
             status=status,
@@ -189,20 +182,17 @@ async def create_paper_review(
         # Check if it's a payment required error
         status_code = getattr(e, "status_code", None)
         if status_code == 402:
-            response.status_code = 402
-            return ErrorResponse(
-                error="Insufficient balance",
+            raise HTTPException(
+                status_code=402,
                 detail="You don't have enough balance to perform this review",
-            )
-        response.status_code = 500
-        return ErrorResponse(error="Failed to start review", detail=str(e))
+            ) from e
+        raise HTTPException(status_code=500, detail="Failed to start review") from e
 
 
-@router.get("/pending", response_model=None)
+@router.get("/pending", response_model=PendingReviewsResponse)
 async def get_pending_reviews(
     request: Request,
-    response: Response,
-) -> Union[PendingReviewsResponse, ErrorResponse]:
+) -> PendingReviewsResponse:
     """
     Get all pending or processing reviews for the authenticated user.
 
@@ -221,17 +211,15 @@ async def get_pending_reviews(
 
     except Exception as e:
         logger.exception("Failed to get pending reviews")
-        response.status_code = 500
-        return ErrorResponse(error="Failed to get pending reviews", detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get pending reviews") from e
 
 
-@router.get("", response_model=None)
+@router.get("", response_model=PaperReviewListResponse)
 async def list_paper_reviews(
     request: Request,
-    response: Response,
     limit: int = 20,
     offset: int = 0,
-) -> Union[PaperReviewListResponse, ErrorResponse]:
+) -> PaperReviewListResponse:
     """
     List paper reviews for the authenticated user.
 
@@ -254,16 +242,14 @@ async def list_paper_reviews(
 
     except Exception as e:
         logger.exception("Failed to list paper reviews")
-        response.status_code = 500
-        return ErrorResponse(error="Failed to list reviews", detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to list reviews") from e
 
 
-@router.get("/{review_id}", response_model=None)
+@router.get("/{review_id}", response_model=PaperReviewDetailResponse)
 async def get_paper_review(
     review_id: int,
     request: Request,
-    response: Response,
-) -> Union[PaperReviewDetailResponse, ErrorResponse]:
+) -> PaperReviewDetailResponse:
     """
     Get a specific paper review by ID.
 
@@ -280,9 +266,8 @@ async def get_paper_review(
         )
 
         if not review:
-            response.status_code = 404
-            return ErrorResponse(
-                error="Review not found",
+            raise HTTPException(
+                status_code=404,
                 detail="The requested review does not exist or you don't have access to it",
             )
 
@@ -318,18 +303,18 @@ async def get_paper_review(
             cost_cents=review.get("cost_cents", 0),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get paper review")
-        response.status_code = 500
-        return ErrorResponse(error="Failed to get review", detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get review") from e
 
 
-@router.get("/{review_id}/download", response_model=None)
+@router.get("/{review_id}/download", response_model=PaperDownloadResponse)
 async def get_paper_download_url(
     review_id: int,
     request: Request,
-    response: Response,
-) -> Union[PaperDownloadResponse, ErrorResponse]:
+) -> PaperDownloadResponse:
     """
     Get a temporary download URL for the reviewed paper PDF.
 
@@ -346,9 +331,8 @@ async def get_paper_download_url(
         )
 
         if not result:
-            response.status_code = 404
-            return ErrorResponse(
-                error="Paper not found",
+            raise HTTPException(
+                status_code=404,
                 detail="The requested paper does not exist or you don't have access to it",
             )
 
@@ -358,7 +342,8 @@ async def get_paper_download_url(
             filename=filename,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to get paper download URL")
-        response.status_code = 500
-        return ErrorResponse(error="Failed to get download URL", detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get download URL") from e

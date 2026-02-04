@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import AsyncGenerator, cast
+from typing import AsyncGenerator, Optional, cast
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
@@ -39,17 +39,43 @@ def _get_service() -> BillingService:
 
 
 @router.get("/wallet", response_model=BillingWalletResponse)
-async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> BillingWalletResponse:
-    """Return wallet balance (in cents) plus recent transactions for the authenticated user."""
+async def get_wallet(
+    request: Request,
+    limit: int = 20,
+    offset: int = 0,
+    transaction_types: Optional[str] = None,
+) -> BillingWalletResponse:
+    """Return wallet balance (in cents) plus recent transactions for the authenticated user.
+
+    Args:
+        limit: Maximum number of transactions to return (1-100).
+        offset: Number of transactions to skip.
+        transaction_types: Comma-separated list of transaction types to include.
+            Valid types: purchase, debit, refund, adjustment, hold, hold_reversal.
+            If not specified, returns all transaction types.
+    """
     if limit <= 0 or limit > 100:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid limit")
     if offset < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid offset")
 
+    # Parse transaction types filter
+    types_filter: Optional[list[str]] = None
+    if transaction_types:
+        types_filter = [t.strip() for t in transaction_types.split(",") if t.strip()]
+
     user = get_current_user(request)
-    logger.debug("Wallet requested for user_id=%s (limit=%s offset=%s)", user.id, limit, offset)
+    logger.debug(
+        "Wallet requested for user_id=%s (limit=%s offset=%s types=%s)",
+        user.id,
+        limit,
+        offset,
+        types_filter,
+    )
     service = _get_service()
-    wallet, transactions = await service.get_wallet(user_id=user.id, limit=limit, offset=offset)
+    wallet, transactions, total_count = await service.get_wallet(
+        user_id=user.id, limit=limit, offset=offset, transaction_types=types_filter
+    )
     transaction_models = [
         CreditTransactionModel(
             id=tx.id,
@@ -63,7 +89,9 @@ async def get_wallet(request: Request, limit: int = 20, offset: int = 0) -> Bill
         )
         for tx in transactions
     ]
-    return BillingWalletResponse(balance_cents=wallet.balance, transactions=transaction_models)
+    return BillingWalletResponse(
+        balance_cents=wallet.balance, transactions=transaction_models, total_count=total_count
+    )
 
 
 @router.get("/packs", response_model=FundingOptionListResponse)

@@ -23,10 +23,9 @@ import type {
 
 export type { ResearchRunDetails };
 
-export interface InitializationStatusData {
-  initialization_status: string;
-  updated_at: string;
-}
+// Re-export generated type for backwards compatibility
+export type InitializationStatusData =
+  ApiComponents["schemas"]["ResearchRunInitializationStatusData"];
 
 interface UseResearchRunSSEOptions {
   runId: string;
@@ -58,13 +57,8 @@ interface UseResearchRunSSEReturn {
   disconnect: () => void;
 }
 
-interface CodeExecutionCompletionEvent {
-  execution_id: string;
-  run_type: ResearchRunCodeExecution["run_type"];
-  status: "success" | "failed";
-  exec_time: number;
-  completed_at: string;
-}
+// Use generated type instead of manual definition
+type CodeExecutionCompletionEvent = ApiCodeExecutionCompletedData;
 
 type InitialEventData = Extract<ResearchRunStreamEvent, { type: "initial" }>["data"];
 type InitialRunInfo = InitialEventData["run"];
@@ -99,6 +93,7 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     pod_id: run.pod_id ?? null,
     pod_name: run.pod_name ?? null,
     gpu_type: run.gpu_type ?? null,
+    cost: (run as unknown as { cost?: number }).cost ?? 0,
     public_ip: run.public_ip ?? null,
     ssh_port: run.ssh_port ?? null,
     pod_host_id: run.pod_host_id ?? null,
@@ -111,6 +106,11 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
     termination_status,
     termination_last_error: terminationRaw.termination_last_error ?? null,
     parent_run_id: (run as unknown as { parent_run_id?: string | null }).parent_run_id ?? null,
+    restart_count: (run as unknown as { restart_count?: number }).restart_count ?? 0,
+    last_restart_at:
+      (run as unknown as { last_restart_at?: string | null }).last_restart_at ?? null,
+    last_restart_reason:
+      (run as unknown as { last_restart_reason?: string | null }).last_restart_reason ?? null,
   };
 }
 
@@ -427,14 +427,7 @@ export function useResearchRunSSE({
                 break;
               case "code_execution_completed":
                 if (onCodeExecutionCompleted) {
-                  const completed = event.data as ApiCodeExecutionCompletedData;
-                  onCodeExecutionCompleted({
-                    execution_id: completed.execution_id,
-                    run_type: completed.run_type ?? "codex_execution",
-                    status: completed.status,
-                    exec_time: completed.exec_time,
-                    completed_at: completed.completed_at,
-                  });
+                  onCodeExecutionCompleted(event.data as ApiCodeExecutionCompletedData);
                 }
                 break;
               case "stage_skip_window":

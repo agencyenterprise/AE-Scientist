@@ -101,32 +101,95 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
         return wallet.balance
 
     async def list_credit_transactions(
-        self, user_id: int, *, limit: int = 20, offset: int = 0
-    ) -> List[CreditTransaction]:
+        self,
+        user_id: int,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        transaction_types: Optional[List[str]] = None,
+    ) -> tuple[List[CreditTransaction], int]:
+        """List credit transactions for a user with pagination.
+
+        Args:
+            user_id: The user's ID.
+            limit: Maximum number of transactions to return.
+            offset: Number of transactions to skip.
+            transaction_types: List of transaction types to include.
+                If None, returns all transaction types.
+
+        Returns:
+            Tuple of (transactions, total_count)
+        """
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    SELECT
-                        id,
-                        user_id,
-                        amount,
-                        transaction_type,
-                        status,
-                        description,
-                        metadata,
-                        stripe_session_id,
-                        created_at,
-                        updated_at
-                    FROM billing_credit_transactions
-                    WHERE user_id = %s
-                    ORDER BY created_at DESC
-                    LIMIT %s OFFSET %s
-                    """,
-                    (user_id, limit, offset),
-                )
+                if transaction_types:
+                    # Filter by specified transaction types
+                    await cursor.execute(
+                        """
+                        SELECT COUNT(*) as count
+                        FROM billing_credit_transactions
+                        WHERE user_id = %s AND transaction_type = ANY(%s)
+                        """,
+                        (user_id, transaction_types),
+                    )
+                    count_row = await cursor.fetchone()
+                    total_count = count_row["count"] if count_row else 0
+
+                    await cursor.execute(
+                        """
+                        SELECT
+                            id,
+                            user_id,
+                            amount,
+                            transaction_type,
+                            status,
+                            description,
+                            metadata,
+                            stripe_session_id,
+                            created_at,
+                            updated_at
+                        FROM billing_credit_transactions
+                        WHERE user_id = %s AND transaction_type = ANY(%s)
+                        ORDER BY created_at DESC
+                        LIMIT %s OFFSET %s
+                        """,
+                        (user_id, transaction_types, limit, offset),
+                    )
+                else:
+                    # No filter - return all transaction types
+                    await cursor.execute(
+                        """
+                        SELECT COUNT(*) as count
+                        FROM billing_credit_transactions
+                        WHERE user_id = %s
+                        """,
+                        (user_id,),
+                    )
+                    count_row = await cursor.fetchone()
+                    total_count = count_row["count"] if count_row else 0
+
+                    await cursor.execute(
+                        """
+                        SELECT
+                            id,
+                            user_id,
+                            amount,
+                            transaction_type,
+                            status,
+                            description,
+                            metadata,
+                            stripe_session_id,
+                            created_at,
+                            updated_at
+                        FROM billing_credit_transactions
+                        WHERE user_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT %s OFFSET %s
+                        """,
+                        (user_id, limit, offset),
+                    )
                 rows = await cursor.fetchall() or []
-        return [CreditTransaction(**row) for row in rows]
+        return [CreditTransaction(**row) for row in rows], total_count
 
     async def add_completed_transaction(
         self,

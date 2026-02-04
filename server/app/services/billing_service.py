@@ -37,13 +37,32 @@ class BillingService:
     # Wallet helpers
     # ------------------------------------------------------------------
     async def get_wallet(
-        self, *, user_id: int, limit: int = 20, offset: int = 0
-    ) -> tuple[BillingWallet, List[CreditTransaction]]:
+        self,
+        *,
+        user_id: int,
+        limit: int = 20,
+        offset: int = 0,
+        transaction_types: Optional[List[str]] = None,
+    ) -> tuple[BillingWallet, List[CreditTransaction], int]:
+        """Get user's wallet, transactions, and total transaction count.
+
+        Args:
+            user_id: The user's ID.
+            limit: Maximum number of transactions to return.
+            offset: Number of transactions to skip.
+            transaction_types: List of transaction types to include.
+                If None, returns all transaction types.
+
+        Returns:
+            Tuple of (wallet, transactions, total_count)
+        """
         wallet = await self.db.get_user_wallet(user_id)
         if wallet is None:
             raise RuntimeError(f"Wallet missing for user {user_id}")
-        transactions = await self.db.list_credit_transactions(user_id, limit=limit, offset=offset)
-        return wallet, transactions
+        transactions, total_count = await self.db.list_credit_transactions(
+            user_id, limit=limit, offset=offset, transaction_types=transaction_types
+        )
+        return wallet, transactions, total_count
 
     async def get_balance(self, user_id: int) -> int:
         """Get user's balance in cents."""

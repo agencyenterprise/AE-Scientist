@@ -946,6 +946,18 @@ class Outcome(StrEnum):
     partial = "partial"
 
 
+class PaperDownloadResponse(BaseModel):
+    download_url: Annotated[
+        str,
+        Field(
+            description="Temporary signed URL to download the PDF", title="Download Url"
+        ),
+    ]
+    filename: Annotated[
+        str, Field(description="Original filename of the PDF", title="Filename")
+    ]
+
+
 class PaperGenerationProgressEvent(BaseModel):
     step: Annotated[str, Field(title="Step")]
     substep: Annotated[str | None, Field(title="Substep")] = None
@@ -1009,6 +1021,35 @@ class PaperGenerationStepEvent(BaseModel):
     ] = None
 
 
+class PaperReviewStartedResponse(BaseModel):
+    review_id: Annotated[int, Field(description="Unique review ID", title="Review Id")]
+    status: Annotated[str, Field(description="Review status (pending)", title="Status")]
+
+
+class PaperReviewSummary(BaseModel):
+    id: Annotated[int, Field(description="Review ID", title="Id")]
+    status: Annotated[str, Field(description="Review status", title="Status")]
+    summary: Annotated[
+        str | None,
+        Field(description="Paper summary (null if pending)", title="Summary"),
+    ] = None
+    overall: Annotated[
+        int | None,
+        Field(description="Overall score (null if pending)", title="Overall"),
+    ] = None
+    decision: Annotated[
+        str | None,
+        Field(description="Review decision (null if pending)", title="Decision"),
+    ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+
+
 class ParentRunFileInfo(BaseModel):
     s3_key: Annotated[str, Field(title="S3 Key")]
     filename: Annotated[str, Field(title="Filename")]
@@ -1023,6 +1064,26 @@ class ParentRunFilesRequest(BaseModel):
 class ParentRunFilesResponse(BaseModel):
     files: Annotated[list[ParentRunFileInfo], Field(title="Files")]
     expires_in: Annotated[int, Field(title="Expires In")]
+
+
+class PendingReviewSummary(BaseModel):
+    id: Annotated[int, Field(description="Review ID", title="Id")]
+    status: Annotated[str, Field(description="Review status", title="Status")]
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+
+
+class PendingReviewsResponse(BaseModel):
+    reviews: Annotated[
+        list[PendingReviewSummary],
+        Field(description="List of pending reviews", title="Reviews"),
+    ]
+    count: Annotated[int, Field(description="Number of pending reviews", title="Count")]
 
 
 class PresignedUploadUrlRequest(BaseModel):
@@ -2105,6 +2166,18 @@ class TokenUsagePayload(BaseModel):
     event: TokenUsageEvent
 
 
+class TokenUsageResponse(BaseModel):
+    input_tokens: Annotated[
+        int, Field(description="Total input tokens used", title="Input Tokens")
+    ]
+    cached_input_tokens: Annotated[
+        int, Field(description="Cached input tokens", title="Cached Input Tokens")
+    ]
+    output_tokens: Annotated[
+        int, Field(description="Total output tokens used", title="Output Tokens")
+    ]
+
+
 class TreeVizItem(BaseModel):
     id: Annotated[int, Field(description="Tree viz identifier", title="Id")]
     run_id: Annotated[str, Field(description="Research run identifier", title="Run Id")]
@@ -2197,6 +2270,7 @@ class AuthStatus(BaseModel):
 class BillingWalletResponse(BaseModel):
     balance_cents: Annotated[int, Field(title="Balance Cents")]
     transactions: Annotated[list[CreditTransactionModel], Field(title="Transactions")]
+    total_count: Annotated[int | None, Field(title="Total Count")] = 0
 
 
 class ChatMessage(BaseModel):
@@ -2466,6 +2540,71 @@ class NodeResultEvent(BaseModel):
     exec_time: Annotated[
         float | None, Field(description="Execution time in seconds", title="Exec Time")
     ] = None
+
+
+class PaperReviewDetailResponse(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    status: Annotated[
+        str,
+        Field(
+            description="Review status: pending, processing, completed, failed",
+            title="Status",
+        ),
+    ]
+    error_message: Annotated[
+        str | None,
+        Field(description="Error message if status is failed", title="Error Message"),
+    ] = None
+    summary: Annotated[
+        str | None,
+        Field(description="Paper summary (null if not completed)", title="Summary"),
+    ] = None
+    strengths: Annotated[
+        list[str] | None,
+        Field(
+            description="List of strengths (null if not completed)", title="Strengths"
+        ),
+    ] = None
+    weaknesses: Annotated[
+        list[str] | None,
+        Field(
+            description="List of weaknesses (null if not completed)", title="Weaknesses"
+        ),
+    ] = None
+    originality: Annotated[int | None, Field(title="Originality")] = None
+    quality: Annotated[int | None, Field(title="Quality")] = None
+    clarity: Annotated[int | None, Field(title="Clarity")] = None
+    significance: Annotated[int | None, Field(title="Significance")] = None
+    questions: Annotated[list[str] | None, Field(title="Questions")] = None
+    limitations: Annotated[list[str] | None, Field(title="Limitations")] = None
+    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
+    soundness: Annotated[int | None, Field(title="Soundness")] = None
+    presentation: Annotated[int | None, Field(title="Presentation")] = None
+    contribution: Annotated[int | None, Field(title="Contribution")] = None
+    overall: Annotated[int | None, Field(title="Overall")] = None
+    confidence: Annotated[int | None, Field(title="Confidence")] = None
+    decision: Annotated[str | None, Field(title="Decision")] = None
+    original_filename: Annotated[str, Field(title="Original Filename")]
+    model: Annotated[str, Field(title="Model")]
+    created_at: Annotated[str, Field(title="Created At")]
+    token_usage: Annotated[
+        TokenUsageResponse | None,
+        Field(description="Token usage (null if not completed)"),
+    ] = None
+    cost_cents: Annotated[
+        int | None,
+        Field(description="Cost charged in cents for this review", title="Cost Cents"),
+    ] = 0
+
+
+class PaperReviewListResponse(BaseModel):
+    reviews: Annotated[
+        list[PaperReviewSummary],
+        Field(description="List of review summaries", title="Reviews"),
+    ]
+    count: Annotated[
+        int, Field(description="Number of reviews returned", title="Count")
+    ]
 
 
 class ProgressUpdateEvent(BaseModel):

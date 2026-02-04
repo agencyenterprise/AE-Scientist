@@ -1,13 +1,10 @@
 "use client";
 
 import { cn } from "@/shared/lib/utils";
+import type { ConversationStatus } from "../types/ideation-queue.types";
 
-/**
- * Status type for conversations
- * - "draft": Conversation without research
- * - "with_research": Conversation with research runs
- */
-export type ConversationStatus = "draft" | "with_research";
+// Re-export for backwards compatibility
+export type { ConversationStatus };
 
 interface ConversationStatusBadgeProps {
   status: ConversationStatus;
