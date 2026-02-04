@@ -55,14 +55,20 @@ export function useChatStreaming({
   const [streamingContent, setStreamingContent] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Cleanup EventSource on unmount
+  // Track mounted state to avoid state updates after unmount
+  const isMountedRef = useRef(true);
+  // Store AbortController in ref so we can abort on unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup on unmount - abort any ongoing request but let backend continue
   useEffect(() => {
-    const currentEventSource = eventSourceRef.current;
+    isMountedRef.current = true;
     return () => {
-      if (currentEventSource) {
-        currentEventSource.close();
+      isMountedRef.current = false;
+      // Abort the fetch request on unmount - backend will continue and save the message
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
@@ -126,6 +132,7 @@ export function useChatStreaming({
 
       // Setup timeout for streaming connection
       const controller = new AbortController();
+      abortControllerRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
       try {
@@ -258,35 +265,55 @@ export function useChatStreaming({
           }
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to send message";
-        setError(errorMessage);
-        // eslint-disable-next-line no-console
-        console.error("Streaming error:", err);
+        // Handle abort errors gracefully - this happens when user navigates away
+        // The backend will continue processing and save the message
+        const isAbortError = err instanceof Error && err.name === "AbortError";
 
-        // Remove optimistic message on error and restore files (skip if auto-trigger)
-        if (!isAutoTrigger) {
-          setMessages(prev => prev.slice(0, -1));
-          restorePendingFiles(currentFiles);
+        if (isAbortError) {
+          // eslint-disable-next-line no-console
+          console.info(
+            "Stream aborted (user navigated away) - backend will continue and save message"
+          );
+        } else {
+          // eslint-disable-next-line no-console
+          console.error("Streaming error:", err);
+        }
+
+        // Only update state if still mounted and not an abort error
+        if (isMountedRef.current && !isAbortError) {
+          const errorMessage = err instanceof Error ? err.message : "Failed to send message";
+          setError(errorMessage);
+
+          // Remove optimistic message on error and restore files (skip if auto-trigger)
+          if (!isAutoTrigger) {
+            setMessages(prev => prev.slice(0, -1));
+            restorePendingFiles(currentFiles);
+          }
         }
       } finally {
-        // Always clear timeout
+        // Always clear timeout and abort controller ref
         clearTimeout(timeoutId);
-        setIsStreaming(false);
-        setStreamingContent("");
-        setStatusMessage("");
+        abortControllerRef.current = null;
 
-        if (onStreamEnd) {
-          onStreamEnd();
-        }
+        // Only update state if still mounted
+        if (isMountedRef.current) {
+          setIsStreaming(false);
+          setStreamingContent("");
+          setStatusMessage("");
 
-        // Focus input field when response is complete and reset height
-        // Use setTimeout to ensure state updates are applied first
-        setTimeout(() => {
-          if (inputRef?.current) {
-            inputRef.current.focus();
-            inputRef.current.style.height = "auto";
+          if (onStreamEnd) {
+            onStreamEnd();
           }
-        }, 100);
+
+          // Focus input field when response is complete and reset height
+          // Use setTimeout to ensure state updates are applied first
+          setTimeout(() => {
+            if (inputRef?.current) {
+              inputRef.current.focus();
+              inputRef.current.style.height = "auto";
+            }
+          }, 100);
+        }
       }
     },
     [

@@ -62,14 +62,14 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
     );
   }
 
-  // No idea data for this conversation
+  // No idea data for this conversation - likely still generating
   if (!idea) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <Eye className="mb-4 h-12 w-12 text-slate-600" />
-        <h3 className="mb-1 text-sm font-medium text-slate-300">No idea yet</h3>
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-500" />
+        <h3 className="mb-1 text-sm font-medium text-slate-300">Generating idea...</h3>
         <p className="text-xs text-slate-500">
-          This conversation doesn&apos;t have an idea generated yet
+          The idea is being generated. It will appear here when ready.
         </p>
       </div>
     );

@@ -87,16 +87,16 @@ export function useProjectDraftData({
   // Load initial data
   useEffect(() => {
     const loadData = async (): Promise<void> => {
-      const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
+      const { data } = await api.GET("/api/conversations/{conversation_id}/idea", {
         params: { path: { conversation_id: conversation.id } },
       });
 
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error("Failed to load data:", error);
-      } else if (data && "idea" in data) {
+      // 404 means idea is still being generated - don't treat as error
+      // Other errors are silently ignored since polling will handle recovery
+      if (data && "idea" in data) {
         setProjectDraft((data.idea as Idea) || null);
       }
+      // If 404 or error, projectDraft stays null - polling will pick it up
 
       setIsLoading(false);
     };
@@ -104,17 +104,18 @@ export function useProjectDraftData({
     loadData();
   }, [conversation.id]);
 
-  // Poll for idea updates when idea is being generated
+  // Poll for idea updates when idea is being generated or doesn't exist yet
   useEffect(() => {
     const checkAndPoll = async () => {
       const { data, error } = await api.GET("/api/conversations/{conversation_id}/idea", {
         params: { path: { conversation_id: conversation.id } },
       });
 
+      // 404 means idea is still being generated - continue polling
+      // Other errors also continue polling to allow recovery
       if (error) {
-        // eslint-disable-next-line no-console
-        console.error("Polling error:", error);
-        return false; // Stop polling
+        // Idea doesn't exist yet or temporary error - continue polling
+        return true;
       }
 
       const draft = data && "idea" in data ? (data.idea as Idea) : null;
@@ -125,7 +126,7 @@ export function useProjectDraftData({
         return true; // Continue polling
       }
 
-      return false; // Stop polling
+      return false; // Stop polling - idea is complete
     };
 
     const pollInterval = setInterval(async () => {

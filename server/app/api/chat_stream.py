@@ -4,9 +4,10 @@ Streaming Chat API endpoints.
 This module contains FastAPI routes for streaming chat functionality with SSE.
 """
 
+import asyncio
 import json
 import logging
-from typing import AsyncGenerator, Optional, Union
+from typing import AsyncGenerator, List, Optional, Union
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,7 @@ from app.services import SummarizerService, get_database
 from app.services.base_llm_service import FileAttachmentData
 from app.services.billing_guard import enforce_minimum_balance
 from app.services.chat_models import StreamDoneEvent
+from app.services.database import DatabaseManager
 
 router = APIRouter(prefix="/conversations")
 
@@ -35,6 +37,144 @@ class ErrorResponse(BaseModel):
 
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Additional error details")
+
+
+async def _run_chat_generation_to_queue(
+    queue: "asyncio.Queue[Optional[str]]",
+    db: DatabaseManager,
+    conversation_id: int,
+    idea_id: int,
+    assistant_msg_id: int,
+    llm_provider: str,
+    llm_model: str,
+    actual_user_message: str,
+    chat_history_payload: List[ChatMessageData],
+    llm_attachment_payload: List[FileAttachmentData],
+    user_id: int,
+    summarizer_service: SummarizerService,
+) -> None:
+    """Background task to generate chat response and write chunks to queue.
+
+    Runs independently of client connection. Writes chunks to queue for
+    streaming to client. When done, writes None to signal completion.
+    The message is saved when generation completes.
+    """
+    stream_completed_successfully = False
+
+    try:
+        logger.info(f"Starting background chat generation for conversation {conversation_id}")
+
+        provider_config = LLM_PROVIDER_REGISTRY.get(llm_provider)
+        if not provider_config:
+            error_msg = f"Unsupported LLM provider: {llm_provider}"
+            logger.error(error_msg)
+            await db.delete_chat_message(assistant_msg_id)
+            await queue.put(json.dumps({"type": "error", "data": error_msg}) + "\n")
+            return
+
+        target_model = provider_config.models_by_id.get(llm_model)
+        if not target_model:
+            error_msg = f"Unsupported model '{llm_model}' for provider '{llm_provider}'"
+            logger.error(error_msg)
+            await db.delete_chat_message(assistant_msg_id)
+            await queue.put(json.dumps({"type": "error", "data": error_msg}) + "\n")
+            return
+
+        async for event_data in provider_config.service.chat_with_idea_stream(
+            llm_model=target_model,
+            conversation_id=conversation_id,
+            idea_id=idea_id,
+            user_message=actual_user_message,
+            chat_history=chat_history_payload,
+            attached_files=llm_attachment_payload,
+            user_id=user_id,
+        ):
+            logger.debug(f"LLM SSE Event ({llm_provider}): {event_data}")
+
+            if isinstance(event_data, StreamDoneEvent):
+                data = event_data._asdict()
+                logger.debug(f"Done event: {data}")
+                final_content = event_data.data.assistant_response
+
+                # Treat empty assistant response as an error and do not persist
+                if not (final_content and final_content.strip()):
+                    error_json = json.dumps({"type": "error", "data": "Empty model output"}) + "\n"
+                    logger.warning(
+                        f"Empty assistant response for conversation {conversation_id}; "
+                        "emitting error instead of persisting"
+                    )
+                    try:
+                        await db.delete_chat_message(assistant_msg_id)
+                        logger.debug(
+                            f"Deleted placeholder assistant message {assistant_msg_id} "
+                            "due to empty response"
+                        )
+                    except Exception as delete_error:
+                        logger.error(
+                            f"Failed to delete placeholder message after empty response: "
+                            f"{delete_error}"
+                        )
+                    await queue.put(error_json)
+                    return
+
+                # Update the placeholder assistant message with the final content
+                await db.update_chat_message_content(
+                    message_id=assistant_msg_id,
+                    content=final_content,
+                )
+                stream_completed_successfully = True
+                logger.debug(
+                    f"Updated assistant message {assistant_msg_id} with final content "
+                    f"for conversation {conversation_id}"
+                )
+
+            # Write event to queue for client
+            json_data = json.dumps(event_data._asdict()) + "\n"
+            await queue.put(json_data)
+
+        logger.info(f"Background chat generation completed for conversation {conversation_id}")
+
+    except Exception as exc:
+        logger.exception(
+            f"Background chat generation failed for conversation {conversation_id}: {exc}"
+        )
+        # Delete placeholder on error if not completed
+        if not stream_completed_successfully:
+            try:
+                await db.delete_chat_message(assistant_msg_id)
+                logger.debug(
+                    f"Deleted placeholder assistant message {assistant_msg_id} after error"
+                )
+            except Exception as delete_error:
+                logger.error(f"Failed to delete placeholder message: {delete_error}")
+        # Write error to queue so client sees it (if still connected)
+        try:
+            await queue.put(
+                json.dumps({"type": "error", "data": f"Stream error: {str(exc)}"}) + "\n"
+            )
+        except Exception:
+            pass
+
+    finally:
+        # Add messages to chat summary
+        logger.debug(f"Adding messages to chat summary for conversation {conversation_id}")
+        try:
+            await summarizer_service.add_messages_to_chat_summary(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                idea_id=idea_id,
+            )
+        except Exception as summarizer_error:
+            logger.exception(
+                f"Error in add_messages_to_chat_summary for conversation {conversation_id}: "
+                f"{summarizer_error}"
+            )
+
+        # Signal completion to the streaming consumer
+        try:
+            await queue.put(None)
+        except Exception:
+            pass
 
 
 @router.post(
@@ -236,7 +376,8 @@ N/A
             for file in attached_files
         ]
 
-        # Create async streaming response
+        # Create async streaming response using queue-based approach
+        # This allows the LLM generation to continue even if client disconnects
         async def generate_stream() -> AsyncGenerator[str, None]:
             # Create placeholder assistant message immediately to prevent duplicate executions
             # on page refresh during streaming
@@ -250,109 +391,44 @@ N/A
                 f"Created placeholder assistant message {assistant_msg_id} for conversation {conversation_id}"
             )
 
-            try:
-                logger.debug(f"Starting stream for conversation {conversation_id}")
+            # Create queue for communication between background task and this stream
+            queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
 
-                provider_config = LLM_PROVIDER_REGISTRY.get(llm_provider)
-                if not provider_config:
-                    error_msg = f"Unsupported LLM provider: {llm_provider}"
-                    logger.error(error_msg)
-                    # Delete placeholder on error
-                    try:
-                        await db.delete_chat_message(assistant_msg_id)
-                    except Exception:
-                        pass
-                    yield json.dumps({"type": "error", "data": error_msg}) + "\n"
-                    return
-
-                target_model = provider_config.models_by_id.get(llm_model)
-                if not target_model:
-                    error_msg = f"Unsupported model '{llm_model}' for provider '{llm_provider}'"
-                    logger.error(error_msg)
-                    # Delete placeholder on error
-                    try:
-                        await db.delete_chat_message(assistant_msg_id)
-                    except Exception:
-                        pass
-                    yield json.dumps({"type": "error", "data": error_msg}) + "\n"
-                    return
-
-                async for event_data in provider_config.service.chat_with_idea_stream(
-                    llm_model=target_model,
+            # Start background task for LLM generation
+            # This runs independently - if client disconnects, task continues and saves message
+            background_task = asyncio.create_task(
+                _run_chat_generation_to_queue(
+                    queue=queue,
+                    db=db,
                     conversation_id=conversation_id,
                     idea_id=idea_id,
-                    user_message=actual_user_message,
-                    chat_history=chat_history_payload,
-                    attached_files=llm_attachment_payload,
+                    assistant_msg_id=assistant_msg_id,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
+                    actual_user_message=actual_user_message,
+                    chat_history_payload=chat_history_payload,
+                    llm_attachment_payload=llm_attachment_payload,
                     user_id=user.id,
-                ):
-                    logger.debug(f"LLM SSE Event ({llm_provider}): {event_data}")
-                    if isinstance(event_data, StreamDoneEvent):
-                        data = event_data._asdict()
-                        logger.debug(f"Done event: {data}")
-                        # Treat empty assistant response as an error and do not persist
-                        if not (
-                            event_data.data.assistant_response
-                            and event_data.data.assistant_response.strip()
-                        ):
-                            error_json = (
-                                json.dumps({"type": "error", "data": "Empty model output"}) + "\n"
-                            )
-                            logger.warning(
-                                f"Empty assistant response for conversation {conversation_id}; emitting error instead of persisting"
-                            )
-                            # Delete the placeholder message since response is empty
-                            try:
-                                await db.delete_chat_message(assistant_msg_id)
-                                logger.debug(
-                                    f"Deleted placeholder assistant message {assistant_msg_id} due to empty response"
-                                )
-                            except Exception as delete_error:
-                                logger.error(
-                                    f"Failed to delete placeholder message after empty response: {delete_error}"
-                                )
-                            yield error_json
-                            return
+                    summarizer_service=summarizer_service,
+                )
+            )
+            background_task.add_done_callback(
+                lambda t: (
+                    logger.error(f"Chat background task exception: {t.exception()}")
+                    if t.exception()
+                    else None
+                )
+            )
 
-                        # Update the placeholder assistant message with the final content
-                        await db.update_chat_message_content(
-                            message_id=assistant_msg_id,
-                            content=event_data.data.assistant_response,
-                        )
-                        logger.debug(
-                            f"Updated assistant message {assistant_msg_id} with final content for conversation {conversation_id}"
-                        )
-
-                    json_data = json.dumps(event_data._asdict()) + "\n"
-                    logger.debug(f"Yielding: {repr(json_data[:100])}")
-                    yield json_data
-
-                logger.debug(f"Stream completed for conversation {conversation_id}")
-            except Exception as e:
-                logger.exception(f"Error in stream_chat_response: {e}")
-                # Delete the placeholder message on error
-                try:
-                    await db.delete_chat_message(assistant_msg_id)
-                    logger.debug(
-                        f"Deleted placeholder assistant message {assistant_msg_id} after error"
-                    )
-                except Exception as delete_error:
-                    logger.error(f"Failed to delete placeholder message: {delete_error}")
-                yield json.dumps({"type": "error", "data": f"Stream error: {str(e)}"}) + "\n"
-
-            finally:
-                logger.debug(f"Adding messages to chat summary for conversation {conversation_id}")
-                try:
-                    await summarizer_service.add_messages_to_chat_summary(
-                        conversation_id=conversation_id,
-                        user_id=user.id,
-                        idea_id=idea_id,
-                    )
-                except Exception as summarizer_error:
-                    logger.exception(
-                        f"Error in add_messages_to_chat_summary for conversation {conversation_id}: {summarizer_error}"
-                    )
-                # Note: LLM costs are now charged atomically in create_llm_token_usage
+            # Stream chunks from queue to client
+            # If client disconnects, GeneratorExit is raised and we exit
+            # But the background task continues running and will save the message
+            while True:
+                queue_chunk = await queue.get()
+                if queue_chunk is None:
+                    # Background task finished
+                    break
+                yield queue_chunk
 
         return StreamingResponse(
             generate_stream(),

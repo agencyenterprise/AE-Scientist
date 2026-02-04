@@ -167,6 +167,15 @@ export function useResearchRunDetails({
     onReviewCompletedRef.current = onReviewCompleted;
   }, [onReviewCompleted]);
 
+  // Track mounted state to avoid state updates after unmount (e.g., when user navigates away)
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const handleReviewCompleted = useCallback((review: LlmReviewResponse) => {
     if (onReviewCompletedRef.current) {
       onReviewCompletedRef.current(review);
@@ -592,13 +601,32 @@ export function useResearchRunDetails({
           },
         }
       );
+
+      // Check if component is still mounted before updating state or navigating
+      if (!isMountedRef.current) {
+        // Component unmounted during API call - operation completed in background
+        // User navigated away, so don't try to update state or navigate
+        return;
+      }
+
       if (seedError) throw new Error("Failed to seed new idea from this run");
 
       router.push(`/conversations/${response.conversation_id}`);
     } catch (err) {
-      setSeedError(err instanceof Error ? err.message : "Failed to seed new idea from this run");
+      // Only update error state if still mounted and it's not an abort error
+      if (isMountedRef.current) {
+        const isAbortError = err instanceof Error && err.name === "AbortError";
+        if (!isAbortError) {
+          setSeedError(
+            err instanceof Error ? err.message : "Failed to seed new idea from this run"
+          );
+        }
+      }
     } finally {
-      setSeedPending(false);
+      // Only update pending state if still mounted
+      if (isMountedRef.current) {
+        setSeedPending(false);
+      }
     }
   }, [conversationId, runId, seedPending, router]);
 
