@@ -1,6 +1,6 @@
 "use client";
 
-import { ResearchLogsList } from "../../../components/run-detail/research-logs-list";
+import { ResearchLogsList } from "../research-logs-list";
 import type { LogEntry } from "@/types/research";
 
 interface LogsTabProps {

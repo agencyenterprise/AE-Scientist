@@ -1,9 +1,9 @@
 "use client";
 
-import { FinalPdfBanner } from "../../../components/run-detail/final-pdf-banner";
-import { ImportSourceCard } from "../../../components/run-detail/import-source-card";
-import { InitializationStatusBanner } from "../../../components/run-detail/initialization-status-banner";
-import { ResearchRunError } from "../../../components/run-detail/research-run-error";
+import { FinalPdfBanner } from "../final-pdf-banner";
+import { ImportSourceCard } from "../import-source-card";
+import { InitializationStatusBanner } from "../initialization-status-banner";
+import { ResearchRunError } from "../research-run-error";
 import { ResearchActivityFeed } from "../ResearchActivityFeed";
 import type { ArtifactMetadata, LlmReviewResponse, ResearchRunInfo } from "@/types/research";
 import { cn } from "@/shared/lib/utils";

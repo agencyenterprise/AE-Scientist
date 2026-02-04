@@ -1,6 +1,6 @@
 "use client";
 
-import { ResearchArtifactsList } from "../../../components/run-detail/research-artifacts-list";
+import { ResearchArtifactsList } from "../research-artifacts-list";
 import type { ArtifactMetadata } from "@/types/research";
 
 interface ArtifactsTabProps {

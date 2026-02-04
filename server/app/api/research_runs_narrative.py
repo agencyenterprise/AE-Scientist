@@ -106,6 +106,20 @@ async def narrative_stream(
     # Authenticate user
     get_current_user(request)
 
+    # Fetch initial state BEFORE entering the generator to avoid DB operations
+    # being interrupted by client disconnect (CancelledError). This prevents
+    # psycopg pool warnings about connections being returned in ACTIVE state.
+    try:
+        initial_state = await db.get_research_run_state(run_id)
+    except asyncio.CancelledError:
+        # Client disconnected before we could fetch state - return empty response
+        logger.debug("Narrator stream: Client disconnected during init for run_id=%s", run_id)
+        return StreamingResponse(
+            iter([]),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
     def _format_sse_event(event_type: str, data: str) -> str:
         """Format event in SSE protocol format."""
         return f"event: {event_type}\ndata: {data}\n\n"
@@ -115,13 +129,12 @@ async def narrative_stream(
 
         try:
             # Send initial state snapshot (without timeline - we'll send events separately)
-            state = await db.get_research_run_state(run_id)
-            if state:
+            if initial_state:
                 # Extract timeline events before sending state
-                timeline_events = state.timeline
+                timeline_events = initial_state.timeline
 
                 # Send state without timeline (empty array)
-                state_dict = state.model_dump(mode="json")
+                state_dict = initial_state.model_dump(mode="json")
                 state_dict["timeline"] = []  # Empty - events sent separately
                 yield _format_sse_event("state_snapshot", json.dumps(state_dict))
 
