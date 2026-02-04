@@ -50,6 +50,7 @@ def configure_logging() -> None:
                 rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
             )
         )
+        root_logger.info("Using JSON formatter")
     else:
         # Human-readable format for local development
         handler.setFormatter(
@@ -58,6 +59,7 @@ def configure_logging() -> None:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
+        root_logger.info("Using human-readable formatter")
     root_logger.addHandler(handler)
 
     # Set specific loggers to appropriate levels
