@@ -131,7 +131,7 @@
           "billing"
         ],
         "summary": "Get Wallet",
-        "description": "Return wallet balance (in cents) plus recent transactions for the authenticated user.",
+        "description": "Return wallet balance (in cents) plus recent transactions for the authenticated user.\n\nArgs:\n    limit: Maximum number of transactions to return (1-100).\n    offset: Number of transactions to skip.\n    transaction_types: Comma-separated list of transaction types to include.\n        Valid types: purchase, debit, refund, adjustment, hold, hold_reversal.\n        If not specified, returns all transaction types.",
         "operationId": "get_wallet_api_billing_wallet_get",
         "parameters": [
           {
@@ -152,6 +152,22 @@
               "type": "integer",
               "default": 0,
               "title": "Offset"
+            }
+          },
+          {
+            "name": "transaction_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Transaction Types"
             }
           }
         ],
@@ -4950,6 +4966,11 @@
             },
             "type": "array",
             "title": "Transactions"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "default": 0
           }
         },
         "type": "object",

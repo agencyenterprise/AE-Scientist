@@ -145,6 +145,13 @@ export interface paths {
         /**
          * Get Wallet
          * @description Return wallet balance (in cents) plus recent transactions for the authenticated user.
+         *
+         *     Args:
+         *         limit: Maximum number of transactions to return (1-100).
+         *         offset: Number of transactions to skip.
+         *         transaction_types: Comma-separated list of transaction types to include.
+         *             Valid types: purchase, debit, refund, adjustment, hold, hold_reversal.
+         *             If not specified, returns all transaction types.
          */
         get: operations["get_wallet_api_billing_wallet_get"];
         put?: never;
@@ -2061,6 +2068,11 @@ export interface components {
             balance_cents: number;
             /** Transactions */
             transactions: components["schemas"]["CreditTransactionModel"][];
+            /**
+             * Total Count
+             * @default 0
+             */
+            total_count: number;
         };
         /** Body_create_paper_review_api_paper_reviews_post */
         Body_create_paper_review_api_paper_reviews_post: {
@@ -6140,6 +6152,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                transaction_types?: string | null;
             };
             header?: never;
             path?: never;

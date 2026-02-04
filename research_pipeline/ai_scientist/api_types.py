@@ -2197,6 +2197,7 @@ class AuthStatus(BaseModel):
 class BillingWalletResponse(BaseModel):
     balance_cents: Annotated[int, Field(title="Balance Cents")]
     transactions: Annotated[list[CreditTransactionModel], Field(title="Transactions")]
+    total_count: Annotated[int | None, Field(title="Total Count")] = 0
 
 
 class ChatMessage(BaseModel):

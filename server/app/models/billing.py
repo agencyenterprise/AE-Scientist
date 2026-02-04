@@ -29,6 +29,7 @@ class BillingWalletResponse(BaseModel):
 
     balance_cents: int
     transactions: List[CreditTransactionModel]
+    total_count: int = 0
 
 
 class FundingOptionModel(BaseModel):
