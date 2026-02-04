@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict
 
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pythonjsonlogger.json import JsonFormatter
 from starlette.middleware.gzip import GZipMiddleware
 
 from app.api.mcp_server import router as mcp_router
@@ -33,12 +35,30 @@ def configure_logging() -> None:
     # Set logging level from environment variable
     log_level = getattr(logging, settings.server.log_level.upper(), logging.INFO)
 
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    # Configure root logger with JSON format in production for Railway
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(log_level)
+
+    if settings.is_production:
+        # JSON format for Railway - includes structured fields for better log parsing
+        handler.setFormatter(
+            JsonFormatter(
+                fmt="%(asctime)s %(name)s %(levelname)s %(message)s",
+                rename_fields={"asctime": "timestamp", "levelname": "level", "name": "logger"},
+            )
+        )
+    else:
+        # Human-readable format for local development
+        handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+    root_logger.addHandler(handler)
 
     # Set specific loggers to appropriate levels
     # Reduce noise from third-party libraries
