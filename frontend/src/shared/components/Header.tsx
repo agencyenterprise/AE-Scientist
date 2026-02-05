@@ -4,6 +4,7 @@ import { UserProfileDropdown } from "@/features/user-profile/components/UserProf
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useWalletBalance } from "@/shared/hooks/useWalletBalance";
 import { MessageSquare, FlaskConical, BookOpen, FileSearch } from "lucide-react";
+import { MobileNav } from "./MobileNav";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -19,8 +20,9 @@ export function Header() {
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-8 py-4">
-        <div className="flex items-center gap-8">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 md:px-8">
+        <div className="flex items-center gap-4 md:gap-8">
+          {user && <MobileNav />}
           <div className="flex items-center gap-2">
             <Link href="/" className="text-lg font-semibold text-white">
               AE Scientist
@@ -39,7 +41,7 @@ export function Header() {
             </span>
           </div>
           {user && (
-            <nav className="flex items-center gap-1">
+            <nav className="hidden items-center gap-1 md:flex">
               <Link
                 href="/how-it-works"
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -87,11 +89,11 @@ export function Header() {
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           {user && (
             <Link
               href="/billing"
-              className="flex items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition-colors hover:border-emerald-500/60 hover:bg-slate-800"
+              className="hidden items-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-3 py-1.5 text-sm text-slate-200 transition-colors hover:border-emerald-500/60 hover:bg-slate-800 md:flex"
             >
               <span className="text-xs uppercase tracking-wide text-slate-400">Balance</span>
               <span className="font-semibold text-white">
