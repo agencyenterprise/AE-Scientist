@@ -4,6 +4,11 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/Modal";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/shared/components/ui/tooltip";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import { cn } from "@/shared/lib/utils";
@@ -20,8 +25,11 @@ import {
   ChevronRight,
   FlaskConical,
   StopCircle,
+  Radio,
+  HelpCircle,
 } from "lucide-react";
 import type { components } from "@/types/api.gen";
+import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
 type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
@@ -374,7 +382,7 @@ function getEventColor(type: string) {
 function getEventLabel(type: string) {
   switch (type) {
     case "run_started":
-      return "Run Started";
+      return "Research Started";
     case "stage_started":
       return "Stage Started";
     case "stage_completed":
@@ -382,18 +390,55 @@ function getEventLabel(type: string) {
     case "progress_update":
       return "Progress Update";
     case "node_result":
-      return "Node Result";
+      return "Result Ready";
     case "node_execution_started":
-      return "Agent Started";
+      return "Experiment Running";
     case "node_execution_completed":
-      return "Agent Complete";
+      return "Experiment Complete";
     case "paper_generation_step":
-      return "Paper Generation";
+      return "Writing Paper";
     case "run_finished":
-      return "Run Finished";
+      return "Research Finished";
     default:
       return type.replace(/_/g, " ");
   }
+}
+
+/**
+ * InfoTooltip - A small help icon with tooltip explanation
+ */
+function InfoTooltip({ content, className }: { content: string; className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex items-center justify-center text-slate-500 hover:text-slate-400 transition-colors",
+            className
+          )}
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+      >
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Get humanized headline for an event
+ */
+function getHumanizedHeadline(event: TimelineEvent): string | null {
+  if (!event.headline) return null;
+
+  const nodeName = "node_name" in event ? (event.node_name as string) : undefined;
+  return humanizeEventHeadline(event.type, event.headline, nodeName);
 }
 
 interface CompactEventItemProps {
@@ -489,7 +534,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
             </div>
           </div>
           {event.headline && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{event.headline}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+              {getHumanizedHeadline(event) || event.headline}
+            </p>
           )}
           <EventDetails event={event} />
 
@@ -660,74 +707,112 @@ function StageSection({
     <div className="border border-border rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-4 p-4 hover:bg-muted/30 transition-colors text-left"
+        className="w-full p-3 sm:p-4 hover:bg-muted/30 transition-colors text-left"
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-start gap-2 sm:gap-3">
           <ChevronRight
             className={cn(
-              "h-4 w-4 text-muted-foreground shrink-0 transition-transform",
+              "h-4 w-4 text-muted-foreground shrink-0 transition-transform mt-1",
               isExpanded && "rotate-90"
             )}
           />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex-1 min-w-0">
+            {/* Stage name and status */}
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-foreground">{stage.stageName}</span>
               {statusBadge[stage.status]}
+            </div>
+
+            {/* Progress badges - wrap on their own line on mobile */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
               {stage.currentIteration !== null && stage.maxNodes !== null && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
-                  {stage.currentIteration}/{stage.maxNodes} iterations
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400 cursor-help">
+                      {stage.currentIteration}/{stage.maxNodes} iterations
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                  >
+                    {TOOLTIP_EXPLANATIONS.iterations}
+                  </TooltipContent>
+                </Tooltip>
               )}
               {stage.totalSeeds !== null && stage.totalSeeds > 0 && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-                    stage.seedEvalInProgress
-                      ? "bg-pink-500/20 text-pink-400"
-                      : "bg-pink-500/10 text-pink-300"
-                  )}
-                >
-                  <FlaskConical className="h-3 w-3" />
-                  {stage.currentSeed || 0}/{stage.totalSeeds} seeds
-                  {stage.seedEvalInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-help",
+                        stage.seedEvalInProgress
+                          ? "bg-pink-500/20 text-pink-400"
+                          : "bg-pink-500/10 text-pink-300"
+                      )}
+                    >
+                      <FlaskConical className="h-3 w-3" />
+                      {stage.currentSeed || 0}/{stage.totalSeeds} seeds
+                      {stage.seedEvalInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                  >
+                    {TOOLTIP_EXPLANATIONS.seeds}
+                  </TooltipContent>
+                </Tooltip>
               )}
               {stage.totalAggregations !== null && stage.totalAggregations > 0 && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-                    stage.aggregationInProgress
-                      ? "bg-teal-500/20 text-teal-400"
-                      : "bg-teal-500/10 text-teal-300"
-                  )}
-                >
-                  <Layers className="h-3 w-3" />
-                  {stage.currentAggregation || 0}/{stage.totalAggregations} aggregation
-                  {stage.aggregationInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium cursor-help",
+                        stage.aggregationInProgress
+                          ? "bg-teal-500/20 text-teal-400"
+                          : "bg-teal-500/10 text-teal-300"
+                      )}
+                    >
+                      <Layers className="h-3 w-3" />
+                      {stage.currentAggregation || 0}/{stage.totalAggregations} aggregation
+                      {stage.aggregationInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                  >
+                    {TOOLTIP_EXPLANATIONS.aggregation}
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
-              {duration && ` • ${duration}`}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-sm font-medium text-foreground">{stage.progress}%</span>
-          <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                stage.status === "completed"
-                  ? "bg-emerald-500"
-                  : stage.status === "in_progress"
-                    ? "bg-yellow-500"
-                    : "bg-slate-500"
-              )}
-              style={{ width: `${stage.progress}%` }}
-            />
+            {/* Progress bar and event count - on separate row */}
+            <div className="flex items-center justify-between gap-3 mt-2">
+              <p className="text-xs text-muted-foreground">
+                {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
+                {duration && ` • ${duration}`}
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-sm font-medium text-foreground">{stage.progress}%</span>
+                <div className="w-16 sm:w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      stage.status === "completed"
+                        ? "bg-emerald-500"
+                        : stage.status === "in_progress"
+                          ? "bg-yellow-500"
+                          : "bg-slate-500"
+                    )}
+                    style={{ width: `${stage.progress}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </button>
@@ -868,7 +953,7 @@ export function ResearchActivityFeed({
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
         <h3 className="text-lg font-semibold text-white mb-4">Research Activity</h3>
         <div className="flex items-center justify-center py-8 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -880,7 +965,7 @@ export function ResearchActivityFeed({
 
   if (error) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
         <h3 className="text-lg font-semibold text-white mb-4">Research Activity</h3>
         <div className="flex flex-col items-center justify-center py-8 text-slate-400">
           <AlertCircle className="h-8 w-8 text-red-400 mb-2" />
@@ -897,18 +982,24 @@ export function ResearchActivityFeed({
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Research Activity</h3>
-        <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "w-2 h-2 rounded-full",
-              isConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-500"
-            )}
-          />
-          <span className="text-xs text-slate-400">{isConnected ? "Live" : "Disconnected"}</span>
-        </div>
+        {isConnected ? (
+          <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1.5 sm:px-4 sm:py-2 self-start sm:self-auto">
+            <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-emerald-500" />
+            </span>
+            <Radio className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400" />
+            <span className="text-xs sm:text-sm font-medium text-emerald-300">Watching Live</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-full bg-slate-700/50 px-3 py-1.5 sm:px-4 sm:py-2 self-start sm:self-auto">
+            <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-slate-500" />
+            <span className="text-xs sm:text-sm text-slate-400">Disconnected</span>
+          </div>
+        )}
       </div>
 
       {stageGroups.length === 0 ? (

@@ -191,7 +191,7 @@ export default function ResearchRunDetailPage() {
 
   return (
     <PageCard>
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
         <ResearchRunHeader
           title={title}
           runNumber={runNumber}

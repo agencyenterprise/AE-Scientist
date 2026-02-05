@@ -16,7 +16,7 @@ interface StatCardProps {
  */
 export function StatCard({ icon: Icon, iconColorClass, label, value, title }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
       <div className="flex items-start gap-3">
         <div
           className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg ${iconColorClass}`}

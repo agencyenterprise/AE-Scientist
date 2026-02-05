@@ -36,7 +36,7 @@ export function ResearchBoardCard({
   parentRunId,
 }: ResearchBoardCardProps) {
   return (
-    <div className="group rounded-xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80">
+    <div className="group rounded-2xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80">
       <ResearchBoardCardHeader
         displayRunId={displayRunId}
         status={status}

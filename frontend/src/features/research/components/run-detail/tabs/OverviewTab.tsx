@@ -48,7 +48,7 @@ export function OverviewTab({
   const isCompleted = run.status === "completed" || run.status === "failed";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <InitializationStatusBanner
         status={run.status}
         initializationStatus={run.initialization_status}
@@ -90,7 +90,7 @@ function EvaluationSummary({
 }) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
           <h3 className="text-lg font-semibold text-white">Evaluation Summary</h3>
@@ -105,7 +105,7 @@ function EvaluationSummary({
 
   if (!review) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
           <h3 className="text-lg font-semibold text-white">Evaluation Summary</h3>
@@ -118,7 +118,7 @@ function EvaluationSummary({
   const isAccepted = review.decision === "Accept";
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-slate-400" />

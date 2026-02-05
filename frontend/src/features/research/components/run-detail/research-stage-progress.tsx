@@ -14,7 +14,7 @@ export function ResearchStageProgress({ progress }: ResearchStageProgressProps) 
   const iterationDisplay = Math.min(progress.iteration, progress.max_iterations);
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
       <h2 className="mb-4 text-lg font-semibold text-white">Stage Progress</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>

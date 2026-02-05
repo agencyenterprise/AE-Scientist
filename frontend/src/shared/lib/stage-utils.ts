@@ -30,6 +30,7 @@ export const STAGE_ID_TO_SLUG: Record<string, string> = {
   stage_2: "baseline_tuning",
   stage_3: "creative_research",
   stage_4: "ablation_studies",
+  stage_5: "paper_generation",
 };
 
 // =============================================================================

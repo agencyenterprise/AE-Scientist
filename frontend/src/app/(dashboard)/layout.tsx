@@ -1,4 +1,5 @@
 import { Header } from "@/shared/components/Header";
+import { Footer } from "@/shared/components/Footer";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <main className="flex-1 px-4 py-6 sm:px-8">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-12">{children}</div>
       </main>
+      <Footer />
     </div>
   );
 }

@@ -7,6 +7,214 @@ import { extractStageNumber } from "@/shared/lib/stage-utils";
 import { PaperGenerationEvent, StageProgress } from "@/types/research";
 
 /**
+ * Stage descriptions for humanizing messages
+ */
+const STAGE_DESCRIPTIONS: Record<string, { name: string; action: string; description: string }> = {
+  "1_baseline": {
+    name: "Baseline Implementation",
+    action: "Building the foundation",
+    description: "Creating the initial working implementation",
+  },
+  "2_baseline_tuning": {
+    name: "Baseline Tuning",
+    action: "Optimizing baseline",
+    description: "Fine-tuning parameters for better performance",
+  },
+  "3_creative": {
+    name: "Creative Research",
+    action: "Exploring creative approaches",
+    description: "Testing innovative strategies and novel ideas",
+  },
+  "4_ablation": {
+    name: "Ablation Studies",
+    action: "Analyzing component contributions",
+    description: "Identifying which components matter most",
+  },
+  "5_paper": {
+    name: "Paper Generation",
+    action: "Writing the research paper",
+    description: "Generating the final paper with results",
+  },
+};
+
+/**
+ * Maps technical node names to human-readable descriptions
+ */
+function humanizeNodeName(nodeName: string): string {
+  // Extract stage number and type
+  const match = nodeName.match(/^(\d+)_([a-z_]+)/i);
+  if (!match) return nodeName;
+
+  const [, stageNum, stageType] = match;
+
+  // Map common stage types
+  const typeMap: Record<string, string> = {
+    baseline: "baseline experiment",
+    baseline_tuning: "parameter optimization",
+    creative: "creative exploration",
+    creati: "creative exploration",
+    ablation: "ablation study",
+    paper: "paper section",
+    paper_generation: "paper writing",
+  };
+
+  const humanType = typeMap[stageType] || stageType.replace(/_/g, " ");
+  return `${humanType} #${stageNum}`;
+}
+
+/**
+ * Transforms technical timeline event headlines to human-readable messages
+ */
+export function humanizeEventHeadline(
+  eventType: string,
+  headline: string | null | undefined,
+  nodeName?: string
+): string {
+  if (!headline) return "";
+
+  // Handle node execution events
+  if (eventType === "node_execution_started" && nodeName) {
+    const humanNode = humanizeNodeName(nodeName);
+    return `Starting ${humanNode}`;
+  }
+
+  if (eventType === "node_execution_completed" && nodeName) {
+    const humanNode = humanizeNodeName(nodeName);
+    // Extract duration if present
+    const durationMatch = headline.match(/\(([\d.]+)s\)/);
+    if (durationMatch) {
+      return `Completed ${humanNode} in ${durationMatch[1]}s`;
+    }
+    return `Completed ${humanNode}`;
+  }
+
+  // Handle stage events
+  if (eventType === "stage_started") {
+    const stageMatch = headline.match(/Stage\s+(\d+_[a-z_]+)/i);
+    if (stageMatch) {
+      const stageKey = stageMatch[1]; // e.g., "2_baseline_tuning"
+      // Direct lookup in STAGE_DESCRIPTIONS using the full key
+      const stageInfo = STAGE_DESCRIPTIONS[stageKey];
+      if (stageInfo) {
+        return stageInfo.action;
+      }
+    }
+    return headline.replace(/Stage\s+\d+_/i, "Starting ");
+  }
+
+  if (eventType === "stage_completed") {
+    return headline.replace(/Stage\s+\d+_/i, "Completed ");
+  }
+
+  // Handle progress updates
+  if (eventType === "progress_update") {
+    return headline;
+  }
+
+  return headline;
+}
+
+/**
+ * Gets a human-readable description of current research activity
+ * Suitable for conference presentations and non-technical audiences
+ */
+export function getHumanReadableStageDescription(
+  stage: string | null,
+  status: string,
+  progress: number | null
+): { title: string; subtitle: string } {
+  if (status === "completed") {
+    return {
+      title: "Research Complete",
+      subtitle: "All experiments finished and paper generated",
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      title: "Research Stopped",
+      subtitle: "An error occurred during the research process",
+    };
+  }
+
+  if (!stage) {
+    if (status === "initializing" || status === "pending") {
+      return {
+        title: "Preparing Research Environment",
+        subtitle: "Setting up GPU and dependencies",
+      };
+    }
+    return {
+      title: "Starting Research",
+      subtitle: "Initializing the research pipeline",
+    };
+  }
+
+  // Extract stage number
+  const stageNumber = extractStageNumber(stage);
+  const progressPercent = progress !== null ? Math.round(progress * 100) : null;
+
+  const stageMessages: Record<string, { title: string; subtitle: string }> = {
+    "1": {
+      title: "Building Foundation",
+      subtitle: "Creating initial implementation and verifying it works",
+    },
+    "2": {
+      title: "Optimizing Performance",
+      subtitle: "Fine-tuning parameters to improve results",
+    },
+    "3": {
+      title: "Exploring Creative Ideas",
+      subtitle: "Testing innovative approaches and novel strategies",
+    },
+    "4": {
+      title: "Analyzing Results",
+      subtitle: "Running ablation studies to understand what works",
+    },
+    "5": {
+      title: "Writing Paper",
+      subtitle: "Generating the final research paper with all findings",
+    },
+  };
+
+  if (stageNumber && stageMessages[stageNumber]) {
+    const msg = stageMessages[stageNumber];
+    return {
+      title: msg.title,
+      subtitle:
+        progressPercent !== null ? `${msg.subtitle} (${progressPercent}% complete)` : msg.subtitle,
+    };
+  }
+
+  return {
+    title: "Running Research",
+    subtitle: stage.replace(/_/g, " "),
+  };
+}
+
+/**
+ * Tooltip explanations for technical terms
+ */
+export const TOOLTIP_EXPLANATIONS = {
+  iterations:
+    "Number of experiment cycles run in this stage. Each iteration tests a different approach or variation.",
+  seeds:
+    "Parallel experiments using different random seeds. Running multiple seeds helps ensure results are reliable and not due to chance.",
+  aggregation:
+    "Combining results from multiple seed experiments to get a more reliable overall assessment.",
+  progress:
+    "Overall completion percentage across all research stages (Baseline, Tuning, Creative, Ablation, Paper).",
+  evaluation:
+    "AI-generated assessment of the research quality based on originality, clarity, significance, and methodology.",
+  cost: "Estimated cost based on GPU compute time and API usage for this research run.",
+  duration: "Time elapsed since the research started.",
+  stage:
+    "Current phase of the research pipeline. Research progresses through 5 stages: Baseline, Tuning, Creative, Ablation, and Paper Generation.",
+} as const;
+
+export type TooltipKey = keyof typeof TOOLTIP_EXPLANATIONS;
+
+/**
  * Converts backend stage ids into a human-readable label.
  *
  * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]

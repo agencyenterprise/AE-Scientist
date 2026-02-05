@@ -29,7 +29,7 @@ export function ResearchArtifactsList({
   }
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+    <div className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
       <div className="mb-4 flex items-center gap-2">
         <Package className="h-5 w-5 text-amber-400" />
         <h2 className="text-lg font-semibold text-white">Artifacts</h2>

@@ -31,17 +31,17 @@ function IdeationQueueRunItemComponent({
       type="button"
       aria-label={`View research run ${truncateRunId(runId)}, status: ${status}`}
       className={cn(
-        "flex w-full items-center justify-between gap-3",
+        "flex w-full items-center justify-between gap-2 sm:gap-3",
         "rounded-lg border border-slate-800/50 bg-slate-900/30",
-        "px-3 py-2 text-left",
+        "px-2 py-2 sm:px-3 text-left",
         "transition-colors hover:border-slate-700 hover:bg-slate-800/50"
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {getStatusBadge(status, "sm")}
-        <span className="font-mono text-xs text-slate-400">{truncateRunId(runId)}</span>
+        <span className="font-mono text-xs text-slate-400 truncate">{truncateRunId(runId)}</span>
       </div>
-      <div className="flex items-center gap-3 text-[10px] text-slate-500">
+      <div className="flex items-center gap-2 sm:gap-3 text-[10px] text-slate-500 shrink-0">
         {gpuType && <span className="hidden sm:inline">{gpuType}</span>}
         <span>{formatRelativeTime(createdAt)}</span>
         <ArrowRight className="h-3 w-3 text-slate-600" />

@@ -84,33 +84,33 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
       {/* Metadata header */}
       <div className="space-y-4 border-b border-slate-800 pb-6">
         {/* Title */}
-        <h2 className="text-2xl font-semibold text-white">
+        <h2 className="text-xl sm:text-2xl font-semibold text-white">
           {activeVersion?.title || "Untitled Idea"}
         </h2>
 
-        <div className="flex flex-row gap-6 items-center">
-          {/* Metadata */}
-          {activeVersion?.created_at && (
-            <div className="text-sm">
-              <span className="text-slate-500">Created: </span>
-              <span className="text-slate-300">
-                {new Date(activeVersion.created_at).toLocaleString()}
-              </span>
-            </div>
-          )}
+        {/* Metadata row - stacks on mobile */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+          {/* Created date and run count */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            {activeVersion?.created_at && (
+              <div className="text-sm">
+                <span className="text-slate-500">Created: </span>
+                <span className="text-slate-300">
+                  {new Date(activeVersion.created_at).toLocaleString()}
+                </span>
+              </div>
+            )}
 
-          {/* Badges */}
-          {runCount > 0 && (
-            <div className="flex items-center gap-2">
+            {runCount > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400">
                 <FlaskConical className="h-3 w-3" />
                 {runCount} {runCount === 1 ? "run" : "runs"}
               </span>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Action buttons */}
-          <div className="ml-auto flex items-center gap-2">
+          {/* Action buttons - full width on mobile */}
+          <div className="flex items-center gap-2 sm:ml-auto">
             <LaunchResearchButton conversationId={conversationId} disabled={!canLaunchResearch} />
             <Button
               onClick={handleEditClick}

@@ -88,8 +88,9 @@ export function ConversationHeader({
   };
 
   return (
-    <div className="flex flex-row items-center justify-between gap-4 mb-4 md:mb-6">
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-3 mb-4 md:mb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      {/* Title Section - Takes priority on mobile */}
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
         <TitleEditor
           title={conversation.title}
           isEditing={isEditingTitle}
@@ -104,7 +105,7 @@ export function ConversationHeader({
         />
         {conversation.parent_run_id && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <GitBranch className="w-3 h-3" />
+            <GitBranch className="w-3 h-3 flex-shrink-0" />
             <span>Seeded from</span>
             <a
               href={`/research/${conversation.parent_run_id}`}
@@ -116,26 +117,28 @@ export function ConversationHeader({
         )}
       </div>
 
-      {/* Model Selector and AI Config */}
-      <div className="flex items-center gap-2">
+      {/* Model Selector and AI Config - Wraps on mobile */}
+      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
         {onOpenPromptModal && !isReadOnly && (
           <button
             onClick={onOpenPromptModal}
-            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
+            className="flex items-center space-x-1 px-2 py-1.5 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
             title="Configure AI prompts"
+            aria-label="Configure AI prompts"
           >
-            <Settings className="w-4 h-4" />
-            <span>AI Config</span>
+            <Settings className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden xs:inline">AI Config</span>
           </button>
         )}
         {costDetails && (
           <button
             onClick={handleShowCost}
-            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
+            className="flex items-center space-x-1 px-2 py-1.5 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
             title="View conversation costs"
+            aria-label="View conversation costs"
           >
-            <DollarSign className="w-4 h-4" />
-            <span>Cost</span>
+            <DollarSign className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden xs:inline">Cost</span>
           </button>
         )}
         <ModelSelector

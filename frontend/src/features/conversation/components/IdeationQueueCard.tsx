@@ -57,7 +57,7 @@ function IdeationQueueCardComponent({
       <article
         onClick={handleCardClick}
         className={cn(
-          "group cursor-pointer rounded-xl border border-slate-800 bg-slate-900/50 p-4",
+          "group cursor-pointer rounded-2xl border border-slate-800 bg-slate-900/50 p-3 sm:p-4",
           "transition-all hover:border-slate-700 hover:bg-slate-900/80",
           isSelected && "ring-2 ring-sky-500 border-sky-500/50 bg-slate-900/80"
         )}
@@ -85,14 +85,14 @@ function IdeationQueueCardComponent({
         )}
 
         {/* Footer: Status + Toggle */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wide text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] uppercase tracking-wide text-slate-500">
             <ConversationStatusBadge status={conversationStatus} />
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" />
               Created {formatRelativeTime(createdAt)}
             </span>
-            <span>Updated {formatRelativeTime(updatedAt)}</span>
+            <span className="hidden sm:inline">Updated {formatRelativeTime(updatedAt)}</span>
           </div>
 
           <button
@@ -101,7 +101,7 @@ function IdeationQueueCardComponent({
             aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
             aria-expanded={isExpanded}
             className={cn(
-              "inline-flex items-center gap-1 rounded px-2 py-1",
+              "inline-flex items-center gap-1 rounded px-2 py-1 shrink-0",
               "text-[10px] uppercase tracking-wide text-slate-400",
               "transition-colors hover:bg-slate-800 hover:text-slate-300"
             )}
@@ -115,7 +115,7 @@ function IdeationQueueCardComponent({
         {isExpanded && <IdeationQueueRunsList conversationId={id} />}
 
         {canLaunchResearch && (
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-3 sm:mt-4 flex items-center justify-center sm:justify-end">
             <LaunchResearchButton conversationId={id} />
           </div>
         )}

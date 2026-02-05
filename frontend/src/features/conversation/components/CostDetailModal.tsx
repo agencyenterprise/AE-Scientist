@@ -48,9 +48,9 @@ export function CostDetailModal({ isOpen, onClose, cost, isLoading }: CostDetail
                   {cost.cost_by_model.length > 0 ? (
                     <ul className="space-y-2">
                       {cost.cost_by_model.map((modelCost: ModelCost) => (
-                        <li key={modelCost.model} className="flex justify-between items-center">
-                          <span>{modelCost.model}</span>
-                          <span className="font-mono text-sm">
+                        <li key={modelCost.model} className="flex justify-between items-center gap-4">
+                          <span className="truncate text-sm" title={modelCost.model}>{modelCost.model}</span>
+                          <span className="font-mono text-sm flex-shrink-0">
                             {formatCurrency(modelCost.cost)}
                           </span>
                         </li>

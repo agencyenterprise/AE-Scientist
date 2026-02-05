@@ -90,7 +90,7 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
           {FLOW_STEPS.map((step, index) => (
             <li
               key={step.title}
-              className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
+              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/20 text-xs font-semibold text-sky-300">
@@ -105,7 +105,7 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
       </section>
 
       <section className="mt-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
             <Clock4 className="h-4 w-4 text-amber-300" />
             Runtime
@@ -118,7 +118,7 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             {maxRuntimeHours === null ? "…" : maxRuntimeHours} hours to prevent excessive cost.
           </p>
         </div>
-        <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
             <DollarSign className="h-4 w-4 text-emerald-300" />
             Cost
@@ -129,7 +129,7 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             experiment.
           </p>
         </div>
-        <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
           <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
             <FileText className="h-4 w-4 text-sky-300" />
             Deliverables

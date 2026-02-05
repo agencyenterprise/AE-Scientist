@@ -14,6 +14,17 @@ A collaborative platform that transforms LLM conversations into structured resea
 
 
 
+### Prerequisites (macOS only)
+
+If you're developing on **macOS**, install the required system dependency:
+
+```bash
+# Install libmagic (required for file type detection)
+brew install libmagic
+```
+
+This is automatically included in Docker/Linux environments but must be manually installed on macOS.
+
 ### Setup
 
 1. **Set up Clerk Authentication (REQUIRED)**

@@ -27,18 +27,6 @@ export function Header() {
             <Link href="/" className="text-lg font-semibold text-white">
               AE Scientist
             </Link>
-            <span className="hidden text-sm text-slate-500 sm:inline">·</span>
-            <span className="hidden text-sm text-slate-500 sm:inline">
-              Built by{" "}
-              <a
-                href="https://ae.studio"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="!text-slate-500 hover:underline"
-              >
-                AE Studio
-              </a>
-            </span>
           </div>
           {user && (
             <nav className="hidden items-center gap-1 md:flex">
