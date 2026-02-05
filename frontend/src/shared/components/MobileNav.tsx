@@ -2,14 +2,7 @@
 
 import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import {
-  Menu,
-  X,
-  MessageSquare,
-  FlaskConical,
-  BookOpen,
-  FileSearch,
-} from "lucide-react";
+import { Menu, X, MessageSquare, FlaskConical, BookOpen, FileSearch } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWalletBalance } from "@/shared/hooks/useWalletBalance";
@@ -88,7 +81,7 @@ export function MobileNav() {
           </div>
 
           <nav className="flex flex-1 flex-col gap-1 p-4">
-            {navItems.map((item) => (
+            {navItems.map(item => (
               <Link
                 key={item.href}
                 href={item.href}

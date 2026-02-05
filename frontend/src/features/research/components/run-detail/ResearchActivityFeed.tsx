@@ -21,6 +21,7 @@ import {
   FlaskConical,
   StopCircle,
 } from "lucide-react";
+import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 import type { components } from "@/types/api.gen";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
@@ -498,9 +499,10 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
             <details className="mt-2 rounded-md border border-blue-500/30 bg-blue-500/5">
               <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-blue-300 hover:text-blue-200 flex items-center gap-2">
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                Coding Agent Task
+                <span className="flex-1">Coding Agent Task</span>
+                <CopyToClipboardButton text={codexCodePreview} label="Copy task prompt" />
               </summary>
-              <div className="max-h-48 overflow-y-auto border-t border-blue-500/20 p-3">
+              <div className="max-h-96 overflow-y-auto border-t border-blue-500/20 p-3">
                 <p className="text-[10px] uppercase tracking-wide text-blue-400 mb-2">
                   Task prompt:
                 </p>
@@ -519,14 +521,19 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
                   <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 )}
                 {hasCompleted && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
-                Node Execution {hasCompleted ? "(completed)" : "(running)"}
+                <span className="flex-1">
+                  Node Execution {hasCompleted ? "(completed)" : "(running)"}
+                </span>
+                {runfileCodePreview && (
+                  <CopyToClipboardButton text={runfileCodePreview} label="Copy generated code" />
+                )}
               </summary>
               <div className="border-t border-emerald-500/20">
                 {"headline" in runfileEvent && (
                   <p className="px-3 py-1 text-xs text-slate-500">{runfileEvent.headline}</p>
                 )}
                 {runfileCodePreview && (
-                  <div className="max-h-48 overflow-y-auto p-3 pt-1">
+                  <div className="max-h-96 overflow-y-auto p-3 pt-1">
                     <p className="text-[10px] uppercase tracking-wide text-emerald-400 mb-2">
                       Generated runfile.py:
                     </p>

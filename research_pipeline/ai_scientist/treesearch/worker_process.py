@@ -561,7 +561,11 @@ def _write_codex_task_file(
         contract_lines = (
             codex_node_result_contract_prompt_lines_common() + codex_seed_agg_contract_lines()
         )
-        seed_agg_instructions = "\n".join(codex_seed_aggregation_instructions_lines()).strip()
+        seed_agg_instructions = "\n".join(
+            codex_seed_aggregation_instructions_lines(
+                seed_aggregation=task_context.seed_aggregation
+            )
+        ).strip()
         seed_agg_block = seed_agg_instructions + "\n\n"
     else:
         contract_lines = codex_node_result_contract_prompt_lines_for_stage(

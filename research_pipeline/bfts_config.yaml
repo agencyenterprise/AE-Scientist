@@ -53,7 +53,7 @@ agent:
   # whether to instruct the agent to use CV (set to 1 to disable)
   k_fold_validation: 1
   multi_seed_eval:
-    num_seeds: 1 # should be the same as num_workers if num_workers < 3. Otherwise, set it to be 3.
+    num_seeds: 3 
 
   # LLM settings for coding
   code:
