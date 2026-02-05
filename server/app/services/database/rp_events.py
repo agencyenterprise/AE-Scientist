@@ -76,6 +76,7 @@ class CodeExecutionEvent(NamedTuple):
     exec_time: Optional[float]
     created_at: datetime
     updated_at: datetime
+    node_index: int
 
 
 class StageSkipWindowRecord(NamedTuple):
@@ -309,6 +310,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
         exec_time: Optional[float] = None,
+        node_index: Optional[int] = None,
     ) -> int:
         """Insert or update a code execution event and return its ID."""
         now = datetime.now()
@@ -321,13 +323,14 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     """
                     INSERT INTO rp_code_execution_events
                         (run_id, execution_id, stage_name, run_type, code, status,
-                         started_at, completed_at, exec_time, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         started_at, completed_at, exec_time, node_index, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (run_id, execution_id, run_type)
                     DO UPDATE SET
                         status = EXCLUDED.status,
                         completed_at = EXCLUDED.completed_at,
                         exec_time = EXCLUDED.exec_time,
+                        node_index = COALESCE(EXCLUDED.node_index, rp_code_execution_events.node_index),
                         updated_at = EXCLUDED.updated_at
                     RETURNING id
                     """,
@@ -341,6 +344,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                         started_at,
                         completed_at,
                         exec_time,
+                        node_index,
                         now,
                         now,
                     ),
@@ -589,7 +593,8 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    completed_at,
                    exec_time,
                    created_at,
-                   updated_at
+                   updated_at,
+                   node_index
             FROM rp_code_execution_events
             WHERE run_id = %s
             ORDER BY started_at DESC NULLS LAST, id DESC
@@ -620,7 +625,8 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    completed_at,
                    exec_time,
                    created_at,
-                   updated_at
+                   updated_at,
+                   node_index
             FROM rp_code_execution_events
             WHERE run_id = %s
             ORDER BY run_type, started_at DESC NULLS LAST, id DESC

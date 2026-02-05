@@ -974,6 +974,7 @@ def _run_codex_cli(
             run_type=RunType.CODEX_EXECUTION,
             is_seed_node=is_seed_node,
             is_seed_agg_node=is_seed_agg_node,
+            node_index=node,
         )
     )
 
@@ -1052,6 +1053,7 @@ def _run_codex_cli(
                     run_type=RunType.RUNFILE_EXECUTION,
                     is_seed_node=is_seed_node,
                     is_seed_agg_node=is_seed_agg_node,
+                    node_index=node,
                 )
             )
             runfile_item_id = None
@@ -1076,6 +1078,7 @@ def _run_codex_cli(
                 run_type=RunType.RUNFILE_EXECUTION,
                 is_seed_node=is_seed_node,
                 is_seed_agg_node=is_seed_agg_node,
+                node_index=node,
             )
         )
 
@@ -1117,6 +1120,7 @@ def _run_codex_cli(
             run_type=RunType.CODEX_EXECUTION,
             is_seed_node=is_seed_node,
             is_seed_agg_node=is_seed_agg_node,
+            node_index=node,
         )
     )
     if exc_type is None:

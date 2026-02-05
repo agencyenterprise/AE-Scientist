@@ -3688,6 +3688,11 @@ export interface components {
              * @default false
              */
             is_seed_agg_node: boolean;
+            /**
+             * Node Index
+             * @description 1-based node index within the stage for display purposes
+             */
+            node_index: number;
         };
         /**
          * NodeExecutionStartedEvent
@@ -3759,6 +3764,11 @@ export interface components {
              * @default false
              */
             is_seed_agg_node: boolean;
+            /**
+             * Node Index
+             * @description 1-based node index within the stage for display purposes
+             */
+            node_index: number;
         };
         /**
          * NodeResultEvent
@@ -5493,6 +5503,8 @@ export interface components {
             is_seed_node: boolean;
             /** Is Seed Agg Node */
             is_seed_agg_node: boolean;
+            /** Node Index */
+            node_index: number;
         };
         /** RunCompletedPayload */
         RunCompletedPayload: {
@@ -5713,6 +5725,8 @@ export interface components {
             is_seed_node: boolean;
             /** Is Seed Agg Node */
             is_seed_agg_node: boolean;
+            /** Node Index */
+            node_index: number;
         };
         /** RunningCodePayload */
         RunningCodePayload: {

@@ -679,6 +679,7 @@ async def ingest_running_code(
         run_type=event.run_type,
         code=event.code,
         started_at=datetime.fromisoformat(event.started_at.replace("Z", "+00:00")),
+        node_index=event.node_index,
     )
 
 
@@ -729,6 +730,7 @@ async def ingest_run_completed(
         status=event.status,
         exec_time=event.exec_time,
         completed_at=datetime.fromisoformat(event.completed_at.replace("Z", "+00:00")),
+        node_index=event.node_index,
     )
 
 

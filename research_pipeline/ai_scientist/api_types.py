@@ -907,6 +907,13 @@ class NodeExecutionCompletedEvent(BaseModel):
             title="Is Seed Agg Node",
         ),
     ] = False
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
 
 
 class NodeExecutionStartedEvent(BaseModel):
@@ -949,6 +956,13 @@ class NodeExecutionStartedEvent(BaseModel):
             title="Is Seed Agg Node",
         ),
     ] = False
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
 
 
 class Outcome(StrEnum):
@@ -1965,6 +1979,7 @@ class RunningCodeEventPayload(BaseModel):
     run_type: RunType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
 
 
 class RunningCodePayload(BaseModel):
@@ -2846,6 +2861,7 @@ class RunCompletedEventPayload(BaseModel):
     run_type: RunType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
 
 
 class RunCompletedPayload(BaseModel):

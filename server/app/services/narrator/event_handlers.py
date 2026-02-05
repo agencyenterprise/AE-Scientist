@@ -249,12 +249,13 @@ def handle_running_code_event(
             timestamp=started_at + timedelta(milliseconds=offset_ms),
             stage=event.stage_name,
             node_id=event.execution_id,
-            headline=f"Node {event.execution_id[:8]} started",
+            headline=f"Node {event.node_index} started",
             execution_id=event.execution_id,
             run_type=event.run_type.value,
             code_preview=code_preview,
             is_seed_node=event.is_seed_node,
             is_seed_agg_node=event.is_seed_agg_node,
+            node_index=event.node_index,
         )
     )
 
@@ -272,9 +273,7 @@ def handle_run_completed_event(
         completed_at = datetime.now(timezone.utc)
 
     status_emoji = "✅" if event.status == "success" else "❌"
-    headline = (
-        f"{status_emoji} Node {event.execution_id[:8]} {event.status} ({event.exec_time:.1f}s)"
-    )
+    headline = f"{status_emoji} Node {event.node_index} {event.status} ({event.exec_time:.1f}s)"
 
     return [
         NodeExecutionCompletedEvent(
@@ -289,6 +288,7 @@ def handle_run_completed_event(
             run_type=event.run_type.value,
             is_seed_node=event.is_seed_node,
             is_seed_agg_node=event.is_seed_agg_node,
+            node_index=event.node_index,
         )
     ]
 

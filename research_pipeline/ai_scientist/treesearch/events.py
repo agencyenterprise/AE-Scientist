@@ -303,6 +303,7 @@ class RunningCodeEvent(BaseEvent):
     run_type: RunType
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
     def type(self) -> str:
         return "ai.run.running_code"
@@ -316,6 +317,7 @@ class RunningCodeEvent(BaseEvent):
             "started_at": self.started_at.isoformat(),
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
+            "node_index": self.node_index,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -327,6 +329,7 @@ class RunningCodeEvent(BaseEvent):
             started_at=self.started_at.isoformat(),
             is_seed_node=self.is_seed_node,
             is_seed_agg_node=self.is_seed_agg_node,
+            node_index=self.node_index,
         )
         return ("running_code", event)
 
@@ -341,6 +344,7 @@ class RunCompletedEvent(BaseEvent):
     run_type: RunType
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
     def type(self) -> str:
         return "ai.run.run_completed"
@@ -355,6 +359,7 @@ class RunCompletedEvent(BaseEvent):
             "completed_at": self.completed_at.isoformat(),
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
+            "node_index": self.node_index,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -367,6 +372,7 @@ class RunCompletedEvent(BaseEvent):
             completed_at=self.completed_at.isoformat(),
             is_seed_node=self.is_seed_node,
             is_seed_agg_node=self.is_seed_agg_node,
+            node_index=self.node_index,
         )
         return ("run_completed", event)
 

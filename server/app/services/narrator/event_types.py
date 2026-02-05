@@ -90,6 +90,7 @@ class RunningCodeEventPayload(BaseModel):
     run_type: RunType
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
 
 class RunCompletedEventPayload(BaseModel):
@@ -101,6 +102,7 @@ class RunCompletedEventPayload(BaseModel):
     run_type: RunType
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
 
 # ============================================================================

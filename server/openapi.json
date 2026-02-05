@@ -7910,6 +7910,11 @@
             "title": "Is Seed Agg Node",
             "description": "True if this is a seed aggregation node",
             "default": false
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index",
+            "description": "1-based node index within the stage for display purposes"
           }
         },
         "type": "object",
@@ -7921,7 +7926,8 @@
           "execution_id",
           "status",
           "exec_time",
-          "run_type"
+          "run_type",
+          "node_index"
         ],
         "title": "NodeExecutionCompletedEvent",
         "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered by run_completed events from research pipeline\n- Tracks node completion with timing and status\n- Pairs with NodeExecutionStartedEvent\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -7996,6 +8002,11 @@
             "title": "Is Seed Agg Node",
             "description": "True if this is a seed aggregation node",
             "default": false
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index",
+            "description": "1-based node index within the stage for display purposes"
           }
         },
         "type": "object",
@@ -8006,7 +8017,8 @@
           "headline",
           "execution_id",
           "run_type",
-          "code_preview"
+          "code_preview",
+          "node_index"
         ],
         "title": "NodeExecutionStartedEvent",
         "description": "Emitted when a node starts executing code.\n\nEmission Criteria:\n- Triggered by running_code events from research pipeline\n- Tracks individual node execution lifecycle\n- Helps show concurrent node execution\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -11635,6 +11647,10 @@
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index"
           }
         },
         "type": "object",
@@ -11646,7 +11662,8 @@
           "completed_at",
           "run_type",
           "is_seed_node",
-          "is_seed_agg_node"
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -12053,6 +12070,10 @@
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index"
           }
         },
         "type": "object",
@@ -12063,7 +12084,8 @@
           "started_at",
           "run_type",
           "is_seed_node",
-          "is_seed_agg_node"
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "RunningCodeEventPayload"
       },

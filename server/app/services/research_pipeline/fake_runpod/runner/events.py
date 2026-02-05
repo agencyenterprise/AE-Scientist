@@ -101,7 +101,8 @@ class EventsMixin:
         _lock = get_lock()
         _executions_by_id = get_executions()
 
-        execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
+        # Use clean UUID format matching production pipeline
+        execution_id = uuid.uuid4().hex
         started_at = datetime.now(timezone.utc)
         logger.debug(
             "[FakeRunner %s] Emitting code execution events execution_id=%s stage=%s iteration=%s",
@@ -143,6 +144,7 @@ class EventsMixin:
                 started_at=started_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -161,6 +163,7 @@ class EventsMixin:
                 started_at=runfile_started_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -194,6 +197,7 @@ class EventsMixin:
                 completed_at=runfile_completed_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -217,6 +221,7 @@ class EventsMixin:
                 completed_at=completed_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
         with _lock:
@@ -576,7 +581,8 @@ class EventsMixin:
 
         # Emit progress for each seed with execution events
         for seed_idx in range(num_seeds):
-            seed_execution_id = f"{stage_name}-seed-{seed_idx}-{uuid.uuid4().hex[:8]}"
+            # Use clean UUID format matching production pipeline
+            seed_execution_id = uuid.uuid4().hex
             seed_started_at = datetime.now(timezone.utc)
 
             # Emit running_code event for seed node
@@ -590,6 +596,7 @@ class EventsMixin:
                         started_at=seed_started_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
+                        node_index=seed_idx + 1,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -613,6 +620,7 @@ class EventsMixin:
                         completed_at=seed_completed_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
+                        node_index=seed_idx + 1,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -652,7 +660,8 @@ class EventsMixin:
                 )
 
         # Emit seed aggregation node execution events
-        agg_execution_id = f"{stage_name}-seed-agg-{uuid.uuid4().hex[:8]}"
+        # Use clean UUID format matching production pipeline
+        agg_execution_id = uuid.uuid4().hex
         agg_started_at = datetime.now(timezone.utc)
         logger.info(
             "[FakeRunner %s] Starting seed aggregation for %s",
@@ -671,6 +680,7 @@ class EventsMixin:
                     started_at=agg_started_at.isoformat(),
                     is_seed_node=False,
                     is_seed_agg_node=True,
+                    node_index=1,  # Single aggregation node
                 )
             )
         except Exception:
@@ -694,6 +704,7 @@ class EventsMixin:
                     completed_at=agg_completed_at.isoformat(),
                     is_seed_node=False,
                     is_seed_agg_node=True,
+                    node_index=1,  # Single aggregation node
                 )
             )
             logger.info(

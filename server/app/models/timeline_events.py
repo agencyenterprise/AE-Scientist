@@ -237,6 +237,9 @@ class NodeExecutionStartedEvent(TimelineEventBase):
     is_seed_agg_node: bool = Field(
         default=False, description="True if this is a seed aggregation node"
     )
+    node_index: int = Field(
+        ..., description="1-based node index within the stage for display purposes"
+    )
 
 
 class NodeExecutionCompletedEvent(TimelineEventBase):
@@ -262,6 +265,9 @@ class NodeExecutionCompletedEvent(TimelineEventBase):
     is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
     is_seed_agg_node: bool = Field(
         default=False, description="True if this is a seed aggregation node"
+    )
+    node_index: int = Field(
+        ..., description="1-based node index within the stage for display purposes"
     )
 
 
