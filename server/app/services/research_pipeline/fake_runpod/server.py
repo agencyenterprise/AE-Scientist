@@ -421,18 +421,6 @@ def telemetry_paper_generation_progress(payload: Dict[str, object] = Body(...)) 
     )
 
 
-@app.post("/telemetry/best-node-selection", status_code=204)
-def telemetry_best_node_selection(payload: Dict[str, object] = Body(...)) -> None:
-    """Record best node selection telemetry."""
-    _telemetry_events.append(
-        TelemetryRecord(
-            path="/telemetry/best-node-selection",
-            payload=payload,
-            received_at=time.time(),
-        )
-    )
-
-
 @app.get("/telemetry")
 def list_telemetry() -> List[Dict[str, object]]:
     """List all telemetry events."""

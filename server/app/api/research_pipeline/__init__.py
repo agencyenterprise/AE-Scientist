@@ -14,8 +14,6 @@ from .research_pipeline_webhooks import router as webhooks_router
 from .schemas import (
     ArtifactUploadedEvent,
     ArtifactUploadedPayload,
-    BestNodeSelectionEvent,
-    BestNodeSelectionPayload,
     CodexEventPayload,
     DatasetFileInfo,
     DatasetUploadUrlRequest,
@@ -91,8 +89,6 @@ __all__ = [
     # Schemas - Event payloads
     "ArtifactUploadedEvent",
     "ArtifactUploadedPayload",
-    "BestNodeSelectionEvent",
-    "BestNodeSelectionPayload",
     "CodexEventPayload",
     "DiskUsagePartition",
     "FigureReviewEvent",

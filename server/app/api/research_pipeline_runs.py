@@ -20,7 +20,6 @@ from app.models import (
     LlmReviewNotFoundResponse,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
-    ResearchRunBestNodeSelection,
     ResearchRunDetailsResponse,
     ResearchRunEvent,
     ResearchRunInfo,
@@ -493,10 +492,6 @@ async def get_research_run_details(
         ResearchRunSubstageSummary.from_db_record(event)
         for event in await db.list_substage_summary_events(run_id=run_id)
     ]
-    best_node_selections = [
-        ResearchRunBestNodeSelection.from_db_record(event)
-        for event in await db.list_best_node_reasoning_events(run_id=run_id)
-    ]
     artifacts = [
         ResearchRunArtifactMetadata.from_db_record(
             artifact=artifact,
@@ -543,7 +538,6 @@ async def get_research_run_details(
         logs=log_events,
         substage_events=substage_events,
         substage_summaries=substage_summaries,
-        best_node_selections=best_node_selections,
         events=run_events,
         artifacts=artifacts,
         paper_generation_progress=paper_gen_events,

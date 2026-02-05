@@ -233,25 +233,6 @@ class ParallelAgent:
             total_seeds,
         )
 
-        # Emit seed evaluation started event (using stage progress with is_seed_node=True)
-        try:
-            self.event_callback(
-                RunStageProgressEvent(
-                    stage=self.stage_name,
-                    iteration=0,
-                    max_iterations=total_seeds,
-                    progress=0.0,
-                    total_nodes=total_seeds,
-                    buggy_nodes=0,
-                    good_nodes=0,
-                    best_metric=None,
-                    is_seed_node=True,
-                    is_seed_agg_node=False,
-                )
-            )
-        except Exception:
-            logger.exception("Failed to emit seed evaluation progress event (started)")
-
         # Process seeds in batches to ensure proper GPU resource management
         completed_seeds = 0
         for batch_start in range(0, total_seeds, batch_size):

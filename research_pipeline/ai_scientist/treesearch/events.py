@@ -6,7 +6,6 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel as PydanticBaseModel
 
-from ai_scientist.api_types import BestNodeSelectionEvent as BestNodeSelectionEventPayload
 from ai_scientist.api_types import (
     PaperGenerationProgressEvent as PaperGenerationProgressEventPayload,
 )
@@ -53,7 +52,6 @@ EventKind = Literal[
     "substage_completed",
     "substage_summary",
     "paper_generation_progress",
-    "best_node_selection",
     "tree_viz_stored",
     "running_code",
     "run_completed",
@@ -241,35 +239,6 @@ class SubstageSummaryEvent(BaseEvent):
             summary=self.summary,
         )
         return ("substage_summary", event)
-
-
-@dataclass(frozen=True)
-class BestNodeSelectedEvent(BaseEvent):
-    """Event emitted when an LLM picks the current best node."""
-
-    run_id: str
-    stage: str
-    node_id: str
-    reasoning: str
-
-    def type(self) -> str:
-        return "ai.run.best_node_selected"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "run_id": self.run_id,
-            "stage": self.stage,
-            "node_id": self.node_id,
-            "reasoning": self.reasoning,
-        }
-
-    def persistence_record(self) -> PersistenceRecord:
-        event = BestNodeSelectionEventPayload(
-            stage=self.stage,
-            node_id=self.node_id,
-            reasoning=self.reasoning,
-        )
-        return ("best_node_selection", event)
 
 
 @dataclass(frozen=True)

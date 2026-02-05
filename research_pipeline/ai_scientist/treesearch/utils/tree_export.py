@@ -51,35 +51,6 @@ def _read_codex_task_markdown(*, node: Node) -> str:
         return ""
 
 
-def _emit_tree_viz_best_node_event(*, journal: Journal, node: Node) -> None:
-    """Emit a metric-only best-node event so DB mirrors the tree visualization."""
-    try:
-        metric_value = None
-        metric_name = None
-        if node.metric is not None:
-            metric_value = node.metric.value
-            metric_name = node.metric.name or "value"
-        reasoning_text = node.best_node_reasoning
-        if reasoning_text:
-            reasoning = reasoning_text
-        else:
-            reasoning_parts = [
-                "Tree visualization metric-only selection.",
-                "Persisted to mirror tree view best node.",
-            ]
-            if metric_value is not None:
-                reasoning_parts.append(
-                    f"Metric ({metric_name or 'value'}): {metric_value}",
-                )
-            reasoning = " ".join(reasoning_parts)
-        journal.emit_best_node_reasoning(
-            node=node,
-            reasoning=reasoning,
-        )
-    except Exception:
-        logger.exception("Failed to emit metric-best node event for stage %s", journal.stage_name)
-
-
 def generate_layout(n_nodes: int, edges: list[tuple[int, int]], layout_type: str) -> np.ndarray:
     """Generate visual layout of graph"""
     layout = Graph(
@@ -171,8 +142,6 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
 
         # Avoid unnecessary LLM calls during visualization; rely on metric-only selection among good nodes
     best_node = jou.get_best_node(only_good=True, use_val_metric_only=True)
-    if best_node is not None:
-        _emit_tree_viz_best_node_event(journal=jou, node=best_node)
     metrics: list[dict[str, object] | None] = []
     is_best_node = []
     codex_task: list[str] = []

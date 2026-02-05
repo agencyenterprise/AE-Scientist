@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 # Import narrator event types - these are the source of truth for event schemas
 # used by both the webhook validation AND the narrator pipeline
 from app.services.narrator.event_types import (
-    BestNodeSelectionEvent,
     NarratorEvent,
     PaperGenerationProgressEvent,
     RunCompletedEventPayload,
@@ -24,7 +23,6 @@ __all__ = [
     "SubstageCompletedEvent",
     "SubstageSummaryEvent",
     "PaperGenerationProgressEvent",
-    "BestNodeSelectionEvent",
     "RunningCodeEventPayload",
     "RunCompletedEventPayload",
     "RunStartedEventData",
@@ -126,10 +124,6 @@ class ReviewCompletedEvent(BaseModel):
 
 class ReviewCompletedPayload(BaseModel):
     event: ReviewCompletedEvent
-
-
-class BestNodeSelectionPayload(BaseModel):
-    event: BestNodeSelectionEvent
 
 
 class StageSkipWindowEventModel(BaseModel):

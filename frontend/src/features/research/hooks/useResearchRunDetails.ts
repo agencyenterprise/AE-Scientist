@@ -12,7 +12,6 @@ import type {
   ArtifactMetadata,
   PaperGenerationEvent,
   TreeVizItem,
-  BestNodeSelection,
   SubstageSummary,
   SubstageEvent,
   HwCostEstimateData,
@@ -188,17 +187,6 @@ export function useResearchRunDetails({
         ? {
             ...prev,
             paper_generation_progress: [...prev.paper_generation_progress, event],
-          }
-        : null
-    );
-  }, []);
-
-  const handleBestNodeSelection = useCallback((event: BestNodeSelection) => {
-    setDetails(prev =>
-      prev
-        ? {
-            ...prev,
-            best_node_selections: [...(prev.best_node_selections ?? []), event],
           }
         : null
     );
@@ -490,7 +478,6 @@ export function useResearchRunDetails({
     onInitializationStatus: handleInitializationStatus,
     onHwCostEstimate: handleHwCostEstimate,
     onHwCostActual: handleHwCostActual,
-    onBestNodeSelection: handleBestNodeSelection,
     onSubstageSummary: handleSubstageSummary,
     onSubstageCompleted: handleSubstageCompleted,
     onError: handleSSEError,

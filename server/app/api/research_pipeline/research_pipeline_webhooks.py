@@ -11,11 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.llm_providers import extract_model_name_and_provider
 from app.api.research_pipeline.utils import generate_run_webhook_token
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
-from app.models.research_pipeline import (
-    LlmReviewResponse,
-    ResearchRunArtifactMetadata,
-    ResearchRunBestNodeSelection,
-)
+from app.models.research_pipeline import LlmReviewResponse, ResearchRunArtifactMetadata
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
     ResearchRunLogEntry,
@@ -25,7 +21,6 @@ from app.models.research_pipeline import (
 from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
 from app.models.research_pipeline import ResearchRunSubstageSummary
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
-from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedData
@@ -55,7 +50,6 @@ from app.services.research_pipeline.runpod.runpod_initialization import WORKSPAC
 from .auth import ResearchRunStore, verify_run_auth
 from .schemas import (
     ArtifactUploadedPayload,
-    BestNodeSelectionPayload,
     CodexEventPayload,
     DiskUsagePartition,
     FigureReviewsPayload,
@@ -483,57 +477,6 @@ async def ingest_substage_summary(
         stage=event.stage,
         summary=event.summary,
         created_at=now,
-    )
-
-
-@router.post("/{run_id}/best-node-selection", status_code=status.HTTP_204_NO_CONTENT)
-async def ingest_best_node_selection(
-    run_id: str,
-    payload: BestNodeSelectionPayload,
-    _: None = Depends(verify_run_auth),
-    db: DatabaseManager = Depends(get_database),
-) -> None:
-    event = payload.event
-    reasoning_preview = (
-        event.reasoning if len(event.reasoning) <= 200 else f"{event.reasoning[:197]}..."
-    )
-    logger.debug(
-        "RP best-node selection: run=%s stage=%s node=%s reasoning=%s",
-        run_id,
-        event.stage,
-        event.node_id,
-        reasoning_preview,
-    )
-    created_at = datetime.now(timezone.utc).isoformat()
-    best_node = ResearchRunBestNodeSelection(
-        id=_next_stream_event_id(),
-        stage=event.stage,
-        node_id=event.node_id,
-        reasoning=event.reasoning,
-        created_at=created_at,
-    )
-    publish_stream_event(
-        run_id=run_id,
-        event=SSEBestNodeEvent(
-            type="best_node_selection",
-            data=best_node,
-        ),
-    )
-
-    # Narrator: Ingest event for timeline
-    await ingest_narration_event(
-        db,
-        run_id=run_id,
-        event_type="best_node_selection",
-        event_data=event,
-    )
-
-    # Persist to database
-    await db.insert_best_node_reasoning_event(
-        run_id=run_id,
-        stage=event.stage,
-        node_id=event.node_id,
-        reasoning=event.reasoning,
     )
 
 

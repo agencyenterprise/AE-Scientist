@@ -2075,60 +2075,6 @@
         }
       }
     },
-    "/api/research-pipeline/events/{run_id}/best-node-selection": {
-      "post": {
-        "tags": [
-          "research-pipeline-events"
-        ],
-        "summary": "Ingest Best Node Selection",
-        "operationId": "ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post",
-        "parameters": [
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Run Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BestNodeSelectionPayload"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/research-pipeline/events/{run_id}/stage-skip-window": {
       "post": {
         "tags": [
@@ -4928,41 +4874,6 @@
         ],
         "title": "AuthUser",
         "description": "User information returned by authentication endpoints."
-      },
-      "BestNodeSelectionEvent": {
-        "properties": {
-          "stage": {
-            "type": "string",
-            "title": "Stage"
-          },
-          "node_id": {
-            "type": "string",
-            "title": "Node Id"
-          },
-          "reasoning": {
-            "type": "string",
-            "title": "Reasoning"
-          }
-        },
-        "type": "object",
-        "required": [
-          "stage",
-          "node_id",
-          "reasoning"
-        ],
-        "title": "BestNodeSelectionEvent"
-      },
-      "BestNodeSelectionPayload": {
-        "properties": {
-          "event": {
-            "$ref": "#/components/schemas/BestNodeSelectionEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "event"
-        ],
-        "title": "BestNodeSelectionPayload"
       },
       "BillingWalletResponse": {
         "properties": {
@@ -9259,65 +9170,6 @@
         ],
         "title": "ResearchRunArtifactMetadata"
       },
-      "ResearchRunBestNodeEvent": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "best_node_selection"
-            ],
-            "const": "best_node_selection",
-            "title": "Type"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ResearchRunBestNodeEvent"
-      },
-      "ResearchRunBestNodeSelection": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Unique identifier of the reasoning record"
-          },
-          "stage": {
-            "type": "string",
-            "title": "Stage",
-            "description": "Stage identifier where the selection happened"
-          },
-          "node_id": {
-            "type": "string",
-            "title": "Node Id",
-            "description": "Identifier of the selected node"
-          },
-          "reasoning": {
-            "type": "string",
-            "title": "Reasoning",
-            "description": "LLM reasoning that justified the selection"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp when the reasoning was recorded"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "stage",
-          "node_id",
-          "reasoning",
-          "created_at"
-        ],
-        "title": "ResearchRunBestNodeSelection"
-      },
       "ResearchRunCodeExecution": {
         "properties": {
           "execution_id": {
@@ -9628,14 +9480,6 @@
             "type": "array",
             "title": "Substage Summaries",
             "description": "LLM-generated summaries for completed sub-stages"
-          },
-          "best_node_selections": {
-            "items": {
-              "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-            },
-            "type": "array",
-            "title": "Best Node Selections",
-            "description": "Reasoning records captured whenever a best node is selected"
           },
           "events": {
             "items": {
@@ -10197,13 +10041,6 @@
             "type": "array",
             "title": "Paper Generation Progress"
           },
-          "best_node_selections": {
-            "items": {
-              "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-            },
-            "type": "array",
-            "title": "Best Node Selections"
-          },
           "stage_skip_windows": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
@@ -10261,8 +10098,7 @@
           "artifacts",
           "tree_viz",
           "events",
-          "paper_generation_progress",
-          "best_node_selections"
+          "paper_generation_progress"
         ],
         "title": "ResearchRunInitialEventData"
       },
@@ -11059,17 +10895,6 @@
               }
             ]
           },
-          "best_node_reasoning": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Node Reasoning"
-          },
           "artifact_ids": {
             "items": {
               "type": "integer"
@@ -11240,9 +11065,6 @@
             "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
           },
           {
-            "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
-          },
-          {
             "$ref": "#/components/schemas/ResearchRunSubstageCompletedEvent"
           },
           {
@@ -11282,7 +11104,6 @@
           "propertyName": "type",
           "mapping": {
             "artifact": "#/components/schemas/ResearchRunArtifactEvent",
-            "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
             "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
             "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
             "complete": "#/components/schemas/ResearchRunCompleteEvent",

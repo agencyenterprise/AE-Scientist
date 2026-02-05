@@ -15,7 +15,6 @@ from app.models.research_pipeline import (
     ChildConversationInfo,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
-    ResearchRunBestNodeSelection,
     ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
@@ -238,7 +237,6 @@ class ResearchRunInitialEventData(BaseModel):
     tree_viz: List[TreeVizItem]
     events: List[ResearchRunEvent]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
-    best_node_selections: List[ResearchRunBestNodeSelection]
     stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
         default_factory=list,
         description="Recorded windows when stages became skippable.",
@@ -313,11 +311,6 @@ class ResearchRunTerminationStatusEvent(BaseModel):
 class ResearchRunLogEvent(BaseModel):
     type: Literal["log"]
     data: ResearchRunLogEntry
-
-
-class ResearchRunBestNodeEvent(BaseModel):
-    type: Literal["best_node_selection"]
-    data: ResearchRunBestNodeSelection
 
 
 class ResearchRunCodeExecutionStartedData(BaseModel):
@@ -410,7 +403,6 @@ ResearchRunEventUnion = Annotated[
         ResearchRunLogEvent,
         ResearchRunArtifactEvent,
         ResearchRunReviewCompletedEvent,
-        ResearchRunBestNodeEvent,
         ResearchRunSubstageCompletedEvent,
         ResearchRunPaperGenerationEvent,
         ResearchRunSubstageEventStream,

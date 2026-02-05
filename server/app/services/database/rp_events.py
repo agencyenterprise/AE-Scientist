@@ -63,15 +63,6 @@ class PaperGenerationEvent(NamedTuple):
     created_at: datetime
 
 
-class BestNodeReasoningEvent(NamedTuple):
-    id: int
-    run_id: str
-    stage: str
-    node_id: str
-    reasoning: str
-    created_at: datetime
-
-
 class CodeExecutionEvent(NamedTuple):
     id: int
     run_id: str
@@ -275,34 +266,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to insert paper generation event")
-                return int(result["id"])
-
-    async def insert_best_node_reasoning_event(
-        self,
-        *,
-        run_id: str,
-        stage: str,
-        node_id: str,
-        reasoning: str,
-        created_at: Optional[datetime] = None,
-    ) -> int:
-        """Insert a best node reasoning event and return its ID."""
-        if created_at is None:
-            created_at = datetime.now()
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    INSERT INTO rp_best_node_reasoning_events
-                        (run_id, stage, node_id, reasoning, created_at)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (run_id, stage, node_id, reasoning, created_at),
-                )
-                result = await cursor.fetchone()
-                if not result:
-                    raise ValueError("Failed to insert best node reasoning event")
                 return int(result["id"])
 
     async def insert_codex_event(
@@ -594,20 +557,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(query, (run_id,))
                 rows = await cursor.fetchall()
         return [PaperGenerationEvent(**row) for row in (rows or [])]
-
-    async def list_best_node_reasoning_events(self, run_id: str) -> List[BestNodeReasoningEvent]:
-        """Fetch reasoning emitted when the best node is chosen."""
-        query = """
-            SELECT id, run_id, stage, node_id, reasoning, created_at
-            FROM rp_best_node_reasoning_events
-            WHERE run_id = %s
-            ORDER BY created_at ASC
-        """
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, (run_id,))
-                rows = await cursor.fetchall()
-        return [BestNodeReasoningEvent(**row) for row in (rows or [])]
 
     async def get_latest_paper_generation_event(
         self, run_id: str

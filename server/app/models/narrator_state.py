@@ -69,7 +69,6 @@ class ResearchRunState(BaseModel):
     current_stage_progress: float = 0.0
     best_node_id: Optional[str] = None
     best_metrics: Optional[MetricCollection] = None
-    best_node_reasoning: Optional[str] = None
     artifact_ids: List[int] = Field(default_factory=list)
     # stage_id -> tree_viz_data
     tree_viz: Dict[str, Any] = Field(default_factory=dict)

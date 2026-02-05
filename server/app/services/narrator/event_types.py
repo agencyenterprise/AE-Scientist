@@ -82,12 +82,6 @@ class PaperGenerationProgressEvent(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-class BestNodeSelectionEvent(BaseModel):
-    stage: str
-    node_id: str
-    reasoning: str
-
-
 class RunningCodeEventPayload(BaseModel):
     execution_id: str
     stage_name: str
@@ -120,7 +114,6 @@ NarratorEvent = Union[
     SubstageCompletedEvent,
     SubstageSummaryEvent,
     PaperGenerationProgressEvent,
-    BestNodeSelectionEvent,
     RunningCodeEventPayload,
     RunCompletedEventPayload,
     RunStartedEventData,

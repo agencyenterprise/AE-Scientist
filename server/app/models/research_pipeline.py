@@ -15,7 +15,6 @@ from app.services.database.research_pipeline_runs import (
 )
 from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import (
-    BestNodeReasoningEvent,
     CodeExecutionEvent,
     PaperGenerationEvent,
     RunLogEvent,
@@ -286,24 +285,6 @@ class ResearchRunSubstageSummary(BaseModel):
         )
 
 
-class ResearchRunBestNodeSelection(BaseModel):
-    id: int = Field(..., description="Unique identifier of the reasoning record")
-    stage: str = Field(..., description="Stage identifier where the selection happened")
-    node_id: str = Field(..., description="Identifier of the selected node")
-    reasoning: str = Field(..., description="LLM reasoning that justified the selection")
-    created_at: str = Field(..., description="ISO timestamp when the reasoning was recorded")
-
-    @staticmethod
-    def from_db_record(event: BestNodeReasoningEvent) -> "ResearchRunBestNodeSelection":
-        return ResearchRunBestNodeSelection(
-            id=event.id,
-            stage=event.stage,
-            node_id=event.node_id,
-            reasoning=event.reasoning,
-            created_at=event.created_at.isoformat(),
-        )
-
-
 class ResearchRunStageSkipWindow(BaseModel):
     id: int = Field(..., description="Unique identifier for the skip window record")
     stage: str = Field(..., description="Stage identifier where skipping became possible")
@@ -470,10 +451,6 @@ class ResearchRunDetailsResponse(BaseModel):
     substage_summaries: List[ResearchRunSubstageSummary] = Field(
         default_factory=list,
         description="LLM-generated summaries for completed sub-stages",
-    )
-    best_node_selections: List[ResearchRunBestNodeSelection] = Field(
-        default_factory=list,
-        description="Reasoning records captured whenever a best node is selected",
     )
     events: List[ResearchRunEvent] = Field(
         default_factory=list,

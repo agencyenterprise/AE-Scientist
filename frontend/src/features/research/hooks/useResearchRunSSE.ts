@@ -9,7 +9,6 @@ import type {
   ArtifactMetadata,
   ResearchRunDetails,
   PaperGenerationEvent,
-  BestNodeSelection,
   SubstageSummary,
   SubstageEvent,
   HwCostEstimateData,
@@ -39,7 +38,6 @@ interface UseResearchRunSSEOptions {
   onComplete: (status: string) => void;
   onRunEvent?: (event: unknown) => void;
   onTerminationStatus?: (event: TerminationStatusData) => void;
-  onBestNodeSelection?: (event: BestNodeSelection) => void;
   onSubstageSummary?: (event: SubstageSummary) => void;
   onSubstageCompleted?: (event: SubstageEvent) => void;
   onError?: (error: string) => void;
@@ -246,7 +244,6 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     artifacts: data.artifacts,
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
-    best_node_selections: data.best_node_selections ?? [],
     stage_skip_windows: rawStageSkipWindows.map(normalizeStageSkipWindow),
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,
@@ -271,7 +268,6 @@ export function useResearchRunSSE({
   onInitializationStatus,
   onHwCostEstimate,
   onHwCostActual,
-  onBestNodeSelection,
   onSubstageSummary,
   onSubstageCompleted,
   onError,
@@ -407,9 +403,6 @@ export function useResearchRunSSE({
               case "review_completed":
                 onReviewCompleted?.(event.data as LlmReviewResponse);
                 break;
-              case "best_node_selection":
-                onBestNodeSelection?.(event.data as BestNodeSelection);
-                break;
               case "substage_summary":
                 onSubstageSummary?.(event.data as SubstageSummary);
                 break;
@@ -518,7 +511,6 @@ export function useResearchRunSSE({
     onSubstageCompleted,
     onRunEvent,
     onTerminationStatus,
-    onBestNodeSelection,
     onSubstageSummary,
     onPaperGenerationProgress,
     onComplete,

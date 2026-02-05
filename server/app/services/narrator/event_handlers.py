@@ -22,7 +22,6 @@ from app.models.timeline_events import (
     MetricInterpretation,
     NodeExecutionCompletedEvent,
     NodeExecutionStartedEvent,
-    NodeResultEvent,
     PaperGenerationStepEvent,
     ProgressUpdateEvent,
     RunFinishedEvent,
@@ -32,7 +31,6 @@ from app.models.timeline_events import (
     TimelineEvent,
 )
 from app.services.narrator.event_types import (
-    BestNodeSelectionEvent,
     NarratorEvent,
     PaperGenerationProgressEvent,
     RunCompletedEventPayload,
@@ -205,29 +203,6 @@ def handle_substage_summary_event(
     # Future: Extract insights, key learnings, confidence level
     # For now, return empty list (no separate timeline event)
     return []
-
-
-def handle_best_node_selection_event(
-    event: BestNodeSelectionEvent, _state: Optional[ResearchRunState]
-) -> List[TimelineEvent]:
-    """Transform best_node_selection event into NodeResultEvent."""
-    now = datetime.now(timezone.utc)
-
-    return [
-        NodeResultEvent(
-            id=str(uuid.uuid4()),
-            timestamp=now,
-            stage=event.stage,
-            node_id=event.node_id,
-            headline=f"Best Node Selected: {event.node_id}",
-            outcome="success",
-            summary=event.reasoning,
-            metrics=None,
-            error_type=None,
-            error_summary=None,
-            exec_time=None,
-        )
-    ]
 
 
 def handle_running_code_event(
@@ -537,8 +512,6 @@ def process_execution_event(
         return handle_substage_summary_event(event_data, state)
     elif isinstance(event_data, PaperGenerationProgressEvent):
         return handle_paper_generation_progress_event(event_data, state)
-    elif isinstance(event_data, BestNodeSelectionEvent):
-        return handle_best_node_selection_event(event_data, state)
     elif isinstance(event_data, RunningCodeEventPayload):
         return handle_running_code_event(event_data, state)
     elif isinstance(event_data, RunCompletedEventPayload):

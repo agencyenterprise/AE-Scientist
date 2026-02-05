@@ -49,7 +49,6 @@ class WebhookClient:
         "substage_completed": "/substage-completed",
         "substage_summary": "/substage-summary",
         "paper_generation_progress": "/paper-generation-progress",
-        "best_node_selection": "/best-node-selection",
         "tree_viz_stored": "/tree-viz-stored",
         "running_code": "/running-code",
         "run_completed": "/run-completed",
