@@ -4,7 +4,14 @@ import { useState } from "react";
 import { AutoEvaluationCard } from "../AutoEvaluationCard";
 import type { LlmReviewResponse } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
-import { FileText, ThumbsUp, ThumbsDown, HelpCircle, AlertTriangle, ChevronDown } from "lucide-react";
+import {
+  FileText,
+  ThumbsUp,
+  ThumbsDown,
+  HelpCircle,
+  AlertTriangle,
+  ChevronDown,
+} from "lucide-react";
 
 // Label mappings for scores
 const LABELS_LOW_TO_HIGH: Record<number, string> = {
@@ -61,9 +68,12 @@ function getScoreLabel(type: ScoreType, score: number): string {
 
 // Get score color based on normalized value (0-1)
 function getScoreColor(normalized: number): { text: string; bg: string; ring: string } {
-  if (normalized >= 0.8) return { text: "text-emerald-400", bg: "bg-emerald-400", ring: "ring-emerald-400/30" };
-  if (normalized >= 0.6) return { text: "text-teal-400", bg: "bg-teal-400", ring: "ring-teal-400/30" };
-  if (normalized >= 0.4) return { text: "text-amber-400", bg: "bg-amber-400", ring: "ring-amber-400/30" };
+  if (normalized >= 0.8)
+    return { text: "text-emerald-400", bg: "bg-emerald-400", ring: "ring-emerald-400/30" };
+  if (normalized >= 0.6)
+    return { text: "text-teal-400", bg: "bg-teal-400", ring: "ring-teal-400/30" };
+  if (normalized >= 0.4)
+    return { text: "text-amber-400", bg: "bg-amber-400", ring: "ring-amber-400/30" };
   return { text: "text-red-400", bg: "bg-red-400", ring: "ring-red-400/30" };
 }
 
@@ -92,9 +102,7 @@ export function EvaluationTab({
         disabled={conversationId === null}
       />
 
-      {review && (
-        <DetailedScoresSection review={review} />
-      )}
+      {review && <DetailedScoresSection review={review} />}
 
       {review?.summary && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:p-6">
@@ -208,28 +216,41 @@ function DetailedScoresSection({ review }: { review: LlmReviewResponse }) {
                 strokeDasharray={`${(review.overall / 10) * 97.4} 97.4`}
                 strokeLinecap="round"
                 className={cn(
-                  review.overall >= 7 ? "text-emerald-400" :
-                  review.overall >= 5 ? "text-amber-400" : "text-red-400"
+                  review.overall >= 7
+                    ? "text-emerald-400"
+                    : review.overall >= 5
+                      ? "text-amber-400"
+                      : "text-red-400"
                 )}
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className={cn(
-                "text-lg sm:text-xl font-bold",
-                review.overall >= 7 ? "text-emerald-400" :
-                review.overall >= 5 ? "text-amber-400" : "text-red-400"
-              )}>
+              <span
+                className={cn(
+                  "text-lg sm:text-xl font-bold",
+                  review.overall >= 7
+                    ? "text-emerald-400"
+                    : review.overall >= 5
+                      ? "text-amber-400"
+                      : "text-red-400"
+                )}
+              >
                 {review.overall}
               </span>
             </div>
           </div>
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider">Overall Score</p>
-            <p className={cn(
-              "text-base sm:text-lg font-semibold",
-              review.overall >= 7 ? "text-emerald-400" :
-              review.overall >= 5 ? "text-amber-400" : "text-red-400"
-            )}>
+            <p
+              className={cn(
+                "text-base sm:text-lg font-semibold",
+                review.overall >= 7
+                  ? "text-emerald-400"
+                  : review.overall >= 5
+                    ? "text-amber-400"
+                    : "text-red-400"
+              )}
+            >
               {getScoreLabel("overall", review.overall)}
             </p>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -250,11 +271,13 @@ function DetailedScoresSection({ review }: { review: LlmReviewResponse }) {
       </div>
 
       {/* Category Scores - Collapsible on mobile, always visible on desktop */}
-      <div className={cn(
-        "mt-5 pt-5 border-t border-slate-800",
-        "sm:block", // Always visible on sm+
-        isExpanded ? "block" : "hidden" // Toggle on mobile
-      )}>
+      <div
+        className={cn(
+          "mt-5 pt-5 border-t border-slate-800",
+          "sm:block", // Always visible on sm+
+          isExpanded ? "block" : "hidden" // Toggle on mobile
+        )}
+      >
         <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
           <ScoreItem
             label="Originality"
@@ -323,7 +346,8 @@ function ScoreItem({
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs text-slate-400 font-medium">{label}</p>
         <p className={cn("text-sm font-semibold tabular-nums", colors.text)}>
-          {value}<span className="text-slate-500 font-normal">/{maxValue}</span>
+          {value}
+          <span className="text-slate-500 font-normal">/{maxValue}</span>
         </p>
       </div>
       <div className="h-1.5 rounded-full bg-slate-700/50 overflow-hidden">
@@ -332,9 +356,7 @@ function ScoreItem({
           style={{ width: `${normalized * 100}%` }}
         />
       </div>
-      {semanticLabel && (
-        <p className="mt-1.5 text-xs text-slate-500">{semanticLabel}</p>
-      )}
+      {semanticLabel && <p className="mt-1.5 text-xs text-slate-500">{semanticLabel}</p>}
     </div>
   );
 }

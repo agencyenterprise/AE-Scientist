@@ -1,12 +1,8 @@
 "use client";
 
 import type { ModelCost, ResearchRunCostResponse } from "@/types";
-import { DollarSign, Loader2, Cpu, Zap, Server, HelpCircle } from "lucide-react";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/shared/components/ui/tooltip";
+import { DollarSign, Loader2, Zap, Server, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 
 interface CostDetailsCardProps {
   cost: ResearchRunCostResponse | null;
@@ -102,14 +98,20 @@ export function CostDetailsCard({
                         EST
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs bg-slate-800 text-slate-200 border-slate-700">
-                      Hardware cost is estimated based on runtime. Final cost will be calculated after completion.
+                    <TooltipContent
+                      side="top"
+                      className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                    >
+                      Hardware cost is estimated based on runtime. Final cost will be calculated
+                      after completion.
                     </TooltipContent>
                   </Tooltip>
                 )}
               </div>
               <span className="font-mono text-2xl font-bold text-emerald-400">
-                {totalCostWithHw !== null ? formatCurrency(totalCostWithHw) : formatCurrency(cost.total_cost)}
+                {totalCostWithHw !== null
+                  ? formatCurrency(totalCostWithHw)
+                  : formatCurrency(cost.total_cost)}
               </span>
             </div>
           </div>
@@ -141,13 +143,18 @@ export function CostDetailsCard({
                             <HelpCircle className="h-3 w-3" />
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-slate-800 text-slate-200 border-slate-700">
+                        <TooltipContent
+                          side="top"
+                          className="bg-slate-800 text-slate-200 border-slate-700"
+                        >
                           Rate: {formatCurrency(hwRateUsdPerHour)}/hour
                         </TooltipContent>
                       </Tooltip>
                     )}
                   </div>
-                  <span className={`font-mono text-white ${hasActualHwCost ? "text-xs line-through text-slate-500" : "text-sm"}`}>
+                  <span
+                    className={`font-mono text-white ${hasActualHwCost ? "text-xs line-through text-slate-500" : "text-sm"}`}
+                  >
                     {hwEstimatedUsd !== null ? formatCurrency(hwEstimatedUsd) : "—"}
                   </span>
                 </div>
@@ -173,13 +180,21 @@ export function CostDetailsCard({
                     const needsTooltip = short !== full;
 
                     return (
-                      <div key={modelCost.model} className="flex justify-between items-center gap-2">
+                      <div
+                        key={modelCost.model}
+                        className="flex justify-between items-center gap-2"
+                      >
                         {needsTooltip ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-xs text-slate-400 truncate cursor-help">{short}</span>
+                              <span className="text-xs text-slate-400 truncate cursor-help">
+                                {short}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent side="left" className="bg-slate-800 text-slate-200 border-slate-700 font-mono text-xs">
+                            <TooltipContent
+                              side="left"
+                              className="bg-slate-800 text-slate-200 border-slate-700 font-mono text-xs"
+                            >
                               {full}
                             </TooltipContent>
                           </Tooltip>

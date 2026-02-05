@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import {
   Terminal,
   ChevronDown,
@@ -15,7 +15,6 @@ import {
   Beaker,
   Settings2,
   BookOpen,
-  Eye,
   List,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -118,7 +117,10 @@ function getStageFromMessage(message: string): StageConfig {
   const lowerMessage = message.toLowerCase();
 
   // Check for stage indicators in the message
-  if (lowerMessage.includes("stage 1") || lowerMessage.includes("baseline") && !lowerMessage.includes("tuning")) {
+  if (
+    lowerMessage.includes("stage 1") ||
+    (lowerMessage.includes("baseline") && !lowerMessage.includes("tuning"))
+  ) {
     return STAGE_CONFIGS[0];
   }
   if (lowerMessage.includes("stage 2") || lowerMessage.includes("tuning")) {
@@ -217,19 +219,20 @@ interface ResearchLogsListProps {
   logs: LogEntry[];
 }
 
+// Helper to get initial view mode from localStorage
+function getInitialViewMode(): ViewMode {
+  if (typeof window === "undefined") return "narrative";
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "narrative" || stored === "detailed") {
+    return stored;
+  }
+  return "narrative";
+}
+
 export function ResearchLogsList({ logs }: ResearchLogsListProps) {
   const [activeFilter, setActiveFilter] = useState<LogLevelFilter>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("narrative");
-  const [expandedStages, setExpandedStages] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode);
   const [expandedErrors, setExpandedErrors] = useState<Set<string>>(new Set());
-
-  // Load preference from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "narrative" || stored === "detailed") {
-      setViewMode(stored);
-    }
-  }, []);
 
   // Save preference to localStorage
   const handleViewModeChange = (mode: ViewMode) => {
@@ -252,16 +255,30 @@ export function ResearchLogsList({ logs }: ResearchLogsListProps) {
   // Group logs by stage
   const groupedLogs = useMemo(() => groupLogsByStage(filteredLogs), [filteredLogs]);
 
-  // Auto-expand stages with errors
-  useEffect(() => {
-    const stagesWithErrors = groupedLogs
-      .filter(g => g.errorCount > 0)
-      .map(g => g.stage.id);
-    setExpandedStages(new Set(stagesWithErrors));
-  }, [groupedLogs]);
+  // Compute stages with errors for auto-expansion
+  const stagesWithErrors = useMemo(
+    () => new Set(groupedLogs.filter(g => g.errorCount > 0).map(g => g.stage.id)),
+    [groupedLogs]
+  );
+
+  // Track manually toggled stages (user overrides)
+  const [manuallyToggledStages, setManuallyToggledStages] = useState<Set<string>>(new Set());
+
+  // Compute effective expanded stages: auto-expand errors, but respect manual toggles
+  const expandedStages = useMemo(() => {
+    const expanded = new Set(stagesWithErrors);
+    manuallyToggledStages.forEach(stageId => {
+      if (expanded.has(stageId)) {
+        expanded.delete(stageId);
+      } else {
+        expanded.add(stageId);
+      }
+    });
+    return expanded;
+  }, [stagesWithErrors, manuallyToggledStages]);
 
   const toggleStage = (stageId: string) => {
-    setExpandedStages(prev => {
+    setManuallyToggledStages(prev => {
       const next = new Set(prev);
       if (next.has(stageId)) {
         next.delete(stageId);
@@ -311,12 +328,8 @@ export function ResearchLogsList({ logs }: ResearchLogsListProps) {
               <h2 className="text-base font-semibold text-white">Research Logs</h2>
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-slate-400">{logs.length} total</span>
-                {errorCount > 0 && (
-                  <span className="text-red-400">• {errorCount} errors</span>
-                )}
-                {warnCount > 0 && (
-                  <span className="text-amber-400">• {warnCount} warnings</span>
-                )}
+                {errorCount > 0 && <span className="text-red-400">• {errorCount} errors</span>}
+                {warnCount > 0 && <span className="text-amber-400">• {warnCount} warnings</span>}
               </div>
             </div>
           </div>
@@ -468,7 +481,8 @@ function NarrativeView({
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {summarizeStage(group.logs)} • {group.logs.length} log{group.logs.length !== 1 ? "s" : ""}
+                  {summarizeStage(group.logs)} • {group.logs.length} log
+                  {group.logs.length !== 1 ? "s" : ""}
                 </p>
               </div>
             </button>
@@ -555,10 +569,7 @@ function LogRow({
       )}
     >
       <div
-        className={cn(
-          "flex gap-2 py-1.5 px-2",
-          hasExpandableContent && "cursor-pointer"
-        )}
+        className={cn("flex gap-2 py-1.5 px-2", hasExpandableContent && "cursor-pointer")}
         onClick={hasExpandableContent ? onToggle : undefined}
       >
         {/* Timestamp */}
@@ -586,11 +597,11 @@ function LogRow({
             isWarning && "text-amber-300"
           )}
         >
-          {compact && !isExpanded ? (
-            log.message.length > 80 ? `${log.message.slice(0, 80)}…` : log.message
-          ) : (
-            log.message
-          )}
+          {compact && !isExpanded
+            ? log.message.length > 80
+              ? `${log.message.slice(0, 80)}…`
+              : log.message
+            : log.message}
         </span>
 
         {/* Expand indicator for errors */}

@@ -404,7 +404,9 @@ export function ResearchPipelineStages({
   };
 
   return (
-    <div className={cn("rounded-2xl border border-slate-800 bg-slate-900/50 p-6 w-full", className)}>
+    <div
+      className={cn("rounded-2xl border border-slate-800 bg-slate-900/50 p-6 w-full", className)}
+    >
       <h2 className="mb-6 text-xl font-semibold text-white">Pipeline Stages</h2>
 
       <div className="flex flex-col gap-6">

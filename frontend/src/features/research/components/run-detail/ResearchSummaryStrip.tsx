@@ -4,11 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import { getCurrentStageLabel, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 import type { LlmReviewResponse } from "@/types/research";
 import { CheckCircle2, XCircle, Loader2, AlertCircle, HelpCircle } from "lucide-react";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/shared/components/ui/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 
 const LABELS_OVERALL: Record<number, string> = {
   1: "Very Strong Reject",
@@ -22,6 +18,34 @@ const LABELS_OVERALL: Record<number, string> = {
   9: "Very Strong Accept",
   10: "Award Quality",
 };
+
+// Helper component for tooltip labels - defined outside to avoid recreation on each render
+function LabelWithTooltip({
+  label,
+  tooltipKey,
+}: {
+  label: string;
+  tooltipKey: keyof typeof TOOLTIP_EXPLANATIONS;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs font-medium text-slate-400">{label}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="text-slate-500 hover:text-slate-400 transition-colors">
+            <HelpCircle className="h-3 w-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+        >
+          {TOOLTIP_EXPLANATIONS[tooltipKey]}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
 
 interface ResearchSummaryStripProps {
   status: string;
@@ -89,35 +113,6 @@ export function ResearchSummaryStrip({
     }
   };
 
-  // Helper for tooltip labels
-  const LabelWithTooltip = ({
-    label,
-    tooltipKey,
-  }: {
-    label: string;
-    tooltipKey: keyof typeof TOOLTIP_EXPLANATIONS;
-  }) => (
-    <div className="flex items-center gap-1">
-      <span className="text-xs font-medium text-slate-400">{label}</span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="text-slate-500 hover:text-slate-400 transition-colors"
-          >
-            <HelpCircle className="h-3 w-3" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent
-          side="top"
-          className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
-        >
-          {TOOLTIP_EXPLANATIONS[tooltipKey]}
-        </TooltipContent>
-      </Tooltip>
-    </div>
-  );
-
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3 sm:p-4 lg:p-5">
       {/* Mobile: Stack vertically, Desktop: Grid layout */}
@@ -127,7 +122,9 @@ export function ResearchSummaryStrip({
           <LabelWithTooltip label="Status" tooltipKey="stage" />
           <div className="flex items-center gap-2 mt-1">
             {getStatusIcon()}
-            <span className="text-sm sm:text-base font-semibold text-white">{currentStageLabel}</span>
+            <span className="text-sm sm:text-base font-semibold text-white">
+              {currentStageLabel}
+            </span>
           </div>
         </div>
 
@@ -152,7 +149,9 @@ export function ResearchSummaryStrip({
         {/* Duration */}
         <div className="flex flex-col">
           <LabelWithTooltip label="Duration" tooltipKey="duration" />
-          <span className="text-sm sm:text-base font-semibold text-white mt-1">{formatDuration()}</span>
+          <span className="text-sm sm:text-base font-semibold text-white mt-1">
+            {formatDuration()}
+          </span>
         </div>
 
         {/* Evaluation - High importance, highlighted */}

@@ -13,12 +13,15 @@ import {
 } from "@/shared/lib/stage-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
 import { mergeTreeVizItems } from "@/shared/lib/tree-merge-utils";
-import { HelpCircle, GitBranch, CheckCircle2, Sparkles, FlaskConical, FileText } from "lucide-react";
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/shared/components/ui/tooltip";
+  HelpCircle,
+  GitBranch,
+  CheckCircle2,
+  Sparkles,
+  FlaskConical,
+  FileText,
+} from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 
 interface Props {
@@ -30,42 +33,45 @@ interface Props {
 }
 
 // Stage configuration with icons and colors for visual hierarchy
-const STAGE_CONFIG: Record<string, { icon: React.ReactNode; color: string; description: string }> = {
-  initial_implementation: {
-    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    color: "emerald",
-    description: "Building the foundation - creating a working baseline implementation",
-  },
-  baseline_tuning: {
-    icon: <FlaskConical className="h-3.5 w-3.5" />,
-    color: "blue",
-    description: "Fine-tuning parameters to optimize baseline performance",
-  },
-  creative_research: {
-    icon: <Sparkles className="h-3.5 w-3.5" />,
-    color: "purple",
-    description: "Exploring novel improvements and generating visualizations",
-  },
-  ablation_studies: {
-    icon: <GitBranch className="h-3.5 w-3.5" />,
-    color: "amber",
-    description: "Testing which components contribute most to the results",
-  },
-  paper_generation: {
-    icon: <FileText className="h-3.5 w-3.5" />,
-    color: "rose",
-    description: "Compiling findings into a research paper",
-  },
-};
+const STAGE_CONFIG: Record<string, { icon: React.ReactNode; color: string; description: string }> =
+  {
+    initial_implementation: {
+      icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+      color: "emerald",
+      description: "Building the foundation - creating a working baseline implementation",
+    },
+    baseline_tuning: {
+      icon: <FlaskConical className="h-3.5 w-3.5" />,
+      color: "blue",
+      description: "Fine-tuning parameters to optimize baseline performance",
+    },
+    creative_research: {
+      icon: <Sparkles className="h-3.5 w-3.5" />,
+      color: "purple",
+      description: "Exploring novel improvements and generating visualizations",
+    },
+    ablation_studies: {
+      icon: <GitBranch className="h-3.5 w-3.5" />,
+      color: "amber",
+      description: "Testing which components contribute most to the results",
+    },
+    paper_generation: {
+      icon: <FileText className="h-3.5 w-3.5" />,
+      color: "rose",
+      description: "Compiling findings into a research paper",
+    },
+  };
 
 // Get stage config with fallback
 function getStageConfig(stageId: string) {
   const slug = getStageSlug(stageId);
-  return STAGE_CONFIG[slug ?? ""] ?? {
-    icon: <GitBranch className="h-3.5 w-3.5" />,
-    color: "slate",
-    description: "Research exploration stage",
-  };
+  return (
+    STAGE_CONFIG[slug ?? ""] ?? {
+      icon: <GitBranch className="h-3.5 w-3.5" />,
+      color: "slate",
+      description: "Research exploration stage",
+    }
+  );
 }
 
 export function TreeVizCard({
@@ -214,7 +220,9 @@ export function TreeVizCard({
         <div className="text-center py-8">
           <GitBranch className="h-12 w-12 text-slate-600 mx-auto mb-3" />
           <p className="text-sm text-slate-400">No tree visualization available yet.</p>
-          <p className="text-xs text-slate-500 mt-1">The tree will appear as the research progresses.</p>
+          <p className="text-xs text-slate-500 mt-1">
+            The tree will appear as the research progresses.
+          </p>
         </div>
       )}
 
@@ -222,7 +230,9 @@ export function TreeVizCard({
         <>
           {/* Stage selector with improved visual hierarchy */}
           <div className="mb-4">
-            <p className="text-xs text-slate-400 mb-2">Select a stage to view its exploration tree:</p>
+            <p className="text-xs text-slate-400 mb-2">
+              Select a stage to view its exploration tree:
+            </p>
             <div className="flex flex-wrap gap-2">
               {list.map(viz => {
                 const config = getStageConfig(viz.stage_id);
@@ -245,7 +255,10 @@ export function TreeVizCard({
                         <span>{stageLabel(viz.stage_id)}</span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-xs bg-slate-800 text-slate-200 border-slate-700">
+                    <TooltipContent
+                      side="bottom"
+                      className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                    >
                       {config.description}
                     </TooltipContent>
                   </Tooltip>
@@ -268,7 +281,10 @@ export function TreeVizCard({
                     <span>Full Tree</span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs bg-slate-800 text-slate-200 border-slate-700">
+                <TooltipContent
+                  side="bottom"
+                  className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                >
                   View the complete research tree across all stages
                 </TooltipContent>
               </Tooltip>
@@ -299,7 +315,8 @@ export function TreeVizCard({
               {formatDateTime(selectedViz.created_at)}
             </span>
             <span>
-              <span className="text-slate-500">Updated:</span> {formatDateTime(selectedViz.updated_at)}
+              <span className="text-slate-500">Updated:</span>{" "}
+              {formatDateTime(selectedViz.updated_at)}
             </span>
           </div>
 

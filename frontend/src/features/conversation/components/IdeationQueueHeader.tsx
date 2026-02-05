@@ -72,7 +72,9 @@ export function IdeationQueueHeader({
             <div className="relative">
               <select
                 value={conversationStatusFilter}
-                onChange={e => onConversationStatusChange(e.target.value as ConversationStatusFilter)}
+                onChange={e =>
+                  onConversationStatusChange(e.target.value as ConversationStatusFilter)
+                }
                 aria-label="Filter by conversation status"
                 className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/50 py-2.5 pl-3 pr-10 text-sm text-slate-100 transition-colors focus:border-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-700"
               >

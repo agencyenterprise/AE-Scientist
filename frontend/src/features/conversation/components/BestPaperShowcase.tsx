@@ -324,11 +324,15 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
                 <div className="text-base sm:text-lg font-bold text-amber-300">
                   {metric.value}
                   {"max" in metric && (
-                    <span className="text-xs sm:text-sm text-slate-500 font-normal">/{metric.max}</span>
+                    <span className="text-xs sm:text-sm text-slate-500 font-normal">
+                      /{metric.max}
+                    </span>
                   )}
                 </div>
                 {"displayLabel" in metric && (
-                  <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{metric.displayLabel}</div>
+                  <div className="text-[10px] sm:text-xs text-slate-400 mt-0.5">
+                    {metric.displayLabel}
+                  </div>
                 )}
               </div>
             ))}
