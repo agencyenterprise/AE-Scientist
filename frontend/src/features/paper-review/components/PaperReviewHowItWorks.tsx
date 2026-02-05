@@ -37,100 +37,48 @@ const FLOW_STEPS = [
   },
 ];
 
+// NeurIPS-style rating scales
+const SCALE_LOW_TO_HIGH = [
+  { value: "4", label: "Very high" },
+  { value: "3", label: "High" },
+  { value: "2", label: "Medium" },
+  { value: "1", label: "Low" },
+];
+
+const SCALE_POOR_TO_EXCELLENT = [
+  { value: "4", label: "Excellent" },
+  { value: "3", label: "Good" },
+  { value: "2", label: "Fair" },
+  { value: "1", label: "Poor" },
+];
+
+const SCALE_OVERALL = [
+  { value: "9-10", label: "Award level" },
+  { value: "7-8", label: "Strong Accept" },
+  { value: "6", label: "Solid Accept" },
+  { value: "4-5", label: "Borderline" },
+  { value: "1-3", label: "Reject" },
+];
+
+const SCALE_CONFIDENCE = [
+  { value: "5", label: "Absolutely certain" },
+  { value: "4", label: "Confident" },
+  { value: "3", label: "Fairly confident" },
+  { value: "2", label: "Uncertain" },
+  { value: "1", label: "Educated guess" },
+];
+
 // All review criteria with their scales (matching NeurIPS form)
 const REVIEW_CRITERIA = [
-  {
-    name: "Originality",
-    desc: "Novelty of ideas and approach",
-    scores: [
-      { value: "4", label: "Very high" },
-      { value: "3", label: "High" },
-      { value: "2", label: "Medium" },
-      { value: "1", label: "Low" },
-    ],
-  },
-  {
-    name: "Quality",
-    desc: "Technical correctness and rigor",
-    scores: [
-      { value: "4", label: "Very high" },
-      { value: "3", label: "High" },
-      { value: "2", label: "Medium" },
-      { value: "1", label: "Low" },
-    ],
-  },
-  {
-    name: "Clarity",
-    desc: "Writing and exposition quality",
-    scores: [
-      { value: "4", label: "Very high" },
-      { value: "3", label: "High" },
-      { value: "2", label: "Medium" },
-      { value: "1", label: "Low" },
-    ],
-  },
-  {
-    name: "Significance",
-    desc: "Potential impact on the field",
-    scores: [
-      { value: "4", label: "Very high" },
-      { value: "3", label: "High" },
-      { value: "2", label: "Medium" },
-      { value: "1", label: "Low" },
-    ],
-  },
-  {
-    name: "Soundness",
-    desc: "Methodological rigor",
-    scores: [
-      { value: "4", label: "Excellent" },
-      { value: "3", label: "Good" },
-      { value: "2", label: "Fair" },
-      { value: "1", label: "Poor" },
-    ],
-  },
-  {
-    name: "Presentation",
-    desc: "Presentation quality",
-    scores: [
-      { value: "4", label: "Excellent" },
-      { value: "3", label: "Good" },
-      { value: "2", label: "Fair" },
-      { value: "1", label: "Poor" },
-    ],
-  },
-  {
-    name: "Contribution",
-    desc: "Contribution level",
-    scores: [
-      { value: "4", label: "Excellent" },
-      { value: "3", label: "Good" },
-      { value: "2", label: "Fair" },
-      { value: "1", label: "Poor" },
-    ],
-  },
-  {
-    name: "Overall",
-    desc: "Overall assessment",
-    scores: [
-      { value: "9-10", label: "Award level" },
-      { value: "7-8", label: "Strong Accept" },
-      { value: "6", label: "Solid Accept" },
-      { value: "4-5", label: "Borderline" },
-      { value: "1-3", label: "Reject" },
-    ],
-  },
-  {
-    name: "Confidence",
-    desc: "Reviewer confidence",
-    scores: [
-      { value: "5", label: "Absolutely certain" },
-      { value: "4", label: "Confident" },
-      { value: "3", label: "Fairly confident" },
-      { value: "2", label: "Uncertain" },
-      { value: "1", label: "Educated guess" },
-    ],
-  },
+  { name: "Originality", desc: "Novelty of ideas and approach", scores: SCALE_LOW_TO_HIGH },
+  { name: "Quality", desc: "Technical correctness and rigor", scores: SCALE_LOW_TO_HIGH },
+  { name: "Clarity", desc: "Writing and exposition quality", scores: SCALE_LOW_TO_HIGH },
+  { name: "Significance", desc: "Potential impact on the field", scores: SCALE_LOW_TO_HIGH },
+  { name: "Soundness", desc: "Methodological rigor", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Presentation", desc: "Presentation quality", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Contribution", desc: "Contribution level", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Overall", desc: "Overall assessment", scores: SCALE_OVERALL },
+  { name: "Confidence", desc: "Reviewer confidence", scores: SCALE_CONFIDENCE },
 ];
 
 interface PaperReviewHowItWorksProps {
