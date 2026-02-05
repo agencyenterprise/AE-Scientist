@@ -1206,9 +1206,27 @@ export function ResearchActivityFeed({
       if (err instanceof Error && err.name === "AbortError") {
         return;
       }
-      setError(err instanceof Error ? err.message : "Connection failed");
-      setIsConnected(false);
-      setIsLoading(false);
+      // Auto-reload the page on stream errors, with rate limiting to prevent infinite loops
+      const RELOAD_KEY = `activity-feed-reload-${runId}`;
+      const RELOAD_WINDOW_MS = 30000; // 30 seconds
+      const MAX_RELOADS = 3;
+
+      const now = Date.now();
+      const reloadHistory: number[] = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || "[]");
+      // Filter to only recent reloads
+      const recentReloads = reloadHistory.filter(t => now - t < RELOAD_WINDOW_MS);
+
+      if (recentReloads.length < MAX_RELOADS) {
+        // Record this reload and trigger it
+        recentReloads.push(now);
+        sessionStorage.setItem(RELOAD_KEY, JSON.stringify(recentReloads));
+        window.location.reload();
+      } else {
+        // Too many reloads, fall back to showing error state
+        setError(err instanceof Error ? err.message : "Connection failed");
+        setIsConnected(false);
+        setIsLoading(false);
+      }
     }
   }, [runId]);
 

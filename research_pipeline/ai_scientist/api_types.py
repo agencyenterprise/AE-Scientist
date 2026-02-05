@@ -909,18 +909,18 @@ class NodeExecutionCompletedEvent(BaseModel):
         ),
     ]
     is_seed_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed evaluation node", title="Is Seed Node"
         ),
-    ] = False
+    ]
     is_seed_agg_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed aggregation node",
             title="Is Seed Agg Node",
         ),
-    ] = False
+    ]
     node_index: Annotated[
         int,
         Field(
@@ -965,18 +965,18 @@ class NodeExecutionStartedEvent(BaseModel):
         str, Field(description="Full code being executed", title="Code Preview")
     ]
     is_seed_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed evaluation node", title="Is Seed Node"
         ),
-    ] = False
+    ]
     is_seed_agg_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed aggregation node",
             title="Is Seed Agg Node",
         ),
-    ] = False
+    ]
     node_index: Annotated[
         int,
         Field(

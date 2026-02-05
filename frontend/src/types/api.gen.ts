@@ -3691,13 +3691,11 @@ export interface components {
             /**
              * Is Seed Node
              * @description True if this is a seed evaluation node
-             * @default false
              */
             is_seed_node: boolean;
             /**
              * Is Seed Agg Node
              * @description True if this is a seed aggregation node
-             * @default false
              */
             is_seed_agg_node: boolean;
             /**
@@ -3773,13 +3771,11 @@ export interface components {
             /**
              * Is Seed Node
              * @description True if this is a seed evaluation node
-             * @default false
              */
             is_seed_node: boolean;
             /**
              * Is Seed Agg Node
              * @description True if this is a seed aggregation node
-             * @default false
              */
             is_seed_agg_node: boolean;
             /**

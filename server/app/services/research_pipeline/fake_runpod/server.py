@@ -1,5 +1,6 @@
 """FastAPI server that mocks the RunPod API."""
 
+import asyncio
 import json
 import logging
 import os
@@ -7,7 +8,8 @@ import re
 import threading
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, List
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List
 
 if TYPE_CHECKING:
     from .runner import FakeRunner
@@ -29,8 +31,18 @@ from .state import create_runner, get_executions, get_lock, get_runners, get_spe
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Handle startup and shutdown gracefully."""
+    try:
+        yield
+    except asyncio.CancelledError:
+        pass
+
+
 # FastAPI app instance
-app = FastAPI(title="Fake RunPod Server")
+app = FastAPI(title="Fake RunPod Server", lifespan=lifespan)
 
 # Local state (not shared with runner)
 _pods: Dict[str, PodRecord] = {}

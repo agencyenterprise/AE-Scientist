@@ -7924,14 +7924,12 @@
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node",
-            "description": "True if this is a seed evaluation node",
-            "default": false
+            "description": "True if this is a seed evaluation node"
           },
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node",
-            "description": "True if this is a seed aggregation node",
-            "default": false
+            "description": "True if this is a seed aggregation node"
           },
           "node_index": {
             "type": "integer",
@@ -7950,6 +7948,8 @@
           "exec_time",
           "run_type",
           "execution_type",
+          "is_seed_node",
+          "is_seed_agg_node",
           "node_index"
         ],
         "title": "NodeExecutionCompletedEvent",
@@ -8028,14 +8028,12 @@
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node",
-            "description": "True if this is a seed evaluation node",
-            "default": false
+            "description": "True if this is a seed evaluation node"
           },
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node",
-            "description": "True if this is a seed aggregation node",
-            "default": false
+            "description": "True if this is a seed aggregation node"
           },
           "node_index": {
             "type": "integer",
@@ -8053,6 +8051,8 @@
           "run_type",
           "execution_type",
           "code_preview",
+          "is_seed_node",
+          "is_seed_agg_node",
           "node_index"
         ],
         "title": "NodeExecutionStartedEvent",

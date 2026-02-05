@@ -88,7 +88,7 @@ class RunningCodeEventPayload(BaseModel):
     code: str
     started_at: str
     run_type: RunType
-    execution_type: ExecutionType  # Categorizes what this execution is for
+    execution_type: ExecutionType
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display
@@ -101,7 +101,7 @@ class RunCompletedEventPayload(BaseModel):
     exec_time: float
     completed_at: str
     run_type: RunType
-    execution_type: ExecutionType  # Categorizes what this execution is for
+    execution_type: ExecutionType
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display
