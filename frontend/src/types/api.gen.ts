@@ -3704,9 +3704,20 @@ export interface components {
             /**
              * Run Type
              * @description Type of run
-             * @default main_execution
              */
             run_type: string;
+            /**
+             * Is Seed Node
+             * @description True if this is a seed evaluation node
+             * @default false
+             */
+            is_seed_node: boolean;
+            /**
+             * Is Seed Agg Node
+             * @description True if this is a seed aggregation node
+             * @default false
+             */
+            is_seed_agg_node: boolean;
         };
         /**
          * NodeExecutionStartedEvent
@@ -3759,14 +3770,25 @@ export interface components {
             /**
              * Run Type
              * @description Type of run
-             * @default main_execution
              */
             run_type: string;
             /**
              * Code Preview
              * @description Preview of code being executed
              */
-            code_preview?: string | null;
+            code_preview: string;
+            /**
+             * Is Seed Node
+             * @description True if this is a seed evaluation node
+             * @default false
+             */
+            is_seed_node: boolean;
+            /**
+             * Is Seed Agg Node
+             * @description True if this is a seed aggregation node
+             * @default false
+             */
+            is_seed_agg_node: boolean;
         };
         /**
          * NodeResultEvent
@@ -3858,8 +3880,11 @@ export interface components {
         };
         /** PaperGenerationProgressEvent */
         PaperGenerationProgressEvent: {
-            /** Step */
-            step: string;
+            /**
+             * Step
+             * @enum {string}
+             */
+            step: "plot_aggregation" | "citation_gathering" | "paper_writeup" | "paper_review";
             /** Substep */
             substep?: string | null;
             /** Progress */
@@ -4259,6 +4284,12 @@ export interface components {
              * @default false
              */
             is_seed_node: boolean;
+            /**
+             * Is Seed Agg Node
+             * @description True if this is seed aggregation progress
+             * @default false
+             */
+            is_seed_agg_node: boolean;
         };
         /**
          * PublicConfigResponse
@@ -5529,6 +5560,10 @@ export interface components {
             /** Completed At */
             completed_at: string;
             run_type: components["schemas"]["RunType"];
+            /** Is Seed Node */
+            is_seed_node: boolean;
+            /** Is Seed Agg Node */
+            is_seed_agg_node: boolean;
         };
         /** RunCompletedPayload */
         RunCompletedPayload: {
@@ -5594,7 +5629,7 @@ export interface components {
              * @description Why the run finished
              * @enum {string}
              */
-            reason: "pipeline_completed" | "pipeline_error" | "heartbeat_timeout" | "deadline_exceeded" | "user_cancelled" | "container_died";
+            reason: "pipeline_completed" | "pipeline_error" | "heartbeat_timeout" | "deadline_exceeded" | "user_cancelled" | "container_died" | "pipeline_event_finish";
             /**
              * Message
              * @description Human-readable completion message
@@ -5745,6 +5780,10 @@ export interface components {
             /** Started At */
             started_at: string;
             run_type: components["schemas"]["RunType"];
+            /** Is Seed Node */
+            is_seed_node: boolean;
+            /** Is Seed Agg Node */
+            is_seed_agg_node: boolean;
         };
         /** RunningCodePayload */
         RunningCodePayload: {
@@ -5966,12 +6005,11 @@ export interface components {
             /** Good Nodes */
             good_nodes: number;
             /** Best Metric */
-            best_metric?: string | null;
-            /**
-             * Is Seed Node
-             * @default false
-             */
+            best_metric: string | null;
+            /** Is Seed Node */
             is_seed_node: boolean;
+            /** Is Seed Agg Node */
+            is_seed_agg_node: boolean;
         };
         /** StageProgressPayload */
         StageProgressPayload: {

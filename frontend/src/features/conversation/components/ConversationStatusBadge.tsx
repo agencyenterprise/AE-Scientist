@@ -3,9 +3,6 @@
 import { cn } from "@/shared/lib/utils";
 import type { ConversationStatus } from "../types/ideation-queue.types";
 
-// Re-export for backwards compatibility
-export type { ConversationStatus };
-
 interface ConversationStatusBadgeProps {
   status: ConversationStatus;
 }

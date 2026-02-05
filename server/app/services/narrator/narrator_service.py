@@ -20,7 +20,7 @@ Pattern:
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from psycopg import AsyncConnection
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from app.api.narrator_stream import publish_narrator_event
 from app.models.narrator_state import ResearchRunState, create_initial_state
 from app.services.database import DatabaseManager
+from app.services.narrator.event_types import NarratorEvent
 
 from .event_handlers import process_execution_event
 from .state_reducer import apply_changes, reduce
@@ -39,12 +40,13 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Global dict of queues, one per run_id
-_event_queues: Dict[str, asyncio.Queue] = {}
+# Each queue holds (event_type, event_data) tuples with typed event models
+_event_queues: Dict[str, "asyncio.Queue[Tuple[str, NarratorEvent]]"] = {}
 _queue_processors: Dict[str, asyncio.Task] = {}
 _run_completed: Dict[str, bool] = {}  # Track which runs have completed
 
 
-def _get_queue_for_run(run_id: str) -> asyncio.Queue:
+def _get_queue_for_run(run_id: str) -> "asyncio.Queue[Tuple[str, NarratorEvent]]":
     """
     Get or create event queue for a specific run_id.
 
@@ -68,7 +70,7 @@ async def _process_event_queue(run_id: str, db: DatabaseManager) -> None:
 
     while True:
         event_type: str = "<not_set>"
-        event_data: Dict[str, Any] = {}
+        event_data: Optional[NarratorEvent] = None
         try:
             # Check if run is complete and queue is empty BEFORE waiting for next event
             if _run_completed.get(run_id, False) and queue.qsize() == 0:
@@ -162,7 +164,7 @@ async def ingest_narration_event(
     *,
     run_id: str,
     event_type: str,
-    event_data: Dict[str, Any],
+    event_data: NarratorEvent,
 ) -> None:
     """
     Main entry point for narrator event ingestion (non-blocking).
@@ -178,7 +180,7 @@ async def ingest_narration_event(
         db: Database manager
         run_id: Research run ID
         event_type: Type of execution event (stage_progress, substage_completed, etc.)
-        event_data: Raw event data
+        event_data: Typed event data (Pydantic model)
 
     Pattern:
         - Non-blocking: Returns immediately after queuing
@@ -222,7 +224,7 @@ async def _process_single_event(
     db: DatabaseManager,
     run_id: str,
     event_type: str,
-    event_data: Dict[str, Any],
+    event_data: NarratorEvent,
 ) -> None:
     """
     Process a single event with database locking.
@@ -239,7 +241,7 @@ async def _process_single_event(
         db: Database manager
         run_id: Research run ID
         event_type: Type of execution event
-        event_data: Raw event data
+        event_data: Typed event data (Pydantic model)
     """
     # Use database connection (auto-commits on success, rolls back on error)
     async with db.aget_connection() as conn:

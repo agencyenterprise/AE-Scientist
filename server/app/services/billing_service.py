@@ -119,13 +119,6 @@ class BillingService:
             )
         return options
 
-    # Backwards compatibility alias
-    async def list_credit_packs(self) -> List[Dict[str, Any]]:
-        """Deprecated: Use list_funding_options instead."""
-        # For backwards compatibility, try to get price IDs from environment
-        # In practice, the caller should provide the price IDs
-        return []
-
     # ------------------------------------------------------------------
     # Checkout sessions
     # ------------------------------------------------------------------

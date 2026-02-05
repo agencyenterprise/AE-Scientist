@@ -4,7 +4,6 @@
 
 import type { components } from "./api.gen";
 
-// Re-export generated types for backwards compatibility
 export type User = components["schemas"]["AuthUser"];
 export type AuthStatus = components["schemas"]["AuthStatus"];
 

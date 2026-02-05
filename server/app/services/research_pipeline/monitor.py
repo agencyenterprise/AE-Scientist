@@ -3,11 +3,11 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Protocol, cast
+from typing import Dict, Literal, Optional, Protocol, cast
 
 from psycopg import AsyncConnection
 
-from app.api.research_pipeline_runs import _generate_run_webhook_token
+from app.api.research_pipeline.utils import generate_run_webhook_token
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
@@ -17,6 +17,7 @@ from app.services.database import DatabaseManager
 from app.services.database.billing import CreditTransaction
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import PodUpdateInfo, ResearchPipelineRun
+from app.services.narrator.event_types import RunFinishedEventData
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline.billing_retry_worker import BillingRetryWorker
 from app.services.research_pipeline.pod_restart import attempt_pod_restart
@@ -272,7 +273,7 @@ class ResearchPipelineMonitor:
         if deadline and now > deadline:
             # Try restart instead of immediate failure
             actual_db = get_database()
-            webhook_token, webhook_token_hash = _generate_run_webhook_token()
+            webhook_token, webhook_token_hash = generate_run_webhook_token()
             gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
             restarted = await attempt_pod_restart(
                 db=actual_db,
@@ -344,7 +345,7 @@ class ResearchPipelineMonitor:
             if failures >= self._max_missed_heartbeats:
                 # Try restart instead of immediate failure
                 actual_db = get_database()
-                webhook_token, webhook_token_hash = _generate_run_webhook_token()
+                webhook_token, webhook_token_hash = generate_run_webhook_token()
                 gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
                 restarted = await attempt_pod_restart(
                     db=actual_db,
@@ -386,7 +387,7 @@ class ResearchPipelineMonitor:
                     )
                     # Try restart instead of immediate failure
                     actual_db = get_database()
-                    webhook_token, webhook_token_hash = _generate_run_webhook_token()
+                    webhook_token, webhook_token_hash = generate_run_webhook_token()
                     gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
                     restarted = await attempt_pod_restart(
                         db=actual_db,
@@ -414,7 +415,11 @@ class ResearchPipelineMonitor:
         db: "ResearchRunStore",
         run: ResearchPipelineRun,
         message: str,
-        reason: str,
+        reason: Literal[
+            "heartbeat_timeout",
+            "deadline_exceeded",
+            "container_died",
+        ],
     ) -> None:
         logger.warning("Marking run %s as failed: %s", run.run_id, message)
         now = datetime.now(timezone.utc)
@@ -458,12 +463,12 @@ class ResearchPipelineMonitor:
             cast(DatabaseManager, db),
             run_id=run.run_id,
             event_type="run_finished",
-            event_data={
-                "success": False,
-                "status": "failed",
-                "message": message,
-                "reason": reason,
-            },
+            event_data=RunFinishedEventData(
+                success=False,
+                status="failed",
+                message=message,
+                reason=reason,
+            ),
         )
 
         termination = await db.enqueue_research_pipeline_run_termination(

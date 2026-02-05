@@ -30,7 +30,11 @@ from langchain_core.messages import BaseMessage
 
 from ai_scientist.api_types import TokenUsageEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
-from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
+from ai_scientist.treesearch.events import (
+    BaseEvent,
+    PaperGenerationProgressEvent,
+    PaperGenerationStep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +113,7 @@ def make_event_callback_adapter(
         callback(
             PaperGenerationProgressEvent(
                 run_id=run_id,
-                step=event.step,
+                step=PaperGenerationStep(event.step),
                 substep=event.substep,
                 progress=event.progress,
                 step_progress=event.step_progress,

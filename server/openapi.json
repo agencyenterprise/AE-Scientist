@@ -7986,8 +7986,19 @@
           "run_type": {
             "type": "string",
             "title": "Run Type",
-            "description": "Type of run",
-            "default": "main_execution"
+            "description": "Type of run"
+          },
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node",
+            "description": "True if this is a seed evaluation node",
+            "default": false
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node",
+            "description": "True if this is a seed aggregation node",
+            "default": false
           }
         },
         "type": "object",
@@ -7998,7 +8009,8 @@
           "headline",
           "execution_id",
           "status",
-          "exec_time"
+          "exec_time",
+          "run_type"
         ],
         "title": "NodeExecutionCompletedEvent",
         "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered by run_completed events from research pipeline\n- Tracks node completion with timing and status\n- Pairs with NodeExecutionStartedEvent\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -8055,20 +8067,24 @@
           "run_type": {
             "type": "string",
             "title": "Run Type",
-            "description": "Type of run",
-            "default": "main_execution"
+            "description": "Type of run"
           },
           "code_preview": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Code Preview",
             "description": "Preview of code being executed"
+          },
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node",
+            "description": "True if this is a seed evaluation node",
+            "default": false
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node",
+            "description": "True if this is a seed aggregation node",
+            "default": false
           }
         },
         "type": "object",
@@ -8077,7 +8093,9 @@
           "timestamp",
           "stage",
           "headline",
-          "execution_id"
+          "execution_id",
+          "run_type",
+          "code_preview"
         ],
         "title": "NodeExecutionStartedEvent",
         "description": "Emitted when a node starts executing code.\n\nEmission Criteria:\n- Triggered by running_code events from research pipeline\n- Tracks individual node execution lifecycle\n- Helps show concurrent node execution\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -8232,6 +8250,12 @@
         "properties": {
           "step": {
             "type": "string",
+            "enum": [
+              "plot_aggregation",
+              "citation_gathering",
+              "paper_writeup",
+              "paper_review"
+            ],
             "title": "Step"
           },
           "substep": {
@@ -9046,6 +9070,12 @@
             "type": "boolean",
             "title": "Is Seed Node",
             "description": "True if this is seed evaluation progress",
+            "default": false
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node",
+            "description": "True if this is seed aggregation progress",
             "default": false
           }
         },
@@ -11764,6 +11794,14 @@
           },
           "run_type": {
             "$ref": "#/components/schemas/RunType"
+          },
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node"
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node"
           }
         },
         "type": "object",
@@ -11773,7 +11811,9 @@
           "status",
           "exec_time",
           "completed_at",
-          "run_type"
+          "run_type",
+          "is_seed_node",
+          "is_seed_agg_node"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -11856,7 +11896,8 @@
               "heartbeat_timeout",
               "deadline_exceeded",
               "user_cancelled",
-              "container_died"
+              "container_died",
+              "pipeline_event_finish"
             ],
             "title": "Reason",
             "description": "Why the run finished"
@@ -12171,6 +12212,14 @@
           },
           "run_type": {
             "$ref": "#/components/schemas/RunType"
+          },
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node"
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node"
           }
         },
         "type": "object",
@@ -12179,7 +12228,9 @@
           "stage_name",
           "code",
           "started_at",
-          "run_type"
+          "run_type",
+          "is_seed_node",
+          "is_seed_agg_node"
         ],
         "title": "RunningCodeEventPayload"
       },
@@ -12589,8 +12640,11 @@
           },
           "is_seed_node": {
             "type": "boolean",
-            "title": "Is Seed Node",
-            "default": false
+            "title": "Is Seed Node"
+          },
+          "is_seed_agg_node": {
+            "type": "boolean",
+            "title": "Is Seed Agg Node"
           }
         },
         "type": "object",
@@ -12601,7 +12655,10 @@
           "progress",
           "total_nodes",
           "buggy_nodes",
-          "good_nodes"
+          "good_nodes",
+          "best_metric",
+          "is_seed_node",
+          "is_seed_agg_node"
         ],
         "title": "StageProgressEvent"
       },

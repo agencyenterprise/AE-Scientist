@@ -12,6 +12,7 @@ export enum NodeType {
   Hyperparam = "hyperparam",
   Ablation = "ablation",
   SeedNode = "seed_node",
+  SeedAggNode = "seed_agg_node",
 }
 
 export enum BorderStyle {
@@ -33,6 +34,7 @@ interface NodeColors {
   [NodeType.Hyperparam]: NodeTypeConfig;
   [NodeType.Ablation]: NodeTypeConfig;
   [NodeType.SeedNode]: NodeTypeConfig;
+  [NodeType.SeedAggNode]: NodeTypeConfig;
 }
 
 interface BorderConfig {
@@ -75,6 +77,10 @@ export const NODE_TYPE_COLORS: NodeColors = {
   [NodeType.SeedNode]: {
     color: "#92400E", // Brown
     label: "Seed Node",
+  },
+  [NodeType.SeedAggNode]: {
+    color: "#0D9488", // Teal-600 - distinct from brown seed nodes
+    label: "Seed Aggregation",
   },
 };
 
@@ -122,7 +128,8 @@ export function getNodeType(nodeIdx: number, context: NodesContext): NodeType {
   const node = context.nodes[nodeIdx];
   if (!node) return NodeType.Improve;
 
-  // Check explicit type flags first
+  // Check explicit type flags first (more specific flags before general ones)
+  if (node.isSeedAggNode) return NodeType.SeedAggNode;
   if (node.isSeedNode) return NodeType.SeedNode;
   if (node.ablationName) return NodeType.Ablation;
   if (node.hyperparamName) return NodeType.Hyperparam;
@@ -167,7 +174,13 @@ export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
 
   switch (normalized) {
     case "stage_1":
-      return [NodeType.Root, NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
+      return [
+        NodeType.Root,
+        NodeType.Debug,
+        NodeType.Improve,
+        NodeType.SeedNode,
+        NodeType.SeedAggNode,
+      ];
     case "stage_2":
       return [
         NodeType.Root,
@@ -175,11 +188,12 @@ export function getStageRelevantNodeTypes(stageId?: string): NodeType[] {
         NodeType.Improve,
         NodeType.Hyperparam,
         NodeType.SeedNode,
+        NodeType.SeedAggNode,
       ];
     case "stage_3":
-      return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode];
+      return [NodeType.Debug, NodeType.Improve, NodeType.SeedNode, NodeType.SeedAggNode];
     case "stage_4":
-      return [NodeType.Improve, NodeType.Ablation, NodeType.SeedNode];
+      return [NodeType.Improve, NodeType.Ablation, NodeType.SeedNode, NodeType.SeedAggNode];
     default:
       return Object.values(NodeType);
   }
@@ -195,6 +209,7 @@ export const NODE_TYPE_DESCRIPTIONS: Record<NodeType, string> = {
   [NodeType.Hyperparam]: "Systematic parameter exploration",
   [NodeType.Ablation]: "Component contribution analysis",
   [NodeType.SeedNode]: "Robustness testing with different random seeds",
+  [NodeType.SeedAggNode]: "Aggregated results from multi-seed evaluation runs",
 };
 
 /**
@@ -214,4 +229,6 @@ export const NODE_TYPE_LONG_DESCRIPTIONS: Record<NodeType, string> = {
     "Controlled removal of specific components to understand their individual contributions. The scientist isolates which parts of the code are most important.",
   [NodeType.SeedNode]:
     "Tests the robustness of the parent's implementation by running it with different random seeds. Unlike debug/improve nodes, this reuses the parent code with varied initialization.",
+  [NodeType.SeedAggNode]:
+    "Combines and analyzes results from multiple seed evaluation runs to assess statistical robustness. This node aggregates metrics and plots from individual seed runs into a consolidated view.",
 };

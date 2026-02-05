@@ -58,6 +58,14 @@ interface StageGroup {
   seedEvalInProgress: boolean;
   /** Whether this stage has any seed evaluation (from is_seed_node flag) */
   hasSeedEvaluation: boolean;
+  /** Aggregation progress: current aggregation (1-based) */
+  currentAggregation: number | null;
+  /** Total number of aggregations (typically 1) */
+  totalAggregations: number | null;
+  /** Whether aggregation is in progress */
+  aggregationInProgress: boolean;
+  /** Whether this stage has aggregation (from is_seed_agg_node flag) */
+  hasAggregation: boolean;
 }
 
 function parseSseFrame(text: string): ParsedSseFrame | null {
@@ -243,6 +251,29 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       }
     }
 
+    // Get aggregation progress from progress_update events with is_seed_agg_node=true
+    const aggProgressEvents = progressEvents.filter(
+      e => "is_seed_agg_node" in e && e.is_seed_agg_node === true
+    );
+    let currentAggregation: number | null = null;
+    let totalAggregations: number | null = null;
+    let aggregationInProgress = false;
+    const hasAggregation = aggProgressEvents.length > 0;
+
+    if (aggProgressEvents.length > 0) {
+      const lastAggProgress = aggProgressEvents[aggProgressEvents.length - 1]!;
+      if ("iteration" in lastAggProgress && "max_iterations" in lastAggProgress) {
+        currentAggregation = lastAggProgress.iteration as number;
+        totalAggregations = lastAggProgress.max_iterations as number;
+        // Aggregation is in progress if current < total and stage is not completed
+        aggregationInProgress =
+          !isCompleted &&
+          currentAggregation !== null &&
+          totalAggregations !== null &&
+          currentAggregation < totalAggregations;
+      }
+    }
+
     return {
       stageId,
       stageName: getStageName(stageId),
@@ -257,6 +288,10 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       totalSeeds,
       seedEvalInProgress,
       hasSeedEvaluation,
+      currentAggregation,
+      totalAggregations,
+      aggregationInProgress,
+      hasAggregation,
     };
   });
 }
@@ -655,6 +690,20 @@ function StageSection({
                   <FlaskConical className="h-3 w-3" />
                   {stage.currentSeed || 0}/{stage.totalSeeds} seeds
                   {stage.seedEvalInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                </span>
+              )}
+              {stage.totalAggregations !== null && stage.totalAggregations > 0 && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                    stage.aggregationInProgress
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "bg-teal-500/10 text-teal-300"
+                  )}
+                >
+                  <Layers className="h-3 w-3" />
+                  {stage.currentAggregation || 0}/{stage.totalAggregations} aggregation
+                  {stage.aggregationInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
                 </span>
               )}
             </div>

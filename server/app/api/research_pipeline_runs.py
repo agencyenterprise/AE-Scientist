@@ -1,8 +1,6 @@
 import asyncio
-import hashlib
 import logging
 import math
-import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Protocol, Union, cast
 from uuid import uuid4
@@ -12,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
+from app.api.research_pipeline.utils import extract_user_first_name, generate_run_webhook_token
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.middleware.auth import get_current_user
@@ -38,6 +37,7 @@ from app.services import get_database
 from app.services.billing_guard import enforce_minimum_balance
 from app.services.database import DatabaseManager
 from app.services.database.research_pipeline_runs import PodUpdateInfo
+from app.services.narrator.event_types import RunFinishedEventData
 from app.services.narrator.narrator_service import ingest_narration_event, initialize_run_state
 from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
@@ -64,7 +64,6 @@ from app.services.s3_service import get_s3_service
 
 router = APIRouter(prefix="/conversations", tags=["research-pipeline"])
 logger = logging.getLogger(__name__)
-REQUESTER_NAME_FALLBACK = "Scientist"
 
 
 def _get_fake_runpod_base_url() -> str | None:
@@ -156,18 +155,6 @@ class IdeaPayloadSource(Protocol):
     version_number: int
     title: str
     idea_markdown: str
-
-
-def extract_user_first_name(*, full_name: str) -> str:
-    """Return a cleaned first-name token suitable for pod naming."""
-    stripped = full_name.strip()
-    if not stripped:
-        return REQUESTER_NAME_FALLBACK
-    token = stripped.split()[0]
-    alnum_only = "".join(char for char in token if char.isalnum())
-    if not alnum_only:
-        return REQUESTER_NAME_FALLBACK
-    return f"{alnum_only[0].upper()}{alnum_only[1:]}"
 
 
 async def _notify_pod_ready_failure(
@@ -313,17 +300,6 @@ async def _wait_for_pod_ready(db: DatabaseManager, pod_info: PodLaunchInfo, run_
     )
 
 
-def _generate_run_webhook_token() -> tuple[str, str]:
-    """Generate a per-run webhook token and its hash.
-
-    Returns:
-        Tuple of (plain_token, token_hash)
-    """
-    plain_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(plain_token.encode()).hexdigest()
-    return plain_token, token_hash
-
-
 async def create_and_launch_research_run(
     *,
     idea_data: IdeaPayloadSource,
@@ -336,7 +312,7 @@ async def create_and_launch_research_run(
     if not gpu_types:
         raise PodLaunchError("At least one GPU type must be provided.")
     run_id = f"rp-{uuid4().hex[:10]}"
-    webhook_token, webhook_token_hash = _generate_run_webhook_token()
+    webhook_token, webhook_token_hash = generate_run_webhook_token()
     await db.create_research_pipeline_run(
         run_id=run_id,
         idea_id=idea_data.idea_id,
@@ -916,12 +892,12 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         db,
         run_id=run_id,
         event_type="run_finished",
-        event_data={
-            "success": False,
-            "status": "cancelled",
-            "message": stop_message,
-            "reason": "user_cancelled",
-        },
+        event_data=RunFinishedEventData(
+            success=False,
+            status="cancelled",
+            message=stop_message,
+            reason="user_cancelled",
+        ),
     )
 
     return ResearchRunStopResponse(

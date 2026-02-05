@@ -100,7 +100,6 @@ export function isErrorResponse(response: unknown): response is ErrorResponse {
 // Request types
 // ============================================================================
 
-// Re-export generated type for backwards compatibility
 export type UpdateSummaryRequest = components["schemas"]["ImportedConversationSummaryUpdate"];
 
 // Helpers for new summary API
@@ -158,7 +157,6 @@ export function convertApiResearchRunList(
 
 import { api } from "./api-client-typed";
 
-// Re-export generated type for backwards compatibility
 export type UserListItem = components["schemas"]["UserListItem"];
 
 export async function fetchUsers(): Promise<UserListItem[]> {

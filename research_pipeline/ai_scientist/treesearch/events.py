@@ -24,6 +24,7 @@ from ai_scientist.api_types import (
 )
 from ai_scientist.api_types import State as StageSkipState
 from ai_scientist.api_types import Status6 as RunCompletedStatus
+from ai_scientist.api_types import Step as PaperGenerationStep
 from ai_scientist.api_types import SubstageCompletedEvent as SubstageCompletedEventPayload
 from ai_scientist.api_types import SubstageSummaryEvent as SubstageSummaryEventPayload
 
@@ -101,8 +102,9 @@ class RunStageProgressEvent(BaseEvent):
     total_nodes: int
     buggy_nodes: int
     good_nodes: int
-    best_metric: Optional[str] = None
-    is_seed_node: bool = False  # True when this progress is from seed evaluation
+    best_metric: Optional[str]
+    is_seed_node: bool
+    is_seed_agg_node: bool
 
     def type(self) -> str:
         return "ai.run.stage_progress"
@@ -118,6 +120,7 @@ class RunStageProgressEvent(BaseEvent):
             "good_nodes": self.good_nodes,
             "best_metric": self.best_metric,
             "is_seed_node": self.is_seed_node,
+            "is_seed_agg_node": self.is_seed_agg_node,
         }
         return data
 
@@ -132,6 +135,7 @@ class RunStageProgressEvent(BaseEvent):
             good_nodes=self.good_nodes,
             best_metric=self.best_metric,
             is_seed_node=self.is_seed_node,
+            is_seed_agg_node=self.is_seed_agg_node,
         )
         return ("run_stage_progress", event)
 
@@ -290,7 +294,7 @@ class PaperGenerationProgressEvent(BaseEvent):
     """Event emitted during paper generation (Stage 5) progress."""
 
     run_id: str
-    step: str  # "plot_aggregation" | "citation_gathering" | "paper_writeup" | "paper_review"
+    step: PaperGenerationStep
     substep: Optional[str] = None
     progress: float = 0.0
     step_progress: float = 0.0
@@ -328,6 +332,8 @@ class RunningCodeEvent(BaseEvent):
     code: str
     started_at: datetime
     run_type: RunType
+    is_seed_node: bool
+    is_seed_agg_node: bool
 
     def type(self) -> str:
         return "ai.run.running_code"
@@ -339,6 +345,8 @@ class RunningCodeEvent(BaseEvent):
             "run_type": self.run_type.value,
             "code": self.code,
             "started_at": self.started_at.isoformat(),
+            "is_seed_node": self.is_seed_node,
+            "is_seed_agg_node": self.is_seed_agg_node,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -348,6 +356,8 @@ class RunningCodeEvent(BaseEvent):
             run_type=ApiRunType(self.run_type.value),
             code=self.code,
             started_at=self.started_at.isoformat(),
+            is_seed_node=self.is_seed_node,
+            is_seed_agg_node=self.is_seed_agg_node,
         )
         return ("running_code", event)
 
@@ -360,6 +370,8 @@ class RunCompletedEvent(BaseEvent):
     exec_time: float
     completed_at: datetime
     run_type: RunType
+    is_seed_node: bool
+    is_seed_agg_node: bool
 
     def type(self) -> str:
         return "ai.run.run_completed"
@@ -372,6 +384,8 @@ class RunCompletedEvent(BaseEvent):
             "status": self.status,
             "exec_time": self.exec_time,
             "completed_at": self.completed_at.isoformat(),
+            "is_seed_node": self.is_seed_node,
+            "is_seed_agg_node": self.is_seed_agg_node,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -382,6 +396,8 @@ class RunCompletedEvent(BaseEvent):
             status=RunCompletedStatus(self.status),
             exec_time=self.exec_time,
             completed_at=self.completed_at.isoformat(),
+            is_seed_node=self.is_seed_node,
+            is_seed_agg_node=self.is_seed_agg_node,
         )
         return ("run_completed", event)
 

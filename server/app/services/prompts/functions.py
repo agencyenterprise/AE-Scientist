@@ -195,7 +195,7 @@ async def get_chat_system_prompt(db: DatabaseManager, conversation_id: int) -> s
     try:
         prompt_data = await db.get_active_prompt(PromptTypes.IDEA_CHAT.value)
         if prompt_data and prompt_data.system_prompt:
-            # Custom prompt from DB - use string replacement for backwards compatibility
+            # Custom prompt from DB - use simple string replacement
             result = prompt_data.system_prompt.replace("{{current_idea}}", current_idea_text)
             result = result.replace("{{original_conversation_summary}}", summary)
             result = result.replace("{{memories_context}}", "")

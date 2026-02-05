@@ -15,7 +15,11 @@ from pydantic import BaseModel, Field
 from ai_scientist.latest_run_finder import find_latest_run_dir_name
 from ai_scientist.llm import get_structured_response_from_llm
 from ai_scientist.prompts.render import render_text
-from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
+from ai_scientist.treesearch.events import (
+    BaseEvent,
+    PaperGenerationProgressEvent,
+    PaperGenerationStep,
+)
 from ai_scientist.writeup_artifacts import (
     filter_experiment_summaries,
     load_exp_summaries,
@@ -230,7 +234,7 @@ def aggregate_plots(
         event_callback(
             PaperGenerationProgressEvent(
                 run_id=run_id,
-                step="plot_aggregation",
+                step=PaperGenerationStep.plot_aggregation,
                 substep="Starting plot aggregation...",
                 progress=0.0,
                 step_progress=0.0,
@@ -258,7 +262,7 @@ def aggregate_plots(
             event_callback(
                 PaperGenerationProgressEvent(
                     run_id=run_id,
-                    step="plot_aggregation",
+                    step=PaperGenerationStep.plot_aggregation,
                     substep=f"Reflection {i + 1} of {n_reflections} (figures: {figure_count})",
                     progress=0.15 * step_progress,  # plot_aggregation is 0-15% of overall
                     step_progress=step_progress,

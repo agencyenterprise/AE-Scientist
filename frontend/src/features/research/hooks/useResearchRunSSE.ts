@@ -23,7 +23,6 @@ import type {
 
 export type { ResearchRunDetails };
 
-// Re-export generated type for backwards compatibility
 export type InitializationStatusData =
   ApiComponents["schemas"]["ResearchRunInitializationStatusData"];
 

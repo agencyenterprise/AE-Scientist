@@ -20,7 +20,11 @@ from ai_scientist.review_integration import (
     perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.treesearch.codex.codex_cli_runner import CodexCliRunner
-from ai_scientist.treesearch.events import BaseEvent, PaperGenerationProgressEvent
+from ai_scientist.treesearch.events import (
+    BaseEvent,
+    PaperGenerationProgressEvent,
+    PaperGenerationStep,
+)
 from ai_scientist.writeup_artifacts import (
     SUMMARY_KEYS_TO_STRIP,
     filter_experiment_summaries,
@@ -428,7 +432,7 @@ def perform_writeup(
             event_callback(
                 PaperGenerationProgressEvent(
                     run_id=run_id,
-                    step="paper_writeup",
+                    step=PaperGenerationStep.paper_writeup,
                     substep=substep,
                     progress=progress,
                     step_progress=step_progress,

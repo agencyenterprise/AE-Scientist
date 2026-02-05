@@ -32,8 +32,8 @@ export-openapi:
 # Usage: make fake-runpod [SPEED=N] where N is the speed multiplier (default: 1)
 SPEED ?= 1
 fake-runpod:
-	@echo "🎭 Starting fake RunPod server (speed=$(SPEED)x)..."
-	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run python -m app.services.research_pipeline.fake_runpod.runner --speed $(SPEED)
+	@echo "🎭 Starting fake RunPod server with auto-reload (speed=$(SPEED)x)..."
+	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run watchfiles "python -m app.services.research_pipeline.fake_runpod.runner --speed $(SPEED)" app/services/research_pipeline/fake_runpod
 
 # Generate API types for frontend
 gen-api-types: export-openapi

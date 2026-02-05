@@ -246,6 +246,7 @@ class ParallelAgent:
                     good_nodes=0,
                     best_metric=None,
                     is_seed_node=True,
+                    is_seed_agg_node=False,
                 )
             )
         except Exception:
@@ -486,6 +487,7 @@ class ParallelAgent:
                             good_nodes=completed_total,
                             best_metric=None,
                             is_seed_node=True,
+                            is_seed_agg_node=False,
                         )
                     )
                 except Exception:

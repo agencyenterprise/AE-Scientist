@@ -182,6 +182,9 @@ class ProgressUpdateEvent(TimelineEventBase):
     is_seed_node: bool = Field(
         default=False, description="True if this is seed evaluation progress"
     )
+    is_seed_agg_node: bool = Field(
+        default=False, description="True if this is seed aggregation progress"
+    )
 
 
 class PaperGenerationStepEvent(TimelineEventBase):
@@ -227,8 +230,13 @@ class NodeExecutionStartedEvent(TimelineEventBase):
 
     headline: str = Field(..., description="Short headline")
     execution_id: str = Field(..., description="Unique execution ID")
-    run_type: str = Field(default="main_execution", description="Type of run")
-    code_preview: Optional[str] = Field(None, description="Preview of code being executed")
+    run_type: str = Field(..., description="Type of run")
+    code_preview: str = Field(..., description="Preview of code being executed")
+    # Defaults for data migration - old events don't have these fields
+    is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
+    is_seed_agg_node: bool = Field(
+        default=False, description="True if this is a seed aggregation node"
+    )
 
 
 class NodeExecutionCompletedEvent(TimelineEventBase):
@@ -249,7 +257,12 @@ class NodeExecutionCompletedEvent(TimelineEventBase):
     execution_id: str = Field(..., description="Unique execution ID")
     status: Literal["success", "failed"] = Field(..., description="Execution status")
     exec_time: float = Field(..., description="Execution time in seconds")
-    run_type: str = Field(default="main_execution", description="Type of run")
+    run_type: str = Field(..., description="Type of run")
+    # Defaults for data migration - old events don't have these fields
+    is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
+    is_seed_agg_node: bool = Field(
+        default=False, description="True if this is a seed aggregation node"
+    )
 
 
 class RunStartedEvent(TimelineEventBase):
@@ -296,6 +309,7 @@ class RunFinishedEvent(TimelineEventBase):
         "deadline_exceeded",
         "user_cancelled",
         "container_died",
+        "pipeline_event_finish",
     ] = Field(..., description="Why the run finished")
     message: Optional[str] = Field(None, description="Human-readable completion message")
     summary: Optional[str] = Field(None, description="Summary of what was accomplished")

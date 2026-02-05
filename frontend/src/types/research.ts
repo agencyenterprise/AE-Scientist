@@ -121,7 +121,6 @@ export type TreeVizItem = TreeVizItemApi;
 // Frontend detail types
 // ===========================================
 
-// Re-export generated type for backwards compatibility
 export type RunType = components["schemas"]["RunType"];
 
 export interface ResearchRunDetails {
@@ -142,7 +141,7 @@ export interface ResearchRunDetails {
 }
 
 // ===========================================
-// SSE Event types (re-export generated types for backwards compatibility)
+// SSE Event types
 // ===========================================
 
 export type TerminationStatusStreamEvent =

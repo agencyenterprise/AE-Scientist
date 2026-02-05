@@ -903,9 +903,20 @@ class NodeExecutionCompletedEvent(BaseModel):
     exec_time: Annotated[
         float, Field(description="Execution time in seconds", title="Exec Time")
     ]
-    run_type: Annotated[
-        str | None, Field(description="Type of run", title="Run Type")
-    ] = "main_execution"
+    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    is_seed_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is a seed evaluation node", title="Is Seed Node"
+        ),
+    ] = False
+    is_seed_agg_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is a seed aggregation node",
+            title="Is Seed Agg Node",
+        ),
+    ] = False
 
 
 class NodeExecutionStartedEvent(BaseModel):
@@ -931,13 +942,23 @@ class NodeExecutionStartedEvent(BaseModel):
     execution_id: Annotated[
         str, Field(description="Unique execution ID", title="Execution Id")
     ]
-    run_type: Annotated[
-        str | None, Field(description="Type of run", title="Run Type")
-    ] = "main_execution"
+    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
     code_preview: Annotated[
-        str | None,
-        Field(description="Preview of code being executed", title="Code Preview"),
-    ] = None
+        str, Field(description="Preview of code being executed", title="Code Preview")
+    ]
+    is_seed_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is a seed evaluation node", title="Is Seed Node"
+        ),
+    ] = False
+    is_seed_agg_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is a seed aggregation node",
+            title="Is Seed Agg Node",
+        ),
+    ] = False
 
 
 class Outcome(StrEnum):
@@ -958,8 +979,15 @@ class PaperDownloadResponse(BaseModel):
     ]
 
 
+class Step(StrEnum):
+    plot_aggregation = "plot_aggregation"
+    citation_gathering = "citation_gathering"
+    paper_writeup = "paper_writeup"
+    paper_review = "paper_review"
+
+
 class PaperGenerationProgressEvent(BaseModel):
-    step: Annotated[str, Field(title="Step")]
+    step: Annotated[Step, Field(title="Step")]
     substep: Annotated[str | None, Field(title="Substep")] = None
     progress: Annotated[float, Field(title="Progress")]
     step_progress: Annotated[float, Field(title="Step Progress")]
@@ -968,13 +996,6 @@ class PaperGenerationProgressEvent(BaseModel):
 
 class PaperGenerationProgressPayload(BaseModel):
     event: PaperGenerationProgressEvent
-
-
-class Step(StrEnum):
-    plot_aggregation = "plot_aggregation"
-    citation_gathering = "citation_gathering"
-    paper_writeup = "paper_writeup"
-    paper_review = "paper_review"
 
 
 class PaperGenerationStepEvent(BaseModel):
@@ -1904,6 +1925,7 @@ class Reason(StrEnum):
     deadline_exceeded = "deadline_exceeded"
     user_cancelled = "user_cancelled"
     container_died = "container_died"
+    pipeline_event_finish = "pipeline_event_finish"
 
 
 class RunFinishedPayload(BaseModel):
@@ -1972,6 +1994,8 @@ class RunningCodeEventPayload(BaseModel):
     code: Annotated[str, Field(title="Code")]
     started_at: Annotated[str, Field(title="Started At")]
     run_type: RunType
+    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
+    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
 
 
 class RunningCodePayload(BaseModel):
@@ -2061,8 +2085,9 @@ class StageProgressEvent(BaseModel):
     total_nodes: Annotated[int, Field(title="Total Nodes")]
     buggy_nodes: Annotated[int, Field(title="Buggy Nodes")]
     good_nodes: Annotated[int, Field(title="Good Nodes")]
-    best_metric: Annotated[str | None, Field(title="Best Metric")] = None
-    is_seed_node: Annotated[bool | None, Field(title="Is Seed Node")] = False
+    best_metric: Annotated[str | None, Field(title="Best Metric")]
+    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
+    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
 
 
 class StageProgressPayload(BaseModel):
@@ -2634,6 +2659,13 @@ class ProgressUpdateEvent(BaseModel):
             description="True if this is seed evaluation progress", title="Is Seed Node"
         ),
     ] = False
+    is_seed_agg_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is seed aggregation progress",
+            title="Is Seed Agg Node",
+        ),
+    ] = False
 
 
 class ResearchRunArtifactEvent(BaseModel):
@@ -2858,6 +2890,8 @@ class RunCompletedEventPayload(BaseModel):
     exec_time: Annotated[float, Field(title="Exec Time")]
     completed_at: Annotated[str, Field(title="Completed At")]
     run_type: RunType
+    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
+    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
 
 
 class RunCompletedPayload(BaseModel):

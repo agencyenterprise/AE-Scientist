@@ -934,6 +934,8 @@ def _run_codex_cli(
     task_file: Path,
     event_callback: Callable[[BaseEvent], None],
     node: int,
+    is_seed_node: bool = False,
+    is_seed_agg_node: bool = False,
 ) -> tuple[list[str], float, str | None, dict[str, object] | None]:
     runner = CodexCliRunner(
         workspace_dir=workspace_dir,
@@ -966,6 +968,8 @@ def _run_codex_cli(
             code=codex_task_content,
             started_at=started_at,
             run_type=RunType.CODEX_EXECUTION,
+            is_seed_node=is_seed_node,
+            is_seed_agg_node=is_seed_agg_node,
         )
     )
 
@@ -1042,6 +1046,8 @@ def _run_codex_cli(
                     exec_time=exec_time,
                     completed_at=completed_at,
                     run_type=RunType.RUNFILE_EXECUTION,
+                    is_seed_node=is_seed_node,
+                    is_seed_agg_node=is_seed_agg_node,
                 )
             )
             runfile_item_id = None
@@ -1064,6 +1070,8 @@ def _run_codex_cli(
                 code=runfile_content,
                 started_at=runfile_started_at,
                 run_type=RunType.RUNFILE_EXECUTION,
+                is_seed_node=is_seed_node,
+                is_seed_agg_node=is_seed_agg_node,
             )
         )
 
@@ -1103,6 +1111,8 @@ def _run_codex_cli(
             exec_time=exec_time,
             completed_at=completed_at,
             run_type=RunType.CODEX_EXECUTION,
+            is_seed_node=is_seed_node,
+            is_seed_agg_node=is_seed_agg_node,
         )
     )
     if exc_type is None:
@@ -1235,6 +1245,8 @@ def process_node(
         task_file=task_file,
         event_callback=event_callback,
         node=node_index,
+        is_seed_node=seed_eval and seed_aggregation is None,
+        is_seed_agg_node=seed_aggregation is not None,
     )
 
     node_result = _load_node_result(output_json_file=output_json_file)

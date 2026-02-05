@@ -619,6 +619,8 @@ class FakeRunner:
                     status=RunCompletedStatus.failed,
                     exec_time=exec_time,
                     completed_at=now.isoformat(),
+                    is_seed_node=False,
+                    is_seed_agg_node=False,
                 )
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort
@@ -805,6 +807,8 @@ class FakeRunner:
                 run_type=RunType(codex_run_type),
                 code=fake_task_markdown,
                 started_at=started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
 
@@ -821,6 +825,8 @@ class FakeRunner:
                 run_type=RunType(runfile_run_type),
                 code=fake_runfile_code,
                 started_at=runfile_started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
 
@@ -851,6 +857,8 @@ class FakeRunner:
                 status=RunCompletedStatus.success,
                 exec_time=runfile_exec_time,
                 completed_at=runfile_completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
 
@@ -872,6 +880,8 @@ class FakeRunner:
                 status=RunCompletedStatus.success,
                 exec_time=exec_time,
                 completed_at=completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
         with _lock:
@@ -994,6 +1004,8 @@ class FakeRunner:
                         buggy_nodes=iteration,
                         good_nodes=9 - iteration,
                         best_metric=f"metric-{progress:.2f}",
+                        is_seed_node=False,
+                        is_seed_agg_node=False,
                     ),
                 )
                 self._enqueue_event(
@@ -1566,14 +1578,58 @@ class FakeRunner:
                     good_nodes=0,
                     best_metric=None,
                     is_seed_node=True,
+                    is_seed_agg_node=False,
                 ),
             )
         except Exception:
             logger.exception("Failed to emit seed eval start event for stage %s", stage_name)
 
-        # Emit progress for each seed
+        # Emit progress for each seed with execution events
         for seed_idx in range(num_seeds):
+            seed_execution_id = f"{stage_name}-seed-{seed_idx}-{uuid.uuid4().hex[:8]}"
+            seed_started_at = datetime.now(timezone.utc)
+
+            # Emit running_code event for seed node
+            try:
+                self._webhooks.publish_running_code(
+                    RunningCodeEventPayload(
+                        execution_id=seed_execution_id,
+                        stage_name=stage_name,
+                        run_type=RunType.runfile_execution,
+                        code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
+                        started_at=seed_started_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit running_code for seed %d in stage %s", seed_idx, stage_name
+                )
+
             self._sleep(5)  # Simulate seed execution time
+
+            # Emit run_completed event for seed node
+            seed_completed_at = datetime.now(timezone.utc)
+            seed_exec_time = max(0.0, (seed_completed_at - seed_started_at).total_seconds())
+            try:
+                self._webhooks.publish_run_completed(
+                    RunCompletedEventPayload(
+                        execution_id=seed_execution_id,
+                        stage_name=stage_name,
+                        run_type=RunType.runfile_execution,
+                        status=RunCompletedStatus.success,
+                        exec_time=seed_exec_time,
+                        completed_at=seed_completed_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit run_completed for seed %d in stage %s", seed_idx, stage_name
+                )
+
             completed = seed_idx + 1
             try:
                 self._enqueue_event(
@@ -1588,6 +1644,7 @@ class FakeRunner:
                         good_nodes=completed,
                         best_metric=None,
                         is_seed_node=True,
+                        is_seed_agg_node=False,
                     ),
                 )
                 logger.info(
@@ -1603,6 +1660,81 @@ class FakeRunner:
                     stage_name,
                     completed,
                 )
+
+        # Emit seed aggregation node execution events
+        agg_execution_id = f"{stage_name}-seed-agg-{uuid.uuid4().hex[:8]}"
+        agg_started_at = datetime.now(timezone.utc)
+        logger.info(
+            "[FakeRunner %s] Starting seed aggregation for %s",
+            self._run_id[:8],
+            stage_name,
+        )
+
+        # Emit running_code event for aggregation node
+        try:
+            self._webhooks.publish_running_code(
+                RunningCodeEventPayload(
+                    execution_id=agg_execution_id,
+                    stage_name=stage_name,
+                    run_type=RunType.codex_execution,
+                    code="# Seed Aggregation\n# Combining results from all seed runs\nimport numpy as np\n\n# Aggregate metrics across seeds\nmetrics = [seed_0_metric, seed_1_metric, seed_2_metric]\nmean_metric = np.mean(metrics)\nstd_metric = np.std(metrics)",
+                    started_at=agg_started_at.isoformat(),
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit running_code for seed aggregation in stage %s", stage_name
+            )
+
+        self._sleep(3)  # Simulate aggregation time
+
+        # Emit run_completed event for aggregation node
+        agg_completed_at = datetime.now(timezone.utc)
+        agg_exec_time = max(0.0, (agg_completed_at - agg_started_at).total_seconds())
+        try:
+            self._webhooks.publish_run_completed(
+                RunCompletedEventPayload(
+                    execution_id=agg_execution_id,
+                    stage_name=stage_name,
+                    run_type=RunType.codex_execution,
+                    status=RunCompletedStatus.success,
+                    exec_time=agg_exec_time,
+                    completed_at=agg_completed_at.isoformat(),
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                )
+            )
+            logger.info(
+                "[FakeRunner %s] Seed aggregation completed for %s",
+                self._run_id[:8],
+                stage_name,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit run_completed for seed aggregation in stage %s", stage_name
+            )
+
+        # Emit aggregation progress event (1/1 aggregation)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=1,
+                    max_iterations=1,
+                    progress=1.0,
+                    total_nodes=1,
+                    buggy_nodes=0,
+                    good_nodes=1,
+                    best_metric=None,
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to emit aggregation progress event for stage %s", stage_name)
 
 
 def main() -> None:

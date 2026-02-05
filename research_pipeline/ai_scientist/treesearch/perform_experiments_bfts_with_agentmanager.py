@@ -119,6 +119,8 @@ def perform_experiments_bfts(
                     buggy_nodes=len(journal.buggy_nodes),
                     good_nodes=good_nodes_count,
                     best_metric=str(best_node.metric) if best_node else None,
+                    is_seed_node=False,
+                    is_seed_agg_node=False,
                 )
             )
 

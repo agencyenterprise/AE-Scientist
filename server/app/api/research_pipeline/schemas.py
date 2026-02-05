@@ -4,43 +4,45 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.models.research_pipeline import RunType
+# Import narrator event types - these are the source of truth for event schemas
+# used by both the webhook validation AND the narrator pipeline
+from app.services.narrator.event_types import (
+    BestNodeSelectionEvent,
+    NarratorEvent,
+    PaperGenerationProgressEvent,
+    RunCompletedEventPayload,
+    RunFinishedEventData,
+    RunningCodeEventPayload,
+    RunStartedEventData,
+    StageProgressEvent,
+    SubstageCompletedEvent,
+    SubstageSummaryEvent,
+)
+
+__all__ = [
+    "StageProgressEvent",
+    "SubstageCompletedEvent",
+    "SubstageSummaryEvent",
+    "PaperGenerationProgressEvent",
+    "BestNodeSelectionEvent",
+    "RunningCodeEventPayload",
+    "RunCompletedEventPayload",
+    "RunStartedEventData",
+    "RunFinishedEventData",
+    "NarratorEvent",
+]
 
 # ============================================================================
 # Event Webhook Payloads
 # ============================================================================
 
 
-class StageProgressEvent(BaseModel):
-    stage: str
-    iteration: int
-    max_iterations: int
-    progress: float
-    total_nodes: int
-    buggy_nodes: int
-    good_nodes: int
-    best_metric: Optional[str] = None
-    is_seed_node: bool = False
-
-
 class StageProgressPayload(BaseModel):
     event: StageProgressEvent
 
 
-class SubstageCompletedEvent(BaseModel):
-    stage: str
-    main_stage_number: int
-    reason: str
-    summary: Dict[str, Any]
-
-
 class SubstageCompletedPayload(BaseModel):
     event: SubstageCompletedEvent
-
-
-class SubstageSummaryEvent(BaseModel):
-    stage: str
-    summary: Dict[str, Any]
 
 
 class SubstageSummaryPayload(BaseModel):
@@ -85,14 +87,6 @@ class GPUShortagePayload(BaseModel):
     message: Optional[str] = None
 
 
-class PaperGenerationProgressEvent(BaseModel):
-    step: str
-    substep: Optional[str] = None
-    progress: float
-    step_progress: float
-    details: Optional[Dict[str, Any]] = None
-
-
 class PaperGenerationProgressPayload(BaseModel):
     event: PaperGenerationProgressEvent
 
@@ -134,12 +128,6 @@ class ReviewCompletedPayload(BaseModel):
     event: ReviewCompletedEvent
 
 
-class BestNodeSelectionEvent(BaseModel):
-    stage: str
-    node_id: str
-    reasoning: str
-
-
 class BestNodeSelectionPayload(BaseModel):
     event: BestNodeSelectionEvent
 
@@ -178,25 +166,8 @@ class CodexEventPayload(BaseModel):
     event: dict[str, Any]
 
 
-class RunningCodeEventPayload(BaseModel):
-    execution_id: str
-    stage_name: str
-    code: str
-    started_at: str
-    run_type: RunType
-
-
 class RunningCodePayload(BaseModel):
     event: RunningCodeEventPayload
-
-
-class RunCompletedEventPayload(BaseModel):
-    execution_id: str
-    stage_name: str
-    status: Literal["success", "failed"]
-    exec_time: float
-    completed_at: str
-    run_type: RunType
 
 
 class RunCompletedPayload(BaseModel):

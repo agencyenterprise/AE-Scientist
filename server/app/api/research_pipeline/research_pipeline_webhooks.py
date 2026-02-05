@@ -9,7 +9,7 @@ import sentry_sdk
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.llm_providers import extract_model_name_and_provider
-from app.api.research_pipeline_runs import _generate_run_webhook_token
+from app.api.research_pipeline.utils import generate_run_webhook_token
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
 from app.models.research_pipeline import (
     LlmReviewResponse,
@@ -42,6 +42,7 @@ from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstage
 from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
 from app.services import DatabaseManager, get_database
 from app.services.billing_guard import charge_for_llm_usage
+from app.services.narrator.event_types import RunFinishedEventData, RunStartedEventData
 from app.services.narrator.narrator_service import ingest_narration_event
 from app.services.research_pipeline.pod_restart import attempt_pod_restart
 from app.services.research_pipeline.pod_termination_worker import (
@@ -198,7 +199,7 @@ async def ingest_stage_progress(
         db,
         run_id=run_id,
         event_type="stage_progress",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database
@@ -257,7 +258,7 @@ async def ingest_substage_completed(
         db,
         run_id=run_id,
         event_type="substage_completed",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database (summary already contains main_stage_number and reason)
@@ -308,7 +309,7 @@ async def ingest_paper_generation_progress(
         db,
         run_id=run_id,
         event_type="paper_generation_progress",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database
@@ -524,7 +525,7 @@ async def ingest_best_node_selection(
         db,
         run_id=run_id,
         event_type="best_node_selection",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database
@@ -724,7 +725,7 @@ async def ingest_running_code(
         cast(DatabaseManager, db),
         run_id=run_id,
         event_type="running_code",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database (status defaults to "running")
@@ -773,7 +774,7 @@ async def ingest_run_completed(
         cast(DatabaseManager, db),
         run_id=run_id,
         event_type="run_completed",
-        event_data=event.model_dump(),
+        event_data=event,
     )
 
     # Persist to database (updates the existing record with completion data)
@@ -844,11 +845,11 @@ async def ingest_run_started(
         cast(DatabaseManager, db),
         run_id=run_id,
         event_type="run_started",
-        event_data={
-            "started_running_at": now.isoformat(),
-            "gpu_type": run.gpu_type,
-            "cost_per_hour_cents": int(run.cost * 100) if run.cost else None,
-        },
+        event_data=RunStartedEventData(
+            started_running_at=now.isoformat(),
+            gpu_type=run.gpu_type,
+            cost_per_hour_cents=int(run.cost * 100) if run.cost else None,
+        ),
     )
 
     logger.debug("RP run started: run=%s", run_id)
@@ -948,11 +949,12 @@ async def ingest_run_finished(
         cast(DatabaseManager, db),
         run_id=run_id,
         event_type="run_finished",
-        event_data={
-            "success": payload.success,
-            "status": new_status,
-            "message": payload.message,
-        },
+        event_data=RunFinishedEventData(
+            success=payload.success,
+            status=new_status,
+            message=payload.message,
+            reason="pipeline_event_finish",
+        ),
     )
 
     termination = await db.enqueue_research_pipeline_run_termination(
@@ -1073,7 +1075,7 @@ async def ingest_gpu_shortage(
     )
 
     # Attempt to restart with any available GPU type
-    webhook_token, webhook_token_hash = _generate_run_webhook_token()
+    webhook_token, webhook_token_hash = generate_run_webhook_token()
     restarted = await attempt_pod_restart(
         db=db,
         run=run,

@@ -9,11 +9,12 @@ Pattern:
 - Simple transformations
 - No LLM calls (for now)
 - Return timeline events or None
+- Type-safe: handlers receive typed Pydantic models, not dicts
 """
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import List, Optional
 
 from app.models.narrator_state import ResearchRunState
 from app.models.timeline_events import (
@@ -29,6 +30,18 @@ from app.models.timeline_events import (
     StageCompletedEvent,
     StageStartedEvent,
     TimelineEvent,
+)
+from app.services.narrator.event_types import (
+    BestNodeSelectionEvent,
+    NarratorEvent,
+    PaperGenerationProgressEvent,
+    RunCompletedEventPayload,
+    RunFinishedEventData,
+    RunningCodeEventPayload,
+    RunStartedEventData,
+    StageProgressEvent,
+    SubstageCompletedEvent,
+    SubstageSummaryEvent,
 )
 from app.services.narrator.predicates import is_stage_started
 
@@ -46,12 +59,12 @@ STAGE_NAMES = {
 
 
 # ============================================================================
-# EVENT HANDLERS (Raw Event → Timeline Event)
+# EVENT HANDLERS (Typed Event → Timeline Event)
 # ============================================================================
 
 
 def handle_stage_progress_event(
-    _run_id: str, event_data: Dict[str, Any], state: Optional[ResearchRunState] = None
+    event: StageProgressEvent, state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
     Transform stage_progress event into timeline event.
@@ -59,31 +72,17 @@ def handle_stage_progress_event(
     Creates:
     - StageStartedEvent (if iteration == 1 AND stage not already started)
     - ProgressUpdateEvent (otherwise)
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw stage_progress event data
-        state: Current research run state (for checking if stage already started)
-
-    Returns:
-        List of timeline events
     """
-    stage = event_data.get("stage", "")
-    iteration = event_data.get("iteration", 1)
-    max_iterations = event_data.get("max_iterations", 10)
-    # progress = event_data.get("progress", 0.0)
-    best_metric = event_data.get("best_metric")
-
     now = datetime.now(timezone.utc)
 
     # If iteration == 1 AND stage not already started, this is stage start
-    if iteration == 1 and state and not is_stage_started(state, stage):
-        stage_name = STAGE_NAMES.get(stage, stage) or stage
+    if event.iteration == 1 and state and not is_stage_started(state, event.stage):
+        stage_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
         return [
             StageStartedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=now,
-                stage=stage,
+                stage=event.stage,
                 node_id=None,
                 headline=f"Starting {stage_name}",
                 stage_name=stage_name,
@@ -92,30 +91,32 @@ def handle_stage_progress_event(
         ]
 
     # Otherwise, it's a progress update
-    stage_name = STAGE_NAMES.get(stage, stage)
-    is_seed_node = event_data.get("is_seed_node", False)
+    stage_name = STAGE_NAMES.get(event.stage, event.stage)
 
-    # Create different focus text for seed evaluation
-    if is_seed_node:
-        current_focus = f"{stage_name}: Seed evaluation {iteration}/{max_iterations}"
-        headline = f"Seed {iteration}/{max_iterations}"
+    # Create different focus text based on node type
+    if event.is_seed_agg_node:
+        current_focus = f"{stage_name}: Aggregating seed results"
+        headline = f"Aggregation {event.iteration}/{event.max_iterations}"
+    elif event.is_seed_node:
+        current_focus = f"{stage_name}: Seed evaluation {event.iteration}/{event.max_iterations}"
+        headline = f"Seed {event.iteration}/{event.max_iterations}"
     else:
-        current_focus = f"{stage_name}: Iteration {iteration}/{max_iterations}"
-        headline = f"Iteration {iteration}/{max_iterations}"
+        current_focus = f"{stage_name}: Iteration {event.iteration}/{event.max_iterations}"
+        headline = f"Iteration {event.iteration}/{event.max_iterations}"
 
     # Create metric interpretation if we have best_metric
     current_best = None
-    if best_metric:
+    if event.best_metric:
         try:
-            metric_value = float(best_metric)
+            metric_value = float(event.best_metric)
             current_best = MetricCollection(
                 primary=MetricInterpretation(
                     name="best_metric",
                     value=metric_value,
                     formatted=f"{metric_value:.4f}",
                     interpretation="Current best",
-                    context=f"Stage {stage}",
-                    comparison=None,  # TODO: fill in
+                    context=f"Stage {event.stage}",
+                    comparison=None,
                 )
             )
         except (ValueError, TypeError):
@@ -125,38 +126,28 @@ def handle_stage_progress_event(
         ProgressUpdateEvent(
             id=str(uuid.uuid4()),
             timestamp=now,
-            stage=stage,
+            stage=event.stage,
             node_id=None,
             headline=headline,
             current_focus=current_focus,
-            iteration=iteration,
-            max_iterations=max_iterations,
+            iteration=event.iteration,
+            max_iterations=event.max_iterations,
             current_best=current_best,
-            is_seed_node=is_seed_node,
+            is_seed_node=event.is_seed_node,
+            is_seed_agg_node=event.is_seed_agg_node,
         )
     ]
 
 
 def handle_substage_completed_event(
-    _run_id: str, event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+    event: SubstageCompletedEvent, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
-    """
-    Transform substage_completed event into StageCompletedEvent.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw substage_completed event data
-
-    Returns:
-        List with StageCompletedEvent
-    """
-    stage = event_data.get("stage", "")
-    summary = event_data.get("summary", {})
-
+    """Transform substage_completed event into StageCompletedEvent."""
     now = datetime.now(timezone.utc)
-    stage_name = STAGE_NAMES.get(stage, stage)
+    stage_name = STAGE_NAMES.get(event.stage, event.stage)
 
-    # Extract data from summary
+    # Extract data from summary dict
+    summary = event.summary
     best_node_id = summary.get("best_node_id")
     total_attempts = summary.get("total_nodes", 0)
     successful_attempts = summary.get("good_nodes", 0)
@@ -174,8 +165,8 @@ def handle_substage_completed_event(
                     value=metric_value,
                     formatted=f"{metric_value:.4f}",
                     interpretation="Best result for this stage",
-                    context=f"Stage {stage}",
-                    comparison=None,  # TODO: fill in
+                    context=f"Stage {event.stage}",
+                    comparison=None,
                 )
             )
         except (ValueError, TypeError):
@@ -188,7 +179,7 @@ def handle_substage_completed_event(
         StageCompletedEvent(
             id=str(uuid.uuid4()),
             timestamp=now,
-            stage=stage,
+            stage=event.stage,
             node_id=best_node_id,
             headline=f"{stage_name} Complete",
             summary=summary_text,
@@ -203,23 +194,13 @@ def handle_substage_completed_event(
 
 
 def handle_substage_summary_event(
-    _run_id: str, _event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+    _event: SubstageSummaryEvent, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
     Transform substage_summary event (LLM-generated) into enriched data.
 
     For now, we don't create a separate timeline event from this.
     Instead, we use this data to enrich the StageCompletedEvent.
-
-    This handler exists for future use when we want to extract
-    insights or key learnings from the LLM-generated summary.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw substage_summary event data
-
-    Returns:
-        None (for now, used for enrichment only)
     """
     # Future: Extract insights, key learnings, confidence level
     # For now, return empty list (no separate timeline event)
@@ -227,37 +208,20 @@ def handle_substage_summary_event(
 
 
 def handle_best_node_selection_event(
-    _run_id: str, event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+    event: BestNodeSelectionEvent, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
-    """
-    Transform best_node_selection event into NodeResultEvent.
-
-    This event tells us which node was selected as best for a stage,
-    along with the reasoning (LLM-generated).
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw best_node_selection event data
-
-    Returns:
-        List with NodeResultEvent
-    """
-    stage = event_data.get("stage", "")
-    node_id = event_data.get("node_id", "")
-    reasoning = event_data.get("reasoning", "")
-
+    """Transform best_node_selection event into NodeResultEvent."""
     now = datetime.now(timezone.utc)
 
-    # Create a node result event marking this as the best node
     return [
         NodeResultEvent(
             id=str(uuid.uuid4()),
             timestamp=now,
-            stage=stage,
-            node_id=node_id,
-            headline=f"Best Node Selected: {node_id}",
+            stage=event.stage,
+            node_id=event.node_id,
+            headline=f"Best Node Selected: {event.node_id}",
             outcome="success",
-            summary=reasoning,
+            summary=event.reasoning,
             metrics=None,
             error_type=None,
             error_summary=None,
@@ -267,143 +231,104 @@ def handle_best_node_selection_event(
 
 
 def handle_running_code_event(
-    _run_id: str, event_data: Dict[str, Any], state: Optional[ResearchRunState] = None
+    event: RunningCodeEventPayload, state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
     Transform running_code event into NodeExecutionStartedEvent.
 
     Note: This is the first signal that a stage has started (code is executing).
     If the stage hasn't started yet (checked via state), we emit stage_started first.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw running_code event data
-        state: Current research run state (for checking if stage already started)
-
-    Returns:
-        List of timeline events
     """
-    execution_id = event_data.get("execution_id", "")
-    stage_name = event_data.get("stage_name", "")
-    run_type = event_data.get("run_type", "main_execution")
-    code = event_data.get("code", "")
-    started_at_str = event_data.get("started_at", "")
-
     # Parse timestamp
     try:
-        started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+        started_at = datetime.fromisoformat(event.started_at.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         started_at = datetime.now(timezone.utc)
 
     # Create code preview (first 100 chars)
-    code_preview = code[:100] + "..." if len(code) > 100 else code
+    code_preview = event.code[:100] + "..." if len(event.code) > 100 else event.code
 
     events: List[TimelineEvent] = []
-    offset_ms = 0  # Start with 0 offset
+    offset_ms = 0
 
     # If stage hasn't started, emit stage_started event first
-    if state and not is_stage_started(state, stage_name):
-        stage_display_name = STAGE_NAMES.get(stage_name, stage_name) or stage_name
+    if state and not is_stage_started(state, event.stage_name):
+        stage_display_name = STAGE_NAMES.get(event.stage_name, event.stage_name) or event.stage_name
         events.append(
             StageStartedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=started_at + timedelta(milliseconds=offset_ms),
-                stage=stage_name,
+                stage=event.stage_name,
                 node_id=None,
                 headline=f"Starting {stage_display_name}",
                 stage_name=stage_display_name,
                 goal=None,
             )
         )
-        offset_ms += 10  # Increment offset for next event
+        offset_ms += 10
 
     # Then emit node execution started event
     events.append(
         NodeExecutionStartedEvent(
             id=str(uuid.uuid4()),
             timestamp=started_at + timedelta(milliseconds=offset_ms),
-            stage=stage_name,
-            node_id=execution_id,
-            headline=f"Node {execution_id[:8]} started",
-            execution_id=execution_id,
-            run_type=run_type,
+            stage=event.stage_name,
+            node_id=event.execution_id,
+            headline=f"Node {event.execution_id[:8]} started",
+            execution_id=event.execution_id,
+            run_type=event.run_type.value,
             code_preview=code_preview,
+            is_seed_node=event.is_seed_node,
+            is_seed_agg_node=event.is_seed_agg_node,
         )
     )
-    offset_ms += 10  # Increment for consistency
 
     return events
 
 
 def handle_run_completed_event(
-    _run_id: str, event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
+    event: RunCompletedEventPayload, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
-    """
-    Transform run_completed event into NodeExecutionCompletedEvent.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw run_completed event data
-
-    Returns:
-        List with NodeExecutionCompletedEvent
-    """
-    execution_id = event_data.get("execution_id", "")
-    stage_name = event_data.get("stage_name", "")
-    status = event_data.get("status", "success")
-    exec_time = event_data.get("exec_time", 0.0)
-    run_type = event_data.get("run_type", "main_execution")
-    completed_at_str = event_data.get("completed_at", "")
-
+    """Transform run_completed event into NodeExecutionCompletedEvent."""
     # Parse timestamp
     try:
-        completed_at = datetime.fromisoformat(completed_at_str.replace("Z", "+00:00"))
+        completed_at = datetime.fromisoformat(event.completed_at.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
         completed_at = datetime.now(timezone.utc)
 
-    status_emoji = "✅" if status == "success" else "❌"
-    headline = f"{status_emoji} Node {execution_id[:8]} {status} ({exec_time:.1f}s)"
+    status_emoji = "✅" if event.status == "success" else "❌"
+    headline = (
+        f"{status_emoji} Node {event.execution_id[:8]} {event.status} ({event.exec_time:.1f}s)"
+    )
 
     return [
         NodeExecutionCompletedEvent(
             id=str(uuid.uuid4()),
             timestamp=completed_at,
-            stage=stage_name,
-            node_id=execution_id,
+            stage=event.stage_name,
+            node_id=event.execution_id,
             headline=headline,
-            execution_id=execution_id,
-            status=status,
-            exec_time=exec_time,
-            run_type=run_type,
+            execution_id=event.execution_id,
+            status=event.status,
+            exec_time=event.exec_time,
+            run_type=event.run_type.value,
+            is_seed_node=event.is_seed_node,
+            is_seed_agg_node=event.is_seed_agg_node,
         )
     ]
 
 
 def handle_paper_generation_progress_event(
-    _run_id: str, event_data: Dict[str, Any], state: Optional[ResearchRunState] = None
+    event: PaperGenerationProgressEvent, state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
     Transform paper_generation_progress event into PaperGenerationStepEvent.
 
     When progress reaches 1.0, also emits a StageCompletedEvent for paper generation.
     If this is the first paper generation event and the stage hasn't started, also emits StageStartedEvent.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw paper_generation_progress event data
-        state: Current research run state (for checking if stage already started)
-
-    Returns:
-        List of timeline events (1-3 events)
     """
-    step = event_data.get("step", "")
-    substep = event_data.get("substep")
-    progress = event_data.get("progress", 0.0)
-    step_progress = event_data.get("step_progress", 0.0)
-    details = event_data.get("details")
-
     now = datetime.now(timezone.utc)
-    offset_ms = 0  # Start with 0 offset
+    offset_ms = 0
 
     events: List[TimelineEvent] = []
 
@@ -420,12 +345,12 @@ def handle_paper_generation_progress_event(
                 goal=None,
             )
         )
-        offset_ms += 10  # Increment offset for next event
+        offset_ms += 10
 
     # Create headline
-    headline = f"Paper: {step.replace('_', ' ').title()}"
-    if substep:
-        headline += f" - {substep}"
+    headline = f"Paper: {event.step.replace('_', ' ').title()}"
+    if event.substep:
+        headline += f" - {event.substep}"
 
     # Add the paper generation step event
     events.append(
@@ -435,18 +360,18 @@ def handle_paper_generation_progress_event(
             stage="5_paper_generation",
             node_id=None,
             headline=headline,
-            step=step,
-            substep=substep,
+            step=event.step,
+            substep=event.substep,
             description=None,
-            progress=progress,
-            step_progress=step_progress,
-            details=details,
+            progress=event.progress,
+            step_progress=event.step_progress,
+            details=event.details,
         )
     )
-    offset_ms += 10  # Increment offset for next event
+    offset_ms += 10
 
     # If progress is 1.0, paper generation is complete
-    if progress >= 1.0:
+    if event.progress >= 1.0:
         events.append(
             StageCompletedEvent(
                 id=str(uuid.uuid4()),
@@ -463,35 +388,60 @@ def handle_paper_generation_progress_event(
                 confidence=None,
             )
         )
-        offset_ms += 10  # Increment for consistency (even though it's the last event)
 
     return events
 
 
+def handle_run_started_event(
+    event: RunStartedEventData, _state: Optional[ResearchRunState]
+) -> List[TimelineEvent]:
+    """
+    Transform run_started event into timeline event.
+
+    This marks the transition from "pending" to "running" when the container is ready.
+    """
+    # Parse timestamp
+    try:
+        timestamp = datetime.fromisoformat(event.started_running_at.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        timestamp = datetime.now(timezone.utc)
+
+    # Generate headline
+    if event.gpu_type:
+        headline = f"Research Run Started on {event.gpu_type}"
+    else:
+        headline = "Research Run Started"
+
+    return [
+        RunStartedEvent(
+            id=str(uuid.uuid4()),
+            timestamp=timestamp,
+            stage="",  # No stage yet - run just started
+            node_id=None,
+            headline=headline,
+            gpu_type=event.gpu_type,
+            cost_per_hour_cents=event.cost_per_hour_cents,
+        )
+    ]
+
+
 def handle_run_finished_event(
-    _run_id: str, event_data: Dict[str, Any], state: Optional[ResearchRunState] = None
+    event: RunFinishedEventData, state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
     Transform run_finished event into timeline event.
 
     This marks the entire research run as complete and triggers queue cleanup.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw run_finished event data (success, status, message, reason)
-        state: Current research run state (for summary info)
-
-    Returns:
-        List containing RunFinishedEvent
     """
-    # Extract data from event
-    success = event_data.get("success", False)
-    status = event_data.get("status", "failed")  # "completed" or "failed"
-    message = event_data.get("message")
-    reason = event_data.get("reason", "pipeline_completed" if success else "pipeline_error")
+    # Determine reason (fallback if not provided)
+    reason = (
+        event.reason
+        if event.reason
+        else ("pipeline_completed" if event.success else "pipeline_error")
+    )
 
     # Generate headline based on status
-    if success:
+    if event.success:
         headline = "Research Run Completed Successfully"
     elif reason == "heartbeat_timeout":
         headline = "Research Run Failed - Container Timeout"
@@ -512,133 +462,43 @@ def handle_run_finished_event(
     summary = None
 
     if state:
-        # Count completed stages
         stages_completed = sum(1 for stage in state.stages if stage.status == "completed")
-
-        # Count total nodes from active_nodes history (approximation)
         total_nodes_executed = sum(
             stage.total_nodes for stage in state.stages if stage.total_nodes > 0
         )
 
-        # Calculate duration if we have timestamps
         if state.started_running_at and state.completed_at:
             total_duration_seconds = (state.completed_at - state.started_running_at).total_seconds()
 
-        # Get best result
         best_result = state.best_metrics
 
-        # Generate summary
-        if success:
+        if event.success:
             summary = (
                 f"Completed {stages_completed} stages with {total_nodes_executed} nodes executed."
             )
         else:
-            summary = f"Run stopped after {stages_completed} stages. {message or 'Unknown error'}"
+            summary = (
+                f"Run stopped after {stages_completed} stages. {event.message or 'Unknown error'}"
+            )
 
-    # Create timeline event
-    event = RunFinishedEvent(
-        id=str(uuid.uuid4()),
-        timestamp=datetime.now(timezone.utc),
-        stage=state.current_stage if state and state.current_stage else "unknown",
-        node_id=None,
-        headline=headline,
-        status=status,
-        success=success,
-        reason=reason,
-        message=message,
-        summary=summary,
-        total_duration_seconds=total_duration_seconds,
-        stages_completed=stages_completed,
-        total_nodes_executed=total_nodes_executed,
-        best_result=best_result,
-    )
-
-    return [event]
-
-
-# ============================================================================
-# DISPATCH TABLE
-# ============================================================================
-
-# Type alias for the transformer function signature
-TransformerFn = Callable[
-    [str, Dict[str, Any], Optional[ResearchRunState]],
-    List[TimelineEvent],
-]
-
-
-# The actual dispatch table
-# We use a controlled cast here to bridge the gap between:
-# - What we know: each transformer handles specific raw event types correctly
-# - What mypy needs: a consistent signature for all transformers in the dict
-#
-# This is a standard pattern in typed Python for event dispatch systems.
-# The invariant we're asserting: "The event_type key guarantees the correct
-# raw event data structure will be passed to each transformer at runtime."
-def handle_run_started_event(
-    _run_id: str, event_data: Dict[str, Any], _state: Optional[ResearchRunState] = None
-) -> List[TimelineEvent]:
-    """
-    Transform run_started event into timeline event.
-
-    This marks the transition from "pending" to "running" when the container is ready.
-
-    Args:
-        run_id: Research run ID
-        event_data: Raw run_started event data (started_running_at, gpu_type, cost)
-        state: Current research run state (unused)
-
-    Returns:
-        List containing RunStartedEvent
-    """
-    # Extract data from event
-    gpu_type = event_data.get("gpu_type")
-    cost_per_hour_cents = event_data.get("cost_per_hour_cents")
-    started_at_str = event_data.get("started_running_at")
-
-    # Parse timestamp
-    if started_at_str:
-        if isinstance(started_at_str, str):
-            timestamp = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
-        else:
-            timestamp = datetime.now(timezone.utc)
-    else:
-        timestamp = datetime.now(timezone.utc)
-
-    # Generate headline
-    if gpu_type:
-        headline = f"Research Run Started on {gpu_type}"
-    else:
-        headline = "Research Run Started"
-
-    # Create timeline event (not associated with any stage yet)
-    event = RunStartedEvent(
-        id=str(uuid.uuid4()),
-        timestamp=timestamp,
-        stage="",  # No stage yet - run just started
-        node_id=None,
-        headline=headline,
-        gpu_type=gpu_type,
-        cost_per_hour_cents=cost_per_hour_cents,
-    )
-
-    return [event]
-
-
-EVENT_HANDLERS: Dict[str, TransformerFn] = cast(
-    Dict[str, TransformerFn],
-    {
-        "stage_progress": handle_stage_progress_event,
-        "substage_completed": handle_substage_completed_event,
-        "substage_summary": handle_substage_summary_event,
-        "paper_generation_progress": handle_paper_generation_progress_event,
-        "best_node_selection": handle_best_node_selection_event,
-        "running_code": handle_running_code_event,
-        "run_completed": handle_run_completed_event,
-        "run_started": handle_run_started_event,
-        "run_finished": handle_run_finished_event,
-    },
-)
+    return [
+        RunFinishedEvent(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.now(timezone.utc),
+            stage=state.current_stage if state and state.current_stage else "unknown",
+            node_id=None,
+            headline=headline,
+            status=event.status,
+            success=event.success,
+            reason=reason,
+            message=event.message,
+            summary=summary,
+            total_duration_seconds=total_duration_seconds,
+            stages_completed=stages_completed,
+            total_nodes_executed=total_nodes_executed,
+            best_result=best_result,
+        )
+    ]
 
 
 # ============================================================================
@@ -647,42 +507,43 @@ EVENT_HANDLERS: Dict[str, TransformerFn] = cast(
 
 
 def process_execution_event(
-    run_id: str,
-    event_type: str,
-    event_data: Dict[str, Any],
+    _run_id: str,
+    _event_type: str,
+    event_data: NarratorEvent,
     state: Optional[ResearchRunState] = None,
 ) -> List[TimelineEvent]:
     """
-    Process a raw execution event and return timeline events.
+    Process a typed execution event and return timeline events.
 
     This is the main entry point for the narrator event pipeline.
     Handlers may return multiple events (e.g., stage_started + node_execution_started).
 
     Args:
-        run_id: Research run ID
-        event_type: Type of raw event (stage_progress, substage_completed, etc.)
-        event_data: Raw event data
+        _run_id: Research run ID (unused but kept for API consistency)
+        _event_type: Type of raw event (for logging/debugging)
+        event_data: Typed event data (Pydantic model)
         state: Current research run state (for context-aware event generation)
 
     Returns:
         List of timeline events (may be empty)
-
-    Pattern:
-        - Simple dispatcher pattern
-        - Handlers receive state for context-aware decisions
-        - Handlers return List[TimelineEvent] (may be empty)
-        - Multiple events can be emitted from a single raw event
-
-    Type safety:
-        - The event_type key determines which transformer is called
-        - Each transformer knows how to handle its specific raw event structure
-        - Runtime dispatch is safe due to the webhook endpoint routing
     """
-    handler = EVENT_HANDLERS.get(event_type)
-
-    if handler is None:
-        # Unknown event type - no timeline events
-        return []
-
-    # Call handler to transform raw event → timeline events
-    return handler(run_id, event_data, state)
+    # Dispatch based on event type using isinstance checks
+    # This provides full type safety - the type checker knows the exact type in each branch
+    if isinstance(event_data, StageProgressEvent):
+        return handle_stage_progress_event(event_data, state)
+    elif isinstance(event_data, SubstageCompletedEvent):
+        return handle_substage_completed_event(event_data, state)
+    elif isinstance(event_data, SubstageSummaryEvent):
+        return handle_substage_summary_event(event_data, state)
+    elif isinstance(event_data, PaperGenerationProgressEvent):
+        return handle_paper_generation_progress_event(event_data, state)
+    elif isinstance(event_data, BestNodeSelectionEvent):
+        return handle_best_node_selection_event(event_data, state)
+    elif isinstance(event_data, RunningCodeEventPayload):
+        return handle_running_code_event(event_data, state)
+    elif isinstance(event_data, RunCompletedEventPayload):
+        return handle_run_completed_event(event_data, state)
+    elif isinstance(event_data, RunStartedEventData):
+        return handle_run_started_event(event_data, state)
+    elif isinstance(event_data, RunFinishedEventData):
+        return handle_run_finished_event(event_data, state)

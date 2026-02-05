@@ -6,7 +6,7 @@ from typing import Dict, Optional, Protocol, cast
 
 from fastapi import Header, HTTPException, status
 
-from app.api.research_pipeline_runs import REQUESTER_NAME_FALLBACK, extract_user_first_name
+from app.api.research_pipeline.utils import REQUESTER_NAME_FALLBACK, extract_user_first_name
 from app.services import get_database
 from app.services.database.ideas import IdeaVersionData
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination

@@ -223,6 +223,8 @@ def generate_and_assign_metrics(
                 code=task_text,
                 started_at=started_at,
                 run_type=RunType.CODEX_EXECUTION,
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
         term_out, exec_time, exc_type, exc_info = metrics_runner.run(
@@ -242,6 +244,8 @@ def generate_and_assign_metrics(
                 exec_time=float(exec_time),
                 completed_at=completed_at,
                 run_type=RunType.CODEX_EXECUTION,
+                is_seed_node=False,
+                is_seed_agg_node=False,
             )
         )
         node.parse_metrics_plan = task_text
