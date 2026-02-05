@@ -22,7 +22,6 @@ import {
   FlaskConical,
   StopCircle,
   Radio,
-  HelpCircle,
 } from "lucide-react";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 import type { components } from "@/types/api.gen";
