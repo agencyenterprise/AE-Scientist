@@ -944,7 +944,7 @@ class NodeExecutionStartedEvent(BaseModel):
     ]
     run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
     code_preview: Annotated[
-        str, Field(description="Preview of code being executed", title="Code Preview")
+        str, Field(description="Full code being executed", title="Code Preview")
     ]
     is_seed_node: Annotated[
         bool | None,

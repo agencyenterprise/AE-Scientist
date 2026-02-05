@@ -245,8 +245,8 @@ def handle_running_code_event(
     except (ValueError, AttributeError):
         started_at = datetime.now(timezone.utc)
 
-    # Create code preview (first 100 chars)
-    code_preview = event.code[:100] + "..." if len(event.code) > 100 else event.code
+    # Store the full code - frontend handles display/scrolling
+    code_preview = event.code
 
     events: List[TimelineEvent] = []
     offset_ms = 0

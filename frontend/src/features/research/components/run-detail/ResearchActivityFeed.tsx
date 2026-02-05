@@ -606,10 +606,32 @@ function EventDetails({ event }: { event: TimelineEvent }) {
         </p>
       ) : null;
 
-    case "node_result":
-      return "outcome" in event && event.outcome ? (
-        <p className="text-xs text-muted-foreground mt-0.5">Outcome: {event.outcome}</p>
-      ) : null;
+    case "node_result": {
+      const hasOutcome = "outcome" in event && event.outcome;
+      const hasSummary = "summary" in event && event.summary;
+      if (!hasOutcome && !hasSummary) return null;
+      return (
+        <div className="mt-1 space-y-1">
+          {hasOutcome && (
+            <span
+              className={cn(
+                "inline-block px-1.5 py-0.5 rounded text-xs font-medium",
+                event.outcome === "success"
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-red-500/20 text-red-400"
+              )}
+            >
+              {(event.outcome as string).toUpperCase()}
+            </span>
+          )}
+          {hasSummary && (
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+              {event.summary as string}
+            </p>
+          )}
+        </div>
+      );
+    }
 
     case "run_finished":
       return "status" in event && event.status ? (

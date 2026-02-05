@@ -8072,7 +8072,7 @@
           "code_preview": {
             "type": "string",
             "title": "Code Preview",
-            "description": "Preview of code being executed"
+            "description": "Full code being executed"
           },
           "is_seed_node": {
             "type": "boolean",

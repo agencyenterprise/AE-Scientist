@@ -1,7 +1,7 @@
 """Fake data generation methods for FakeRunner."""
 
 import logging
-import uuid
+import random
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -196,11 +196,55 @@ class FakeDataMixin:
             )
 
     def _emit_fake_best_node(self, *, stage_name: str, stage_index: int) -> None:
-        """Emit a fake best node selection event."""
-        node_id = f"{stage_name}-best-{uuid.uuid4().hex[:8]}"
-        reasoning = (
-            f"Selected synthetic best node for {stage_name} after stage index {stage_index + 1}."
+        """Emit a fake best node selection event with realistic reasoning."""
+        node_id = str(random.randint(1, 5))
+
+        # Stage-specific reasoning templates
+        stage_reasonings = {
+            "1_initial_implementation": [
+                f"Node {node_id} demonstrates the most stable training with consistent loss reduction. "
+                "The implementation correctly handles edge cases and produces valid outputs across all test inputs. "
+                "Validation accuracy reached 78.3% which exceeds the baseline threshold.",
+                f"Selected node {node_id} based on successful execution without runtime errors. "
+                "The baseline model architecture is correctly implemented with proper weight initialization. "
+                "Training converged smoothly with final validation loss of 0.342.",
+            ],
+            "2_baseline_tuning": [
+                f"Node {node_id} achieved the best validation metric of 0.847 after hyperparameter optimization. "
+                "Learning rate of 3e-4 with cosine annealing schedule showed optimal convergence. "
+                "Batch size of 32 provided good balance between training speed and gradient stability.",
+                f"Hyperparameter search selected node {node_id} with validation accuracy 85.2%. "
+                "The tuned model uses dropout=0.3 and weight decay=1e-5 which reduced overfitting. "
+                "Early stopping triggered at epoch 45 with patience of 10.",
+            ],
+            "3_creative_research": [
+                f"Node {node_id} introduced an attention mechanism that improved performance by 3.2%. "
+                "The novel residual connection pattern allows better gradient flow through deeper layers. "
+                "Ablation studies confirm the contribution of each proposed modification.",
+                f"Selected node {node_id} for its innovative data augmentation strategy. "
+                "The proposed method combines mixup with cutout achieving 87.9% test accuracy. "
+                "Visualization of learned features shows more discriminative representations.",
+            ],
+            "4_ablation_studies": [
+                f"Node {node_id} provides comprehensive ablation analysis validating all key components. "
+                "Removing the attention module decreases accuracy by 2.8%, confirming its importance. "
+                "The study demonstrates statistical significance with p < 0.01 across all comparisons.",
+                f"Ablation node {node_id} confirms that each proposed contribution is necessary. "
+                "Component-wise analysis shows: attention (+2.1%), residual (+1.4%), augmentation (+1.8%). "
+                "Results are consistent across 3 random seeds with std < 0.3%.",
+            ],
+        }
+
+        # Get reasoning for this stage, or use a generic one
+        reasonings = stage_reasonings.get(
+            stage_name,
+            [
+                f"Node {node_id} selected as the best performing candidate for {stage_name}. "
+                "The implementation meets all quality criteria and produces reliable results.",
+            ],
         )
+        reasoning = random.choice(reasonings)
+
         try:
             self._persistence.queue.put(
                 PersistableEvent(
@@ -211,6 +255,13 @@ class FakeDataMixin:
                         reasoning=reasoning,
                     ),
                 )
+            )
+            logger.info(
+                "[FakeRunner %s] Emitted best_node_selection for stage %s index %d (node %s)",
+                self._run_id[:8],
+                stage_name,
+                stage_index,
+                node_id,
             )
         except Exception:
             logger.exception("Failed to enqueue fake best node event for stage %s", stage_name)

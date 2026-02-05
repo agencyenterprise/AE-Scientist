@@ -231,7 +231,7 @@ class NodeExecutionStartedEvent(TimelineEventBase):
     headline: str = Field(..., description="Short headline")
     execution_id: str = Field(..., description="Unique execution ID")
     run_type: str = Field(..., description="Type of run")
-    code_preview: str = Field(..., description="Preview of code being executed")
+    code_preview: str = Field(..., description="Full code being executed")
     # Defaults for data migration - old events don't have these fields
     is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
     is_seed_agg_node: bool = Field(

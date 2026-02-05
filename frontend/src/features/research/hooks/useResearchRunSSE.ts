@@ -464,6 +464,8 @@ export function useResearchRunSSE({
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
+        // Reset snapshot flag so we re-fetch full state on reconnect
+        initialSnapshotFetchedRef.current = false;
         // eslint-disable-next-line no-console
         console.debug(
           `[Research Run SSE] Stream ended unexpectedly. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
@@ -488,6 +490,8 @@ export function useResearchRunSSE({
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
+        // Reset snapshot flag so we re-fetch full state on reconnect
+        initialSnapshotFetchedRef.current = false;
         // eslint-disable-next-line no-console
         console.debug(
           `[Research Run SSE] Connection failed: ${errorMessage}. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`

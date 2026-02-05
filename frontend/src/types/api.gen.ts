@@ -3774,7 +3774,7 @@ export interface components {
             run_type: string;
             /**
              * Code Preview
-             * @description Preview of code being executed
+             * @description Full code being executed
              */
             code_preview: string;
             /**
