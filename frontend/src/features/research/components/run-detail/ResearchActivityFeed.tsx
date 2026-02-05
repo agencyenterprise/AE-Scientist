@@ -643,7 +643,12 @@ function EventDetails({ event }: { event: TimelineEvent }) {
 
     case "progress_update":
       // For seed nodes, show "Seed X/Y"; for regular nodes, iteration is already shown in header badge
-      if ("is_seed_node" in event && event.is_seed_node && "iteration" in event && "max_iterations" in event) {
+      if (
+        "is_seed_node" in event &&
+        event.is_seed_node &&
+        "iteration" in event &&
+        "max_iterations" in event
+      ) {
         return (
           <p className="text-xs text-muted-foreground mt-0.5">
             Seed {event.iteration}/{event.max_iterations}
