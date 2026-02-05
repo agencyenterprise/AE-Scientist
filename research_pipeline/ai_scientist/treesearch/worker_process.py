@@ -36,7 +36,14 @@ from .codex.seed_aggregation import (
 )
 from .config import Config as AppConfig
 from .config import apply_log_level
-from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
+from .events import (
+    BaseEvent,
+    ExecutionType,
+    RunCompletedEvent,
+    RunLogEvent,
+    RunningCodeEvent,
+    RunType,
+)
 from .executor import run_python_script
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
@@ -561,7 +568,11 @@ def _write_codex_task_file(
         contract_lines = (
             codex_node_result_contract_prompt_lines_common() + codex_seed_agg_contract_lines()
         )
-        seed_agg_instructions = "\n".join(codex_seed_aggregation_instructions_lines()).strip()
+        seed_agg_instructions = "\n".join(
+            codex_seed_aggregation_instructions_lines(
+                seed_aggregation=task_context.seed_aggregation
+            )
+        ).strip()
         seed_agg_block = seed_agg_instructions + "\n\n"
     else:
         contract_lines = codex_node_result_contract_prompt_lines_for_stage(
@@ -961,6 +972,14 @@ def _run_codex_cli(
             task_file,
         )
 
+    # Derive execution_type from context
+    if is_seed_agg_node:
+        execution_type = ExecutionType.AGGREGATION
+    elif is_seed_node:
+        execution_type = ExecutionType.SEED
+    else:
+        execution_type = ExecutionType.STAGE_GOAL
+
     event_callback(
         RunningCodeEvent(
             execution_id=execution_id,
@@ -968,8 +987,10 @@ def _run_codex_cli(
             code=codex_task_content,
             started_at=started_at,
             run_type=RunType.CODEX_EXECUTION,
+            execution_type=execution_type,
             is_seed_node=is_seed_node,
             is_seed_agg_node=is_seed_agg_node,
+            node_index=node,
         )
     )
 
@@ -1046,8 +1067,10 @@ def _run_codex_cli(
                     exec_time=exec_time,
                     completed_at=completed_at,
                     run_type=RunType.RUNFILE_EXECUTION,
+                    execution_type=execution_type,
                     is_seed_node=is_seed_node,
                     is_seed_agg_node=is_seed_agg_node,
+                    node_index=node,
                 )
             )
             runfile_item_id = None
@@ -1070,8 +1093,10 @@ def _run_codex_cli(
                 code=runfile_content,
                 started_at=runfile_started_at,
                 run_type=RunType.RUNFILE_EXECUTION,
+                execution_type=execution_type,
                 is_seed_node=is_seed_node,
                 is_seed_agg_node=is_seed_agg_node,
+                node_index=node,
             )
         )
 
@@ -1111,8 +1136,10 @@ def _run_codex_cli(
             exec_time=exec_time,
             completed_at=completed_at,
             run_type=RunType.CODEX_EXECUTION,
+            execution_type=execution_type,
             is_seed_node=is_seed_node,
             is_seed_agg_node=is_seed_agg_node,
+            node_index=node,
         )
     )
     if exc_type is None:

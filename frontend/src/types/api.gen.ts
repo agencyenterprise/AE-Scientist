@@ -899,23 +899,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/{run_id}/best-node-selection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ingest Best Node Selection */
-        post: operations["ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/research-pipeline/events/{run_id}/stage-skip-window": {
         parameters: {
             query?: never;
@@ -2045,19 +2028,6 @@ export interface components {
              */
             name: string;
         };
-        /** BestNodeSelectionEvent */
-        BestNodeSelectionEvent: {
-            /** Stage */
-            stage: string;
-            /** Node Id */
-            node_id: string;
-            /** Reasoning */
-            reasoning: string;
-        };
-        /** BestNodeSelectionPayload */
-        BestNodeSelectionPayload: {
-            event: components["schemas"]["BestNodeSelectionEvent"];
-        };
         /**
          * BillingWalletResponse
          * @description User's wallet balance and transaction history.
@@ -2705,6 +2675,12 @@ export interface components {
              */
             detail?: string | null;
         };
+        /**
+         * ExecutionType
+         * @description Type of execution categorizing what the code execution is for.
+         * @enum {string}
+         */
+        ExecutionType: "stage_goal" | "seed" | "aggregation" | "metrics";
         /** FigureReviewEvent */
         FigureReviewEvent: {
             /** Figure Name */
@@ -3707,17 +3683,26 @@ export interface components {
              */
             run_type: string;
             /**
+             * Execution Type
+             * @description Type of execution (stage_goal, seed, aggregation, metrics)
+             * @enum {string}
+             */
+            execution_type: "stage_goal" | "seed" | "aggregation" | "metrics";
+            /**
              * Is Seed Node
              * @description True if this is a seed evaluation node
-             * @default false
              */
             is_seed_node: boolean;
             /**
              * Is Seed Agg Node
              * @description True if this is a seed aggregation node
-             * @default false
              */
             is_seed_agg_node: boolean;
+            /**
+             * Node Index
+             * @description 1-based node index within the stage for display purposes
+             */
+            node_index: number;
         };
         /**
          * NodeExecutionStartedEvent
@@ -3773,22 +3758,31 @@ export interface components {
              */
             run_type: string;
             /**
+             * Execution Type
+             * @description Type of execution (stage_goal, seed, aggregation, metrics)
+             * @enum {string}
+             */
+            execution_type: "stage_goal" | "seed" | "aggregation" | "metrics";
+            /**
              * Code Preview
-             * @description Preview of code being executed
+             * @description Full code being executed
              */
             code_preview: string;
             /**
              * Is Seed Node
              * @description True if this is a seed evaluation node
-             * @default false
              */
             is_seed_node: boolean;
             /**
              * Is Seed Agg Node
              * @description True if this is a seed aggregation node
-             * @default false
              */
             is_seed_agg_node: boolean;
+            /**
+             * Node Index
+             * @description 1-based node index within the stage for display purposes
+             */
+            node_index: number;
         };
         /**
          * NodeResultEvent
@@ -4382,43 +4376,6 @@ export interface components {
              */
             conversation_id?: number | null;
         };
-        /** ResearchRunBestNodeEvent */
-        ResearchRunBestNodeEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "best_node_selection";
-            data: components["schemas"]["ResearchRunBestNodeSelection"];
-        };
-        /** ResearchRunBestNodeSelection */
-        ResearchRunBestNodeSelection: {
-            /**
-             * Id
-             * @description Unique identifier of the reasoning record
-             */
-            id: number;
-            /**
-             * Stage
-             * @description Stage identifier where the selection happened
-             */
-            stage: string;
-            /**
-             * Node Id
-             * @description Identifier of the selected node
-             */
-            node_id: string;
-            /**
-             * Reasoning
-             * @description LLM reasoning that justified the selection
-             */
-            reasoning: string;
-            /**
-             * Created At
-             * @description ISO timestamp when the reasoning was recorded
-             */
-            created_at: string;
-        };
         /**
          * ResearchRunCodeExecution
          * @description Latest code execution snapshot for a run.
@@ -4561,11 +4518,6 @@ export interface components {
              * @description LLM-generated summaries for completed sub-stages
              */
             substage_summaries?: components["schemas"]["ResearchRunSubstageSummary"][];
-            /**
-             * Best Node Selections
-             * @description Reasoning records captured whenever a best node is selected
-             */
-            best_node_selections?: components["schemas"]["ResearchRunBestNodeSelection"][];
             /**
              * Events
              * @description Audit events describing run-level lifecycle transitions
@@ -4853,8 +4805,6 @@ export interface components {
             events: components["schemas"]["ResearchRunEvent"][];
             /** Paper Generation Progress */
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
-            /** Best Node Selections */
-            best_node_selections: components["schemas"]["ResearchRunBestNodeSelection"][];
             /**
              * Stage Skip Windows
              * @description Recorded windows when stages became skippable.
@@ -5272,8 +5222,6 @@ export interface components {
             /** Best Node Id */
             best_node_id?: string | null;
             best_metrics?: components["schemas"]["MetricCollection"] | null;
-            /** Best Node Reasoning */
-            best_node_reasoning?: string | null;
             /** Artifact Ids */
             artifact_ids?: number[];
             /** Tree Viz */
@@ -5321,7 +5269,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunBestNodeEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunLogEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /** ResearchRunSubstageCompletedEvent */
         ResearchRunSubstageCompletedEvent: {
             /**
@@ -5565,10 +5513,13 @@ export interface components {
             /** Completed At */
             completed_at: string;
             run_type: components["schemas"]["RunType"];
+            execution_type: components["schemas"]["ExecutionType"];
             /** Is Seed Node */
             is_seed_node: boolean;
             /** Is Seed Agg Node */
             is_seed_agg_node: boolean;
+            /** Node Index */
+            node_index: number;
         };
         /** RunCompletedPayload */
         RunCompletedPayload: {
@@ -5785,10 +5736,13 @@ export interface components {
             /** Started At */
             started_at: string;
             run_type: components["schemas"]["RunType"];
+            execution_type: components["schemas"]["ExecutionType"];
             /** Is Seed Node */
             is_seed_node: boolean;
             /** Is Seed Agg Node */
             is_seed_agg_node: boolean;
+            /** Node Index */
+            node_index: number;
         };
         /** RunningCodePayload */
         RunningCodePayload: {
@@ -7676,41 +7630,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SubstageSummaryPayload"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post: {
-        parameters: {
-            query?: never;
-            header: {
-                authorization: string;
-            };
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BestNodeSelectionPayload"];
             };
         };
         responses: {

@@ -231,11 +231,14 @@ class NodeExecutionStartedEvent(TimelineEventBase):
     headline: str = Field(..., description="Short headline")
     execution_id: str = Field(..., description="Unique execution ID")
     run_type: str = Field(..., description="Type of run")
-    code_preview: str = Field(..., description="Preview of code being executed")
-    # Defaults for data migration - old events don't have these fields
-    is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
-    is_seed_agg_node: bool = Field(
-        default=False, description="True if this is a seed aggregation node"
+    execution_type: Literal["stage_goal", "seed", "aggregation", "metrics"] = Field(
+        ..., description="Type of execution (stage_goal, seed, aggregation, metrics)"
+    )
+    code_preview: str = Field(..., description="Full code being executed")
+    is_seed_node: bool = Field(..., description="True if this is a seed evaluation node")
+    is_seed_agg_node: bool = Field(..., description="True if this is a seed aggregation node")
+    node_index: int = Field(
+        ..., description="1-based node index within the stage for display purposes"
     )
 
 
@@ -258,10 +261,13 @@ class NodeExecutionCompletedEvent(TimelineEventBase):
     status: Literal["success", "failed"] = Field(..., description="Execution status")
     exec_time: float = Field(..., description="Execution time in seconds")
     run_type: str = Field(..., description="Type of run")
-    # Defaults for data migration - old events don't have these fields
-    is_seed_node: bool = Field(default=False, description="True if this is a seed evaluation node")
-    is_seed_agg_node: bool = Field(
-        default=False, description="True if this is a seed aggregation node"
+    execution_type: Literal["stage_goal", "seed", "aggregation", "metrics"] = Field(
+        ..., description="Type of execution (stage_goal, seed, aggregation, metrics)"
+    )
+    is_seed_node: bool = Field(..., description="True if this is a seed evaluation node")
+    is_seed_agg_node: bool = Field(..., description="True if this is a seed aggregation node")
+    node_index: int = Field(
+        ..., description="1-based node index within the stage for display purposes"
     )
 
 

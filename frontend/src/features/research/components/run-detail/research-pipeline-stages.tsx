@@ -5,7 +5,6 @@ import type {
   SubstageEvent,
   StageProgress,
   PaperGenerationEvent,
-  BestNodeSelection,
   SubstageSummary,
   ResearchRunCodeExecution,
 } from "@/types/research";
@@ -23,7 +22,6 @@ interface ResearchPipelineStagesProps {
   substageEvents: SubstageEvent[];
   substageSummaries: SubstageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
-  bestNodeSelections: BestNodeSelection[];
   stageSkipState: StageSkipStateMap;
   codexExecution?: ResearchRunCodeExecution | null;
   runfileExecution?: ResearchRunCodeExecution | null;
@@ -175,21 +173,6 @@ const formatNodeId = (nodeId: string): string => {
   return `${nodeId.slice(0, 6)}…${nodeId.slice(-4)}`;
 };
 
-const getBestNodeForStage = (
-  stageKey: string,
-  selections: BestNodeSelection[]
-): BestNodeSelection | null => {
-  const matches = selections.filter(selection => extractStageSlug(selection.stage) === stageKey);
-  if (matches.length === 0) {
-    return null;
-  }
-  return (
-    matches.sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )[0] ?? null
-  );
-};
-
 const getLatestSummaryForStage = (
   stageKey: string,
   summaries: SubstageSummary[]
@@ -252,7 +235,6 @@ export function ResearchPipelineStages({
   substageEvents,
   substageSummaries,
   paperGenerationProgress,
-  bestNodeSelections,
   stageSkipState,
   codexExecution,
   runfileExecution,
@@ -433,9 +415,6 @@ export function ResearchPipelineStages({
             ? getPaperGenerationSegments(paperGenerationProgress)
             : getNodeSegments(stage.key, substageEvents, stageProgress);
           const emptyMessage = isPaperGeneration ? "No steps yet" : "No nodes yet";
-          const bestNode = isPaperGeneration
-            ? null
-            : getBestNodeForStage(stage.key, bestNodeSelections);
           const latestSummary = isPaperGeneration
             ? null
             : getLatestSummaryForStage(stage.key, substageSummaries);
@@ -561,35 +540,18 @@ export function ResearchPipelineStages({
               {/* Unified progress bar for all stages */}
               <SegmentedProgressBar segments={segments} emptyMessage={emptyMessage} />
 
-              {!isPaperGeneration && (bestNode || latestSummary) && (
+              {!isPaperGeneration && latestSummary && (
                 <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3 space-y-3">
-                  {bestNode && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Current Best Node
-                      </p>
-                      <div className="mt-1 space-y-1">
-                        <p className="text-sm font-mono text-emerald-300">
-                          {formatNodeId(bestNode.node_id)}
-                        </p>
-                        <div className="max-h-24 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
-                          {bestNode.reasoning}
-                        </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Substage Summary
+                    </p>
+                    {summaryText && (
+                      <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
+                        {summaryText}
                       </div>
-                    </div>
-                  )}
-                  {latestSummary && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                        Substage Summary
-                      </p>
-                      {summaryText && (
-                        <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">
-                          {summaryText}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
             </div>

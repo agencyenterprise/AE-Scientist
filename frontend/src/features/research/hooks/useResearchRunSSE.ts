@@ -9,7 +9,6 @@ import type {
   ArtifactMetadata,
   ResearchRunDetails,
   PaperGenerationEvent,
-  BestNodeSelection,
   SubstageSummary,
   SubstageEvent,
   HwCostEstimateData,
@@ -39,7 +38,6 @@ interface UseResearchRunSSEOptions {
   onComplete: (status: string) => void;
   onRunEvent?: (event: unknown) => void;
   onTerminationStatus?: (event: TerminationStatusData) => void;
-  onBestNodeSelection?: (event: BestNodeSelection) => void;
   onSubstageSummary?: (event: SubstageSummary) => void;
   onSubstageCompleted?: (event: SubstageEvent) => void;
   onError?: (error: string) => void;
@@ -246,7 +244,6 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     artifacts: data.artifacts,
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
-    best_node_selections: data.best_node_selections ?? [],
     stage_skip_windows: rawStageSkipWindows.map(normalizeStageSkipWindow),
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,
@@ -271,7 +268,6 @@ export function useResearchRunSSE({
   onInitializationStatus,
   onHwCostEstimate,
   onHwCostActual,
-  onBestNodeSelection,
   onSubstageSummary,
   onSubstageCompleted,
   onError,
@@ -284,6 +280,8 @@ export function useResearchRunSSE({
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const initialSnapshotFetchedRef = useRef(false);
+  const isConnectedRef = useRef(false);
+  const connectionFailedRef = useRef(false);
   const maxReconnectAttempts = 5;
 
   const ensureInitialSnapshot = useCallback(async () => {
@@ -354,6 +352,8 @@ export function useResearchRunSSE({
       }
 
       reconnectAttemptsRef.current = 0;
+      isConnectedRef.current = true;
+      connectionFailedRef.current = false;
       // eslint-disable-next-line no-console
       console.debug("[Research Run SSE] Connection established");
 
@@ -363,7 +363,13 @@ export function useResearchRunSSE({
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          isConnectedRef.current = false;
+          // Stream ended - this could be due to server disconnect, trigger reconnect
+          // eslint-disable-next-line no-console
+          console.debug("[Research Run SSE] Stream ended, will reconnect on next read attempt");
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
@@ -396,9 +402,6 @@ export function useResearchRunSSE({
                 break;
               case "review_completed":
                 onReviewCompleted?.(event.data as LlmReviewResponse);
-                break;
-              case "best_node_selection":
-                onBestNodeSelection?.(event.data as BestNodeSelection);
                 break;
               case "substage_summary":
                 onSubstageSummary?.(event.data as SubstageSummary);
@@ -433,6 +436,7 @@ export function useResearchRunSSE({
                 }
                 break;
               case "complete":
+                isConnectedRef.current = false;
                 onComplete(event.data.status);
                 return;
               case "error":
@@ -447,7 +451,29 @@ export function useResearchRunSSE({
           }
         }
       }
+
+      // Stream ended without a "complete" event - attempt to reconnect
+      // This can happen if the server closes the connection unexpectedly
+      if (reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+        reconnectAttemptsRef.current++;
+        // Reset snapshot flag so we re-fetch full state on reconnect
+        initialSnapshotFetchedRef.current = false;
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[Research Run SSE] Stream ended unexpectedly. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
+        );
+        reconnectTimeoutRef.current = setTimeout(connect, delay);
+      } else {
+        connectionFailedRef.current = true;
+        // eslint-disable-next-line no-console
+        console.debug(
+          "[Research Run SSE] Max reconnection attempts reached after stream end. Will retry when tab becomes visible."
+        );
+      }
     } catch (error) {
+      isConnectedRef.current = false;
+
       if ((error as Error).name === "AbortError") {
         return;
       }
@@ -457,17 +483,20 @@ export function useResearchRunSSE({
       if (reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
+        // Reset snapshot flag so we re-fetch full state on reconnect
+        initialSnapshotFetchedRef.current = false;
         // eslint-disable-next-line no-console
         console.debug(
           `[Research Run SSE] Connection failed: ${errorMessage}. Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts} in ${delay}ms`
         );
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
+        connectionFailedRef.current = true;
         // eslint-disable-next-line no-console
         console.error(
-          "[Research Run SSE] Max reconnection attempts reached. Connection permanently lost."
+          "[Research Run SSE] Max reconnection attempts reached. Will retry when tab becomes visible."
         );
-        onError?.("Max reconnection attempts reached. Please refresh the page.");
+        // Don't show error to user - we'll retry when they return to the tab
       }
     }
   }, [
@@ -482,7 +511,6 @@ export function useResearchRunSSE({
     onSubstageCompleted,
     onRunEvent,
     onTerminationStatus,
-    onBestNodeSelection,
     onSubstageSummary,
     onPaperGenerationProgress,
     onComplete,
@@ -510,7 +538,32 @@ export function useResearchRunSSE({
     };
   }, [enabled, conversationId, connect]);
 
+  // Auto-reconnect when user returns to the tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && enabled && conversationId) {
+        // If connection failed or we're not connected, reset attempts and reconnect
+        if (connectionFailedRef.current || !isConnectedRef.current) {
+          // eslint-disable-next-line no-console
+          console.debug("[Research Run SSE] Tab became visible, attempting to reconnect...");
+          reconnectAttemptsRef.current = 0;
+          connectionFailedRef.current = false;
+          // Reset snapshot flag so we re-fetch full state on reconnect
+          // This ensures we get all events that occurred while disconnected
+          initialSnapshotFetchedRef.current = false;
+          connect();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [enabled, conversationId, connect]);
+
   const disconnect = useCallback(() => {
+    isConnectedRef.current = false;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }

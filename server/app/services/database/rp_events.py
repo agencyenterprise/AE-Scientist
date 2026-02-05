@@ -63,21 +63,13 @@ class PaperGenerationEvent(NamedTuple):
     created_at: datetime
 
 
-class BestNodeReasoningEvent(NamedTuple):
-    id: int
-    run_id: str
-    stage: str
-    node_id: str
-    reasoning: str
-    created_at: datetime
-
-
 class CodeExecutionEvent(NamedTuple):
     id: int
     run_id: str
     execution_id: str
     stage_name: str
     run_type: str
+    execution_type: str  # stage_goal, seed, aggregation, metrics
     code: str
     status: str
     started_at: datetime
@@ -85,6 +77,7 @@ class CodeExecutionEvent(NamedTuple):
     exec_time: Optional[float]
     created_at: datetime
     updated_at: datetime
+    node_index: int
 
 
 class StageSkipWindowRecord(NamedTuple):
@@ -277,34 +270,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     raise ValueError("Failed to insert paper generation event")
                 return int(result["id"])
 
-    async def insert_best_node_reasoning_event(
-        self,
-        *,
-        run_id: str,
-        stage: str,
-        node_id: str,
-        reasoning: str,
-        created_at: Optional[datetime] = None,
-    ) -> int:
-        """Insert a best node reasoning event and return its ID."""
-        if created_at is None:
-            created_at = datetime.now()
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    INSERT INTO rp_best_node_reasoning_events
-                        (run_id, stage, node_id, reasoning, created_at)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (run_id, stage, node_id, reasoning, created_at),
-                )
-                result = await cursor.fetchone()
-                if not result:
-                    raise ValueError("Failed to insert best node reasoning event")
-                return int(result["id"])
-
     async def insert_codex_event(
         self,
         *,
@@ -341,11 +306,13 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         execution_id: str,
         stage_name: str,
         run_type: str,
+        execution_type: str,
         code: Optional[str] = None,
         status: str = "running",
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
         exec_time: Optional[float] = None,
+        node_index: Optional[int] = None,
     ) -> int:
         """Insert or update a code execution event and return its ID."""
         now = datetime.now()
@@ -357,14 +324,16 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(
                     """
                     INSERT INTO rp_code_execution_events
-                        (run_id, execution_id, stage_name, run_type, code, status,
-                         started_at, completed_at, exec_time, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (run_id, execution_id, stage_name, run_type, execution_type, code, status,
+                         started_at, completed_at, exec_time, node_index, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (run_id, execution_id, run_type)
                     DO UPDATE SET
                         status = EXCLUDED.status,
                         completed_at = EXCLUDED.completed_at,
                         exec_time = EXCLUDED.exec_time,
+                        execution_type = COALESCE(EXCLUDED.execution_type, rp_code_execution_events.execution_type),
+                        node_index = COALESCE(EXCLUDED.node_index, rp_code_execution_events.node_index),
                         updated_at = EXCLUDED.updated_at
                     RETURNING id
                     """,
@@ -373,11 +342,13 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                         execution_id,
                         stage_name,
                         run_type,
+                        execution_type,
                         code,
                         status,
                         started_at,
                         completed_at,
                         exec_time,
+                        node_index,
                         now,
                         now,
                     ),
@@ -595,20 +566,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 rows = await cursor.fetchall()
         return [PaperGenerationEvent(**row) for row in (rows or [])]
 
-    async def list_best_node_reasoning_events(self, run_id: str) -> List[BestNodeReasoningEvent]:
-        """Fetch reasoning emitted when the best node is chosen."""
-        query = """
-            SELECT id, run_id, stage, node_id, reasoning, created_at
-            FROM rp_best_node_reasoning_events
-            WHERE run_id = %s
-            ORDER BY created_at ASC
-        """
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, (run_id,))
-                rows = await cursor.fetchall()
-        return [BestNodeReasoningEvent(**row) for row in (rows or [])]
-
     async def get_latest_paper_generation_event(
         self, run_id: str
     ) -> Optional[PaperGenerationEvent]:
@@ -634,13 +591,15 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    execution_id,
                    stage_name,
                    run_type,
+                   execution_type,
                    code,
                    status,
                    started_at,
                    completed_at,
                    exec_time,
                    created_at,
-                   updated_at
+                   updated_at,
+                   node_index
             FROM rp_code_execution_events
             WHERE run_id = %s
             ORDER BY started_at DESC NULLS LAST, id DESC
@@ -665,13 +624,15 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    execution_id,
                    stage_name,
                    run_type,
+                   execution_type,
                    code,
                    status,
                    started_at,
                    completed_at,
                    exec_time,
                    created_at,
-                   updated_at
+                   updated_at,
+                   node_index
             FROM rp_code_execution_events
             WHERE run_id = %s
             ORDER BY run_type, started_at DESC NULLS LAST, id DESC

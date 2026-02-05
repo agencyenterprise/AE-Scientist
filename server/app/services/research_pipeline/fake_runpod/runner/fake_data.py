@@ -1,14 +1,12 @@
 """Fake data generation methods for FakeRunner."""
 
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 # fmt: off
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
-    BestNodeSelectionEvent,
     FigureReviewEvent,
     FigureReviewsEvent,
     ReviewCompletedEvent,
@@ -16,9 +14,6 @@ from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-no
 )
 # isort: on
 # fmt: on
-from research_pipeline.ai_scientist.telemetry.event_persistence import (  # type: ignore[import-not-found]
-    PersistableEvent,
-)
 
 if TYPE_CHECKING:
     from .core import FakeRunnerCore
@@ -194,23 +189,3 @@ class FakeDataMixin:
             logger.exception(
                 "[FakeRunner %s] Failed to post review completed webhook", self._run_id[:8]
             )
-
-    def _emit_fake_best_node(self, *, stage_name: str, stage_index: int) -> None:
-        """Emit a fake best node selection event."""
-        node_id = f"{stage_name}-best-{uuid.uuid4().hex[:8]}"
-        reasoning = (
-            f"Selected synthetic best node for {stage_name} after stage index {stage_index + 1}."
-        )
-        try:
-            self._persistence.queue.put(
-                PersistableEvent(
-                    kind="best_node_selection",
-                    data=BestNodeSelectionEvent(
-                        stage=stage_name,
-                        node_id=node_id,
-                        reasoning=reasoning,
-                    ),
-                )
-            )
-        except Exception:
-            logger.exception("Failed to enqueue fake best node event for stage %s", stage_name)

@@ -80,16 +80,6 @@ class AuthUser(BaseModel):
     name: Annotated[str, Field(description="User display name", title="Name")]
 
 
-class BestNodeSelectionEvent(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    node_id: Annotated[str, Field(title="Node Id")]
-    reasoning: Annotated[str, Field(title="Reasoning")]
-
-
-class BestNodeSelectionPayload(BaseModel):
-    event: BestNodeSelectionEvent
-
-
 class BodyCreatePaperReviewApiPaperReviewsPost(BaseModel):
     file: Annotated[bytes, Field(description="PDF file to review", title="File")]
     model: Annotated[
@@ -346,6 +336,13 @@ class ErrorResponse(BaseModel):
     detail: Annotated[
         str | None, Field(description="Additional error details", title="Detail")
     ] = None
+
+
+class ExecutionType(StrEnum):
+    stage_goal = "stage_goal"
+    seed = "seed"
+    aggregation = "aggregation"
+    metrics = "metrics"
 
 
 class FigureReviewEvent(BaseModel):
@@ -904,19 +901,33 @@ class NodeExecutionCompletedEvent(BaseModel):
         float, Field(description="Execution time in seconds", title="Exec Time")
     ]
     run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
     is_seed_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed evaluation node", title="Is Seed Node"
         ),
-    ] = False
+    ]
     is_seed_agg_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed aggregation node",
             title="Is Seed Agg Node",
         ),
-    ] = False
+    ]
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
 
 
 class NodeExecutionStartedEvent(BaseModel):
@@ -943,22 +954,36 @@ class NodeExecutionStartedEvent(BaseModel):
         str, Field(description="Unique execution ID", title="Execution Id")
     ]
     run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
     code_preview: Annotated[
-        str, Field(description="Preview of code being executed", title="Code Preview")
+        str, Field(description="Full code being executed", title="Code Preview")
     ]
     is_seed_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed evaluation node", title="Is Seed Node"
         ),
-    ] = False
+    ]
     is_seed_agg_node: Annotated[
-        bool | None,
+        bool,
         Field(
             description="True if this is a seed aggregation node",
             title="Is Seed Agg Node",
         ),
-    ] = False
+    ]
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
 
 
 class Outcome(StrEnum):
@@ -1172,34 +1197,6 @@ class ResearchRunArtifactMetadata(BaseModel):
         int | None,
         Field(description="ID of the associated conversation", title="Conversation Id"),
     ] = None
-
-
-class ResearchRunBestNodeSelection(BaseModel):
-    id: Annotated[
-        int, Field(description="Unique identifier of the reasoning record", title="Id")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier where the selection happened", title="Stage"
-        ),
-    ]
-    node_id: Annotated[
-        str, Field(description="Identifier of the selected node", title="Node Id")
-    ]
-    reasoning: Annotated[
-        str,
-        Field(
-            description="LLM reasoning that justified the selection", title="Reasoning"
-        ),
-    ]
-    created_at: Annotated[
-        str,
-        Field(
-            description="ISO timestamp when the reasoning was recorded",
-            title="Created At",
-        ),
-    ]
 
 
 class Status3(StrEnum):
@@ -2001,8 +1998,10 @@ class RunningCodeEventPayload(BaseModel):
     code: Annotated[str, Field(title="Code")]
     started_at: Annotated[str, Field(title="Started At")]
     run_type: RunType
+    execution_type: ExecutionType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
 
 
 class RunningCodePayload(BaseModel):
@@ -2680,11 +2679,6 @@ class ResearchRunArtifactEvent(BaseModel):
     data: ResearchRunArtifactMetadata
 
 
-class ResearchRunBestNodeEvent(BaseModel):
-    type: Annotated[Literal["best_node_selection"], Field(title="Type")]
-    data: ResearchRunBestNodeSelection
-
-
 class ResearchRunCodeExecution(BaseModel):
     execution_id: Annotated[
         str,
@@ -2775,13 +2769,6 @@ class ResearchRunDetailsResponse(BaseModel):
             title="Substage Summaries",
         ),
     ] = None
-    best_node_selections: Annotated[
-        list[ResearchRunBestNodeSelection] | None,
-        Field(
-            description="Reasoning records captured whenever a best node is selected",
-            title="Best Node Selections",
-        ),
-    ] = None
     events: Annotated[
         list[ResearchRunEvent] | None,
         Field(
@@ -2839,9 +2826,6 @@ class ResearchRunInitialEventData(BaseModel):
         list[ResearchRunPaperGenerationProgress],
         Field(title="Paper Generation Progress"),
     ]
-    best_node_selections: Annotated[
-        list[ResearchRunBestNodeSelection], Field(title="Best Node Selections")
-    ]
     stage_skip_windows: Annotated[
         list[ResearchRunStageSkipWindow] | None,
         Field(
@@ -2897,8 +2881,10 @@ class RunCompletedEventPayload(BaseModel):
     exec_time: Annotated[float, Field(title="Exec Time")]
     completed_at: Annotated[str, Field(title="Completed At")]
     run_type: RunType
+    execution_type: ExecutionType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
 
 
 class RunCompletedPayload(BaseModel):
@@ -3097,9 +3083,6 @@ class ResearchRunState(BaseModel):
     ] = 0.0
     best_node_id: Annotated[str | None, Field(title="Best Node Id")] = None
     best_metrics: MetricCollection | None = None
-    best_node_reasoning: Annotated[str | None, Field(title="Best Node Reasoning")] = (
-        None
-    )
     artifact_ids: Annotated[list[int] | None, Field(title="Artifact Ids")] = None
     tree_viz: Annotated[dict[str, Any] | None, Field(title="Tree Viz")] = None
     created_at: Annotated[AwareDatetime, Field(title="Created At")]
@@ -3131,7 +3114,6 @@ class ResearchRunStreamEvent(
         | ResearchRunLogEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
-        | ResearchRunBestNodeEvent
         | ResearchRunSubstageCompletedEvent
         | ResearchRunPaperGenerationEvent
         | ResearchRunSubstageEventStream
@@ -3155,7 +3137,6 @@ class ResearchRunStreamEvent(
         | ResearchRunLogEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
-        | ResearchRunBestNodeEvent
         | ResearchRunSubstageCompletedEvent
         | ResearchRunPaperGenerationEvent
         | ResearchRunSubstageEventStream

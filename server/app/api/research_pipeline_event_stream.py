@@ -13,7 +13,6 @@ from app.middleware.auth import get_current_user
 from app.models import (
     ChildConversationInfo,
     ResearchRunArtifactMetadata,
-    ResearchRunBestNodeSelection,
     ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
@@ -343,10 +342,6 @@ async def _build_initial_stream_payload(
         for event in await db.list_paper_generation_events(run_id=run_id)
     ]
     run_events = [ResearchRunEvent.from_db_record(event).model_dump() for event in raw_run_events]
-    best_node_payload = [
-        ResearchRunBestNodeSelection.from_db_record(event).model_dump()
-        for event in await db.list_best_node_reasoning_events(run_id=run_id)
-    ]
     latest_code_executions_by_type = await db.list_latest_code_execution_events_by_run_type(
         run_id=run_id
     )
@@ -390,7 +385,6 @@ async def _build_initial_stream_payload(
         "tree_viz": tree_viz,
         "events": run_events,
         "paper_generation_progress": paper_gen_events,
-        "best_node_selections": best_node_payload,
         "code_executions": code_executions_snapshot,
         "stage_skip_windows": stage_skip_windows,
         "child_conversations": child_conversations,

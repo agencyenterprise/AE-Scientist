@@ -1,10 +1,16 @@
 from ..prompts.render import render_lines, render_text
+from .codex_task_types import SeedAggregationPayload
 from .node_result_contract import NodeResultContractContext, is_non_empty_string
 
 
-def codex_seed_aggregation_instructions_lines() -> list[str]:
+def codex_seed_aggregation_instructions_lines(
+    seed_aggregation: SeedAggregationPayload | None = None,
+) -> list[str]:
+    context: dict[str, object] = {}
+    if seed_aggregation is not None:
+        context["seed_nodes"] = [sn.to_json_dict() for sn in seed_aggregation.seed_nodes]
     rendered = render_text(
-        template_name="seed_aggregation/seed_aggregation_instructions.md.j2", context={}
+        template_name="seed_aggregation/seed_aggregation_instructions.md.j2", context=context
     )
     return [line for line in rendered.splitlines() if line.strip()]
 

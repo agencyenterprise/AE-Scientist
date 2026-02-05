@@ -1,8 +1,11 @@
 """CLI entry point for the fake RunPod server."""
 
 import argparse
+import asyncio
 import logging
 import os
+import signal
+import sys
 
 import uvicorn
 
@@ -18,6 +21,34 @@ def _require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"{name} is required for fake RunPod server")
     return value
+
+
+async def _run_server(host: str, port: int) -> None:
+    """Run the server with graceful shutdown handling."""
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level="debug",
+    )
+    server = uvicorn.Server(config)
+
+    # Handle shutdown signals gracefully
+    loop = asyncio.get_event_loop()
+    shutdown_event = asyncio.Event()
+
+    def handle_signal() -> None:
+        shutdown_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_signal)
+
+    # Run server until shutdown signal
+    serve_task = asyncio.create_task(server.serve())
+
+    await shutdown_event.wait()
+    server.should_exit = True
+    await serve_task
 
 
 def main() -> None:
@@ -43,12 +74,11 @@ def main() -> None:
         )
 
     port_value = _require_env("FAKE_RUNPOD_PORT")
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=int(port_value),
-        log_level="debug",
-    )
+    try:
+        asyncio.run(_run_server("127.0.0.1", int(port_value)))
+    except KeyboardInterrupt:
+        pass
+    sys.exit(0)
 
 
 if __name__ == "__main__":

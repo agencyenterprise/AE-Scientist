@@ -2075,60 +2075,6 @@
         }
       }
     },
-    "/api/research-pipeline/events/{run_id}/best-node-selection": {
-      "post": {
-        "tags": [
-          "research-pipeline-events"
-        ],
-        "summary": "Ingest Best Node Selection",
-        "operationId": "ingest_best_node_selection_api_research_pipeline_events__run_id__best_node_selection_post",
-        "parameters": [
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Run Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BestNodeSelectionPayload"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/research-pipeline/events/{run_id}/stage-skip-window": {
       "post": {
         "tags": [
@@ -4929,41 +4875,6 @@
         "title": "AuthUser",
         "description": "User information returned by authentication endpoints."
       },
-      "BestNodeSelectionEvent": {
-        "properties": {
-          "stage": {
-            "type": "string",
-            "title": "Stage"
-          },
-          "node_id": {
-            "type": "string",
-            "title": "Node Id"
-          },
-          "reasoning": {
-            "type": "string",
-            "title": "Reasoning"
-          }
-        },
-        "type": "object",
-        "required": [
-          "stage",
-          "node_id",
-          "reasoning"
-        ],
-        "title": "BestNodeSelectionEvent"
-      },
-      "BestNodeSelectionPayload": {
-        "properties": {
-          "event": {
-            "$ref": "#/components/schemas/BestNodeSelectionEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "event"
-        ],
-        "title": "BestNodeSelectionPayload"
-      },
       "BillingWalletResponse": {
         "properties": {
           "balance_cents": {
@@ -6345,6 +6256,17 @@
         ],
         "title": "ErrorResponse",
         "description": "Standard error response schema."
+      },
+      "ExecutionType": {
+        "type": "string",
+        "enum": [
+          "stage_goal",
+          "seed",
+          "aggregation",
+          "metrics"
+        ],
+        "title": "ExecutionType",
+        "description": "Type of execution categorizing what the code execution is for."
       },
       "FigureReviewEvent": {
         "properties": {
@@ -7988,17 +7910,31 @@
             "title": "Run Type",
             "description": "Type of run"
           },
+          "execution_type": {
+            "type": "string",
+            "enum": [
+              "stage_goal",
+              "seed",
+              "aggregation",
+              "metrics"
+            ],
+            "title": "Execution Type",
+            "description": "Type of execution (stage_goal, seed, aggregation, metrics)"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node",
-            "description": "True if this is a seed evaluation node",
-            "default": false
+            "description": "True if this is a seed evaluation node"
           },
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node",
-            "description": "True if this is a seed aggregation node",
-            "default": false
+            "description": "True if this is a seed aggregation node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index",
+            "description": "1-based node index within the stage for display purposes"
           }
         },
         "type": "object",
@@ -8010,7 +7946,11 @@
           "execution_id",
           "status",
           "exec_time",
-          "run_type"
+          "run_type",
+          "execution_type",
+          "is_seed_node",
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "NodeExecutionCompletedEvent",
         "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered by run_completed events from research pipeline\n- Tracks node completion with timing and status\n- Pairs with NodeExecutionStartedEvent\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -8069,22 +8009,36 @@
             "title": "Run Type",
             "description": "Type of run"
           },
+          "execution_type": {
+            "type": "string",
+            "enum": [
+              "stage_goal",
+              "seed",
+              "aggregation",
+              "metrics"
+            ],
+            "title": "Execution Type",
+            "description": "Type of execution (stage_goal, seed, aggregation, metrics)"
+          },
           "code_preview": {
             "type": "string",
             "title": "Code Preview",
-            "description": "Preview of code being executed"
+            "description": "Full code being executed"
           },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node",
-            "description": "True if this is a seed evaluation node",
-            "default": false
+            "description": "True if this is a seed evaluation node"
           },
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node",
-            "description": "True if this is a seed aggregation node",
-            "default": false
+            "description": "True if this is a seed aggregation node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index",
+            "description": "1-based node index within the stage for display purposes"
           }
         },
         "type": "object",
@@ -8095,7 +8049,11 @@
           "headline",
           "execution_id",
           "run_type",
-          "code_preview"
+          "execution_type",
+          "code_preview",
+          "is_seed_node",
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "NodeExecutionStartedEvent",
         "description": "Emitted when a node starts executing code.\n\nEmission Criteria:\n- Triggered by running_code events from research pipeline\n- Tracks individual node execution lifecycle\n- Helps show concurrent node execution\n\nFrequency: 10-50 per stage (one per node execution)"
@@ -9259,65 +9217,6 @@
         ],
         "title": "ResearchRunArtifactMetadata"
       },
-      "ResearchRunBestNodeEvent": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "best_node_selection"
-            ],
-            "const": "best_node_selection",
-            "title": "Type"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ResearchRunBestNodeEvent"
-      },
-      "ResearchRunBestNodeSelection": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Unique identifier of the reasoning record"
-          },
-          "stage": {
-            "type": "string",
-            "title": "Stage",
-            "description": "Stage identifier where the selection happened"
-          },
-          "node_id": {
-            "type": "string",
-            "title": "Node Id",
-            "description": "Identifier of the selected node"
-          },
-          "reasoning": {
-            "type": "string",
-            "title": "Reasoning",
-            "description": "LLM reasoning that justified the selection"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp when the reasoning was recorded"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "stage",
-          "node_id",
-          "reasoning",
-          "created_at"
-        ],
-        "title": "ResearchRunBestNodeSelection"
-      },
       "ResearchRunCodeExecution": {
         "properties": {
           "execution_id": {
@@ -9628,14 +9527,6 @@
             "type": "array",
             "title": "Substage Summaries",
             "description": "LLM-generated summaries for completed sub-stages"
-          },
-          "best_node_selections": {
-            "items": {
-              "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-            },
-            "type": "array",
-            "title": "Best Node Selections",
-            "description": "Reasoning records captured whenever a best node is selected"
           },
           "events": {
             "items": {
@@ -10197,13 +10088,6 @@
             "type": "array",
             "title": "Paper Generation Progress"
           },
-          "best_node_selections": {
-            "items": {
-              "$ref": "#/components/schemas/ResearchRunBestNodeSelection"
-            },
-            "type": "array",
-            "title": "Best Node Selections"
-          },
           "stage_skip_windows": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunStageSkipWindow"
@@ -10261,8 +10145,7 @@
           "artifacts",
           "tree_viz",
           "events",
-          "paper_generation_progress",
-          "best_node_selections"
+          "paper_generation_progress"
         ],
         "title": "ResearchRunInitialEventData"
       },
@@ -11059,17 +10942,6 @@
               }
             ]
           },
-          "best_node_reasoning": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Node Reasoning"
-          },
           "artifact_ids": {
             "items": {
               "type": "integer"
@@ -11240,9 +11112,6 @@
             "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
           },
           {
-            "$ref": "#/components/schemas/ResearchRunBestNodeEvent"
-          },
-          {
             "$ref": "#/components/schemas/ResearchRunSubstageCompletedEvent"
           },
           {
@@ -11282,7 +11151,6 @@
           "propertyName": "type",
           "mapping": {
             "artifact": "#/components/schemas/ResearchRunArtifactEvent",
-            "best_node_selection": "#/components/schemas/ResearchRunBestNodeEvent",
             "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
             "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
             "complete": "#/components/schemas/ResearchRunCompleteEvent",
@@ -11807,6 +11675,9 @@
           "run_type": {
             "$ref": "#/components/schemas/RunType"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node"
@@ -11814,6 +11685,10 @@
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index"
           }
         },
         "type": "object",
@@ -11824,8 +11699,10 @@
           "exec_time",
           "completed_at",
           "run_type",
+          "execution_type",
           "is_seed_node",
-          "is_seed_agg_node"
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "RunCompletedEventPayload"
       },
@@ -12225,6 +12102,9 @@
           "run_type": {
             "$ref": "#/components/schemas/RunType"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node"
@@ -12232,6 +12112,10 @@
           "is_seed_agg_node": {
             "type": "boolean",
             "title": "Is Seed Agg Node"
+          },
+          "node_index": {
+            "type": "integer",
+            "title": "Node Index"
           }
         },
         "type": "object",
@@ -12241,8 +12125,10 @@
           "code",
           "started_at",
           "run_type",
+          "execution_type",
           "is_seed_node",
-          "is_seed_agg_node"
+          "is_seed_agg_node",
+          "node_index"
         ],
         "title": "RunningCodeEventPayload"
       },

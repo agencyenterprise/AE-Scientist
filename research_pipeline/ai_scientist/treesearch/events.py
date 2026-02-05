@@ -6,7 +6,7 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel as PydanticBaseModel
 
-from ai_scientist.api_types import BestNodeSelectionEvent as BestNodeSelectionEventPayload
+from ai_scientist.api_types import ExecutionType as ApiExecutionType
 from ai_scientist.api_types import (
     PaperGenerationProgressEvent as PaperGenerationProgressEventPayload,
 )
@@ -47,13 +47,21 @@ class RunType(str, Enum):
     RUNFILE_EXECUTION = "runfile_execution"
 
 
+class ExecutionType(str, Enum):
+    """Type of execution categorizing what the code execution is for."""
+
+    STAGE_GOAL = "stage_goal"  # Regular node execution for stage goals
+    SEED = "seed"  # Seed evaluation execution
+    AGGREGATION = "aggregation"  # Seed aggregation execution
+    METRICS = "metrics"  # Metrics parsing execution
+
+
 EventKind = Literal[
     "run_stage_progress",
     "run_log",
     "substage_completed",
     "substage_summary",
     "paper_generation_progress",
-    "best_node_selection",
     "tree_viz_stored",
     "running_code",
     "run_completed",
@@ -244,35 +252,6 @@ class SubstageSummaryEvent(BaseEvent):
 
 
 @dataclass(frozen=True)
-class BestNodeSelectedEvent(BaseEvent):
-    """Event emitted when an LLM picks the current best node."""
-
-    run_id: str
-    stage: str
-    node_id: str
-    reasoning: str
-
-    def type(self) -> str:
-        return "ai.run.best_node_selected"
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "run_id": self.run_id,
-            "stage": self.stage,
-            "node_id": self.node_id,
-            "reasoning": self.reasoning,
-        }
-
-    def persistence_record(self) -> PersistenceRecord:
-        event = BestNodeSelectionEventPayload(
-            stage=self.stage,
-            node_id=self.node_id,
-            reasoning=self.reasoning,
-        )
-        return ("best_node_selection", event)
-
-
-@dataclass(frozen=True)
 class GpuShortageEvent(BaseEvent):
     required_gpus: int
     available_gpus: int
@@ -332,8 +311,10 @@ class RunningCodeEvent(BaseEvent):
     code: str
     started_at: datetime
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
     def type(self) -> str:
         return "ai.run.running_code"
@@ -343,10 +324,12 @@ class RunningCodeEvent(BaseEvent):
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
             "run_type": self.run_type.value,
+            "execution_type": self.execution_type.value,
             "code": self.code,
             "started_at": self.started_at.isoformat(),
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
+            "node_index": self.node_index,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -354,10 +337,12 @@ class RunningCodeEvent(BaseEvent):
             execution_id=self.execution_id,
             stage_name=self.stage_name,
             run_type=ApiRunType(self.run_type.value),
+            execution_type=ApiExecutionType(self.execution_type.value),
             code=self.code,
             started_at=self.started_at.isoformat(),
             is_seed_node=self.is_seed_node,
             is_seed_agg_node=self.is_seed_agg_node,
+            node_index=self.node_index,
         )
         return ("running_code", event)
 
@@ -370,8 +355,10 @@ class RunCompletedEvent(BaseEvent):
     exec_time: float
     completed_at: datetime
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
+    node_index: int  # 1-based node index for display
 
     def type(self) -> str:
         return "ai.run.run_completed"
@@ -381,11 +368,13 @@ class RunCompletedEvent(BaseEvent):
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
             "run_type": self.run_type.value,
+            "execution_type": self.execution_type.value,
             "status": self.status,
             "exec_time": self.exec_time,
             "completed_at": self.completed_at.isoformat(),
             "is_seed_node": self.is_seed_node,
             "is_seed_agg_node": self.is_seed_agg_node,
+            "node_index": self.node_index,
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -393,11 +382,13 @@ class RunCompletedEvent(BaseEvent):
             execution_id=self.execution_id,
             stage_name=self.stage_name,
             run_type=ApiRunType(self.run_type.value),
+            execution_type=ApiExecutionType(self.execution_type.value),
             status=RunCompletedStatus(self.status),
             exec_time=self.exec_time,
             completed_at=self.completed_at.isoformat(),
             is_seed_node=self.is_seed_node,
             is_seed_agg_node=self.is_seed_agg_node,
+            node_index=self.node_index,
         )
         return ("run_completed", event)
 

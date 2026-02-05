@@ -22,7 +22,6 @@ from app.models.timeline_events import (
     MetricInterpretation,
     NodeExecutionCompletedEvent,
     NodeExecutionStartedEvent,
-    NodeResultEvent,
     PaperGenerationStepEvent,
     ProgressUpdateEvent,
     RunFinishedEvent,
@@ -32,7 +31,6 @@ from app.models.timeline_events import (
     TimelineEvent,
 )
 from app.services.narrator.event_types import (
-    BestNodeSelectionEvent,
     NarratorEvent,
     PaperGenerationProgressEvent,
     RunCompletedEventPayload,
@@ -207,29 +205,6 @@ def handle_substage_summary_event(
     return []
 
 
-def handle_best_node_selection_event(
-    event: BestNodeSelectionEvent, _state: Optional[ResearchRunState]
-) -> List[TimelineEvent]:
-    """Transform best_node_selection event into NodeResultEvent."""
-    now = datetime.now(timezone.utc)
-
-    return [
-        NodeResultEvent(
-            id=str(uuid.uuid4()),
-            timestamp=now,
-            stage=event.stage,
-            node_id=event.node_id,
-            headline=f"Best Node Selected: {event.node_id}",
-            outcome="success",
-            summary=event.reasoning,
-            metrics=None,
-            error_type=None,
-            error_summary=None,
-            exec_time=None,
-        )
-    ]
-
-
 def handle_running_code_event(
     event: RunningCodeEventPayload, state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
@@ -245,8 +220,8 @@ def handle_running_code_event(
     except (ValueError, AttributeError):
         started_at = datetime.now(timezone.utc)
 
-    # Create code preview (first 100 chars)
-    code_preview = event.code[:100] + "..." if len(event.code) > 100 else event.code
+    # Store the full code - frontend handles display/scrolling
+    code_preview = event.code
 
     events: List[TimelineEvent] = []
     offset_ms = 0
@@ -274,12 +249,14 @@ def handle_running_code_event(
             timestamp=started_at + timedelta(milliseconds=offset_ms),
             stage=event.stage_name,
             node_id=event.execution_id,
-            headline=f"Node {event.execution_id[:8]} started",
+            headline=f"Node {event.node_index} started",
             execution_id=event.execution_id,
             run_type=event.run_type.value,
+            execution_type=event.execution_type.value,
             code_preview=code_preview,
             is_seed_node=event.is_seed_node,
             is_seed_agg_node=event.is_seed_agg_node,
+            node_index=event.node_index,
         )
     )
 
@@ -297,9 +274,7 @@ def handle_run_completed_event(
         completed_at = datetime.now(timezone.utc)
 
     status_emoji = "✅" if event.status == "success" else "❌"
-    headline = (
-        f"{status_emoji} Node {event.execution_id[:8]} {event.status} ({event.exec_time:.1f}s)"
-    )
+    headline = f"{status_emoji} Node {event.node_index} {event.status} ({event.exec_time:.1f}s)"
 
     return [
         NodeExecutionCompletedEvent(
@@ -312,8 +287,10 @@ def handle_run_completed_event(
             status=event.status,
             exec_time=event.exec_time,
             run_type=event.run_type.value,
+            execution_type=event.execution_type.value,
             is_seed_node=event.is_seed_node,
             is_seed_agg_node=event.is_seed_agg_node,
+            node_index=event.node_index,
         )
     ]
 
@@ -537,8 +514,6 @@ def process_execution_event(
         return handle_substage_summary_event(event_data, state)
     elif isinstance(event_data, PaperGenerationProgressEvent):
         return handle_paper_generation_progress_event(event_data, state)
-    elif isinstance(event_data, BestNodeSelectionEvent):
-        return handle_best_node_selection_event(event_data, state)
     elif isinstance(event_data, RunningCodeEventPayload):
         return handle_running_code_event(event_data, state)
     elif isinstance(event_data, RunCompletedEventPayload):

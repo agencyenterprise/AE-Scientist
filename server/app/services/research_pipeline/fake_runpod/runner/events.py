@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
     CodexEventPayload,
+    ExecutionType,
     PaperGenerationProgressEvent,
     RunCompletedEventPayload,
     RunLogEvent,
@@ -58,7 +59,6 @@ class EventsMixin:
         def _enqueue_event(self, *, kind: str, data: object) -> None: ...
         def _consume_stage_skip_request(self) -> str | None: ...
         def _wait_or_skip(self, *, timeout_seconds: float) -> str | None: ...
-        def _emit_fake_best_node(self, *, stage_name: str, stage_index: int) -> None: ...
         def _store_tree_viz(self, *, stage_number: int, version: int) -> None: ...
 
     def _emit_stage_skip_window_event(self, *, stage_name: str, state: str, reason: str) -> None:
@@ -102,7 +102,8 @@ class EventsMixin:
         _lock = get_lock()
         _executions_by_id = get_executions()
 
-        execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
+        # Use clean UUID format matching production pipeline
+        execution_id = uuid.uuid4().hex
         started_at = datetime.now(timezone.utc)
         logger.debug(
             "[FakeRunner %s] Emitting code execution events execution_id=%s stage=%s iteration=%s",
@@ -140,10 +141,12 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(codex_run_type),
+                execution_type=ExecutionType.stage_goal,
                 code=fake_task_markdown,
                 started_at=started_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -158,10 +161,12 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(runfile_run_type),
+                execution_type=ExecutionType.stage_goal,
                 code=fake_runfile_code,
                 started_at=runfile_started_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -190,11 +195,13 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(runfile_run_type),
+                execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
                 exec_time=runfile_exec_time,
                 completed_at=runfile_completed_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
 
@@ -213,17 +220,54 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(codex_run_type),
+                execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
                 exec_time=exec_time,
                 completed_at=completed_at.isoformat(),
                 is_seed_node=False,
                 is_seed_agg_node=False,
+                node_index=iteration + 1,  # 1-based index
             )
         )
         with _lock:
             existing = _executions_by_id.get(execution_id)
             if existing is not None:
                 _executions_by_id[execution_id] = existing._replace(status="success")
+
+        # Emit metrics parsing events after node execution
+        metrics_execution_id = f"{execution_id}_metrics"
+        metrics_started_at = datetime.now(timezone.utc)
+        self._webhooks.publish_running_code(
+            RunningCodeEventPayload(
+                execution_id=metrics_execution_id,
+                stage_name=stage_name,
+                run_type=RunType.runfile_execution,
+                execution_type=ExecutionType.metrics,
+                code="# Metrics parsing\nimport json\nwith open('metrics.json') as f:\n    metrics = json.load(f)\nprint(f'Parsed metrics: {metrics}')",
+                started_at=metrics_started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+                node_index=iteration + 1,
+            )
+        )
+        # Metrics parsing is quick
+        self._sleep(0.5)
+        metrics_completed_at = datetime.now(timezone.utc)
+        metrics_exec_time = max(0.0, (metrics_completed_at - metrics_started_at).total_seconds())
+        self._webhooks.publish_run_completed(
+            RunCompletedEventPayload(
+                execution_id=metrics_execution_id,
+                stage_name=stage_name,
+                run_type=RunType.runfile_execution,
+                execution_type=ExecutionType.metrics,
+                status=RunCompletedStatus.success,
+                exec_time=metrics_exec_time,
+                completed_at=metrics_completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+                node_index=iteration + 1,
+            )
+        )
 
     def _emit_codex_events(self, *, stage_name: str, node_index: int) -> None:
         """Emit Codex JSONL-like events."""
@@ -427,7 +471,6 @@ class EventsMixin:
                     reason=effective_skip_reason,
                 )
                 continue
-            self._emit_fake_best_node(stage_name=stage_name, stage_index=stage_index)
             # Emit seed evaluation progress events (3 seeds)
             self._emit_seed_evaluation_progress(stage_name=stage_name)
             summary = {
@@ -575,29 +618,11 @@ class EventsMixin:
             stage_name,
             num_seeds,
         )
-        # Emit initial event (0/3 seeds)
-        try:
-            self._enqueue_event(
-                kind="run_stage_progress",
-                data=StageProgressEvent(
-                    stage=stage_name,
-                    iteration=0,
-                    max_iterations=num_seeds,
-                    progress=0.0,
-                    total_nodes=num_seeds,
-                    buggy_nodes=0,
-                    good_nodes=0,
-                    best_metric=None,
-                    is_seed_node=True,
-                    is_seed_agg_node=False,
-                ),
-            )
-        except Exception:
-            logger.exception("Failed to emit seed eval start event for stage %s", stage_name)
 
         # Emit progress for each seed with execution events
         for seed_idx in range(num_seeds):
-            seed_execution_id = f"{stage_name}-seed-{seed_idx}-{uuid.uuid4().hex[:8]}"
+            # Use clean UUID format matching production pipeline
+            seed_execution_id = uuid.uuid4().hex
             seed_started_at = datetime.now(timezone.utc)
 
             # Emit running_code event for seed node
@@ -607,10 +632,12 @@ class EventsMixin:
                         execution_id=seed_execution_id,
                         stage_name=stage_name,
                         run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
                         code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
                         started_at=seed_started_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
+                        node_index=seed_idx + 1,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -629,11 +656,13 @@ class EventsMixin:
                         execution_id=seed_execution_id,
                         stage_name=stage_name,
                         run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
                         status=RunCompletedStatus.success,
                         exec_time=seed_exec_time,
                         completed_at=seed_completed_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
+                        node_index=seed_idx + 1,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -673,13 +702,36 @@ class EventsMixin:
                 )
 
         # Emit seed aggregation node execution events
-        agg_execution_id = f"{stage_name}-seed-agg-{uuid.uuid4().hex[:8]}"
+        # Use clean UUID format matching production pipeline
+        agg_execution_id = uuid.uuid4().hex
         agg_started_at = datetime.now(timezone.utc)
         logger.info(
             "[FakeRunner %s] Starting seed aggregation for %s",
             self._run_id[:8],
             stage_name,
         )
+
+        # Emit aggregation progress event (start - in progress)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=1,
+                    max_iterations=1,
+                    progress=0.0,
+                    total_nodes=1,
+                    buggy_nodes=0,
+                    good_nodes=0,
+                    best_metric=None,
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit aggregation start progress event for stage %s", stage_name
+            )
 
         # Emit running_code event for aggregation node
         try:
@@ -688,10 +740,12 @@ class EventsMixin:
                     execution_id=agg_execution_id,
                     stage_name=stage_name,
                     run_type=RunType.codex_execution,
+                    execution_type=ExecutionType.aggregation,
                     code="# Seed Aggregation\n# Combining results from all seed runs\nimport numpy as np\n\n# Aggregate metrics across seeds\nmetrics = [seed_0_metric, seed_1_metric, seed_2_metric]\nmean_metric = np.mean(metrics)\nstd_metric = np.std(metrics)",
                     started_at=agg_started_at.isoformat(),
                     is_seed_node=False,
                     is_seed_agg_node=True,
+                    node_index=1,  # Single aggregation node
                 )
             )
         except Exception:
@@ -710,11 +764,13 @@ class EventsMixin:
                     execution_id=agg_execution_id,
                     stage_name=stage_name,
                     run_type=RunType.codex_execution,
+                    execution_type=ExecutionType.aggregation,
                     status=RunCompletedStatus.success,
                     exec_time=agg_exec_time,
                     completed_at=agg_completed_at.isoformat(),
                     is_seed_node=False,
                     is_seed_agg_node=True,
+                    node_index=1,  # Single aggregation node
                 )
             )
             logger.info(

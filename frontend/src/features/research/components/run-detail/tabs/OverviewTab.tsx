@@ -1,7 +1,6 @@
 "use client";
 
 import { FinalPdfBanner } from "../final-pdf-banner";
-import { ImportSourceCard } from "../import-source-card";
 import { InitializationStatusBanner } from "../initialization-status-banner";
 import { ResearchRunError } from "../research-run-error";
 import { ResearchActivityFeed } from "../ResearchActivityFeed";
@@ -26,7 +25,6 @@ interface OverviewTabProps {
   run: ResearchRunInfo;
   conversationId: number | null;
   runId: string;
-  conversationUrl: string | null;
   artifacts: ArtifactMetadata[];
   review: LlmReviewResponse | null;
   reviewLoading: boolean;
@@ -38,7 +36,6 @@ export function OverviewTab({
   run,
   conversationId,
   runId,
-  conversationUrl,
   artifacts,
   review,
   reviewLoading,
@@ -55,8 +52,6 @@ export function OverviewTab({
       />
 
       {run.error_message && <ResearchRunError message={run.error_message} />}
-
-      {conversationUrl && <ImportSourceCard conversationUrl={conversationUrl} />}
 
       {conversationId !== null && (
         <FinalPdfBanner artifacts={artifacts} conversationId={conversationId} runId={runId} />

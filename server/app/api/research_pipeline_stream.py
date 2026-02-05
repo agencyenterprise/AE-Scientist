@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict, Set, Union
 
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
-from app.models.sse import ResearchRunBestNodeEvent as SSEBestNodeEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunCompleteEvent as SSECompleteEvent
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 StreamEventModel = Union[
     SSEStageProgressEvent,
-    SSEBestNodeEvent,
     SSEPaperGenerationEvent,
     SSESubstageEvent,
     SSESubstageSummaryEvent,

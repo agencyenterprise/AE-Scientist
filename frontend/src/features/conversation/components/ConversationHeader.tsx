@@ -4,7 +4,8 @@ import { ModelSelector } from "@/features/model-selector/components/ModelSelecto
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import { useState } from "react";
-import { DollarSign, GitBranch, Settings } from "lucide-react";
+import { DollarSign, ExternalLink, GitBranch, MessageSquare, Settings } from "lucide-react";
+import { detectPlatform } from "@/shared/utils/platform-detection";
 
 import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
@@ -115,6 +116,25 @@ export function ConversationHeader({
             </a>
           </div>
         )}
+        {(() => {
+          const platform = detectPlatform(conversation.url);
+          if (!platform) return null;
+          return (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <MessageSquare className="w-3 h-3" />
+              <span>Imported from</span>
+              <a
+                href={conversation.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
+              >
+                {platform.displayName}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Model Selector and AI Config - Wraps on mobile */}

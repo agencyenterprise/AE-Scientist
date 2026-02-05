@@ -259,7 +259,6 @@ export default function ResearchRunDetailPage() {
               run={run}
               conversationId={conversationId}
               runId={runId}
-              conversationUrl={runMeta?.conversation_url ?? null}
               artifacts={artifacts}
               review={review}
               reviewLoading={reviewLoading}

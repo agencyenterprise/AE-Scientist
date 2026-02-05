@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from ai_scientist.llm import structured_query_with_schema
 
-from .events import BaseEvent, BestNodeSelectedEvent, RunLogEvent
+from .events import BaseEvent, RunLogEvent
 from .utils.metric import MetricValue, WorstMetricValue
 from .utils.response import trim_long_string
 
@@ -78,7 +78,6 @@ class Node(DataClassJsonMixin):
     # -> always True if exc_type is not None or no valid metric
     is_buggy: bool | None = field(default=None, kw_only=True)
     is_buggy_plots: bool | None = field(default=None, kw_only=True)
-    best_node_reasoning: str | None = field(default=None, kw_only=True)
 
     # ---- plotting ----
     plot_data: dict = field(default_factory=dict, kw_only=True)
@@ -360,28 +359,6 @@ class Journal:
         node.step = len(self.nodes)
         self.nodes.append(node)
 
-    def emit_best_node_reasoning(self, *, node: Node, reasoning: str) -> None:
-        """Public helper to emit persisted best-node reasoning events."""
-        self._emit_best_node_reasoning(node=node, reasoning=reasoning)
-
-    def _emit_best_node_reasoning(self, *, node: Node, reasoning: str) -> None:
-        """Persist LLM reasoning for the selected best node when telemetry is enabled."""
-        if self.run_id is None:
-            return
-        reasoning_text = reasoning if reasoning.strip() else "No reasoning provided."
-        node.best_node_reasoning = reasoning_text
-        try:
-            self.event_callback(
-                BestNodeSelectedEvent(
-                    run_id=self.run_id,
-                    stage=self.stage_name,
-                    node_id=str(node.step),
-                    reasoning=reasoning_text,
-                )
-            )
-        except Exception:
-            logger.exception("Failed to emit BestNodeSelectedEvent for node %s", node.id)
-
     @property
     def draft_nodes(self) -> list[Node]:
         """Return a list of nodes representing intial coding drafts"""
@@ -539,10 +516,6 @@ class Journal:
             sel_metric_val = (
                 selected_metric_node.metric.value if selected_metric_node.metric else None
             )
-            self._emit_best_node_reasoning(
-                node=selected_metric_node,
-                reasoning=f"Metric-only selection (use_val_metric_only=True). Metric value: {sel_metric_val}",
-            )
             logger.info(
                 f"best-node (val_only=True): selected by metric -> "
                 f"{selected_metric_node.id[:8]} (metric={sel_metric_val}). Cached."
@@ -555,10 +528,6 @@ class Journal:
             self._best_cache_time_map[sig] = time.time()
             self._best_cache_candidate_ids_map[sig] = candidate_ids
             self._best_cache_total_nodes_count_map[sig] = total_nodes_count
-            self._emit_best_node_reasoning(
-                node=selected_single,
-                reasoning="Only one candidate available; bypassed LLM selection.",
-            )
             logger.debug(
                 f"Only one candidate; bypassing LLM selection. "
                 f"Selected {selected_single.id[:8]}. Cached.",
@@ -637,7 +606,6 @@ class Journal:
                     self.event_callback(
                         RunLogEvent(message=f"💡 Reasoning: {preview}", level="info")
                     )
-                self._emit_best_node_reasoning(node=selected_node, reasoning=reasoning_text)
 
                 self._best_cache[sig] = selected_node
                 self._best_cache_time_map[sig] = time.time()
@@ -656,14 +624,6 @@ class Journal:
                 if nodes_with_metric
                 else None
             )
-            if selected_fallback is not None:
-                self._emit_best_node_reasoning(
-                    node=selected_fallback,
-                    reasoning=(
-                        f"LLM selected unknown node id {selected_id}; "
-                        "stored best metric candidate instead."
-                    ),
-                )
             self._best_cache[sig] = selected_fallback
             self._best_cache_time_map[sig] = time.time()
             self._best_cache_candidate_ids_map[sig] = candidate_ids
@@ -680,11 +640,6 @@ class Journal:
                 if nodes_with_metric
                 else None
             )
-            if selected_on_error is not None:
-                self._emit_best_node_reasoning(
-                    node=selected_on_error,
-                    reasoning=f"LLM selection error: {exc}. Falling back to best metric.",
-                )
             self._best_cache[sig] = selected_on_error
             self._best_cache_time_map[sig] = time.time()
             self._best_cache_candidate_ids_map[sig] = candidate_ids

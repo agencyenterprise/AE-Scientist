@@ -28,7 +28,6 @@ export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGen
 
 // Artifacts and selections
 export type ArtifactMetadataApi = components["schemas"]["ResearchRunArtifactMetadata"];
-export type BestNodeSelectionApi = components["schemas"]["ResearchRunBestNodeSelection"];
 export type StageSkipWindowApi = components["schemas"]["ResearchRunStageSkipWindow"];
 export type StageSkipWindowUpdate = components["schemas"]["ResearchRunStageSkipWindowUpdate"];
 
@@ -113,7 +112,6 @@ export type SubstageEvent = SubstageEventApi;
 export type SubstageSummary = SubstageSummaryApi;
 export type PaperGenerationEvent = PaperGenerationEventApi;
 export type ArtifactMetadata = ArtifactMetadataApi;
-export type BestNodeSelection = BestNodeSelectionApi;
 export type StageSkipWindow = StageSkipWindowApi;
 export type TreeVizItem = TreeVizItemApi;
 
@@ -132,7 +130,6 @@ export interface ResearchRunDetails {
   artifacts: ArtifactMetadata[];
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];
-  best_node_selections?: BestNodeSelection[];
   stage_skip_windows?: StageSkipWindow[];
   hw_cost_estimate?: HwCostEstimateData | null;
   hw_cost_actual?: HwCostActualData | null;
