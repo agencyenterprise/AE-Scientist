@@ -24,8 +24,7 @@ class StageProgressEvent(NamedTuple):
     buggy_nodes: int
     good_nodes: int
     best_metric: Optional[str]
-    eta_s: Optional[int]
-    latest_iteration_time_s: Optional[int]
+    is_seed_node: bool
     created_at: datetime
 
 
@@ -127,8 +126,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         buggy_nodes: int,
         good_nodes: int,
         best_metric: Optional[str] = None,
-        eta_s: Optional[int] = None,
-        latest_iteration_time_s: Optional[int] = None,
+        is_seed_node: bool = False,
         created_at: Optional[datetime] = None,
     ) -> int:
         """Insert a stage progress event and return its ID."""
@@ -140,9 +138,8 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     """
                     INSERT INTO rp_run_stage_progress_events
                         (run_id, stage, iteration, max_iterations, progress, total_nodes,
-                         buggy_nodes, good_nodes, best_metric, eta_s, latest_iteration_time_s,
-                         created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         buggy_nodes, good_nodes, best_metric, is_seed_node, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -155,8 +152,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                         buggy_nodes,
                         good_nodes,
                         best_metric,
-                        eta_s,
-                        latest_iteration_time_s,
+                        is_seed_node,
                         created_at,
                     ),
                 )
@@ -458,8 +454,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
     async def list_stage_progress_events(self, run_id: str) -> List[StageProgressEvent]:
         query = """
             SELECT id, run_id, stage, iteration, max_iterations, progress, total_nodes,
-                   buggy_nodes, good_nodes, best_metric, eta_s, latest_iteration_time_s,
-                   created_at
+                   buggy_nodes, good_nodes, best_metric, is_seed_node, created_at
             FROM rp_run_stage_progress_events
             WHERE run_id = %s
             ORDER BY created_at ASC
@@ -574,8 +569,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         """Fetch the most recent stage progress event for a run."""
         query = """
             SELECT id, run_id, stage, iteration, max_iterations, progress, total_nodes,
-                   buggy_nodes, good_nodes, best_metric, eta_s, latest_iteration_time_s,
-                   created_at
+                   buggy_nodes, good_nodes, best_metric, is_seed_node, created_at
             FROM rp_run_stage_progress_events
             WHERE run_id = %s
             ORDER BY created_at DESC

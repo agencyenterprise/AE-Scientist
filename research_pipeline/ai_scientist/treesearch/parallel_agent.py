@@ -32,7 +32,7 @@ from .codex.codex_task_types import (
     StageIdea,
 )
 from .config import Config
-from .events import BaseEvent, GpuShortageEvent, RunLogEvent
+from .events import BaseEvent, GpuShortageEvent, RunLogEvent, RunStageProgressEvent
 from .gpu_manager import GPUManager, get_gpu_count
 from .journal import Journal, Node
 from .process_utils import send_signal_to_process_group
@@ -211,116 +211,70 @@ class ParallelAgent:
         - These seed runs **do not use Codex** to generate code.
         - Each seed run re-executes the *parent node's experiment code* under a different RNG seed
           (see `worker_process._process_seed_eval_reuse`).
+        - Seeds are run in batches sized by num_workers (and num_gpus if applicable) to ensure
+          GPU resources are properly reused between batches.
 
         Returns a list of nodes corresponding to the individual seed executions.
         """
         # Convert node to dict for parallel processing
         node_data = node.to_dict()
 
-        # Submit parallel jobs for different seeds
         seed_nodes: List[Node] = []
-        futures: list[Future] = []
-        execution_ids: list[str] = []
-        seed_process_ids: list[str | None] = []  # Track process IDs for GPU release
         executor = self._ensure_executor()
         next_node_index = len(self.journal.nodes)
-        for seed in range(self.cfg.agent.multi_seed_eval["num_seeds"]):
-            gpu_id = None
-            process_id = f"seed_{seed}_worker"
-            if self.gpu_manager is not None:
-                try:
-                    gpu_id = self.gpu_manager.acquire_gpu(process_id)
-                    logger.info(f"Assigned GPU {gpu_id} to seed {seed}")
-                    seed_process_ids.append(process_id)
-                except RuntimeError as e:
-                    logger.warning(f"Could not acquire GPU for seed {seed}: {e}. Running on CPU")
-                    seed_process_ids.append(None)
+        total_seeds = self.cfg.agent.multi_seed_eval.num_seeds
 
-            seed_eval = True
-            memory_summary = ""
-            logger.info("Starting multi-seed eval...")
-            execution_id = uuid.uuid4().hex
+        # Batch size is determined by num_workers (GPU availability is handled per-seed)
+        batch_size = self.num_workers
+        logger.info(
+            "Running multi-seed evaluation in batches of %s (num_workers=%s, total_seeds=%s)",
+            batch_size,
+            self.num_workers,
+            total_seeds,
+        )
+
+        # Emit seed evaluation started event (using stage progress with is_seed_node=True)
+        try:
+            self.event_callback(
+                RunStageProgressEvent(
+                    stage=self.stage_name,
+                    iteration=0,
+                    max_iterations=total_seeds,
+                    progress=0.0,
+                    total_nodes=total_seeds,
+                    buggy_nodes=0,
+                    good_nodes=0,
+                    best_metric=None,
+                    is_seed_node=True,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit seed evaluation progress event (started)")
+
+        # Process seeds in batches to ensure proper GPU resource management
+        completed_seeds = 0
+        for batch_start in range(0, total_seeds, batch_size):
+            batch_end = min(batch_start + batch_size, total_seeds)
+            batch_seeds = list(range(batch_start, batch_end))
             logger.info(
-                "ParallelAgent registering multi-seed execution %s (seed=%s) for node %s",
-                execution_id,
-                seed,
-                node.id,
+                "Starting seed evaluation batch: seeds %s (batch %d/%d)",
+                batch_seeds,
+                (batch_start // batch_size) + 1,
+                (total_seeds + batch_size - 1) // batch_size,
             )
-            execution_registry.register_execution(
-                execution_id=execution_id,
-                node=node,
-                stage_name=self.stage_name,
-            )
-            task: NodeTask = {
-                "node_data": node_data,
-                "title": self.title,
-                "task_desc": self.task_desc,
-                "stage_goals": self.stage_goals,
-                "evaluation_metric_spec": self.evaluation_metric_spec,
-                "cfg": self.cfg,
-                "gpu_id": gpu_id,
-                "memory_summary": memory_summary,
-                "stage_identifier": self.stage_identifier,
-                "seed_eval": seed_eval,
-                "seed_value": seed,
-                "seed_aggregation": None,
-                "stage2_hyperparam_idea": None,
-                "stage4_ablation_idea": None,
-                "event_callback": self.event_callback,
-                "execution_id": execution_id,
-                "user_feedback_payload": "",
-                "node_index": next_node_index,
-            }
-            next_node_index += 1
-            future = executor.submit(process_node, **task)
-            futures.append(future)
-            execution_ids.append(execution_id)
 
-        # Collect results and release GPUs
-        for idx, future in enumerate(futures):
-            execution_id = execution_ids[idx]
-            try:
-                result_data = future.result(timeout=self.timeout)
-                result_node = Node.from_dict(result_data, self.journal)
-                execution_registry.attach_node(
-                    execution_id=execution_id,
-                    node=result_node,
-                )
-                parent_id_str = result_node.parent.id if result_node.parent is not None else "N/A"
-                logger.debug(f"Parent node id: {parent_id_str}")
-                logger.debug(f"Sanity check: actual parent node id: {node.id}")
-                # Add node to journal's list and assign its step number
-                self.journal.append(result_node)
-                node_found = self.journal.get_node_by_id(result_node.id)
-                if node_found is not None:
-                    seed_nodes.append(node_found)
-                logger.debug("Added result node to journal")
-            except ExecutionTerminatedError:
-                logger.info(
-                    "Multi-seed execution %s was terminated intentionally; skipping result.",
-                    execution_id,
-                )
-            except ExecutionCrashedError as exc:
-                logger.error(
-                    "Multi-seed execution %s crashed unexpectedly: %s",
-                    execution_id,
-                    exc,
-                )
-            except Exception:
-                logger.exception("Error in multi-seed evaluation")
-            finally:
-                logger.info(
-                    "ParallelAgent clearing execution %s after multi-seed run for node %s",
-                    execution_id,
-                    node.id,
-                )
-                execution_registry.clear_execution(execution_id)
-                # Release GPU after this seed completes
-                if self.gpu_manager is not None and idx < len(seed_process_ids):
-                    proc_id = seed_process_ids[idx]
-                    if proc_id is not None:
-                        self.gpu_manager.release_gpu(proc_id)
-                        logger.info(f"Released GPU for {proc_id}")
+            batch_results = self._run_seed_batch(
+                node=node,
+                node_data=node_data,
+                seeds=batch_seeds,
+                executor=executor,
+                next_node_index=next_node_index,
+                total_seeds=total_seeds,
+                completed_seeds_before=completed_seeds,
+            )
+            seed_nodes.extend(batch_results)
+            next_node_index += len(batch_seeds)
+            completed_seeds += len(batch_seeds)
 
         # Run a Codex seed-aggregation task to produce a single rolled-up node with aggregate plots/metric.
         aggregation_execution_id: str | None = None
@@ -400,6 +354,150 @@ class ParallelAgent:
                         pass
 
         return seed_nodes
+
+    def _run_seed_batch(
+        self,
+        *,
+        node: Node,
+        node_data: dict,
+        seeds: List[int],
+        executor: ProcessPoolExecutor,
+        next_node_index: int,
+        total_seeds: int,
+        completed_seeds_before: int,
+    ) -> List[Node]:
+        """
+        Run a batch of seeds and wait for all to complete before returning.
+
+        This ensures GPUs are released after each batch completes, allowing
+        subsequent batches to reuse the same GPU resources.
+        """
+        batch_nodes: List[Node] = []
+        futures: list[Future] = []
+        execution_ids: list[str] = []
+        seed_process_ids: list[str | None] = []
+
+        # Submit all seeds in this batch
+        for idx, seed in enumerate(seeds):
+            gpu_id = None
+            process_id = f"seed_{seed}_worker"
+            if self.gpu_manager is not None:
+                try:
+                    gpu_id = self.gpu_manager.acquire_gpu(process_id)
+                    logger.info(f"Assigned GPU {gpu_id} to seed {seed}")
+                    seed_process_ids.append(process_id)
+                except RuntimeError as e:
+                    logger.warning(f"Could not acquire GPU for seed {seed}: {e}. Running on CPU")
+                    seed_process_ids.append(None)
+            else:
+                seed_process_ids.append(None)
+
+            execution_id = uuid.uuid4().hex
+            logger.info(
+                "ParallelAgent registering multi-seed execution %s (seed=%s) for node %s",
+                execution_id,
+                seed,
+                node.id,
+            )
+            execution_registry.register_execution(
+                execution_id=execution_id,
+                node=node,
+                stage_name=self.stage_name,
+            )
+            task: NodeTask = {
+                "node_data": node_data,
+                "title": self.title,
+                "task_desc": self.task_desc,
+                "stage_goals": self.stage_goals,
+                "evaluation_metric_spec": self.evaluation_metric_spec,
+                "cfg": self.cfg,
+                "gpu_id": gpu_id,
+                "memory_summary": "",
+                "stage_identifier": self.stage_identifier,
+                "seed_eval": True,
+                "seed_value": seed,
+                "seed_aggregation": None,
+                "stage2_hyperparam_idea": None,
+                "stage4_ablation_idea": None,
+                "event_callback": self.event_callback,
+                "execution_id": execution_id,
+                "user_feedback_payload": "",
+                "node_index": next_node_index + idx,
+            }
+            future = executor.submit(process_node, **task)
+            futures.append(future)
+            execution_ids.append(execution_id)
+
+        # Collect results for this batch
+        for idx, future in enumerate(futures):
+            execution_id = execution_ids[idx]
+            seed = seeds[idx]
+            try:
+                result_data = future.result(timeout=self.timeout)
+                result_node = Node.from_dict(result_data, self.journal)
+                execution_registry.attach_node(
+                    execution_id=execution_id,
+                    node=result_node,
+                )
+                parent_id_str = result_node.parent.id if result_node.parent is not None else "N/A"
+                logger.debug(f"Parent node id: {parent_id_str}")
+                logger.debug(f"Sanity check: actual parent node id: {node.id}")
+                # Add node to journal's list and assign its step number
+                self.journal.append(result_node)
+                node_found = self.journal.get_node_by_id(result_node.id)
+                if node_found is not None:
+                    batch_nodes.append(node_found)
+                logger.debug(f"Added seed {seed} result node to journal")
+            except ExecutionTerminatedError:
+                logger.info(
+                    "Multi-seed execution %s (seed=%s) was terminated intentionally; skipping result.",
+                    execution_id,
+                    seed,
+                )
+            except ExecutionCrashedError as exc:
+                logger.error(
+                    "Multi-seed execution %s (seed=%s) crashed unexpectedly: %s",
+                    execution_id,
+                    seed,
+                    exc,
+                )
+            except Exception:
+                logger.exception(f"Error in multi-seed evaluation for seed {seed}")
+            finally:
+                logger.info(
+                    "ParallelAgent clearing execution %s after multi-seed run for node %s (seed=%s)",
+                    execution_id,
+                    node.id,
+                    seed,
+                )
+                execution_registry.clear_execution(execution_id)
+
+                # Emit seed evaluation progress event (using stage progress with is_seed_node=True)
+                try:
+                    completed_total = completed_seeds_before + idx + 1
+                    self.event_callback(
+                        RunStageProgressEvent(
+                            stage=self.stage_name,
+                            iteration=completed_total,
+                            max_iterations=total_seeds,
+                            progress=float(completed_total) / float(total_seeds),
+                            total_nodes=total_seeds,
+                            buggy_nodes=0,
+                            good_nodes=completed_total,
+                            best_metric=None,
+                            is_seed_node=True,
+                        )
+                    )
+                except Exception:
+                    logger.exception("Failed to emit seed evaluation progress event (completed)")
+
+                # Release GPU after this seed completes
+                proc_id = seed_process_ids[idx]
+                if self.gpu_manager is not None and proc_id is not None:
+                    self.gpu_manager.release_gpu(proc_id)
+                    logger.info(f"Released GPU for {proc_id} (seed {seed})")
+
+        return batch_nodes
 
     def _get_leaves(self, node: Node) -> List[Node]:
         """Get all leaf nodes in the subtree rooted at node."""

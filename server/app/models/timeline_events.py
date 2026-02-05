@@ -179,6 +179,10 @@ class ProgressUpdateEvent(TimelineEventBase):
         None, description="Current best metrics if available"
     )
 
+    is_seed_node: bool = Field(
+        default=False, description="True if this is seed evaluation progress"
+    )
+
 
 class PaperGenerationStepEvent(TimelineEventBase):
     """

@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Loader2,
   ChevronRight,
+  FlaskConical,
 } from "lucide-react";
 import type { components } from "@/types/api.gen";
 
@@ -44,6 +45,14 @@ interface StageGroup {
   maxNodes: number | null;
   /** Current iteration number */
   currentIteration: number | null;
+  /** Seed evaluation progress: current seed being evaluated (1-based) */
+  currentSeed: number | null;
+  /** Total number of seeds to evaluate */
+  totalSeeds: number | null;
+  /** Whether seed evaluation is in progress */
+  seedEvalInProgress: boolean;
+  /** Whether this stage has any seed evaluation (from is_seed_node flag) */
+  hasSeedEvaluation: boolean;
 }
 
 function parseSseFrame(text: string): ParsedSseFrame | null {
@@ -149,12 +158,43 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     const endTime =
       isCompleted && timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
 
-    // Get max_iterations and current iteration from progress_update events
+    // Get max_iterations and current iteration from regular progress_update events (not seed)
+    const regularProgressEvents = progressEvents.filter(
+      e => !("is_seed_node" in e && e.is_seed_node)
+    );
+    const lastRegularProgress =
+      regularProgressEvents.length > 0
+        ? regularProgressEvents[regularProgressEvents.length - 1]
+        : null;
     let maxNodes: number | null = null;
     let currentIteration: number | null = null;
-    if (lastProgress && "max_iterations" in lastProgress && "iteration" in lastProgress) {
-      maxNodes = lastProgress.max_iterations as number;
-      currentIteration = lastProgress.iteration as number;
+    if (
+      lastRegularProgress &&
+      "max_iterations" in lastRegularProgress &&
+      "iteration" in lastRegularProgress
+    ) {
+      maxNodes = lastRegularProgress.max_iterations as number;
+      currentIteration = lastRegularProgress.iteration as number;
+    }
+
+    // Get seed evaluation progress from progress_update events with is_seed_node=true
+    const seedProgressEvents = progressEvents.filter(
+      e => "is_seed_node" in e && e.is_seed_node === true
+    );
+    let currentSeed: number | null = null;
+    let totalSeeds: number | null = null;
+    let seedEvalInProgress = false;
+    const hasSeedEvaluation = seedProgressEvents.length > 0;
+
+    if (seedProgressEvents.length > 0) {
+      const lastSeedProgress = seedProgressEvents[seedProgressEvents.length - 1]!;
+      if ("iteration" in lastSeedProgress && "max_iterations" in lastSeedProgress) {
+        currentSeed = lastSeedProgress.iteration as number;
+        totalSeeds = lastSeedProgress.max_iterations as number;
+        // Seed eval is in progress if current < total and stage is not completed
+        seedEvalInProgress =
+          !isCompleted && currentSeed !== null && totalSeeds !== null && currentSeed < totalSeeds;
+      }
     }
 
     return {
@@ -167,6 +207,10 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       endTime,
       maxNodes,
       currentIteration,
+      currentSeed,
+      totalSeeds,
+      seedEvalInProgress,
+      hasSeedEvaluation,
     };
   });
 }
@@ -382,6 +426,20 @@ function StageSection({
               {stage.currentIteration !== null && stage.maxNodes !== null && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
                   {stage.currentIteration}/{stage.maxNodes} iterations
+                </span>
+              )}
+              {stage.totalSeeds !== null && stage.totalSeeds > 0 && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                    stage.seedEvalInProgress
+                      ? "bg-pink-500/20 text-pink-400"
+                      : "bg-pink-500/10 text-pink-300"
+                  )}
+                >
+                  <FlaskConical className="h-3 w-3" />
+                  {stage.currentSeed || 0}/{stage.totalSeeds} seeds
+                  {stage.seedEvalInProgress && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
                 </span>
               )}
             </div>

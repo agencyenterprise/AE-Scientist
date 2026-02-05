@@ -183,8 +183,6 @@ async def ingest_stage_progress(
         buggy_nodes=event.buggy_nodes,
         good_nodes=event.good_nodes,
         best_metric=event.best_metric,
-        eta_s=event.eta_s,
-        latest_iteration_time_s=event.latest_iteration_time_s,
         created_at=created_at,
     )
     publish_stream_event(
@@ -214,8 +212,7 @@ async def ingest_stage_progress(
         buggy_nodes=event.buggy_nodes,
         good_nodes=event.good_nodes,
         best_metric=event.best_metric,
-        eta_s=event.eta_s,
-        latest_iteration_time_s=event.latest_iteration_time_s,
+        is_seed_node=event.is_seed_node,
     )
 
 

@@ -124,8 +124,6 @@ function normalizeStageProgress(progress: InitialStageProgress): StageProgress {
     buggy_nodes: progress.buggy_nodes,
     good_nodes: progress.good_nodes,
     best_metric: progress.best_metric ?? null,
-    eta_s: progress.eta_s ?? null,
-    latest_iteration_time_s: progress.latest_iteration_time_s ?? null,
     created_at: progress.created_at,
   };
 }

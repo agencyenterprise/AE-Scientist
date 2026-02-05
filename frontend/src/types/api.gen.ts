@@ -4253,6 +4253,12 @@ export interface components {
             max_iterations: number;
             /** @description Current best metrics if available */
             current_best?: components["schemas"]["MetricCollection"] | null;
+            /**
+             * Is Seed Node
+             * @description True if this is seed evaluation progress
+             * @default false
+             */
+            is_seed_node: boolean;
         };
         /**
          * PublicConfigResponse
@@ -5115,16 +5121,6 @@ export interface components {
              */
             best_metric?: string | null;
             /**
-             * Eta S
-             * @description Estimated time remaining in seconds
-             */
-            eta_s?: number | null;
-            /**
-             * Latest Iteration Time S
-             * @description Duration of the latest iteration in seconds
-             */
-            latest_iteration_time_s?: number | null;
-            /**
              * Created At
              * @description ISO timestamp when the event was recorded
              */
@@ -5971,10 +5967,11 @@ export interface components {
             good_nodes: number;
             /** Best Metric */
             best_metric?: string | null;
-            /** Eta S */
-            eta_s?: number | null;
-            /** Latest Iteration Time S */
-            latest_iteration_time_s?: number | null;
+            /**
+             * Is Seed Node
+             * @default false
+             */
+            is_seed_node: boolean;
         };
         /** StageProgressPayload */
         StageProgressPayload: {

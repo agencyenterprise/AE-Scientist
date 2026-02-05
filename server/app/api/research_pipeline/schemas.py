@@ -20,8 +20,7 @@ class StageProgressEvent(BaseModel):
     buggy_nodes: int
     good_nodes: int
     best_metric: Optional[str] = None
-    eta_s: Optional[int] = None
-    latest_iteration_time_s: Optional[int] = None
+    is_seed_node: bool = False
 
 
 class StageProgressPayload(BaseModel):

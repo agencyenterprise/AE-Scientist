@@ -13,9 +13,8 @@ High-level steps:
 
 import json
 import logging
-import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from .agent_manager import AgentManager, RunOutcome
 from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
@@ -70,17 +69,12 @@ def perform_experiments_bfts(
         evaluation_metric_spec=evaluation_metric_spec,
     )
 
-    # Track iteration timing for smart ETA calculation
-    iteration_start_time: Optional[float] = None
-    iteration_durations: list[float] = []
     # Track per-stage iteration state to avoid duplicate progress events and
     # to ensure iteration counts start from 1 for each main stage.
     last_reported_iteration_by_stage: dict[str, int] = {}
     stage_best_node_summary_written: set[str] = set()
 
     def iteration_started_callback(stage: StageMeta, journal: Journal) -> None:
-        nonlocal iteration_start_time
-        iteration_start_time = time.time()
         attempt_iteration = manager.get_attempt_iteration(stage.name)
         if attempt_iteration == 0:
             return
@@ -92,23 +86,6 @@ def perform_experiments_bfts(
         best_node = journal.get_best_node()
         good_nodes_list = journal.good_nodes
         good_nodes_count = len(good_nodes_list)
-        latest_node = journal.nodes[-1] if journal.nodes else None
-
-        eta_s = None
-        if len(iteration_durations) >= 2:
-            recent_durations = iteration_durations[-5:]
-            avg_duration = sum(recent_durations) / len(recent_durations)
-            remaining_iterations = (
-                max(stage.max_iterations - attempt_iteration, 0)
-                if stage.max_iterations > 0
-                else None
-            )
-            if remaining_iterations is not None:
-                eta_s = int(remaining_iterations * avg_duration)
-
-        latest_exec_time_s = None
-        if latest_node and latest_node.exec_time is not None:
-            latest_exec_time_s = int(latest_node.exec_time)
 
         stage_completed = manager.has_stage_completed(stage.name)
         previous_iteration = last_reported_iteration_by_stage.get(stage.name)
@@ -142,8 +119,6 @@ def perform_experiments_bfts(
                     buggy_nodes=len(journal.buggy_nodes),
                     good_nodes=good_nodes_count,
                     best_metric=str(best_node.metric) if best_node else None,
-                    eta_s=eta_s,
-                    latest_iteration_time_s=latest_exec_time_s,
                 )
             )
 
@@ -151,14 +126,6 @@ def perform_experiments_bfts(
         # Persist progress snapshot and emit progress events after each step
         logger.debug("Step complete")
         try:
-            # Track iteration timing
-            current_time = time.time()
-            nonlocal iteration_start_time
-            if iteration_start_time is not None:
-                duration = current_time - iteration_start_time
-                iteration_durations.append(duration)
-                iteration_start_time = None
-
             # Generate and save notes for this step
             notes_dir = cfg.log_dir / f"stage_{stage.name}" / "notes"
             notes_dir.mkdir(parents=True, exist_ok=True)
