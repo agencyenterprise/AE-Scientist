@@ -642,11 +642,16 @@ function EventDetails({ event }: { event: TimelineEvent }) {
       ) : null;
 
     case "progress_update":
-      return "iteration" in event && "max_iterations" in event ? (
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Iteration {event.iteration}/{event.max_iterations}
-        </p>
-      ) : null;
+      // For seed nodes, show "Seed X/Y"; for regular nodes, iteration is already shown in header badge
+      if ("is_seed_node" in event && event.is_seed_node && "iteration" in event && "max_iterations" in event) {
+        return (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Seed {event.iteration}/{event.max_iterations}
+          </p>
+        );
+      }
+      // Don't show iteration for regular nodes - it's already displayed in the stage header badge
+      return null;
 
     case "node_result": {
       const hasOutcome = "outcome" in event && event.outcome;
