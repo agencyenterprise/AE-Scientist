@@ -11,7 +11,14 @@ from ai_scientist.llm import structured_query_with_schema
 from .codex.codex_cli_runner import CodexCliRunner, build_codex_env
 from .codex.codex_task_types import EvaluationMetricSpec
 from .config import Config as AppConfig
-from .events import BaseEvent, RunCompletedEvent, RunLogEvent, RunningCodeEvent, RunType
+from .events import (
+    BaseEvent,
+    ExecutionType,
+    RunCompletedEvent,
+    RunLogEvent,
+    RunningCodeEvent,
+    RunType,
+)
 from .executor import run_python_script
 from .journal import Node
 from .prompts.render import render_text
@@ -223,6 +230,7 @@ def generate_and_assign_metrics(
                 code=task_text,
                 started_at=started_at,
                 run_type=RunType.CODEX_EXECUTION,
+                execution_type=ExecutionType.METRICS,
                 is_seed_node=False,
                 is_seed_agg_node=False,
                 node_index=node_index,
@@ -245,6 +253,7 @@ def generate_and_assign_metrics(
                 exec_time=float(exec_time),
                 completed_at=completed_at,
                 run_type=RunType.CODEX_EXECUTION,
+                execution_type=ExecutionType.METRICS,
                 is_seed_node=False,
                 is_seed_agg_node=False,
                 node_index=node_index,

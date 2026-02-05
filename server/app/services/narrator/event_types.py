@@ -11,7 +11,7 @@ from typing import Any, Dict, Literal, Optional, Union
 
 from pydantic import BaseModel
 
-from app.models.research_pipeline import RunType
+from app.models.research_pipeline import ExecutionType, RunType
 
 # ============================================================================
 # Internal Event Data Models (used by narrator, not exposed via API)
@@ -88,6 +88,7 @@ class RunningCodeEventPayload(BaseModel):
     code: str
     started_at: str
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display
@@ -100,6 +101,7 @@ class RunCompletedEventPayload(BaseModel):
     exec_time: float
     completed_at: str
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display

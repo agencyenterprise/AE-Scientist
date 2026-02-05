@@ -6257,6 +6257,17 @@
         "title": "ErrorResponse",
         "description": "Standard error response schema."
       },
+      "ExecutionType": {
+        "type": "string",
+        "enum": [
+          "stage_goal",
+          "seed",
+          "aggregation",
+          "metrics"
+        ],
+        "title": "ExecutionType",
+        "description": "Type of execution categorizing what the code execution is for."
+      },
       "FigureReviewEvent": {
         "properties": {
           "figure_name": {
@@ -7899,6 +7910,17 @@
             "title": "Run Type",
             "description": "Type of run"
           },
+          "execution_type": {
+            "type": "string",
+            "enum": [
+              "stage_goal",
+              "seed",
+              "aggregation",
+              "metrics"
+            ],
+            "title": "Execution Type",
+            "description": "Type of execution (stage_goal, seed, aggregation, metrics)"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node",
@@ -7927,6 +7949,7 @@
           "status",
           "exec_time",
           "run_type",
+          "execution_type",
           "node_index"
         ],
         "title": "NodeExecutionCompletedEvent",
@@ -7986,6 +8009,17 @@
             "title": "Run Type",
             "description": "Type of run"
           },
+          "execution_type": {
+            "type": "string",
+            "enum": [
+              "stage_goal",
+              "seed",
+              "aggregation",
+              "metrics"
+            ],
+            "title": "Execution Type",
+            "description": "Type of execution (stage_goal, seed, aggregation, metrics)"
+          },
           "code_preview": {
             "type": "string",
             "title": "Code Preview",
@@ -8017,6 +8051,7 @@
           "headline",
           "execution_id",
           "run_type",
+          "execution_type",
           "code_preview",
           "node_index"
         ],
@@ -11640,6 +11675,9 @@
           "run_type": {
             "$ref": "#/components/schemas/RunType"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node"
@@ -11661,6 +11699,7 @@
           "exec_time",
           "completed_at",
           "run_type",
+          "execution_type",
           "is_seed_node",
           "is_seed_agg_node",
           "node_index"
@@ -12063,6 +12102,9 @@
           "run_type": {
             "$ref": "#/components/schemas/RunType"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
           "is_seed_node": {
             "type": "boolean",
             "title": "Is Seed Node"
@@ -12083,6 +12125,7 @@
           "code",
           "started_at",
           "run_type",
+          "execution_type",
           "is_seed_node",
           "is_seed_agg_node",
           "node_index"

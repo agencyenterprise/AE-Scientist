@@ -26,6 +26,7 @@ import type { components } from "@/types/api.gen";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
 type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
+type ExecutionType = components["schemas"]["ExecutionType"];
 
 interface ResearchActivityFeedProps {
   runId: string;
@@ -98,8 +99,10 @@ function getEventStage(event: TimelineEvent): string {
 }
 
 /**
- * Filter events to show only codex_execution events for node executions.
- * runfile_execution events are sub-executions and shouldn't appear as separate items.
+ * Filter events to show main executions, hiding sub-executions (runfile_execution for stage_goal).
+ * - codex_execution events: always show (these are the main agent tasks)
+ * - runfile_execution events: only show if execution_type is seed/aggregation/metrics
+ *   (runfile_execution with stage_goal are sub-executions of codex and shouldn't appear separately)
  */
 function filterNodeExecutionEvents(events: TimelineEvent[]): TimelineEvent[] {
   return events.filter(event => {
@@ -107,9 +110,18 @@ function filterNodeExecutionEvents(events: TimelineEvent[]): TimelineEvent[] {
     if (event.type !== "node_execution_started" && event.type !== "node_execution_completed") {
       return true;
     }
-    // For execution events, only show codex_execution (the main execution)
+    // For execution events, check run_type and execution_type
     if ("run_type" in event) {
-      return event.run_type === "codex_execution";
+      // Always show codex_execution events
+      if (event.run_type === "codex_execution") {
+        return true;
+      }
+      // For runfile_execution, only show if it's a special execution type (not stage_goal)
+      // This includes seed, aggregation, and metrics executions
+      if (event.run_type === "runfile_execution") {
+        const execType = "execution_type" in event ? event.execution_type : null;
+        return execType !== null && execType !== "stage_goal";
+      }
     }
     return true;
   });
@@ -266,12 +278,14 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       if ("iteration" in lastAggProgress && "max_iterations" in lastAggProgress) {
         currentAggregation = lastAggProgress.iteration as number;
         totalAggregations = lastAggProgress.max_iterations as number;
-        // Aggregation is in progress if current < total and stage is not completed
+        // Aggregation is in progress if progress < 1.0 and stage is not completed
+        const aggProgress =
+          "progress" in lastAggProgress ? (lastAggProgress.progress as number) : 0;
         aggregationInProgress =
           !isCompleted &&
           currentAggregation !== null &&
           totalAggregations !== null &&
-          currentAggregation < totalAggregations;
+          aggProgress < 1.0;
       }
     }
 
@@ -397,6 +411,98 @@ function getEventLabel(type: string) {
   }
 }
 
+/**
+ * Get the execution type from an event (reads execution_type field from API)
+ */
+function getExecutionType(event: TimelineEvent): ExecutionType | null {
+  if (
+    (event.type === "node_execution_started" || event.type === "node_execution_completed") &&
+    "execution_type" in event &&
+    typeof event.execution_type === "string"
+  ) {
+    return event.execution_type as ExecutionType;
+  }
+  return null;
+}
+
+/**
+ * Check if an execution event is for metrics parsing
+ */
+function isMetricsExecution(event: TimelineEvent): boolean {
+  return getExecutionType(event) === "metrics";
+}
+
+/**
+ * Get badge configuration for an execution type
+ */
+function getExecutionTypeBadge(executionType: ExecutionType): {
+  label: string;
+  bgClass: string;
+  textClass: string;
+} | null {
+  switch (executionType) {
+    case "metrics":
+      return {
+        label: "Metrics",
+        bgClass: "bg-purple-500/20",
+        textClass: "text-purple-400",
+      };
+    case "seed":
+      return {
+        label: "Seed",
+        bgClass: "bg-pink-500/20",
+        textClass: "text-pink-400",
+      };
+    case "aggregation":
+      return {
+        label: "Aggregation",
+        bgClass: "bg-teal-500/20",
+        textClass: "text-teal-400",
+      };
+    case "stage_goal":
+      return {
+        label: "Goal",
+        bgClass: "bg-blue-500/20",
+        textClass: "text-blue-400",
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Get the base node ID from an execution event (strips "_metrics" suffix if present)
+ */
+function getBaseNodeId(event: TimelineEvent): string | null {
+  if (
+    (event.type === "node_execution_started" || event.type === "node_execution_completed") &&
+    "execution_id" in event &&
+    typeof event.execution_id === "string"
+  ) {
+    const execId = event.execution_id;
+    return execId.endsWith("_metrics") ? execId.slice(0, -8) : execId;
+  }
+  return null;
+}
+
+/**
+ * Get the node index from an execution event
+ */
+function getNodeIndex(event: TimelineEvent): number | null {
+  if ("node_index" in event && typeof event.node_index === "number") {
+    return event.node_index;
+  }
+  return null;
+}
+
+interface NodeExecutionGroup {
+  baseNodeId: string;
+  nodeIndex: number | null;
+  executionType: ExecutionType | null;
+  codeEvents: TimelineEvent[];
+  metricsEvents: TimelineEvent[];
+}
+
 interface CompactEventItemProps {
   event: TimelineEvent;
   allEvents: TimelineEvent[];
@@ -420,9 +526,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
     event.run_type === "codex_execution" &&
     "execution_id" in event;
 
-  // Check if this is a seed aggregation execution
-  const isSeedAggregation =
-    isActiveExecution && "is_seed_agg_node" in event && event.is_seed_agg_node === true;
+  // Get execution type badge configuration
+  const executionType = getExecutionType(event);
+  const executionBadge = executionType ? getExecutionTypeBadge(executionType) : null;
 
   // Check if there's a completion event for this execution
   const hasCompleted =
@@ -477,9 +583,15 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className={cn("text-sm font-medium", colorClass)}>{label}</span>
-              {isSeedAggregation && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-500/20 text-teal-400">
-                  Seed Aggregation
+              {executionBadge && (
+                <span
+                  className={cn(
+                    "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                    executionBadge.bgClass,
+                    executionBadge.textClass
+                  )}
+                >
+                  {executionBadge.label}
                 </span>
               )}
             </div>
@@ -510,40 +622,60 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
             <details
               className={cn(
                 "mt-2 rounded-md border",
-                isSeedAggregation
+                executionType === "aggregation"
                   ? "border-teal-500/30 bg-teal-500/5"
-                  : "border-blue-500/30 bg-blue-500/5"
+                  : executionType === "seed"
+                    ? "border-pink-500/30 bg-pink-500/5"
+                    : "border-blue-500/30 bg-blue-500/5"
               )}
             >
               <summary
                 className={cn(
                   "cursor-pointer px-3 py-2 text-xs font-medium flex items-center gap-2",
-                  isSeedAggregation
+                  executionType === "aggregation"
                     ? "text-teal-300 hover:text-teal-200"
-                    : "text-blue-300 hover:text-blue-200"
+                    : executionType === "seed"
+                      ? "text-pink-300 hover:text-pink-200"
+                      : "text-blue-300 hover:text-blue-200"
                 )}
               >
                 <span
                   className={cn(
                     "inline-block w-2 h-2 rounded-full animate-pulse",
-                    isSeedAggregation ? "bg-teal-400" : "bg-blue-400"
+                    executionType === "aggregation"
+                      ? "bg-teal-400"
+                      : executionType === "seed"
+                        ? "bg-pink-400"
+                        : "bg-blue-400"
                   )}
                 />
                 <span className="flex-1">
-                  {isSeedAggregation ? "Seed Aggregation Task" : "Coding Agent Task"}
+                  {executionType === "aggregation"
+                    ? "Aggregation Task"
+                    : executionType === "seed"
+                      ? "Seed Evaluation Task"
+                      : "Coding Agent Task"}
                 </span>
                 <CopyToClipboardButton text={codexCodePreview} label="Copy task prompt" />
               </summary>
               <div
                 className={cn(
                   "max-h-96 overflow-y-auto border-t p-3",
-                  isSeedAggregation ? "border-teal-500/20" : "border-blue-500/20"
+                  executionType === "aggregation"
+                    ? "border-teal-500/20"
+                    : executionType === "seed"
+                      ? "border-pink-500/20"
+                      : "border-blue-500/20"
                 )}
               >
                 <p
                   className={cn(
                     "text-[10px] uppercase tracking-wide mb-2",
-                    isSeedAggregation ? "text-teal-400" : "text-blue-400"
+                    executionType === "aggregation"
+                      ? "text-teal-400"
+                      : executionType === "seed"
+                        ? "text-pink-400"
+                        : "text-blue-400"
                   )}
                 >
                   Task prompt:
@@ -702,6 +834,152 @@ function EventDetails({ event }: { event: TimelineEvent }) {
   }
 }
 
+/**
+ * Groups events by node execution, keeping code generation and metrics parsing events together.
+ * Non-execution events are rendered individually.
+ */
+function GroupedEventsList({
+  events,
+  allEvents,
+  onTerminateExecution,
+}: {
+  events: TimelineEvent[];
+  allEvents: TimelineEvent[];
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+}) {
+  // Group execution events by their base node ID
+  const groupedItems: Array<
+    { type: "single"; event: TimelineEvent } | { type: "group"; group: NodeExecutionGroup }
+  > = [];
+  const nodeGroups = new Map<string, NodeExecutionGroup>();
+  const processedEventIds = new Set<string>();
+
+  // First pass: identify all execution events and group them
+  for (const event of events) {
+    const baseNodeId = getBaseNodeId(event);
+    if (baseNodeId) {
+      const eventExecType = getExecutionType(event);
+      if (!nodeGroups.has(baseNodeId)) {
+        const nodeIndex = getNodeIndex(event);
+        nodeGroups.set(baseNodeId, {
+          baseNodeId,
+          nodeIndex,
+          executionType: eventExecType !== "metrics" ? eventExecType : null,
+          codeEvents: [],
+          metricsEvents: [],
+        });
+      }
+      const group = nodeGroups.get(baseNodeId)!;
+      // Update execution type if we find a non-metrics type
+      if (eventExecType && eventExecType !== "metrics" && !group.executionType) {
+        group.executionType = eventExecType;
+      }
+      if (isMetricsExecution(event)) {
+        group.metricsEvents.push(event);
+      } else {
+        group.codeEvents.push(event);
+      }
+      if (event.id) {
+        processedEventIds.add(event.id);
+      }
+    }
+  }
+
+  // Second pass: build the final list maintaining original order
+  const emittedGroups = new Set<string>();
+  for (const event of events) {
+    const baseNodeId = getBaseNodeId(event);
+    if (baseNodeId && nodeGroups.has(baseNodeId)) {
+      // Emit the group only once, when we encounter the first event of this group
+      if (!emittedGroups.has(baseNodeId)) {
+        emittedGroups.add(baseNodeId);
+        groupedItems.push({ type: "group", group: nodeGroups.get(baseNodeId)! });
+      }
+    } else {
+      // Non-execution event, render individually
+      groupedItems.push({ type: "single", event });
+    }
+  }
+
+  return (
+    <>
+      {groupedItems.map((item, idx) => {
+        if (item.type === "single") {
+          return (
+            <CompactEventItem
+              key={item.event.id || idx}
+              event={item.event}
+              allEvents={allEvents}
+              onTerminateExecution={onTerminateExecution}
+            />
+          );
+        } else {
+          const { group } = item;
+          const hasMetrics = group.metricsEvents.length > 0;
+
+          // Determine border color based on execution type
+          const borderColor =
+            group.executionType === "aggregation"
+              ? "border-l-teal-500/50"
+              : group.executionType === "seed"
+                ? "border-l-pink-500/50"
+                : "border-l-blue-500/50";
+
+          // Determine header label based on execution type
+          const headerLabel =
+            group.executionType === "aggregation"
+              ? "Aggregation"
+              : group.executionType === "seed"
+                ? `Seed ${group.nodeIndex ?? "?"}`
+                : `Node ${group.nodeIndex ?? "?"}`;
+
+          return (
+            <div key={group.baseNodeId} className={cn("border-l-2 ml-2", borderColor)}>
+              {/* Node header */}
+              <div className="px-3 py-1.5 bg-muted/20 flex items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">{headerLabel}</span>
+                {hasMetrics && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                    + Metrics
+                  </span>
+                )}
+              </div>
+              {/* Code generation events */}
+              {group.codeEvents.map((event, eventIdx) => (
+                <div key={event.id || `code-${eventIdx}`} className="relative">
+                  <CompactEventItem
+                    event={event}
+                    allEvents={allEvents}
+                    onTerminateExecution={onTerminateExecution}
+                  />
+                </div>
+              ))}
+              {/* Metrics parsing events */}
+              {group.metricsEvents.length > 0 && (
+                <div className="border-t border-purple-500/20 bg-purple-500/5">
+                  <div className="px-3 py-1 flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-purple-400 font-medium">
+                      Metrics Parsing
+                    </span>
+                  </div>
+                  {group.metricsEvents.map((event, eventIdx) => (
+                    <CompactEventItem
+                      key={event.id || `metrics-${eventIdx}`}
+                      event={event}
+                      allEvents={allEvents}
+                      onTerminateExecution={onTerminateExecution}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+      })}
+    </>
+  );
+}
+
 function StageSection({
   stage,
   isExpanded,
@@ -816,14 +1094,11 @@ function StageSection({
       {isExpanded && (
         <div className="border-t border-border bg-muted/10">
           <div className="divide-y divide-border/50">
-            {stage.events.map((event, idx) => (
-              <CompactEventItem
-                key={event.id || idx}
-                event={event}
-                allEvents={allEvents}
-                onTerminateExecution={onTerminateExecution}
-              />
-            ))}
+            <GroupedEventsList
+              events={stage.events}
+              allEvents={allEvents}
+              onTerminateExecution={onTerminateExecution}
+            />
           </div>
         </div>
       )}

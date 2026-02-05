@@ -770,13 +770,8 @@ class AgentManager:
                     current_substage=current_substage,
                     journal=self.journals[current_substage.name],
                 )
-                if current_substage.name not in self._substage_completed_emitted:
-                    self._emit_substage_completed_event(
-                        current_substage=current_substage,
-                        journal=self.journals[current_substage.name],
-                        reason=main_stage_feedback,
-                    )
-                # After main stage completion, run multi-seed eval on the best node
+                # Run multi-seed eval BEFORE emitting stage completed event
+                # This ensures "Stage Completed" only appears after seeds + aggregation finish
                 multi_seed_ok = self._perform_multi_seed_eval_if_needed(
                     agent=agent,
                     current_substage=current_substage,
@@ -787,6 +782,13 @@ class AgentManager:
                     # Setting current_stage = None here would prevent that
                     # Instead, let the caller handle this case
                     pass
+                # Emit stage completed event AFTER multi-seed eval (seeds + aggregation) finishes
+                if current_substage.name not in self._substage_completed_emitted:
+                    self._emit_substage_completed_event(
+                        current_substage=current_substage,
+                        journal=self.journals[current_substage.name],
+                        reason=main_stage_feedback,
+                    )
                 return True, None
 
             # If substage completes but main stage doesn't, create next substage

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 # fmt: off
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
+    ExecutionType,
     RunCompletedEventPayload,
     RunLogEvent,
     RunType,
@@ -149,11 +150,13 @@ class FakeRunnerCore:
                     execution_id=execution_id,
                     stage_name=record.stage_name,
                     run_type=RunType(record.run_type),
+                    execution_type=ExecutionType.stage_goal,  # Default for terminations
                     status=RunCompletedStatus.failed,
                     exec_time=exec_time,
                     completed_at=now.isoformat(),
                     is_seed_node=False,
                     is_seed_agg_node=False,
+                    node_index=0,  # Unknown for terminated executions
                 )
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort

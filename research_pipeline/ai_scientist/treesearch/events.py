@@ -6,6 +6,7 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel as PydanticBaseModel
 
+from ai_scientist.api_types import ExecutionType as ApiExecutionType
 from ai_scientist.api_types import (
     PaperGenerationProgressEvent as PaperGenerationProgressEventPayload,
 )
@@ -44,6 +45,15 @@ class RunType(str, Enum):
 
     CODEX_EXECUTION = "codex_execution"
     RUNFILE_EXECUTION = "runfile_execution"
+
+
+class ExecutionType(str, Enum):
+    """Type of execution categorizing what the code execution is for."""
+
+    STAGE_GOAL = "stage_goal"  # Regular node execution for stage goals
+    SEED = "seed"  # Seed evaluation execution
+    AGGREGATION = "aggregation"  # Seed aggregation execution
+    METRICS = "metrics"  # Metrics parsing execution
 
 
 EventKind = Literal[
@@ -301,6 +311,7 @@ class RunningCodeEvent(BaseEvent):
     code: str
     started_at: datetime
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display
@@ -313,6 +324,7 @@ class RunningCodeEvent(BaseEvent):
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
             "run_type": self.run_type.value,
+            "execution_type": self.execution_type.value,
             "code": self.code,
             "started_at": self.started_at.isoformat(),
             "is_seed_node": self.is_seed_node,
@@ -325,6 +337,7 @@ class RunningCodeEvent(BaseEvent):
             execution_id=self.execution_id,
             stage_name=self.stage_name,
             run_type=ApiRunType(self.run_type.value),
+            execution_type=ApiExecutionType(self.execution_type.value),
             code=self.code,
             started_at=self.started_at.isoformat(),
             is_seed_node=self.is_seed_node,
@@ -342,6 +355,7 @@ class RunCompletedEvent(BaseEvent):
     exec_time: float
     completed_at: datetime
     run_type: RunType
+    execution_type: ExecutionType  # Categorizes what this execution is for
     is_seed_node: bool
     is_seed_agg_node: bool
     node_index: int  # 1-based node index for display
@@ -354,6 +368,7 @@ class RunCompletedEvent(BaseEvent):
             "execution_id": self.execution_id,
             "stage_name": self.stage_name,
             "run_type": self.run_type.value,
+            "execution_type": self.execution_type.value,
             "status": self.status,
             "exec_time": self.exec_time,
             "completed_at": self.completed_at.isoformat(),
@@ -367,6 +382,7 @@ class RunCompletedEvent(BaseEvent):
             execution_id=self.execution_id,
             stage_name=self.stage_name,
             run_type=ApiRunType(self.run_type.value),
+            execution_type=ApiExecutionType(self.execution_type.value),
             status=RunCompletedStatus(self.status),
             exec_time=self.exec_time,
             completed_at=self.completed_at.isoformat(),

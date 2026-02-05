@@ -69,6 +69,7 @@ class CodeExecutionEvent(NamedTuple):
     execution_id: str
     stage_name: str
     run_type: str
+    execution_type: str  # stage_goal, seed, aggregation, metrics
     code: str
     status: str
     started_at: datetime
@@ -305,6 +306,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         execution_id: str,
         stage_name: str,
         run_type: str,
+        execution_type: str,
         code: Optional[str] = None,
         status: str = "running",
         started_at: Optional[datetime] = None,
@@ -322,14 +324,15 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(
                     """
                     INSERT INTO rp_code_execution_events
-                        (run_id, execution_id, stage_name, run_type, code, status,
+                        (run_id, execution_id, stage_name, run_type, execution_type, code, status,
                          started_at, completed_at, exec_time, node_index, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (run_id, execution_id, run_type)
                     DO UPDATE SET
                         status = EXCLUDED.status,
                         completed_at = EXCLUDED.completed_at,
                         exec_time = EXCLUDED.exec_time,
+                        execution_type = COALESCE(EXCLUDED.execution_type, rp_code_execution_events.execution_type),
                         node_index = COALESCE(EXCLUDED.node_index, rp_code_execution_events.node_index),
                         updated_at = EXCLUDED.updated_at
                     RETURNING id
@@ -339,6 +342,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                         execution_id,
                         stage_name,
                         run_type,
+                        execution_type,
                         code,
                         status,
                         started_at,
@@ -587,6 +591,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    execution_id,
                    stage_name,
                    run_type,
+                   execution_type,
                    code,
                    status,
                    started_at,
@@ -619,6 +624,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    execution_id,
                    stage_name,
                    run_type,
+                   execution_type,
                    code,
                    status,
                    started_at,

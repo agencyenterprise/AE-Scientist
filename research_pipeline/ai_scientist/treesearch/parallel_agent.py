@@ -261,6 +261,25 @@ class ParallelAgent:
         # Run a Codex seed-aggregation task to produce a single rolled-up node with aggregate plots/metric.
         aggregation_execution_id: str | None = None
         if len(seed_nodes) >= 2:
+            # Emit aggregation progress event (start)
+            try:
+                self.event_callback(
+                    RunStageProgressEvent(
+                        stage=self.stage_name,
+                        iteration=1,
+                        max_iterations=1,
+                        progress=0.0,
+                        total_nodes=1,
+                        buggy_nodes=0,
+                        good_nodes=0,
+                        best_metric=None,
+                        is_seed_node=False,
+                        is_seed_agg_node=True,
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to emit aggregation progress event (start)")
+
             try:
                 aggregation_execution_id = uuid.uuid4().hex
                 execution_registry.register_execution(
@@ -322,6 +341,24 @@ class ParallelAgent:
                     aggregation_execution_id,
                     agg_node.id,
                 )
+                # Emit aggregation progress event (completed)
+                try:
+                    self.event_callback(
+                        RunStageProgressEvent(
+                            stage=self.stage_name,
+                            iteration=1,
+                            max_iterations=1,
+                            progress=1.0,
+                            total_nodes=1,
+                            buggy_nodes=0,
+                            good_nodes=1,
+                            best_metric=None,
+                            is_seed_node=False,
+                            is_seed_agg_node=True,
+                        )
+                    )
+                except Exception:
+                    logger.exception("Failed to emit aggregation progress event (completed)")
             except ExecutionTerminatedError:
                 logger.info(
                     "Seed aggregation was terminated intentionally; skipping aggregation node."

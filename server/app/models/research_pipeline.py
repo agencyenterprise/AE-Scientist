@@ -33,6 +33,15 @@ class RunType(str, Enum):
     RUNFILE_EXECUTION = "runfile_execution"
 
 
+class ExecutionType(str, Enum):
+    """Type of execution categorizing what the code execution is for."""
+
+    STAGE_GOAL = "stage_goal"  # Regular node execution for stage goals
+    SEED = "seed"  # Seed evaluation execution
+    AGGREGATION = "aggregation"  # Seed aggregation execution
+    METRICS = "metrics"  # Metrics parsing execution
+
+
 def parse_run_type(*, run_type: str) -> RunType:
     """
     Convert persisted run_type strings into the supported RunType enum.

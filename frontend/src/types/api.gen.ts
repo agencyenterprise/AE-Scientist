@@ -2675,6 +2675,12 @@ export interface components {
              */
             detail?: string | null;
         };
+        /**
+         * ExecutionType
+         * @description Type of execution categorizing what the code execution is for.
+         * @enum {string}
+         */
+        ExecutionType: "stage_goal" | "seed" | "aggregation" | "metrics";
         /** FigureReviewEvent */
         FigureReviewEvent: {
             /** Figure Name */
@@ -3677,6 +3683,12 @@ export interface components {
              */
             run_type: string;
             /**
+             * Execution Type
+             * @description Type of execution (stage_goal, seed, aggregation, metrics)
+             * @enum {string}
+             */
+            execution_type: "stage_goal" | "seed" | "aggregation" | "metrics";
+            /**
              * Is Seed Node
              * @description True if this is a seed evaluation node
              * @default false
@@ -3747,6 +3759,12 @@ export interface components {
              * @description Type of run
              */
             run_type: string;
+            /**
+             * Execution Type
+             * @description Type of execution (stage_goal, seed, aggregation, metrics)
+             * @enum {string}
+             */
+            execution_type: "stage_goal" | "seed" | "aggregation" | "metrics";
             /**
              * Code Preview
              * @description Full code being executed
@@ -5499,6 +5517,7 @@ export interface components {
             /** Completed At */
             completed_at: string;
             run_type: components["schemas"]["RunType"];
+            execution_type: components["schemas"]["ExecutionType"];
             /** Is Seed Node */
             is_seed_node: boolean;
             /** Is Seed Agg Node */
@@ -5721,6 +5740,7 @@ export interface components {
             /** Started At */
             started_at: string;
             run_type: components["schemas"]["RunType"];
+            execution_type: components["schemas"]["ExecutionType"];
             /** Is Seed Node */
             is_seed_node: boolean;
             /** Is Seed Agg Node */

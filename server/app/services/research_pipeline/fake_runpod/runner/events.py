@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
     CodexEventPayload,
+    ExecutionType,
     PaperGenerationProgressEvent,
     RunCompletedEventPayload,
     RunLogEvent,
@@ -140,6 +141,7 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(codex_run_type),
+                execution_type=ExecutionType.stage_goal,
                 code=fake_task_markdown,
                 started_at=started_at.isoformat(),
                 is_seed_node=False,
@@ -159,6 +161,7 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(runfile_run_type),
+                execution_type=ExecutionType.stage_goal,
                 code=fake_runfile_code,
                 started_at=runfile_started_at.isoformat(),
                 is_seed_node=False,
@@ -192,6 +195,7 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(runfile_run_type),
+                execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
                 exec_time=runfile_exec_time,
                 completed_at=runfile_completed_at.isoformat(),
@@ -216,6 +220,7 @@ class EventsMixin:
                 execution_id=execution_id,
                 stage_name=stage_name,
                 run_type=RunType(codex_run_type),
+                execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
                 exec_time=exec_time,
                 completed_at=completed_at.isoformat(),
@@ -228,6 +233,41 @@ class EventsMixin:
             existing = _executions_by_id.get(execution_id)
             if existing is not None:
                 _executions_by_id[execution_id] = existing._replace(status="success")
+
+        # Emit metrics parsing events after node execution
+        metrics_execution_id = f"{execution_id}_metrics"
+        metrics_started_at = datetime.now(timezone.utc)
+        self._webhooks.publish_running_code(
+            RunningCodeEventPayload(
+                execution_id=metrics_execution_id,
+                stage_name=stage_name,
+                run_type=RunType.runfile_execution,
+                execution_type=ExecutionType.metrics,
+                code="# Metrics parsing\nimport json\nwith open('metrics.json') as f:\n    metrics = json.load(f)\nprint(f'Parsed metrics: {metrics}')",
+                started_at=metrics_started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+                node_index=iteration + 1,
+            )
+        )
+        # Metrics parsing is quick
+        self._sleep(0.5)
+        metrics_completed_at = datetime.now(timezone.utc)
+        metrics_exec_time = max(0.0, (metrics_completed_at - metrics_started_at).total_seconds())
+        self._webhooks.publish_run_completed(
+            RunCompletedEventPayload(
+                execution_id=metrics_execution_id,
+                stage_name=stage_name,
+                run_type=RunType.runfile_execution,
+                execution_type=ExecutionType.metrics,
+                status=RunCompletedStatus.success,
+                exec_time=metrics_exec_time,
+                completed_at=metrics_completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+                node_index=iteration + 1,
+            )
+        )
 
     def _emit_codex_events(self, *, stage_name: str, node_index: int) -> None:
         """Emit Codex JSONL-like events."""
@@ -592,6 +632,7 @@ class EventsMixin:
                         execution_id=seed_execution_id,
                         stage_name=stage_name,
                         run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
                         code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
                         started_at=seed_started_at.isoformat(),
                         is_seed_node=True,
@@ -615,6 +656,7 @@ class EventsMixin:
                         execution_id=seed_execution_id,
                         stage_name=stage_name,
                         run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
                         status=RunCompletedStatus.success,
                         exec_time=seed_exec_time,
                         completed_at=seed_completed_at.isoformat(),
@@ -669,6 +711,28 @@ class EventsMixin:
             stage_name,
         )
 
+        # Emit aggregation progress event (start - in progress)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=1,
+                    max_iterations=1,
+                    progress=0.0,
+                    total_nodes=1,
+                    buggy_nodes=0,
+                    good_nodes=0,
+                    best_metric=None,
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit aggregation start progress event for stage %s", stage_name
+            )
+
         # Emit running_code event for aggregation node
         try:
             self._webhooks.publish_running_code(
@@ -676,6 +740,7 @@ class EventsMixin:
                     execution_id=agg_execution_id,
                     stage_name=stage_name,
                     run_type=RunType.codex_execution,
+                    execution_type=ExecutionType.aggregation,
                     code="# Seed Aggregation\n# Combining results from all seed runs\nimport numpy as np\n\n# Aggregate metrics across seeds\nmetrics = [seed_0_metric, seed_1_metric, seed_2_metric]\nmean_metric = np.mean(metrics)\nstd_metric = np.std(metrics)",
                     started_at=agg_started_at.isoformat(),
                     is_seed_node=False,
@@ -699,6 +764,7 @@ class EventsMixin:
                     execution_id=agg_execution_id,
                     stage_name=stage_name,
                     run_type=RunType.codex_execution,
+                    execution_type=ExecutionType.aggregation,
                     status=RunCompletedStatus.success,
                     exec_time=agg_exec_time,
                     completed_at=agg_completed_at.isoformat(),

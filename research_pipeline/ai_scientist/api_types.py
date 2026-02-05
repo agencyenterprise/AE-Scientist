@@ -338,6 +338,13 @@ class ErrorResponse(BaseModel):
     ] = None
 
 
+class ExecutionType(StrEnum):
+    stage_goal = "stage_goal"
+    seed = "seed"
+    aggregation = "aggregation"
+    metrics = "metrics"
+
+
 class FigureReviewEvent(BaseModel):
     figure_name: Annotated[str, Field(title="Figure Name")]
     img_description: Annotated[str, Field(title="Img Description")]
@@ -894,6 +901,13 @@ class NodeExecutionCompletedEvent(BaseModel):
         float, Field(description="Execution time in seconds", title="Exec Time")
     ]
     run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
     is_seed_node: Annotated[
         bool | None,
         Field(
@@ -940,6 +954,13 @@ class NodeExecutionStartedEvent(BaseModel):
         str, Field(description="Unique execution ID", title="Execution Id")
     ]
     run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
     code_preview: Annotated[
         str, Field(description="Full code being executed", title="Code Preview")
     ]
@@ -1977,6 +1998,7 @@ class RunningCodeEventPayload(BaseModel):
     code: Annotated[str, Field(title="Code")]
     started_at: Annotated[str, Field(title="Started At")]
     run_type: RunType
+    execution_type: ExecutionType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
     node_index: Annotated[int, Field(title="Node Index")]
@@ -2859,6 +2881,7 @@ class RunCompletedEventPayload(BaseModel):
     exec_time: Annotated[float, Field(title="Exec Time")]
     completed_at: Annotated[str, Field(title="Completed At")]
     run_type: RunType
+    execution_type: ExecutionType
     is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
     is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
     node_index: Annotated[int, Field(title="Node Index")]
