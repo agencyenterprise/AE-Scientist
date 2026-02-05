@@ -31,7 +31,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export default function ResearchRunDetailPage() {
   const params = useParams();
@@ -102,6 +102,29 @@ export default function ResearchRunDetailPage() {
   }, [conversationId, review, notFound, reviewError, reviewLoading, fetchReview]);
 
   const [activeTab, setActiveTab] = useState("overview");
+
+  const handleTerminateExecution = useCallback(
+    async (executionId: string, feedback: string) => {
+      if (!conversationId) {
+        throw new Error("Conversation not available yet. Please try again in a moment.");
+      }
+      const { error } = await api.POST(
+        "/api/conversations/{conversation_id}/idea/research-run/{run_id}/executions/{execution_id}/terminate",
+        {
+          params: {
+            path: {
+              conversation_id: conversationId,
+              run_id: runId,
+              execution_id: executionId,
+            },
+          },
+          body: { payload: feedback },
+        }
+      );
+      if (error) throw new Error("Failed to terminate execution");
+    },
+    [conversationId, runId]
+  );
 
   if (loading) {
     return (
@@ -243,6 +266,7 @@ export default function ResearchRunDetailPage() {
               review={review}
               reviewLoading={reviewLoading}
               onViewEvaluation={() => setActiveTab("evaluation")}
+              onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
             />
           </TabsContent>
 

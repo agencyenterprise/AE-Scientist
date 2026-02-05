@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { Button } from "@/shared/components/ui/button";
+import { Modal } from "@/shared/components/Modal";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import { cn } from "@/shared/lib/utils";
@@ -17,6 +19,7 @@ import {
   Loader2,
   ChevronRight,
   FlaskConical,
+  StopCircle,
 } from "lucide-react";
 import type { components } from "@/types/api.gen";
 
@@ -26,6 +29,8 @@ type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
 interface ResearchActivityFeedProps {
   runId: string;
   maxHeight?: string;
+  /** Handler to terminate an active execution. If not provided, terminate buttons won't appear. */
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
 }
 
 interface ParsedSseFrame {
@@ -83,6 +88,44 @@ function getEventStage(event: TimelineEvent): string {
   return "_unknown";
 }
 
+/**
+ * Filter events to show only codex_execution events for node executions.
+ * runfile_execution events are sub-executions and shouldn't appear as separate items.
+ */
+function filterNodeExecutionEvents(events: TimelineEvent[]): TimelineEvent[] {
+  return events.filter(event => {
+    // Keep all non-execution events
+    if (event.type !== "node_execution_started" && event.type !== "node_execution_completed") {
+      return true;
+    }
+    // For execution events, only show codex_execution (the main execution)
+    if ("run_type" in event) {
+      return event.run_type === "codex_execution";
+    }
+    return true;
+  });
+}
+
+/**
+ * Find the runfile execution event that matches a codex execution (same execution_id)
+ */
+function findRunfileExecution(
+  events: TimelineEvent[],
+  executionId: string,
+  eventType: "node_execution_started" | "node_execution_completed"
+): TimelineEvent | null {
+  return (
+    events.find(
+      e =>
+        e.type === eventType &&
+        "execution_id" in e &&
+        e.execution_id === executionId &&
+        "run_type" in e &&
+        e.run_type === "runfile_execution"
+    ) ?? null
+  );
+}
+
 function getStageName(stageId: string): string {
   if (stageId === "_run_start") return "Run Initialization";
   if (stageId === "_run_end") return "Run Completion";
@@ -103,10 +146,13 @@ function getStageName(stageId: string): string {
 }
 
 function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
+  // Filter out runfile_execution events - they're sub-executions of codex_execution
+  const filteredEvents = filterNodeExecutionEvents(events);
+
   const stageMap = new Map<string, TimelineEvent[]>();
   const stageOrder: string[] = [];
 
-  for (const event of events) {
+  for (const event of filteredEvents) {
     const stageId = getEventStage(event);
 
     if (!stageMap.has(stageId)) {
@@ -303,9 +349,9 @@ function getEventLabel(type: string) {
     case "node_result":
       return "Node Result";
     case "node_execution_started":
-      return "Execution Started";
+      return "Agent Started";
     case "node_execution_completed":
-      return "Execution Complete";
+      return "Agent Complete";
     case "paper_generation_step":
       return "Paper Generation";
     case "run_finished":
@@ -315,27 +361,192 @@ function getEventLabel(type: string) {
   }
 }
 
-function CompactEventItem({ event }: { event: TimelineEvent }) {
+interface CompactEventItemProps {
+  event: TimelineEvent;
+  allEvents: TimelineEvent[];
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+}
+
+function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEventItemProps) {
+  const [isTerminateDialogOpen, setIsTerminateDialogOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const icon = getEventIcon(event.type);
   const colorClass = getEventColor(event.type);
   const label = getEventLabel(event.type);
 
+  // Check if this is an active codex execution (started but not completed)
+  const isActiveExecution =
+    event.type === "node_execution_started" &&
+    "run_type" in event &&
+    event.run_type === "codex_execution" &&
+    "execution_id" in event;
+
+  // Check if there's a completion event for this execution
+  const hasCompleted =
+    isActiveExecution &&
+    "execution_id" in event &&
+    allEvents.some(
+      e =>
+        e.type === "node_execution_completed" &&
+        "execution_id" in e &&
+        e.execution_id === event.execution_id
+    );
+
+  const canTerminate = isActiveExecution && !hasCompleted && onTerminateExecution;
+
+  // Find the matching runfile execution for display
+  const runfileEvent =
+    isActiveExecution && "execution_id" in event
+      ? findRunfileExecution(allEvents, event.execution_id as string, "node_execution_started")
+      : null;
+
+  // Get code preview for execution events
+  const codexCodePreview =
+    event.type === "node_execution_started" && "code_preview" in event
+      ? (event.code_preview as string | null)
+      : null;
+
+  const runfileCodePreview =
+    runfileEvent && "code_preview" in runfileEvent
+      ? (runfileEvent.code_preview as string | null)
+      : null;
+
+  const handleTerminate = async () => {
+    if (!onTerminateExecution || !("execution_id" in event)) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onTerminateExecution(event.execution_id as string, feedback.trim());
+      setIsTerminateDialogOpen(false);
+      setFeedback("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to terminate execution");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="flex items-start gap-3 py-2 px-3 rounded-md hover:bg-muted/30 transition-colors">
-      <div className={cn("mt-0.5 shrink-0", colorClass)}>{icon}</div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className={cn("text-sm font-medium", colorClass)}>{label}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {formatTimeAgo(event.timestamp)}
-          </span>
+    <>
+      <div className="flex items-start gap-3 py-2 px-3 rounded-md hover:bg-muted/30 transition-colors">
+        <div className={cn("mt-0.5 shrink-0", colorClass)}>{icon}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className={cn("text-sm font-medium", colorClass)}>{label}</span>
+            <div className="flex items-center gap-2">
+              {canTerminate && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                  onClick={() => setIsTerminateDialogOpen(true)}
+                >
+                  <StopCircle className="h-3 w-3 mr-1" />
+                  Terminate
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground shrink-0">
+                {formatTimeAgo(event.timestamp)}
+              </span>
+            </div>
+          </div>
+          {event.headline && (
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{event.headline}</p>
+          )}
+          <EventDetails event={event} />
+
+          {/* Show Coding Agent Task with task prompt */}
+          {isActiveExecution && codexCodePreview && (
+            <details className="mt-2 rounded-md border border-blue-500/30 bg-blue-500/5">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-blue-300 hover:text-blue-200 flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                Coding Agent Task
+              </summary>
+              <div className="max-h-48 overflow-y-auto border-t border-blue-500/20 p-3">
+                <p className="text-[10px] uppercase tracking-wide text-blue-400 mb-2">
+                  Task prompt:
+                </p>
+                <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
+                  {codexCodePreview}
+                </pre>
+              </div>
+            </details>
+          )}
+
+          {/* Show Node Execution (runfile) with generated code */}
+          {runfileEvent && (
+            <details className="mt-2 rounded-md border border-emerald-500/30 bg-emerald-500/5">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-emerald-300 hover:text-emerald-200 flex items-center gap-2">
+                {!hasCompleted && (
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                )}
+                {hasCompleted && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                Node Execution {hasCompleted ? "(completed)" : "(running)"}
+              </summary>
+              <div className="border-t border-emerald-500/20">
+                {"headline" in runfileEvent && (
+                  <p className="px-3 py-1 text-xs text-slate-500">{runfileEvent.headline}</p>
+                )}
+                {runfileCodePreview && (
+                  <div className="max-h-48 overflow-y-auto p-3 pt-1">
+                    <p className="text-[10px] uppercase tracking-wide text-emerald-400 mb-2">
+                      Generated runfile.py:
+                    </p>
+                    <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
+                      {runfileCodePreview}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
         </div>
-        {event.headline && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{event.headline}</p>
-        )}
-        <EventDetails event={event} />
       </div>
-    </div>
+
+      {/* Terminate confirmation dialog */}
+      {canTerminate && (
+        <Modal
+          isOpen={isTerminateDialogOpen}
+          onClose={() => !isSubmitting && setIsTerminateDialogOpen(false)}
+          title="Terminate execution"
+          maxHeight="max-h-[80vh]"
+        >
+          <p className="text-sm text-slate-200">
+            The current execution will be stopped immediately. Optionally provide feedback for the
+            next iteration.
+          </p>
+          <textarea
+            className="mt-3 w-full rounded-md border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            rows={4}
+            value={feedback}
+            onChange={e => setFeedback(e.target.value)}
+            placeholder="Example: Stop this run and focus on fixing data loader crashes…"
+          />
+          {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsTerminateDialogOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleTerminate}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Sending..." : "Send & terminate"}
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -379,10 +590,14 @@ function StageSection({
   stage,
   isExpanded,
   onToggle,
+  allEvents,
+  onTerminateExecution,
 }: {
   stage: StageGroup;
   isExpanded: boolean;
   onToggle: () => void;
+  allEvents: TimelineEvent[];
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
 }) {
   const statusBadge = {
     completed: (
@@ -472,7 +687,12 @@ function StageSection({
         <div className="border-t border-border bg-muted/10">
           <div className="divide-y divide-border/50">
             {stage.events.map((event, idx) => (
-              <CompactEventItem key={event.id || idx} event={event} />
+              <CompactEventItem
+                key={event.id || idx}
+                event={event}
+                allEvents={allEvents}
+                onTerminateExecution={onTerminateExecution}
+              />
             ))}
           </div>
         </div>
@@ -481,7 +701,11 @@ function StageSection({
   );
 }
 
-export function ResearchActivityFeed({ runId, maxHeight = "500px" }: ResearchActivityFeedProps) {
+export function ResearchActivityFeed({
+  runId,
+  maxHeight = "500px",
+  onTerminateExecution,
+}: ResearchActivityFeedProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -652,6 +876,8 @@ export function ResearchActivityFeed({ runId, maxHeight = "500px" }: ResearchAct
                 stage={stage}
                 isExpanded={expandedStages.has(stage.stageId)}
                 onToggle={() => toggleStage(stage.stageId)}
+                allEvents={events}
+                onTerminateExecution={onTerminateExecution}
               />
             ))}
           </div>

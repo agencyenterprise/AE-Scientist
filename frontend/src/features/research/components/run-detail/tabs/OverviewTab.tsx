@@ -31,6 +31,7 @@ interface OverviewTabProps {
   review: LlmReviewResponse | null;
   reviewLoading: boolean;
   onViewEvaluation?: () => void;
+  onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
 }
 
 export function OverviewTab({
@@ -42,6 +43,7 @@ export function OverviewTab({
   review,
   reviewLoading,
   onViewEvaluation,
+  onTerminateExecution,
 }: OverviewTabProps) {
   const isCompleted = run.status === "completed" || run.status === "failed";
 
@@ -68,7 +70,11 @@ export function OverviewTab({
         />
       )}
 
-      <ResearchActivityFeed runId={runId} maxHeight="600px" />
+      <ResearchActivityFeed
+        runId={runId}
+        maxHeight="600px"
+        onTerminateExecution={onTerminateExecution}
+      />
     </div>
   );
 }
