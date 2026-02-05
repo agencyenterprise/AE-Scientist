@@ -10432,6 +10432,18 @@
             "title": "Conversation Id",
             "description": "ID of the associated conversation"
           },
+          "conversation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Url",
+            "description": "Original conversation share URL (ChatGPT, Claude, etc.) if imported"
+          },
           "parent_run_id": {
             "anyOf": [
               {
