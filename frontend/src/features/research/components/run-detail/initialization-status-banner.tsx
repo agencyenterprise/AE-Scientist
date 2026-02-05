@@ -20,7 +20,7 @@ export function InitializationStatusBanner({
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
       <div className="flex items-center gap-3">
         <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
         <div className="flex flex-col">

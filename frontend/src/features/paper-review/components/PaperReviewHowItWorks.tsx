@@ -38,80 +38,47 @@ const FLOW_STEPS = [
 ];
 
 // NeurIPS-style rating scales
-// For Originality, Quality, Clarity, Significance
 const SCALE_LOW_TO_HIGH = [
-  { value: 4, label: "Very high" },
-  { value: 3, label: "High" },
-  { value: 2, label: "Medium" },
-  { value: 1, label: "Low" },
+  { value: "4", label: "Very high" },
+  { value: "3", label: "High" },
+  { value: "2", label: "Medium" },
+  { value: "1", label: "Low" },
 ];
 
-// For Soundness, Presentation, Contribution
 const SCALE_POOR_TO_EXCELLENT = [
-  { value: 4, label: "Excellent" },
-  { value: 3, label: "Good" },
-  { value: 2, label: "Fair" },
-  { value: 1, label: "Poor" },
+  { value: "4", label: "Excellent" },
+  { value: "3", label: "Good" },
+  { value: "2", label: "Fair" },
+  { value: "1", label: "Poor" },
 ];
 
+const SCALE_OVERALL = [
+  { value: "9-10", label: "Award level" },
+  { value: "7-8", label: "Strong Accept" },
+  { value: "6", label: "Solid Accept" },
+  { value: "4-5", label: "Borderline" },
+  { value: "1-3", label: "Reject" },
+];
+
+const SCALE_CONFIDENCE = [
+  { value: "5", label: "Absolutely certain" },
+  { value: "4", label: "Confident" },
+  { value: "3", label: "Fairly confident" },
+  { value: "2", label: "Uncertain" },
+  { value: "1", label: "Educated guess" },
+];
+
+// All review criteria with their scales (matching NeurIPS form)
 const REVIEW_CRITERIA = [
-  {
-    label: "Originality",
-    description: "Novelty of ideas and approach",
-    scale: SCALE_LOW_TO_HIGH,
-  },
-  {
-    label: "Quality",
-    description: "Technical correctness and rigor",
-    scale: SCALE_LOW_TO_HIGH,
-  },
-  {
-    label: "Clarity",
-    description: "Writing and exposition quality",
-    scale: SCALE_LOW_TO_HIGH,
-  },
-  {
-    label: "Significance",
-    description: "Potential impact on the field",
-    scale: SCALE_LOW_TO_HIGH,
-  },
-  {
-    label: "Soundness",
-    description: "Methodological rigor",
-    scale: SCALE_POOR_TO_EXCELLENT,
-  },
-  {
-    label: "Presentation",
-    description: "Presentation quality",
-    scale: SCALE_POOR_TO_EXCELLENT,
-  },
-  {
-    label: "Contribution",
-    description: "Contribution level",
-    scale: SCALE_POOR_TO_EXCELLENT,
-  },
-  {
-    label: "Overall",
-    description: "Overall assessment",
-    scale: [
-      { value: "9-10", label: "Award level" },
-      { value: "7-8", label: "Strong Accept" },
-      { value: "6", label: "Solid Accept" },
-      { value: "4-5", label: "Borderline" },
-      { value: "1-3", label: "Reject" },
-    ],
-  },
-  {
-    label: "Confidence",
-    description: "Reviewer confidence",
-    scale: [
-      { value: 5, label: "Absolutely certain" },
-      { value: 4, label: "Confident" },
-      { value: 3, label: "Fairly confident" },
-      { value: 2, label: "Uncertain" },
-      { value: 1, label: "Educated guess" },
-    ],
-  },
+  { name: "Originality", desc: "Novelty of ideas and approach", scores: SCALE_LOW_TO_HIGH },
+  { name: "Quality", desc: "Technical correctness and rigor", scores: SCALE_LOW_TO_HIGH },
+  { name: "Clarity", desc: "Writing and exposition quality", scores: SCALE_LOW_TO_HIGH },
+  { name: "Significance", desc: "Potential impact on the field", scores: SCALE_LOW_TO_HIGH },
+  { name: "Soundness", desc: "Methodological rigor", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Presentation", desc: "Presentation quality", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Contribution", desc: "Contribution level", scores: SCALE_POOR_TO_EXCELLENT },
+  { name: "Overall", desc: "Overall assessment", scores: SCALE_OVERALL },
+  { name: "Confidence", desc: "Reviewer confidence", scores: SCALE_CONFIDENCE },
 ];
 
 interface PaperReviewHowItWorksProps {
@@ -122,7 +89,7 @@ export function PaperReviewHowItWorks({ className }: PaperReviewHowItWorksProps)
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className={cn("rounded-xl border border-slate-800 bg-slate-900/50", className)}>
+    <div className={cn("rounded-2xl border border-slate-800 bg-slate-900/50", className)}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-slate-800/30"
@@ -167,26 +134,25 @@ export function PaperReviewHowItWorks({ className }: PaperReviewHowItWorksProps)
             })}
           </div>
 
-          {/* Review Criteria */}
-          <div className="mt-4 rounded-lg border border-slate-800/60 bg-slate-900/40 p-4">
-            <h4 className="mb-3 text-sm font-semibold text-white">
+          {/* Review Criteria - 3x3 Grid */}
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold text-white mb-3">
               Review Criteria (NeurIPS-style)
             </h4>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {REVIEW_CRITERIA.map(criteria => (
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {REVIEW_CRITERIA.map(criterion => (
                 <div
-                  key={criteria.label}
-                  className="rounded-md border border-slate-700/50 bg-slate-800/30 p-3"
+                  key={criterion.name}
+                  className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3"
                 >
-                  <div className="text-sm font-medium text-sky-300">{criteria.label}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{criteria.description}</div>
-                  <div className="mt-2 space-y-0.5">
-                    {criteria.scale.map(item => (
-                      <div key={item.value} className="flex items-center gap-2 text-xs">
-                        <span className="w-8 text-right font-mono text-slate-400">
-                          {item.value}
-                        </span>
-                        <span className="text-slate-500">{item.label}</span>
+                  <h5 className="text-sm font-semibold text-sky-400">{criterion.name}</h5>
+                  <p className="text-xs text-slate-500 mb-2">{criterion.desc}</p>
+                  <div className="space-y-0.5">
+                    {criterion.scores.map(score => (
+                      <div key={score.value} className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-400 font-medium w-8">{score.value}</span>
+                        <span className="text-slate-500">{score.label}</span>
                       </div>
                     ))}
                   </div>

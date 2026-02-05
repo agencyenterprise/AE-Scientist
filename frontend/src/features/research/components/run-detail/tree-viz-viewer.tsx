@@ -314,8 +314,8 @@ export function TreeVizViewer({
   );
 
   return (
-    <div className="flex w-full gap-4 min-h-[500px] items-stretch">
-      <div className="w-1/2 flex flex-col">
+    <div className="flex flex-col md:flex-row w-full gap-4 min-h-[400px] md:min-h-[500px] items-stretch">
+      <div className="w-full md:w-1/2 min-h-[300px] flex flex-col">
         <div
           ref={treeContainerRef}
           className="relative flex-1 border border-slate-700 bg-slate-900"
@@ -423,8 +423,8 @@ export function TreeVizViewer({
           </svg>
         </div>
       </div>
-      <div className="w-1/2 relative">
-        <div className="absolute inset-0 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 overflow-y-auto">
+      <div className="w-full md:w-1/2 relative min-h-[300px] md:min-h-0">
+        <div className="md:absolute md:inset-0 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 overflow-y-auto">
           {selectedNode ? (
             <>
               <div className="space-y-3">

@@ -14,7 +14,7 @@ interface ResearchRunDetailsGridProps {
  */
 export function ResearchRunDetailsGrid({ run, conversationId }: ResearchRunDetailsGridProps) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
       <div className="mb-4 flex items-center gap-2">
         <Calendar className="h-5 w-5 text-slate-400" />
         <h2 className="text-lg font-semibold text-white">Run Details</h2>

@@ -82,7 +82,7 @@ export function AutoEvaluationCard({
   const showContent = hasReview && !loading;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
       <h3 className="text-lg font-semibold text-white mb-4">Evaluation</h3>
 
       {showLoading && (

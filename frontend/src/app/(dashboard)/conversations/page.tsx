@@ -53,7 +53,7 @@ export default function ConversationsPage() {
     <>
       {/* Main Card */}
       <PageCard>
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
           <IdeationQueueHeader
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
@@ -80,7 +80,7 @@ export default function ConversationsPage() {
 
       {/* Inline Idea View Card */}
       <PageCard>
-        <div ref={inlineViewRef} className="p-6">
+        <div ref={inlineViewRef} className="p-4 sm:p-6">
           <InlineIdeaView conversationId={selectedConversationId} />
         </div>
       </PageCard>

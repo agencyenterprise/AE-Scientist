@@ -10,7 +10,7 @@ export function IdeationQueueSkeleton() {
       {[1, 2, 3, 4, 5].map(i => (
         <div
           key={i}
-          className="animate-pulse rounded-xl border border-slate-800 bg-slate-900/50 p-4"
+          className="animate-pulse rounded-2xl border border-slate-800 bg-slate-900/50 p-4"
         >
           {/* Status badge skeleton */}
           <div className="mb-3 h-5 w-20 rounded-full bg-slate-700/50" />
