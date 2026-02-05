@@ -43,9 +43,10 @@ const STAGE_DESCRIPTIONS: Record<string, { name: string; action: string; descrip
 function humanizeNodeName(nodeName: string): string {
   // Extract stage number and type
   const match = nodeName.match(/^(\d+)_([a-z_]+)/i);
-  if (!match) return nodeName;
+  const stageNum = match?.[1];
+  const stageType = match?.[2];
 
-  const [, stageNum, stageType] = match;
+  if (!stageNum || !stageType) return nodeName;
 
   // Map common stage types
   const typeMap: Record<string, string> = {
@@ -91,8 +92,8 @@ export function humanizeEventHeadline(
   // Handle stage events
   if (eventType === "stage_started") {
     const stageMatch = headline.match(/Stage\s+(\d+_[a-z_]+)/i);
-    if (stageMatch) {
-      const stageKey = stageMatch[1]; // e.g., "2_baseline_tuning"
+    const stageKey = stageMatch?.[1]; // e.g., "2_baseline_tuning"
+    if (stageKey) {
       // Direct lookup in STAGE_DESCRIPTIONS using the full key
       const stageInfo = STAGE_DESCRIPTIONS[stageKey];
       if (stageInfo) {

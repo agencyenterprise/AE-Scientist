@@ -43,8 +43,8 @@ interface GroupedLogs {
 }
 
 // ===== Constants =====
-const STAGE_CONFIGS: StageConfig[] = [
-  {
+const STAGE_CONFIGS_MAP = {
+  baseline: {
     id: "1_baseline",
     name: "Baseline Implementation",
     shortName: "Baseline",
@@ -53,7 +53,7 @@ const STAGE_CONFIGS: StageConfig[] = [
     bgColor: "bg-violet-500/10",
     borderColor: "border-violet-500/30",
   },
-  {
+  tuning: {
     id: "2_baseline_tuning",
     name: "Baseline Tuning",
     shortName: "Tuning",
@@ -62,7 +62,7 @@ const STAGE_CONFIGS: StageConfig[] = [
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/30",
   },
-  {
+  creative: {
     id: "3_creative",
     name: "Creative Research",
     shortName: "Creative",
@@ -71,7 +71,7 @@ const STAGE_CONFIGS: StageConfig[] = [
     bgColor: "bg-amber-500/10",
     borderColor: "border-amber-500/30",
   },
-  {
+  ablation: {
     id: "4_ablation",
     name: "Ablation Studies",
     shortName: "Ablation",
@@ -80,7 +80,7 @@ const STAGE_CONFIGS: StageConfig[] = [
     bgColor: "bg-rose-500/10",
     borderColor: "border-rose-500/30",
   },
-  {
+  paper: {
     id: "5_paper",
     name: "Paper Generation",
     shortName: "Paper",
@@ -89,7 +89,17 @@ const STAGE_CONFIGS: StageConfig[] = [
     bgColor: "bg-emerald-500/10",
     borderColor: "border-emerald-500/30",
   },
-];
+} as const satisfies Record<string, StageConfig>;
+
+const STAGE_CONFIGS: StageConfig[] = Object.values(STAGE_CONFIGS_MAP);
+
+const STAGE_CONFIGS_BY_NUMBER: Record<string, StageConfig> = {
+  "1": STAGE_CONFIGS_MAP.baseline,
+  "2": STAGE_CONFIGS_MAP.tuning,
+  "3": STAGE_CONFIGS_MAP.creative,
+  "4": STAGE_CONFIGS_MAP.ablation,
+  "5": STAGE_CONFIGS_MAP.paper,
+};
 
 const GENERAL_STAGE: StageConfig = {
   id: "general",
@@ -121,27 +131,28 @@ function getStageFromMessage(message: string): StageConfig {
     lowerMessage.includes("stage 1") ||
     (lowerMessage.includes("baseline") && !lowerMessage.includes("tuning"))
   ) {
-    return STAGE_CONFIGS[0];
+    return STAGE_CONFIGS_MAP.baseline;
   }
   if (lowerMessage.includes("stage 2") || lowerMessage.includes("tuning")) {
-    return STAGE_CONFIGS[1];
+    return STAGE_CONFIGS_MAP.tuning;
   }
   if (lowerMessage.includes("stage 3") || lowerMessage.includes("creative")) {
-    return STAGE_CONFIGS[2];
+    return STAGE_CONFIGS_MAP.creative;
   }
   if (lowerMessage.includes("stage 4") || lowerMessage.includes("ablation")) {
-    return STAGE_CONFIGS[3];
+    return STAGE_CONFIGS_MAP.ablation;
   }
   if (lowerMessage.includes("stage 5") || lowerMessage.includes("paper")) {
-    return STAGE_CONFIGS[4];
+    return STAGE_CONFIGS_MAP.paper;
   }
 
   // Check for stage number pattern
   const stageMatch = message.match(/(\d)_/);
-  if (stageMatch) {
-    const stageNum = parseInt(stageMatch[1], 10);
-    if (stageNum >= 1 && stageNum <= 5) {
-      return STAGE_CONFIGS[stageNum - 1];
+  const stageNum = stageMatch?.[1];
+  if (stageNum) {
+    const stageByNumber = STAGE_CONFIGS_BY_NUMBER[stageNum];
+    if (stageByNumber) {
+      return stageByNumber;
     }
   }
 
@@ -495,8 +506,8 @@ function NarrativeView({
                     <LogRow
                       key={log.id}
                       log={log}
-                      isExpanded={expandedErrors.has(log.id)}
-                      onToggle={() => onToggleError(log.id)}
+                      isExpanded={expandedErrors.has(String(log.id))}
+                      onToggle={() => onToggleError(String(log.id))}
                       compact
                     />
                   ))}
@@ -534,8 +545,8 @@ function DetailedView({
         <LogRow
           key={log.id}
           log={log}
-          isExpanded={expandedErrors.has(log.id)}
-          onToggle={() => onToggleError(log.id)}
+          isExpanded={expandedErrors.has(String(log.id))}
+          onToggle={() => onToggleError(String(log.id))}
         />
       ))}
     </div>
