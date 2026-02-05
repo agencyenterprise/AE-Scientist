@@ -1553,6 +1553,13 @@ class ResearchRunListItem(BaseModel):
         int,
         Field(description="ID of the associated conversation", title="Conversation Id"),
     ]
+    conversation_url: Annotated[
+        str | None,
+        Field(
+            description="Original conversation share URL (ChatGPT, Claude, etc.) if imported",
+            title="Conversation Url",
+        ),
+    ] = None
     parent_run_id: Annotated[
         str | None,
         Field(

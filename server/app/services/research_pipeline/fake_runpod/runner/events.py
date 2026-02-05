@@ -1,0 +1,745 @@
+"""Event emission methods for FakeRunner."""
+
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+# fmt: off
+# isort: off
+from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
+    CodexEventPayload,
+    PaperGenerationProgressEvent,
+    RunCompletedEventPayload,
+    RunLogEvent,
+    RunningCodeEventPayload,
+    RunType,
+    StageProgressEvent,
+    StageSkipWindowEventModel,
+    State as StageSkipState,
+    Status6 as RunCompletedStatus,
+    SubstageCompletedEvent,
+    SubstageSummaryEvent,
+)
+# isort: on
+# fmt: on
+from research_pipeline.ai_scientist.telemetry.event_persistence import (  # type: ignore[import-not-found]
+    PersistableEvent,
+)
+
+from ..models import (
+    MIN_FAKE_CODEX_OUTLIVES_RUNFILE_SECONDS,
+    MIN_FAKE_RUNFILE_RUNNING_SECONDS,
+    ExecutionRecord,
+)
+from ..state import get_executions, get_lock, get_speed_factor
+
+if TYPE_CHECKING:
+    from .core import FakeRunnerCore
+
+logger = logging.getLogger(__name__)
+
+
+class EventsMixin:
+    """Mixin providing event emission methods for FakeRunner."""
+
+    # Type hints for methods from FakeRunnerCore
+    _run_id: str
+    _webhooks: "FakeRunnerCore._webhooks"  # type: ignore[name-defined]
+    _persistence: "FakeRunnerCore._persistence"  # type: ignore[name-defined]
+    _random_exec_time_seconds: float
+    _stage_plan: list[tuple[str, int]]
+    _iterations_per_stage: int
+
+    def _sleep(self, seconds: float) -> None: ...
+    def _enqueue_event(self, *, kind: str, data: object) -> None: ...
+    def _consume_stage_skip_request(self) -> str | None: ...
+    def _wait_or_skip(self, *, timeout_seconds: float) -> str | None: ...
+    def _emit_fake_best_node(self, *, stage_name: str, stage_index: int) -> None: ...
+    def _store_tree_viz(self, *, stage_number: int, version: int) -> None: ...
+
+    def _emit_stage_skip_window_event(self, *, stage_name: str, state: str, reason: str) -> None:
+        """Emit a stage skip window event."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+        payload = StageSkipWindowEventModel(
+            stage=stage_name,
+            state=StageSkipState(state),
+            timestamp=timestamp,
+            reason=reason,
+        )
+        logger.info(
+            "[FakeRunner %s] Stage skip window %s for %s",
+            self._run_id[:8],
+            state,
+            stage_name,
+        )
+        try:
+            self._persistence.queue.put(
+                PersistableEvent(
+                    kind="stage_skip_window",
+                    data=payload,
+                )
+            )
+            logger.debug(
+                "[FakeRunner %s] Enqueued stage_skip_window event (stage=%s state=%s)",
+                self._run_id[:8],
+                stage_name,
+                state,
+            )
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to enqueue stage skip window event for stage %s",
+                self._run_id[:8],
+                stage_name,
+            )
+        self._webhooks.publish_stage_skip_window(payload)
+
+    def _emit_code_execution_events(self, *, stage_name: str, iteration: int) -> None:
+        """Emit code execution events for a single iteration."""
+        _lock = get_lock()
+        _executions_by_id = get_executions()
+
+        execution_id = f"{stage_name}-{iteration + 1}-{uuid.uuid4().hex[:8]}"
+        started_at = datetime.now(timezone.utc)
+        logger.debug(
+            "[FakeRunner %s] Emitting code execution events execution_id=%s stage=%s iteration=%s",
+            self._run_id[:8],
+            execution_id,
+            stage_name,
+            iteration + 1,
+        )
+        fake_task_markdown = (
+            f"# Fake Codex task for {stage_name} iteration {iteration + 1}\n\n"
+            "This simulates the markdown prompt we send to Codex.\n\n"
+            "## Objective\n"
+            "Write `runfile.py` with a minimal experiment and then execute it.\n\n"
+            "## Files\n"
+            "- `runfile.py`: main script to execute\n"
+        )
+        fake_runfile_code = (
+            "\n\n"
+            "def main() -> None:\n"
+            "    print('Hello from fake runfile execution')\n\n"
+            "main()\n"
+        )
+        codex_run_type = "codex_execution"
+        runfile_run_type = "runfile_execution"
+        with _lock:
+            _executions_by_id[execution_id] = ExecutionRecord(
+                run_id=self._run_id,
+                stage_name=stage_name,
+                run_type=codex_run_type,
+                started_at=started_at,
+                status="running",
+            )
+        self._webhooks.publish_running_code(
+            RunningCodeEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(codex_run_type),
+                code=fake_task_markdown,
+                started_at=started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+            )
+        )
+
+        # Emit Codex JSONL-like events so the UI can show Codex activity.
+        self._emit_codex_events(stage_name=stage_name, node_index=iteration)
+
+        # Simulate the moment when Codex starts executing the runfile.
+        self._sleep(1)
+        runfile_started_at = datetime.now(timezone.utc)
+        self._webhooks.publish_running_code(
+            RunningCodeEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(runfile_run_type),
+                code=fake_runfile_code,
+                started_at=runfile_started_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+            )
+        )
+
+        # Keep the "runfile execution" shorter than the overall Codex session.
+        runfile_exec_time = max(
+            MIN_FAKE_RUNFILE_RUNNING_SECONDS, float(self._random_exec_time_seconds) * 0.4
+        )
+        _speed_factor = get_speed_factor()
+        logger.debug(
+            "[FakeRunner %s] Starting runfile execution execution_id=%s running_for_s=%.1f",
+            self._run_id[:8],
+            execution_id,
+            runfile_exec_time / _speed_factor,
+        )
+        self._sleep(runfile_exec_time)
+        runfile_completed_at = datetime.now(timezone.utc)
+        runfile_exec_time = max(0.0, (runfile_completed_at - runfile_started_at).total_seconds())
+        logger.debug(
+            "[FakeRunner %s] Completing runfile execution execution_id=%s completed_at=%s",
+            self._run_id[:8],
+            execution_id,
+            runfile_completed_at.isoformat(),
+        )
+        self._webhooks.publish_run_completed(
+            RunCompletedEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(runfile_run_type),
+                status=RunCompletedStatus.success,
+                exec_time=runfile_exec_time,
+                completed_at=runfile_completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+            )
+        )
+
+        # Ensure codex_execution always outlives runfile_execution.
+        self._sleep(MIN_FAKE_CODEX_OUTLIVES_RUNFILE_SECONDS)
+        completed_at = datetime.now(timezone.utc)
+        exec_time = max(0.0, (completed_at - started_at).total_seconds())
+        logger.debug(
+            "[FakeRunner %s] Completing codex execution execution_id=%s completed_at=%s",
+            self._run_id[:8],
+            execution_id,
+            completed_at.isoformat(),
+        )
+        self._webhooks.publish_run_completed(
+            RunCompletedEventPayload(
+                execution_id=execution_id,
+                stage_name=stage_name,
+                run_type=RunType(codex_run_type),
+                status=RunCompletedStatus.success,
+                exec_time=exec_time,
+                completed_at=completed_at.isoformat(),
+                is_seed_node=False,
+                is_seed_agg_node=False,
+            )
+        )
+        with _lock:
+            existing = _executions_by_id.get(execution_id)
+            if existing is not None:
+                _executions_by_id[execution_id] = existing._replace(status="success")
+
+    def _emit_codex_events(self, *, stage_name: str, node_index: int) -> None:
+        """Emit Codex JSONL-like events."""
+        item_id = f"item_{uuid.uuid4().hex[:6]}"
+        item_event = {
+            "type": "item.started",
+            "item": {
+                "id": item_id,
+                "type": "command_execution",
+                "command": "bash -lc python runfile.py",
+                "status": "in_progress",
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "item.started",
+                    "event_content": item_event,
+                }
+            ),
+        )
+        item_completed_event = {
+            "type": "item.completed",
+            "item": {
+                "id": item_id,
+                "type": "command_execution",
+                "command": "bash -lc python runfile.py",
+                "status": "completed",
+                "exit_code": 0,
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "item.completed",
+                    "event_content": item_completed_event,
+                }
+            ),
+        )
+        turn_event = {
+            "type": "turn.completed",
+            "usage": {
+                "input_tokens": 1200,
+                "cached_input_tokens": 800,
+                "output_tokens": 250,
+            },
+        }
+        self._enqueue_event(
+            kind="codex_event",
+            data=CodexEventPayload(
+                event={
+                    "stage": stage_name,
+                    "node": node_index,
+                    "event_type": "turn.completed",
+                    "event_content": turn_event,
+                }
+            ),
+        )
+
+    def _emit_progress_flow(self) -> None:
+        """Emit the full progress flow for all stages."""
+        total_iterations = len(self._stage_plan) * self._iterations_per_stage
+        current_iter = 0
+        for stage_index, (stage_name, max_iterations) in enumerate(self._stage_plan):
+            logger.info(
+                "[FakeRunner %s] Stage %d/%d: %s",
+                self._run_id[:8],
+                stage_index + 1,
+                len(self._stage_plan),
+                stage_name,
+            )
+            self._emit_stage_skip_window_event(
+                stage_name=stage_name,
+                state="opened",
+                reason="Fake runner marked stage as skippable.",
+            )
+            stage_skipped = False
+            stage_skip_reason: str | None = None
+            iterations_to_emit = min(self._iterations_per_stage, max_iterations)
+            for iteration in range(iterations_to_emit):
+                pending_skip_reason = self._consume_stage_skip_request()
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
+                current_iter += 1
+                progress = (iteration + 1) / max_iterations
+                logger.debug(
+                    "Emitting progress run=%s stage=%s iteration=%s progress=%.2f",
+                    self._run_id,
+                    stage_name,
+                    iteration + 1,
+                    progress,
+                )
+                self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=iteration + 1,
+                        max_iterations=max_iterations,
+                        progress=progress,
+                        total_nodes=10 + iteration,
+                        buggy_nodes=iteration,
+                        good_nodes=9 - iteration,
+                        best_metric=f"metric-{progress:.2f}",
+                        is_seed_node=False,
+                        is_seed_agg_node=False,
+                    ),
+                )
+                self._enqueue_event(
+                    kind="run_log",
+                    data=RunLogEvent(
+                        message=f"{stage_name} iteration {iteration + 1} complete",
+                        level="info",
+                    ),
+                )
+                # Mid-stage tree viz emit on second iteration (iteration index 1)
+                if iteration == 1:
+                    try:
+                        self._store_tree_viz(stage_number=stage_index + 1, version=iteration + 1)
+                    except Exception:
+                        logger.exception(
+                            "Failed to store mid-stage tree viz for stage %s iteration %s",
+                            stage_name,
+                            iteration + 1,
+                        )
+                pending_skip_reason = self._wait_or_skip(timeout_seconds=20)
+                if pending_skip_reason is not None:
+                    stage_skipped = True
+                    stage_skip_reason = pending_skip_reason
+                    logger.info(
+                        "[FakeRunner %s] Skip requested for stage %s during wait: %s",
+                        self._run_id[:8],
+                        stage_name,
+                        stage_skip_reason,
+                    )
+                    break
+                logger.info(
+                    "[FakeRunner %s]   Iteration %d/%d complete (%.0f%% overall)",
+                    self._run_id[:8],
+                    iteration + 1,
+                    iterations_to_emit,
+                    (current_iter / total_iterations) * 100,
+                )
+            if stage_skipped:
+                effective_skip_reason = stage_skip_reason or "Stage skipped by operator."
+                self._enqueue_event(
+                    kind="run_log",
+                    data=RunLogEvent(
+                        message=f"Skipping stage {stage_name}: {effective_skip_reason}",
+                        level="warn",
+                    ),
+                )
+                summary = {
+                    "goals": f"Goals for {stage_name}",
+                    "feedback": effective_skip_reason,
+                    "good_nodes": 0,
+                    "best_metric": None,
+                    "buggy_nodes": 0,
+                    "total_nodes": 0,
+                    "llm_summary": f"Stage {stage_name} skipped.",
+                }
+                self._enqueue_event(
+                    kind="substage_completed",
+                    data=SubstageCompletedEvent(
+                        stage=stage_name,
+                        main_stage_number=stage_index + 1,
+                        reason="skipped",
+                        summary=summary,
+                    ),
+                )
+                try:
+                    self._enqueue_event(
+                        kind="substage_summary",
+                        data=SubstageSummaryEvent(
+                            stage=stage_name,
+                            summary=summary,
+                        ),
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to enqueue skipped-stage substage summary for stage %s",
+                        stage_name,
+                    )
+                self._emit_stage_skip_window_event(
+                    stage_name=stage_name,
+                    state="closed",
+                    reason=effective_skip_reason,
+                )
+                continue
+            self._emit_fake_best_node(stage_name=stage_name, stage_index=stage_index)
+            # Emit seed evaluation progress events (3 seeds)
+            self._emit_seed_evaluation_progress(stage_name=stage_name)
+            summary = {
+                "goals": f"Goals for {stage_name}",
+                "feedback": "Reached max iterations",
+                "good_nodes": 2,
+                "best_metric": f"Metrics(fake metric for {stage_name})",
+                "buggy_nodes": 1,
+                "total_nodes": 3,
+                "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
+            }
+            logger.info("Emitting substage_completed for stage %s", stage_name)
+            self._enqueue_event(
+                kind="substage_completed",
+                data=SubstageCompletedEvent(
+                    stage=stage_name,
+                    main_stage_number=stage_index + 1,
+                    reason="completed",
+                    summary=summary,
+                ),
+            )
+            try:
+                self._enqueue_event(
+                    kind="substage_summary",
+                    data=SubstageSummaryEvent(
+                        stage=stage_name,
+                        summary=summary,
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
+            logger.info(
+                "[FakeRunner %s] Stage %d/%d complete",
+                self._run_id[:8],
+                stage_index + 1,
+                len(self._stage_plan),
+            )
+            self._emit_stage_skip_window_event(
+                stage_name=stage_name,
+                state="closed",
+                reason="Stage completed in fake runner.",
+            )
+
+        # Stage 5: Paper Generation
+        logger.info("[FakeRunner %s] Starting paper generation (Stage 5)", self._run_id[:8])
+        self._emit_paper_generation_flow()
+
+    def _emit_paper_generation_flow(self) -> None:
+        """Emit Stage 5 paper generation progress events."""
+        # Define the paper generation steps with their substeps
+        paper_steps: list[tuple[str, list[str], dict[str, object]]] = [
+            (
+                "plot_aggregation",
+                ["collecting_figures", "validating_plots", "generating_captions"],
+                {"figures_collected": 8, "valid_plots": 7},
+            ),
+            (
+                "citation_gathering",
+                ["searching_literature", "filtering_relevant", "formatting_citations"],
+                {"citations_found": 15, "relevant_citations": 12},
+            ),
+            (
+                "paper_writeup",
+                [
+                    "writing_abstract",
+                    "writing_introduction",
+                    "writing_methodology",
+                    "writing_results",
+                    "writing_discussion",
+                    "writing_conclusion",
+                ],
+                {"sections_completed": 6, "word_count": 4500},
+            ),
+            (
+                "paper_review",
+                ["review_1", "review_2", "review_3"],
+                {
+                    "avg_score": 7.2,
+                    "review_scores": [7.0, 7.5, 7.1],
+                    "strengths": ["novel approach", "thorough experiments"],
+                    "weaknesses": ["limited comparison", "minor clarity issues"],
+                },
+            ),
+        ]
+
+        total_steps = len(paper_steps)
+        for step_idx, (step_name, substeps, step_details) in enumerate(paper_steps):
+            logger.info(
+                "[FakeRunner %s] Paper step %d/%d: %s",
+                self._run_id[:8],
+                step_idx + 1,
+                total_steps,
+                step_name,
+            )
+            for substep_idx, substep_name in enumerate(substeps):
+                step_progress = (substep_idx + 1) / len(substeps)
+                overall_progress = (step_idx + step_progress) / total_steps
+
+                self._enqueue_event(
+                    kind="paper_generation_progress",
+                    data=PaperGenerationProgressEvent(
+                        step=step_name,
+                        substep=substep_name,
+                        progress=overall_progress,
+                        step_progress=step_progress,
+                        details={
+                            **step_details,
+                            "current_substep": substep_idx + 1,
+                            "total_substeps": len(substeps),
+                        },
+                    ),
+                )
+                self._enqueue_event(
+                    kind="run_log",
+                    data=RunLogEvent(
+                        message=f"Paper generation: {step_name} - {substep_name}",
+                        level="info",
+                    ),
+                )
+                # Shorter delay for paper generation steps (5s instead of 20s)
+                self._sleep(5)
+                logger.info(
+                    "[FakeRunner %s]   %s complete (%.0f%% step)",
+                    self._run_id[:8],
+                    substep_name,
+                    step_progress * 100,
+                )
+
+        # Log completion
+        self._enqueue_event(
+            kind="run_log",
+            data=RunLogEvent(
+                message="Paper generation completed",
+                level="info",
+            ),
+        )
+        logger.info("[FakeRunner %s] Paper generation complete", self._run_id[:8])
+
+    def _emit_seed_evaluation_progress(self, *, stage_name: str) -> None:
+        """Emit fake seed evaluation progress events (3 seeds) with is_seed_node=True."""
+        num_seeds = 3
+        logger.info(
+            "[FakeRunner %s] Starting seed evaluation for %s (%d seeds)",
+            self._run_id[:8],
+            stage_name,
+            num_seeds,
+        )
+        # Emit initial event (0/3 seeds)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=0,
+                    max_iterations=num_seeds,
+                    progress=0.0,
+                    total_nodes=num_seeds,
+                    buggy_nodes=0,
+                    good_nodes=0,
+                    best_metric=None,
+                    is_seed_node=True,
+                    is_seed_agg_node=False,
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to emit seed eval start event for stage %s", stage_name)
+
+        # Emit progress for each seed with execution events
+        for seed_idx in range(num_seeds):
+            seed_execution_id = f"{stage_name}-seed-{seed_idx}-{uuid.uuid4().hex[:8]}"
+            seed_started_at = datetime.now(timezone.utc)
+
+            # Emit running_code event for seed node
+            try:
+                self._webhooks.publish_running_code(
+                    RunningCodeEventPayload(
+                        execution_id=seed_execution_id,
+                        stage_name=stage_name,
+                        run_type=RunType.runfile_execution,
+                        code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
+                        started_at=seed_started_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit running_code for seed %d in stage %s", seed_idx, stage_name
+                )
+
+            self._sleep(5)  # Simulate seed execution time
+
+            # Emit run_completed event for seed node
+            seed_completed_at = datetime.now(timezone.utc)
+            seed_exec_time = max(0.0, (seed_completed_at - seed_started_at).total_seconds())
+            try:
+                self._webhooks.publish_run_completed(
+                    RunCompletedEventPayload(
+                        execution_id=seed_execution_id,
+                        stage_name=stage_name,
+                        run_type=RunType.runfile_execution,
+                        status=RunCompletedStatus.success,
+                        exec_time=seed_exec_time,
+                        completed_at=seed_completed_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit run_completed for seed %d in stage %s", seed_idx, stage_name
+                )
+
+            completed = seed_idx + 1
+            try:
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=completed,
+                        max_iterations=num_seeds,
+                        progress=float(completed) / float(num_seeds),
+                        total_nodes=num_seeds,
+                        buggy_nodes=0,
+                        good_nodes=completed,
+                        best_metric=None,
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    ),
+                )
+                logger.info(
+                    "[FakeRunner %s]   Seed %d/%d completed for %s",
+                    self._run_id[:8],
+                    completed,
+                    num_seeds,
+                    stage_name,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit seed eval progress event for stage %s seed %d",
+                    stage_name,
+                    completed,
+                )
+
+        # Emit seed aggregation node execution events
+        agg_execution_id = f"{stage_name}-seed-agg-{uuid.uuid4().hex[:8]}"
+        agg_started_at = datetime.now(timezone.utc)
+        logger.info(
+            "[FakeRunner %s] Starting seed aggregation for %s",
+            self._run_id[:8],
+            stage_name,
+        )
+
+        # Emit running_code event for aggregation node
+        try:
+            self._webhooks.publish_running_code(
+                RunningCodeEventPayload(
+                    execution_id=agg_execution_id,
+                    stage_name=stage_name,
+                    run_type=RunType.codex_execution,
+                    code="# Seed Aggregation\n# Combining results from all seed runs\nimport numpy as np\n\n# Aggregate metrics across seeds\nmetrics = [seed_0_metric, seed_1_metric, seed_2_metric]\nmean_metric = np.mean(metrics)\nstd_metric = np.std(metrics)",
+                    started_at=agg_started_at.isoformat(),
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit running_code for seed aggregation in stage %s", stage_name
+            )
+
+        self._sleep(3)  # Simulate aggregation time
+
+        # Emit run_completed event for aggregation node
+        agg_completed_at = datetime.now(timezone.utc)
+        agg_exec_time = max(0.0, (agg_completed_at - agg_started_at).total_seconds())
+        try:
+            self._webhooks.publish_run_completed(
+                RunCompletedEventPayload(
+                    execution_id=agg_execution_id,
+                    stage_name=stage_name,
+                    run_type=RunType.codex_execution,
+                    status=RunCompletedStatus.success,
+                    exec_time=agg_exec_time,
+                    completed_at=agg_completed_at.isoformat(),
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                )
+            )
+            logger.info(
+                "[FakeRunner %s] Seed aggregation completed for %s",
+                self._run_id[:8],
+                stage_name,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to emit run_completed for seed aggregation in stage %s", stage_name
+            )
+
+        # Emit aggregation progress event (1/1 aggregation)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=1,
+                    max_iterations=1,
+                    progress=1.0,
+                    total_nodes=1,
+                    buggy_nodes=0,
+                    good_nodes=1,
+                    best_metric=None,
+                    is_seed_node=False,
+                    is_seed_agg_node=True,
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to emit aggregation progress event for stage %s", stage_name)
