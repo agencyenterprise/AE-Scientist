@@ -1,3 +1,6 @@
+{% if seed_agg_block %}
+{{ seed_agg_block }}
+{% endif %}
 ## Task context
 
 ### Introduction
@@ -171,7 +174,6 @@ You have full permission to install packages, download data, edit files, and run
 ## Context
 - wall_clock_timeout_seconds: {{ timeout_seconds }}
 
-{{ seed_agg_block }}
 ## Required outputs (MUST)
 - Write a JSON object to `{{ output_json_name }}` that conforms to the **Output JSON contract** section below.
 - Write your final experiment code to `{{ agent_file_name }}`.

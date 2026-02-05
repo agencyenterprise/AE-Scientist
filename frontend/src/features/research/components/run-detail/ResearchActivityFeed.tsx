@@ -420,6 +420,10 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
     event.run_type === "codex_execution" &&
     "execution_id" in event;
 
+  // Check if this is a seed aggregation execution
+  const isSeedAggregation =
+    isActiveExecution && "is_seed_agg_node" in event && event.is_seed_agg_node === true;
+
   // Check if there's a completion event for this execution
   const hasCompleted =
     isActiveExecution &&
@@ -471,7 +475,14 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
         <div className={cn("mt-0.5 shrink-0", colorClass)}>{icon}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <span className={cn("text-sm font-medium", colorClass)}>{label}</span>
+            <div className="flex items-center gap-2">
+              <span className={cn("text-sm font-medium", colorClass)}>{label}</span>
+              {isSeedAggregation && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-teal-500/20 text-teal-400">
+                  Seed Aggregation
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {canTerminate && (
                 <Button
@@ -496,14 +507,45 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
 
           {/* Show Coding Agent Task with task prompt */}
           {isActiveExecution && codexCodePreview && (
-            <details className="mt-2 rounded-md border border-blue-500/30 bg-blue-500/5">
-              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-blue-300 hover:text-blue-200 flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                <span className="flex-1">Coding Agent Task</span>
+            <details
+              className={cn(
+                "mt-2 rounded-md border",
+                isSeedAggregation
+                  ? "border-teal-500/30 bg-teal-500/5"
+                  : "border-blue-500/30 bg-blue-500/5"
+              )}
+            >
+              <summary
+                className={cn(
+                  "cursor-pointer px-3 py-2 text-xs font-medium flex items-center gap-2",
+                  isSeedAggregation
+                    ? "text-teal-300 hover:text-teal-200"
+                    : "text-blue-300 hover:text-blue-200"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block w-2 h-2 rounded-full animate-pulse",
+                    isSeedAggregation ? "bg-teal-400" : "bg-blue-400"
+                  )}
+                />
+                <span className="flex-1">
+                  {isSeedAggregation ? "Seed Aggregation Task" : "Coding Agent Task"}
+                </span>
                 <CopyToClipboardButton text={codexCodePreview} label="Copy task prompt" />
               </summary>
-              <div className="max-h-96 overflow-y-auto border-t border-blue-500/20 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-blue-400 mb-2">
+              <div
+                className={cn(
+                  "max-h-96 overflow-y-auto border-t p-3",
+                  isSeedAggregation ? "border-teal-500/20" : "border-blue-500/20"
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-[10px] uppercase tracking-wide mb-2",
+                    isSeedAggregation ? "text-teal-400" : "text-blue-400"
+                  )}
+                >
                   Task prompt:
                 </p>
                 <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">

@@ -573,25 +573,6 @@ class EventsMixin:
             stage_name,
             num_seeds,
         )
-        # Emit initial event (0/3 seeds)
-        try:
-            self._enqueue_event(
-                kind="run_stage_progress",
-                data=StageProgressEvent(
-                    stage=stage_name,
-                    iteration=0,
-                    max_iterations=num_seeds,
-                    progress=0.0,
-                    total_nodes=num_seeds,
-                    buggy_nodes=0,
-                    good_nodes=0,
-                    best_metric=None,
-                    is_seed_node=True,
-                    is_seed_agg_node=False,
-                ),
-            )
-        except Exception:
-            logger.exception("Failed to emit seed eval start event for stage %s", stage_name)
 
         # Emit progress for each seed with execution events
         for seed_idx in range(num_seeds):
