@@ -191,10 +191,6 @@ class ResearchRunStageProgress(BaseModel):
     buggy_nodes: int = Field(..., description="Number of buggy nodes")
     good_nodes: int = Field(..., description="Number of good nodes")
     best_metric: Optional[str] = Field(None, description="Best metric reported at this stage")
-    eta_s: Optional[int] = Field(None, description="Estimated time remaining in seconds")
-    latest_iteration_time_s: Optional[int] = Field(
-        None, description="Duration of the latest iteration in seconds"
-    )
     created_at: str = Field(..., description="ISO timestamp when the event was recorded")
 
     @staticmethod
@@ -208,8 +204,6 @@ class ResearchRunStageProgress(BaseModel):
             buggy_nodes=event.buggy_nodes,
             good_nodes=event.good_nodes,
             best_metric=event.best_metric,
-            eta_s=event.eta_s,
-            latest_iteration_time_s=event.latest_iteration_time_s,
             created_at=event.created_at.isoformat(),
         )
 

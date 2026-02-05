@@ -1650,17 +1650,6 @@ class ResearchRunStageProgress(BaseModel):
         str | None,
         Field(description="Best metric reported at this stage", title="Best Metric"),
     ] = None
-    eta_s: Annotated[
-        int | None,
-        Field(description="Estimated time remaining in seconds", title="Eta S"),
-    ] = None
-    latest_iteration_time_s: Annotated[
-        int | None,
-        Field(
-            description="Duration of the latest iteration in seconds",
-            title="Latest Iteration Time S",
-        ),
-    ] = None
     created_at: Annotated[
         str,
         Field(
@@ -2073,10 +2062,7 @@ class StageProgressEvent(BaseModel):
     buggy_nodes: Annotated[int, Field(title="Buggy Nodes")]
     good_nodes: Annotated[int, Field(title="Good Nodes")]
     best_metric: Annotated[str | None, Field(title="Best Metric")] = None
-    eta_s: Annotated[int | None, Field(title="Eta S")] = None
-    latest_iteration_time_s: Annotated[
-        int | None, Field(title="Latest Iteration Time S")
-    ] = None
+    is_seed_node: Annotated[bool | None, Field(title="Is Seed Node")] = False
 
 
 class StageProgressPayload(BaseModel):
@@ -2642,6 +2628,12 @@ class ProgressUpdateEvent(BaseModel):
     current_best: Annotated[
         MetricCollection | None, Field(description="Current best metrics if available")
     ] = None
+    is_seed_node: Annotated[
+        bool | None,
+        Field(
+            description="True if this is seed evaluation progress", title="Is Seed Node"
+        ),
+    ] = False
 
 
 class ResearchRunArtifactEvent(BaseModel):

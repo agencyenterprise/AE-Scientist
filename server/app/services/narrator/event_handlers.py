@@ -93,7 +93,15 @@ def handle_stage_progress_event(
 
     # Otherwise, it's a progress update
     stage_name = STAGE_NAMES.get(stage, stage)
-    current_focus = f"{stage_name}: Iteration {iteration}/{max_iterations}"
+    is_seed_node = event_data.get("is_seed_node", False)
+
+    # Create different focus text for seed evaluation
+    if is_seed_node:
+        current_focus = f"{stage_name}: Seed evaluation {iteration}/{max_iterations}"
+        headline = f"Seed {iteration}/{max_iterations}"
+    else:
+        current_focus = f"{stage_name}: Iteration {iteration}/{max_iterations}"
+        headline = f"Iteration {iteration}/{max_iterations}"
 
     # Create metric interpretation if we have best_metric
     current_best = None
@@ -119,11 +127,12 @@ def handle_stage_progress_event(
             timestamp=now,
             stage=stage,
             node_id=None,
-            headline=f"Iteration {iteration}/{max_iterations}",
+            headline=headline,
             current_focus=current_focus,
             iteration=iteration,
             max_iterations=max_iterations,
             current_best=current_best,
+            is_seed_node=is_seed_node,
         )
     ]
 

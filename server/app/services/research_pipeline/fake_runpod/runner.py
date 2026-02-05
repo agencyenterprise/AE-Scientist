@@ -994,8 +994,6 @@ class FakeRunner:
                         buggy_nodes=iteration,
                         good_nodes=9 - iteration,
                         best_metric=f"metric-{progress:.2f}",
-                        eta_s=int((total_iterations - current_iter) * 20),
-                        latest_iteration_time_s=20,
                     ),
                 )
                 self._enqueue_event(
@@ -1080,6 +1078,8 @@ class FakeRunner:
                 )
                 continue
             self._emit_fake_best_node(stage_name=stage_name, stage_index=stage_index)
+            # Emit seed evaluation progress events (3 seeds)
+            self._emit_seed_evaluation_progress(stage_name=stage_name)
             summary = {
                 "goals": f"Goals for {stage_name}",
                 "feedback": "Reached max iterations",
@@ -1542,6 +1542,67 @@ class FakeRunner:
             )
         except Exception:
             logger.exception("Failed to enqueue fake best node event for stage %s", stage_name)
+
+    def _emit_seed_evaluation_progress(self, *, stage_name: str) -> None:
+        """Emit fake seed evaluation progress events (3 seeds) with is_seed_node=True."""
+        num_seeds = 3
+        logger.info(
+            "[FakeRunner %s] Starting seed evaluation for %s (%d seeds)",
+            self._run_id[:8],
+            stage_name,
+            num_seeds,
+        )
+        # Emit initial event (0/3 seeds)
+        try:
+            self._enqueue_event(
+                kind="run_stage_progress",
+                data=StageProgressEvent(
+                    stage=stage_name,
+                    iteration=0,
+                    max_iterations=num_seeds,
+                    progress=0.0,
+                    total_nodes=num_seeds,
+                    buggy_nodes=0,
+                    good_nodes=0,
+                    best_metric=None,
+                    is_seed_node=True,
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to emit seed eval start event for stage %s", stage_name)
+
+        # Emit progress for each seed
+        for seed_idx in range(num_seeds):
+            self._sleep(5)  # Simulate seed execution time
+            completed = seed_idx + 1
+            try:
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=completed,
+                        max_iterations=num_seeds,
+                        progress=float(completed) / float(num_seeds),
+                        total_nodes=num_seeds,
+                        buggy_nodes=0,
+                        good_nodes=completed,
+                        best_metric=None,
+                        is_seed_node=True,
+                    ),
+                )
+                logger.info(
+                    "[FakeRunner %s]   Seed %d/%d completed for %s",
+                    self._run_id[:8],
+                    completed,
+                    num_seeds,
+                    stage_name,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit seed eval progress event for stage %s seed %d",
+                    stage_name,
+                    completed,
+                )
 
 
 def main() -> None:

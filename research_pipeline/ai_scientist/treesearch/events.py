@@ -102,8 +102,7 @@ class RunStageProgressEvent(BaseEvent):
     buggy_nodes: int
     good_nodes: int
     best_metric: Optional[str] = None
-    eta_s: Optional[int] = None
-    latest_iteration_time_s: Optional[int] = None
+    is_seed_node: bool = False  # True when this progress is from seed evaluation
 
     def type(self) -> str:
         return "ai.run.stage_progress"
@@ -118,11 +117,8 @@ class RunStageProgressEvent(BaseEvent):
             "buggy_nodes": self.buggy_nodes,
             "good_nodes": self.good_nodes,
             "best_metric": self.best_metric,
+            "is_seed_node": self.is_seed_node,
         }
-        if self.eta_s is not None:
-            data["eta_s"] = self.eta_s
-        if self.latest_iteration_time_s is not None:
-            data["latest_iteration_time_s"] = self.latest_iteration_time_s
         return data
 
     def persistence_record(self) -> PersistenceRecord:
@@ -135,8 +131,7 @@ class RunStageProgressEvent(BaseEvent):
             buggy_nodes=self.buggy_nodes,
             good_nodes=self.good_nodes,
             best_metric=self.best_metric,
-            eta_s=self.eta_s,
-            latest_iteration_time_s=self.latest_iteration_time_s,
+            is_seed_node=self.is_seed_node,
         )
         return ("run_stage_progress", event)
 

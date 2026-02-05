@@ -9041,6 +9041,12 @@
               }
             ],
             "description": "Current best metrics if available"
+          },
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node",
+            "description": "True if this is seed evaluation progress",
+            "default": false
           }
         },
         "type": "object",
@@ -10679,30 +10685,6 @@
             ],
             "title": "Best Metric",
             "description": "Best metric reported at this stage"
-          },
-          "eta_s": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Eta S",
-            "description": "Estimated time remaining in seconds"
-          },
-          "latest_iteration_time_s": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Iteration Time S",
-            "description": "Duration of the latest iteration in seconds"
           },
           "created_at": {
             "type": "string",
@@ -12605,27 +12587,10 @@
             ],
             "title": "Best Metric"
           },
-          "eta_s": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Eta S"
-          },
-          "latest_iteration_time_s": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest Iteration Time S"
+          "is_seed_node": {
+            "type": "boolean",
+            "title": "Is Seed Node",
+            "default": false
           }
         },
         "type": "object",

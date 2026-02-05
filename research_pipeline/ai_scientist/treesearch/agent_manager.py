@@ -576,8 +576,6 @@ class AgentManager:
                     best_metric=(
                         str(best_node.metric) if (best_node := journal.get_best_node()) else None
                     ),
-                    eta_s=None,
-                    latest_iteration_time_s=None,
                 )
             )
         except Exception:

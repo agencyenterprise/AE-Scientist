@@ -103,6 +103,13 @@ class AgentStagesConfig:
 
 
 @dataclass
+class MultiSeedEvalConfig:
+    """Configuration for multi-seed evaluation (reproducibility testing)."""
+
+    num_seeds: int  # Number of seed runs to execute for reproducibility
+
+
+@dataclass
 class AgentConfig:
     stages: AgentStagesConfig
     k_fold_validation: int
@@ -114,7 +121,7 @@ class AgentConfig:
     search: SearchConfig
     num_workers: int
     type: str
-    multi_seed_eval: dict[str, int]
+    multi_seed_eval: MultiSeedEvalConfig
 
 
 @dataclass
