@@ -23,12 +23,23 @@ class ResearchRunCostResponse(BaseModel):
     cost_by_model: list[ModelCost]
 
 
+def _is_external_url(url: str | None) -> bool:
+    """Check if a URL is an external URL (http/https), not an internal one like manual://."""
+    if not url:
+        return False
+    return url.startswith("http://") or url.startswith("https://")
+
+
 def _row_to_list_item(row: dict) -> ResearchRunListItem:
     """Convert a database row to a ResearchRunListItem."""
     idea_title = row.get("title") or "Untitled"
     idea_markdown = row.get("idea_markdown", "")
     # Pass full markdown, frontend handles preview
     idea_hypothesis = idea_markdown if idea_markdown else None
+
+    # Only include conversation_url if it's an external URL (not manual://, etc.)
+    raw_url = row.get("conversation_url")
+    conversation_url = raw_url if _is_external_url(raw_url) else None
 
     return ResearchRunListItem(
         run_id=row["run_id"],
@@ -47,6 +58,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         artifacts_count=row.get("artifacts_count", 0),
         error_message=row.get("error_message"),
         conversation_id=row["conversation_id"],
+        conversation_url=conversation_url,
         parent_run_id=row.get("parent_run_id"),
     )
 

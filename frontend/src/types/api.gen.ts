@@ -4986,6 +4986,11 @@ export interface components {
              */
             conversation_id: number;
             /**
+             * Conversation Url
+             * @description Original conversation share URL (ChatGPT, Claude, etc.) if imported
+             */
+            conversation_url?: string | null;
+            /**
              * Parent Run Id
              * @description Parent run ID if this run's conversation was seeded from a previous run
              */

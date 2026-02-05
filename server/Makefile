@@ -19,7 +19,7 @@ lint:
 	@echo "✅ Linting complete"
 
 # Development server
-dev: migrate gen-api-types
+dev: migrate
 	@echo "🚀 Starting server development server with DEBUG logging..."
 	VIRTUAL_ENV= LOG_LEVEL=DEBUG uv run -m uvicorn app.main:app --reload --reload-dir . --reload-dir ../packages/ae-paper-review
 
@@ -33,7 +33,7 @@ export-openapi:
 SPEED ?= 1
 fake-runpod:
 	@echo "🎭 Starting fake RunPod server with auto-reload (speed=$(SPEED)x)..."
-	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run watchfiles "python -m app.services.research_pipeline.fake_runpod.runner --speed $(SPEED)" app/services/research_pipeline/fake_runpod
+	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run watchfiles "python -m app.services.research_pipeline.fake_runpod --speed $(SPEED)" app/services/research_pipeline/fake_runpod
 
 # Generate API types for frontend
 gen-api-types: export-openapi
