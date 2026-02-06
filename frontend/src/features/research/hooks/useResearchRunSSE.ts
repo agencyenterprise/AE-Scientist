@@ -5,7 +5,6 @@ import type { ResearchRunStreamEvent, ApiComponents } from "@/types";
 import type {
   ResearchRunInfo,
   StageProgress,
-  LogEntry,
   ArtifactMetadata,
   ResearchRunDetails,
   PaperGenerationEvent,
@@ -31,7 +30,6 @@ interface UseResearchRunSSEOptions {
   enabled: boolean;
   onInitialData: (data: ResearchRunDetails) => void;
   onStageProgress: (event: StageProgress) => void;
-  onLog: (event: LogEntry) => void;
   onArtifact: (event: ArtifactMetadata) => void;
   onRunUpdate: (run: ResearchRunInfo) => void;
   onPaperGenerationProgress: (event: PaperGenerationEvent) => void;
@@ -238,7 +236,6 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
-    logs: data.logs,
     substage_events: data.substage_events,
     substage_summaries: getInitialSubstageSummaries(data),
     artifacts: data.artifacts,
@@ -258,7 +255,6 @@ export function useResearchRunSSE({
   enabled,
   onInitialData,
   onStageProgress,
-  onLog,
   onArtifact,
   onRunUpdate,
   onPaperGenerationProgress,
@@ -394,9 +390,6 @@ export function useResearchRunSSE({
               case "termination_status":
                 onTerminationStatus?.(event.data as TerminationStatusData);
                 break;
-              case "log":
-                onLog(event.data as LogEntry);
-                break;
               case "artifact":
                 onArtifact(event.data as ArtifactMetadata);
                 break;
@@ -506,7 +499,6 @@ export function useResearchRunSSE({
     ensureInitialSnapshot,
     onStageProgress,
     onInitializationStatus,
-    onLog,
     onArtifact,
     onSubstageCompleted,
     onRunEvent,

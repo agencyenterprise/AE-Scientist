@@ -28,14 +28,6 @@ class StageProgressEvent(NamedTuple):
     created_at: datetime
 
 
-class RunLogEvent(NamedTuple):
-    id: int
-    run_id: str
-    message: str
-    level: str
-    created_at: datetime
-
-
 class SubstageCompletedEvent(NamedTuple):
     id: int
     run_id: str
@@ -436,25 +428,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 rows = await cursor.fetchall()
         return [StageProgressEvent(**row) for row in (rows or [])]
 
-    async def list_run_log_events(
-        self, run_id: str, limit: Optional[int] = None
-    ) -> List[RunLogEvent]:
-        query = """
-            SELECT id, run_id, message, level, created_at
-            FROM rp_run_log_events
-            WHERE run_id = %s
-            ORDER BY created_at DESC
-        """
-        params: list[object] = [run_id]
-        if limit is not None and limit > 0:
-            query += " LIMIT %s"
-            params.append(limit)
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, tuple(params))
-                rows = await cursor.fetchall()
-        return [RunLogEvent(**row) for row in (rows or [])]
-
     async def list_substage_completed_events(self, run_id: str) -> List[SubstageCompletedEvent]:
         query = """
             SELECT id, run_id, stage, summary, created_at
@@ -502,39 +475,6 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(query, (run_id,))
                 row = await cursor.fetchone()
         return SubstageSummaryEvent(**row) if row else None
-
-    async def list_run_log_events_since(
-        self, run_id: str, since: datetime, limit: int = 100
-    ) -> List[RunLogEvent]:
-        """Fetch log events created after the given timestamp."""
-        query = """
-            SELECT id, run_id, message, level, created_at
-            FROM rp_run_log_events
-            WHERE run_id = %s AND created_at > %s
-            ORDER BY created_at ASC
-            LIMIT %s
-        """
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, (run_id, since, limit))
-                rows = await cursor.fetchall()
-        return [RunLogEvent(**row) for row in (rows or [])]
-
-    async def list_run_log_events_after_id(
-        self, run_id: str, last_id: int, *, limit: int = 100
-    ) -> List[RunLogEvent]:
-        query = """
-            SELECT id, run_id, message, level, created_at
-            FROM rp_run_log_events
-            WHERE run_id = %s AND id > %s
-            ORDER BY id ASC
-            LIMIT %s
-        """
-        async with self.aget_connection() as conn:
-            async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, (run_id, last_id, limit))
-                rows = await cursor.fetchall()
-        return [RunLogEvent(**row) for row in (rows or [])]
 
     async def get_latest_stage_progress(self, run_id: str) -> Optional[StageProgressEvent]:
         """Fetch the most recent stage progress event for a run."""

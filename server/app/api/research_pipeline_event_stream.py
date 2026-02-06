@@ -16,7 +16,6 @@ from app.models import (
     ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
-    ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
@@ -312,10 +311,6 @@ async def _build_initial_stream_payload(
         ResearchRunStageProgress.from_db_record(event).model_dump()
         for event in await db.list_stage_progress_events(run_id=run_id)
     ]
-    log_events = [
-        ResearchRunLogEntry.from_db_record(event).model_dump()
-        for event in await db.list_run_log_events(run_id=run_id)
-    ]
     substage_events = [
         ResearchRunSubstageEvent.from_db_record(event).model_dump()
         for event in await db.list_substage_completed_events(run_id=run_id)
@@ -378,7 +373,6 @@ async def _build_initial_stream_payload(
             run=current_run, termination=termination, parent_run_id=parent_run_id
         ).model_dump(),
         "stage_progress": stage_events,
-        "logs": log_events,
         "substage_events": substage_events,
         "substage_summaries": substage_summaries,
         "artifacts": artifacts,

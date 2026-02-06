@@ -21,7 +21,6 @@ export type ResearchRunDetailsApi = components["schemas"]["ResearchRunDetailsRes
 
 // Progress and events
 export type StageProgressApi = components["schemas"]["ResearchRunStageProgress"];
-export type LogEntryApi = components["schemas"]["ResearchRunLogEntry"];
 export type SubstageEventApi = components["schemas"]["ResearchRunSubstageEvent"];
 export type SubstageSummaryApi = components["schemas"]["ResearchRunSubstageSummary"];
 export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGenerationProgress"];
@@ -107,7 +106,6 @@ export type ResearchRunTerminationStatus =
 // uses snake_case for SSE event handling
 export type ResearchRunInfo = ResearchRunInfoApi;
 export type StageProgress = StageProgressApi;
-export type LogEntry = LogEntryApi;
 export type SubstageEvent = SubstageEventApi;
 export type SubstageSummary = SubstageSummaryApi;
 export type PaperGenerationEvent = PaperGenerationEventApi;
@@ -124,7 +122,6 @@ export type RunType = components["schemas"]["RunType"];
 export interface ResearchRunDetails {
   run: ResearchRunInfo;
   stage_progress: StageProgress[];
-  logs: LogEntry[];
   substage_events: SubstageEvent[];
   substage_summaries: SubstageSummary[];
   artifacts: ArtifactMetadata[];

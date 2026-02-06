@@ -18,7 +18,6 @@ from app.models.research_pipeline import (
     ResearchRunCodeExecution,
     ResearchRunEvent,
     ResearchRunInfo,
-    ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
@@ -230,7 +229,6 @@ class ResearchRunHwCostActualEvent(BaseModel):
 class ResearchRunInitialEventData(BaseModel):
     run: ResearchRunInfo
     stage_progress: List[ResearchRunStageProgress]
-    logs: List[ResearchRunLogEntry]
     substage_events: List[ResearchRunSubstageEvent]
     substage_summaries: List[ResearchRunSubstageSummary]
     artifacts: List[ResearchRunArtifactMetadata]
@@ -306,11 +304,6 @@ class ResearchRunTerminationStatusData(BaseModel):
 class ResearchRunTerminationStatusEvent(BaseModel):
     type: Literal["termination_status"]
     data: ResearchRunTerminationStatusData
-
-
-class ResearchRunLogEvent(BaseModel):
-    type: Literal["log"]
-    data: ResearchRunLogEntry
 
 
 class ResearchRunCodeExecutionStartedData(BaseModel):
@@ -400,7 +393,6 @@ ResearchRunEventUnion = Annotated[
         ResearchRunRunEvent,
         ResearchRunInitializationStatusEvent,
         ResearchRunTerminationStatusEvent,
-        ResearchRunLogEvent,
         ResearchRunArtifactEvent,
         ResearchRunReviewCompletedEvent,
         ResearchRunSubstageCompletedEvent,

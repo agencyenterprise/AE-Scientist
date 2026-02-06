@@ -23,7 +23,6 @@ from app.models import (
     ResearchRunDetailsResponse,
     ResearchRunEvent,
     ResearchRunInfo,
-    ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
@@ -498,10 +497,6 @@ async def get_research_run_details(
         ResearchRunStageProgress.from_db_record(event)
         for event in await db.list_stage_progress_events(run_id=run_id)
     ]
-    log_events = [
-        ResearchRunLogEntry.from_db_record(event)
-        for event in await db.list_run_log_events(run_id=run_id)
-    ]
     substage_events = [
         ResearchRunSubstageEvent.from_db_record(event)
         for event in await db.list_substage_completed_events(run_id=run_id)
@@ -553,7 +548,6 @@ async def get_research_run_details(
             run=run, termination=termination, parent_run_id=conversation.parent_run_id
         ),
         stage_progress=stage_events,
-        logs=log_events,
         substage_events=substage_events,
         substage_summaries=substage_summaries,
         events=run_events,

@@ -857,35 +857,52 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
     async def list_runs_awaiting_billing(
         self,
         *,
-        max_retry_count: int = 10,
-        min_retry_interval_seconds: int = 300,
+        max_retry_count: int = 30,
+        base_interval_seconds: int = 300,
+        max_interval_seconds: int = 14400,
+        max_elapsed_hours: int = 48,
     ) -> list[ResearchPipelineRun]:
         """
         List runs that are awaiting billing data from RunPod.
 
         These are terminated runs where RunPod returned empty billing data and we need
-        to retry fetching the actual costs.
+        to retry fetching the actual costs. Uses exponential backoff for retry intervals.
 
         Args:
-            max_retry_count: Maximum number of retries before giving up
-            min_retry_interval_seconds: Minimum seconds between retry attempts
+            max_retry_count: Maximum number of retries before giving up (safeguard)
+            base_interval_seconds: Base interval for first retry (default 5 min)
+            max_interval_seconds: Maximum interval cap (default 4 hours)
+            max_elapsed_hours: Stop retrying after this many hours since run ended (default 48)
 
         Returns:
             List of runs that need billing retry
         """
+        # Exponential backoff: interval = min(base * 2^retry_count, max_interval)
+        # Also check that we haven't exceeded max_elapsed_hours since the run ended
         query = """
             SELECT * FROM research_pipeline_runs
             WHERE hw_billing_status = 'awaiting_billing_data'
               AND hw_billing_retry_count < %s
+              AND updated_at > NOW() - INTERVAL '%s hours'
               AND (
                   hw_billing_last_retry_at IS NULL
-                  OR hw_billing_last_retry_at < NOW() - INTERVAL '%s seconds'
+                  OR hw_billing_last_retry_at < NOW() - (
+                      LEAST(%s * POWER(2, hw_billing_retry_count), %s) * INTERVAL '1 second'
+                  )
               )
             ORDER BY hw_billing_last_retry_at ASC NULLS FIRST, updated_at ASC
             LIMIT 20
         """
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(query, (max_retry_count, min_retry_interval_seconds))
+                await cursor.execute(
+                    query,
+                    (
+                        max_retry_count,
+                        max_elapsed_hours,
+                        base_interval_seconds,
+                        max_interval_seconds,
+                    ),
+                )
                 rows = await cursor.fetchall() or []
         return [self._row_to_run(row) for row in rows]

@@ -61,13 +61,9 @@ export function RunCostTab({
             </dd>
             <dd className="text-xs text-slate-400">{formatRelativeTime(run.created_at)}</dd>
           </div>
-          {run.updated_at && (
+          {run.updated_at && (run.status === "completed" || run.status === "failed") && (
             <div>
-              <dt className="text-xs text-slate-400">
-                {run.status === "completed" || run.status === "failed"
-                  ? "Completed at"
-                  : "Updated at"}
-              </dt>
+              <dt className="text-xs text-slate-400">Completed at</dt>
               <dd className="font-mono text-sm text-white">
                 {new Date(run.updated_at).toLocaleString()}
               </dd>
@@ -79,8 +75,11 @@ export function RunCostTab({
             <dd className="font-mono text-lg text-white">{formatDuration()}</dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-400">GPU Type</dt>
-            <dd className="font-mono text-sm text-white">{run.gpu_type}</dd>
+            <dt className="text-xs text-slate-400">GPU</dt>
+            <dd className="font-mono text-sm text-white whitespace-nowrap">
+              {run.gpu_type}
+              {hwCostPerHourCents !== null ? ` @ $${(hwCostPerHourCents / 100).toFixed(2)}/hr` : ""}
+            </dd>
           </div>
         </dl>
       </div>

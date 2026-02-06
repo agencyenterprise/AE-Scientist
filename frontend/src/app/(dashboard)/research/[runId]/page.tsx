@@ -7,7 +7,6 @@ import {
   OverviewTab,
   TreeTab,
   ArtifactsTab,
-  LogsTab,
   EvaluationTab,
   RunCostTab,
 } from "@/features/research/components/run-detail";
@@ -26,7 +25,6 @@ import {
   Layers,
   Loader2,
   Package,
-  ScrollText,
   ShieldCheck,
   DollarSign,
 } from "lucide-react";
@@ -155,7 +153,6 @@ export default function ResearchRunDetailPage() {
   const {
     run,
     stage_progress,
-    logs,
     artifacts,
     substage_summaries = [],
     paper_generation_progress,
@@ -240,13 +237,6 @@ export default function ResearchRunDetailPage() {
                 {artifacts.length}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="logs" className="gap-1.5 data-[state=active]:bg-background">
-              <ScrollText className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Logs</span>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-                {logs.length}
-              </span>
-            </TabsTrigger>
             <TabsTrigger value="evaluation" className="gap-1.5 data-[state=active]:bg-background">
               <ShieldCheck className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Evaluation</span>
@@ -285,10 +275,6 @@ export default function ResearchRunDetailPage() {
 
           <TabsContent value="artifacts">
             <ArtifactsTab artifacts={artifacts} conversationId={conversationId} runId={runId} />
-          </TabsContent>
-
-          <TabsContent value="logs">
-            <LogsTab logs={logs} />
           </TabsContent>
 
           <TabsContent value="evaluation">

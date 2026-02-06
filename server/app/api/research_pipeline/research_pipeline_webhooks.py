@@ -14,7 +14,6 @@ from app.api.research_pipeline_stream import StreamEventModel, publish_stream_ev
 from app.models.research_pipeline import LlmReviewResponse, ResearchRunArtifactMetadata
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
-    ResearchRunLogEntry,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageProgress,
 )
@@ -27,7 +26,6 @@ from app.models.sse import ResearchRunCodeExecutionStartedData
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
 from app.models.sse import ResearchRunInitializationStatusData
 from app.models.sse import ResearchRunInitializationStatusEvent as SSEInitializationStatusEvent
-from app.models.sse import ResearchRunLogEvent as SSELogEvent
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
@@ -591,26 +589,12 @@ async def ingest_run_log(
         payload.event.level,
         payload.event.message,
     )
-    now = datetime.now(timezone.utc)
-    publish_stream_event(
-        run_id=run_id,
-        event=SSELogEvent(
-            type="log",
-            data=ResearchRunLogEntry(
-                id=_next_stream_event_id(),
-                level=payload.event.level,
-                message=payload.event.message,
-                created_at=now.isoformat(),
-            ),
-        ),
-    )
-
     # Persist to database
     await cast(DatabaseManager, db).insert_run_log_event(
         run_id=run_id,
         level=payload.event.level,
         message=payload.event.message,
-        created_at=now,
+        created_at=datetime.now(timezone.utc),
     )
 
 

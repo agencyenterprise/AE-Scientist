@@ -8,7 +8,6 @@ import type {
   ResearchRunDetails,
   ResearchRunInfo,
   StageProgress,
-  LogEntry,
   ArtifactMetadata,
   PaperGenerationEvent,
   TreeVizItem,
@@ -132,19 +131,6 @@ export function useResearchRunDetails({
             ...prev,
             stage_progress: [...prev.stage_progress, event],
           }
-        : null
-    );
-  }, []);
-
-  const handleLog = useCallback((event: LogEntry) => {
-    setDetails(prev =>
-      prev
-        ? prev.logs.some(log => log.id === event.id)
-          ? prev
-          : {
-              ...prev,
-              logs: [event, ...prev.logs],
-            }
         : null
     );
   }, []);
@@ -468,7 +454,6 @@ export function useResearchRunDetails({
         !details),
     onInitialData: handleInitialData,
     onStageProgress: handleStageProgress,
-    onLog: handleLog,
     onArtifact: handleArtifact,
     onPaperGenerationProgress: handlePaperGenerationProgress,
     onRunUpdate: handleRunUpdate,
