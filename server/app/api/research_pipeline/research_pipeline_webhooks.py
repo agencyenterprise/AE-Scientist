@@ -909,6 +909,18 @@ async def ingest_heartbeat(
             run_id,
         )
         return
+
+    # Warn if receiving heartbeat from a terminated run - indicates orphaned pod
+    if run.status in ("failed", "completed", "cancelled"):
+        message = (
+            f"Received heartbeat from terminated run {run_id} "
+            f"(status={run.status}, pod_id={run.pod_id}). "
+            "Pod may still be running and incurring charges."
+        )
+        logger.warning(message)
+        sentry_sdk.capture_message(message, level="warning")
+        return
+
     now = datetime.now(timezone.utc)
     await db.update_research_pipeline_run(
         run_id=run_id,
@@ -932,6 +944,18 @@ async def ingest_hw_stats(
             run_id,
         )
         return
+
+    # Warn if receiving hw-stats from a terminated run - indicates orphaned pod
+    if run.status in ("failed", "completed", "cancelled"):
+        message = (
+            f"Received hw-stats from terminated run {run_id} "
+            f"(status={run.status}, pod_id={run.pod_id}). "
+            "Pod may still be running and incurring charges."
+        )
+        logger.warning(message)
+        sentry_sdk.capture_message(message, level="warning")
+        return
+
     now = datetime.now(timezone.utc)
     resolved_partitions: list[DiskUsagePartition] = []
     for partition in payload.partitions:
