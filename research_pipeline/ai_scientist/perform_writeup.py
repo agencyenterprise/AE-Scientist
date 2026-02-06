@@ -439,7 +439,7 @@ def perform_writeup(
                 )
             )
 
-    emit_event("Starting Codex-based paper writeup...", 0.30, 0.0)
+    emit_event("Starting coding agent-based paper writeup...", 0.30, 0.0)
 
     try:
         base_path = Path(base_folder)
@@ -562,7 +562,7 @@ def perform_writeup(
         # ------------------------------------------------------------------- #
         # Phase 1: Initial Codex paper writing                                #
         # ------------------------------------------------------------------- #
-        emit_event("Running Codex to write initial paper...", 0.40, 0.20)
+        emit_event("Running coding agent to write initial paper...", 0.40, 0.20)
 
         codex_task_content = render_text(
             template_name="writeup/codex_paper_task.md.j2",
@@ -648,9 +648,9 @@ def perform_writeup(
                 logger.info("VLM review indicates paper is acceptable. Stopping refinement.")
                 break
 
-            # Run Codex refinement
+            # Run coding agent refinement
             emit_event(
-                f"Running Codex refinement (round {version}/{max_refinement_rounds})...",
+                f"Running coding agent refinement (round {version}/{max_refinement_rounds})...",
                 0.40 + step_progress * 0.5 + 0.05,
                 step_progress + 0.05,
             )

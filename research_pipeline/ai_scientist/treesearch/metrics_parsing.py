@@ -209,7 +209,7 @@ def generate_and_assign_metrics(
 
         event_callback(
             RunLogEvent(
-                message="Generating metrics parsing code via Codex...",
+                message="Generating metrics parsing code via coding agent...",
                 level="info",
             )
         )

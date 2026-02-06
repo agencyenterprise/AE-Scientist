@@ -961,7 +961,7 @@ def _run_codex_cli(
 
     codex_task_content = _read_text_or_empty(path=task_file)
     started_at = datetime.now(timezone.utc)
-    event_callback(RunLogEvent(message="Executing via Codex CLI...", level="info"))
+    event_callback(RunLogEvent(message="Executing via coding agent...", level="info"))
 
     # Warn if code is empty - this should never happen
     if not codex_task_content or not codex_task_content.strip():

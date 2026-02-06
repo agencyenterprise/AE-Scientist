@@ -1067,16 +1067,21 @@ function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
   const isCompleted = stage.status === "completed";
 
   // Calculate progress for each phase (0 to 1)
-  // If stage is completed, show 100% for phases that ran (even with early exit)
-  const iterationProgress = isCompleted
-    ? 1 // Stage completed = iterations done (even if early exit)
-    : stage.maxNodes && stage.maxNodes > 0
-      ? Math.min((stage.currentIteration || 0) / stage.maxNodes, 1)
-      : 0;
+  // If stage is completed OR a later phase has started, show 100% (even with early exit)
+  const seedsStarted = stage.seedEvalInProgress || (stage.currentSeed && stage.currentSeed > 0);
+  const aggregationStarted =
+    stage.aggregationInProgress || (stage.currentAggregation && stage.currentAggregation > 0);
+
+  const iterationProgress =
+    isCompleted || seedsStarted || aggregationStarted
+      ? 1 // Iterations done if stage completed OR seeds/aggregation started (early exit)
+      : stage.maxNodes && stage.maxNodes > 0
+        ? Math.min((stage.currentIteration || 0) / stage.maxNodes, 1)
+        : 0;
 
   const seedProgress =
-    isCompleted && stage.hasSeedEvaluation
-      ? 1 // Stage completed with seeds = seeds done
+    (isCompleted && stage.hasSeedEvaluation) || aggregationStarted
+      ? 1 // Seeds done if stage completed with seeds OR aggregation started
       : stage.totalSeeds && stage.totalSeeds > 0
         ? Math.min((stage.currentSeed || 0) / stage.totalSeeds, 1)
         : 0;
