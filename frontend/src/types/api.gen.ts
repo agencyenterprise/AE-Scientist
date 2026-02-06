@@ -967,6 +967,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research-pipeline/events/{run_id}/codex-events-bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ingest Codex Events Bulk
+         * @description Bulk ingest codex events for improved performance.
+         */
+        post: operations["ingest_codex_events_bulk_api_research_pipeline_events__run_id__codex_events_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/research-pipeline/events/{run_id}/running-code": {
         parameters: {
             query?: never;
@@ -2288,10 +2308,34 @@ export interface components {
              */
             status: string;
         };
+        /**
+         * CodexEventItem
+         * @description Single codex event for bulk insertion.
+         */
+        CodexEventItem: {
+            /** Stage */
+            stage: string;
+            /** Node */
+            node: number;
+            /** Event Type */
+            event_type: string;
+            /** Event Content */
+            event_content: Record<string, never>;
+            /** Occurred At */
+            occurred_at: string;
+        };
         /** CodexEventPayload */
         CodexEventPayload: {
             /** Event */
             event: Record<string, never>;
+        };
+        /**
+         * CodexEventsBulkPayload
+         * @description Payload for bulk codex event ingestion.
+         */
+        CodexEventsBulkPayload: {
+            /** Events */
+            events: components["schemas"]["CodexEventItem"][];
         };
         /** ConversationCostResponse */
         ConversationCostResponse: {
@@ -7739,6 +7783,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CodexEventPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_codex_events_bulk_api_research_pipeline_events__run_id__codex_events_bulk_post: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodexEventsBulkPayload"];
             };
         };
         responses: {

@@ -82,6 +82,7 @@ class CodexEventInnerPayload(PydanticBaseModel):
     node: int
     event_type: str
     event_content: str
+    occurred_at: str  # ISO format timestamp
 
 
 class BaseEvent:
@@ -172,6 +173,7 @@ class CodexEvent(BaseEvent):
     node: int
     event_type: str
     event_content: str
+    occurred_at: datetime
 
     def type(self) -> str:
         return "ai.codex.event"
@@ -182,6 +184,7 @@ class CodexEvent(BaseEvent):
             "node": self.node,
             "event_type": self.event_type,
             "event_content": self.event_content,
+            "occurred_at": self.occurred_at.isoformat(),
         }
 
     def persistence_record(self) -> PersistenceRecord:
@@ -191,6 +194,7 @@ class CodexEvent(BaseEvent):
             node=self.node,
             event_type=self.event_type,
             event_content=self.event_content,
+            occurred_at=self.occurred_at.isoformat(),
         )
         return ("codex_event", event)
 

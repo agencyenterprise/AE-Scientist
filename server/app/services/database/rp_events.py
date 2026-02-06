@@ -5,12 +5,22 @@ Database helpers for research pipeline telemetry events.
 # pylint: disable=not-async-context-manager
 
 from datetime import datetime
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Protocol, Sequence
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .base import ConnectionProvider
+
+
+class CodexEventItemProtocol(Protocol):
+    """Protocol for codex event items to avoid circular imports."""
+
+    stage: str
+    node: int
+    event_type: str
+    event_content: dict[str, Any]
+    occurred_at: str  # ISO format timestamp
 
 
 class StageProgressEvent(NamedTuple):
@@ -270,26 +280,62 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         node: int,
         event_type: str,
         event_content: dict,
-        created_at: Optional[datetime] = None,
+        occurred_at: datetime,
     ) -> int:
         """Insert a codex event and return its ID."""
-        if created_at is None:
-            created_at = datetime.now()
+        now = datetime.now()
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
                     INSERT INTO rp_codex_events
-                        (run_id, stage, node, event_type, event_content, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                        (run_id, stage, node, event_type, event_content, occurred_at, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, stage, node, event_type, Jsonb(event_content), created_at),
+                    (run_id, stage, node, event_type, Jsonb(event_content), occurred_at, now),
                 )
                 result = await cursor.fetchone()
                 if not result:
                     raise ValueError("Failed to insert codex event")
                 return int(result["id"])
+
+    async def insert_codex_events_bulk(
+        self,
+        *,
+        run_id: str,
+        events: Sequence[CodexEventItemProtocol],
+    ) -> int:
+        """Bulk insert codex events. Returns the number of events inserted."""
+        if not events:
+            return 0
+
+        now = datetime.now()
+        # Build values for bulk insert
+        values = [
+            (
+                run_id,
+                event.stage,
+                event.node,
+                event.event_type,
+                Jsonb(event.event_content),
+                event.occurred_at,
+                now,
+            )
+            for event in events
+        ]
+
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.executemany(
+                    """
+                    INSERT INTO rp_codex_events
+                        (run_id, stage, node, event_type, event_content, occurred_at, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    values,
+                )
+                return len(events)
 
     async def upsert_code_execution_event(
         self,

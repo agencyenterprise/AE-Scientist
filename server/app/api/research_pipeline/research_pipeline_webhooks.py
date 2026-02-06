@@ -49,6 +49,7 @@ from .auth import ResearchRunStore, verify_run_auth
 from .schemas import (
     ArtifactUploadedPayload,
     CodexEventPayload,
+    CodexEventsBulkPayload,
     DiskUsagePartition,
     FigureReviewsPayload,
     GPUShortagePayload,
@@ -609,13 +610,34 @@ async def ingest_codex_event(
 
     # Persist to database
     event_data = payload.event
+    # Use occurred_at from payload if provided, otherwise use current time
+    occurred_at_str = event_data.get("occurred_at")
+    if occurred_at_str:
+        occurred_at = datetime.fromisoformat(occurred_at_str.replace("Z", "+00:00"))
+    else:
+        occurred_at = datetime.now(timezone.utc)
+
     await db.insert_codex_event(
         run_id=run_id,
         stage=event_data.get("stage", ""),
         node=event_data.get("node", 0),
         event_type=event_data.get("event_type", ""),
         event_content=event_data,
+        occurred_at=occurred_at,
     )
+
+
+@router.post("/{run_id}/codex-events-bulk", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_codex_events_bulk(
+    run_id: str,
+    payload: CodexEventsBulkPayload,
+    _: None = Depends(verify_run_auth),
+    db: DatabaseManager = Depends(get_database),
+) -> None:
+    """Bulk ingest codex events for improved performance."""
+    logger.debug("RP codex events bulk received: run=%s count=%d", run_id, len(payload.events))
+
+    await db.insert_codex_events_bulk(run_id=run_id, events=payload.events)
 
 
 @router.post("/{run_id}/running-code", status_code=status.HTTP_204_NO_CONTENT)

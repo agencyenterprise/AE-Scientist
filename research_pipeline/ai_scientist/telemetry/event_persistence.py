@@ -10,9 +10,10 @@ import multiprocessing
 import multiprocessing.queues  # noqa: F401  # Ensure multiprocessing.queues is imported
 import queue
 import threading
+import time
 from concurrent.futures import Future
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
+from dataclasses import dataclass, field
+from typing import Any, Callable, List, Optional, cast
 
 import requests
 from pydantic import BaseModel
@@ -27,6 +28,10 @@ from ai_scientist.api_types import (
 )
 from ai_scientist.treesearch.events import BaseEvent, EventKind, PersistenceRecord
 
+# Batching configuration for codex events
+CODEX_BATCH_SIZE = 200  # Max events per batch
+CODEX_BATCH_INTERVAL_SECONDS = 30.0  # Max time to wait before flushing
+
 # pylint: disable=broad-except
 
 
@@ -37,6 +42,22 @@ logger = logging.getLogger("ai-scientist.telemetry")
 class PersistableEvent:
     kind: EventKind
     data: BaseModel
+
+
+class CodexEventItem(BaseModel):
+    """Single codex event for bulk insertion (matches server schema)."""
+
+    stage: str
+    node: int
+    event_type: str
+    event_content: dict[str, Any]
+    occurred_at: str  # ISO format timestamp
+
+
+class CodexEventsBulkPayload(BaseModel):
+    """Payload for bulk codex event ingestion."""
+
+    events: List[CodexEventItem]
 
 
 class WebhookClient:
@@ -185,6 +206,40 @@ class WebhookClient:
         )
         return self._post(path="/gpu-shortage", payload=payload.model_dump(exclude_none=True))
 
+    def publish_codex_events_bulk(self, *, events: List[CodexEventItem]) -> Optional[Future[None]]:
+        """Publish multiple codex events in a single request."""
+        if not events:
+            return None
+        payload = CodexEventsBulkPayload(events=events)
+        return self._post(path="/codex-events-bulk", payload=payload.model_dump())
+
+
+@dataclass
+class CodexEventBuffer:
+    """Buffer for batching codex events."""
+
+    events: List[CodexEventItem] = field(default_factory=list)
+    last_flush_time: float = field(default_factory=time.monotonic)
+
+    def add(self, event: CodexEventItem) -> None:
+        self.events.append(event)
+
+    def should_flush(self) -> bool:
+        if not self.events:
+            return False
+        if len(self.events) >= CODEX_BATCH_SIZE:
+            return True
+        elapsed = time.monotonic() - self.last_flush_time
+        if elapsed >= CODEX_BATCH_INTERVAL_SECONDS:
+            return True
+        return False
+
+    def flush(self) -> List[CodexEventItem]:
+        events = self.events
+        self.events = []
+        self.last_flush_time = time.monotonic()
+        return events
+
 
 class EventPersistenceManager:
     """Owns the background worker that dispatches events via webhooks."""
@@ -213,6 +268,7 @@ class EventPersistenceManager:
             daemon=True,
         )
         self._started = False
+        self._codex_buffer = CodexEventBuffer()
 
     @property
     def queue(self) -> multiprocessing.queues.Queue[PersistableEvent | None]:
@@ -254,10 +310,18 @@ class EventPersistenceManager:
     def _drain_queue(self) -> None:
         while True:
             try:
-                item = self._queue.get()
+                # Use timeout to periodically flush codex buffer even with no new events
+                try:
+                    item = self._queue.get(timeout=1.0)
+                except queue.Empty:
+                    # No new event, but check if we need to flush codex buffer
+                    self._maybe_flush_codex_buffer()
+                    continue
             except (EOFError, OSError):
                 break
             if item is self._stop_sentinel:
+                # Flush any remaining codex events before stopping
+                self._flush_codex_buffer()
                 break
             if item is None:
                 continue
@@ -265,10 +329,43 @@ class EventPersistenceManager:
                 self._publish_event(event=item)
             except requests.RequestException:
                 logger.exception("Failed to publish event via webhook; dropping and continuing.")
+            # Check if codex buffer needs flushing after each event
+            self._maybe_flush_codex_buffer()
+
+    def _maybe_flush_codex_buffer(self) -> None:
+        """Flush codex buffer if it meets flush criteria."""
+        if self._codex_buffer.should_flush():
+            self._flush_codex_buffer()
+
+    def _flush_codex_buffer(self) -> None:
+        """Flush all buffered codex events."""
+        events = self._codex_buffer.flush()
+        if not events:
+            return
+        try:
+            logger.debug("Flushing %d codex events in bulk", len(events))
+            self._webhook_client.publish_codex_events_bulk(events=events)
+        except requests.RequestException:
+            logger.exception(
+                "Failed to publish %d codex events via bulk webhook; dropping.",
+                len(events),
+            )
 
     def _publish_event(self, *, event: PersistableEvent) -> None:
-        """Publish event via webhook."""
-        self._webhook_client.publish(kind=event.kind, payload=event.data)
+        """Publish event via webhook, buffering codex events for batch sending."""
+        if event.kind == "codex_event":
+            # Buffer codex events for batch sending
+            data = event.data.model_dump()
+            codex_item = CodexEventItem(
+                stage=data.get("stage", ""),
+                node=data.get("node", 0),
+                event_type=data.get("event_type", ""),
+                event_content=data,  # Store full payload as content
+                occurred_at=data.get("occurred_at", ""),
+            )
+            self._codex_buffer.add(codex_item)
+        else:
+            self._webhook_client.publish(kind=event.kind, payload=event.data)
 
 
 @dataclass

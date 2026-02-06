@@ -4,6 +4,7 @@ import os
 import selectors
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Callable, cast
 
@@ -419,6 +420,7 @@ class CodexCliRunner:
                         node=node,
                         event_type="stderr",
                         event_content=decoded_chunk,
+                        occurred_at=datetime.now(timezone.utc),
                     )
                 )
             except (ValueError, TypeError):
@@ -436,7 +438,13 @@ class CodexCliRunner:
             typ = obj.get("type")
             if typ is not None:
                 self._event_callback(
-                    CodexEvent(stage=stage, node=node, event_type=typ, event_content=line)
+                    CodexEvent(
+                        stage=stage,
+                        node=node,
+                        event_type=typ,
+                        event_content=line,
+                        occurred_at=datetime.now(timezone.utc),
+                    )
                 )
 
         return self._run_subprocess(

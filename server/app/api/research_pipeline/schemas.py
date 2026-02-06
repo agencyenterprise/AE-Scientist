@@ -160,6 +160,22 @@ class CodexEventPayload(BaseModel):
     event: dict[str, Any]
 
 
+class CodexEventItem(BaseModel):
+    """Single codex event for bulk insertion."""
+
+    stage: str
+    node: int
+    event_type: str
+    event_content: dict[str, Any]
+    occurred_at: str  # ISO format timestamp
+
+
+class CodexEventsBulkPayload(BaseModel):
+    """Payload for bulk codex event ingestion."""
+
+    events: List[CodexEventItem]
+
+
 class RunningCodePayload(BaseModel):
     event: RunningCodeEventPayload
 

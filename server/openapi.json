@@ -2291,6 +2291,61 @@
         }
       }
     },
+    "/api/research-pipeline/events/{run_id}/codex-events-bulk": {
+      "post": {
+        "tags": [
+          "research-pipeline-events"
+        ],
+        "summary": "Ingest Codex Events Bulk",
+        "description": "Bulk ingest codex events for improved performance.",
+        "operationId": "ingest_codex_events_bulk_api_research_pipeline_events__run_id__codex_events_bulk_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexEventsBulkPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/research-pipeline/events/{run_id}/running-code": {
       "post": {
         "tags": [
@@ -5332,6 +5387,40 @@
         "title": "ChildConversationInfo",
         "description": "Brief info about a child conversation seeded from a run."
       },
+      "CodexEventItem": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "node": {
+            "type": "integer",
+            "title": "Node"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "event_content": {
+            "type": "object",
+            "title": "Event Content"
+          },
+          "occurred_at": {
+            "type": "string",
+            "title": "Occurred At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "node",
+          "event_type",
+          "event_content",
+          "occurred_at"
+        ],
+        "title": "CodexEventItem",
+        "description": "Single codex event for bulk insertion."
+      },
       "CodexEventPayload": {
         "properties": {
           "event": {
@@ -5344,6 +5433,23 @@
           "event"
         ],
         "title": "CodexEventPayload"
+      },
+      "CodexEventsBulkPayload": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/CodexEventItem"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "CodexEventsBulkPayload",
+        "description": "Payload for bulk codex event ingestion."
       },
       "ConversationCostResponse": {
         "properties": {

@@ -200,8 +200,20 @@ class ChildConversationInfo(BaseModel):
     status: Annotated[str, Field(description="Conversation status", title="Status")]
 
 
+class CodexEventItem(BaseModel):
+    stage: Annotated[str, Field(title="Stage")]
+    node: Annotated[int, Field(title="Node")]
+    event_type: Annotated[str, Field(title="Event Type")]
+    event_content: Annotated[dict[str, Any], Field(title="Event Content")]
+    occurred_at: Annotated[str, Field(title="Occurred At")]
+
+
 class CodexEventPayload(BaseModel):
     event: Annotated[dict[str, Any], Field(title="Event")]
+
+
+class CodexEventsBulkPayload(BaseModel):
+    events: Annotated[list[CodexEventItem], Field(title="Events")]
 
 
 class ConversationImportConflictItem(BaseModel):
