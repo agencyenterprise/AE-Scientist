@@ -763,23 +763,27 @@ class AgentManager:
                     stage_name=current_substage.name,
                     reason=main_stage_feedback or "Stage completed",
                 )
-                self._emit_final_progress_if_needed(
-                    current_substage=current_substage,
-                    journal=self.journals[current_substage.name],
-                )
+                # Track node count before multi-seed eval to detect if seeds were added
+                journal = self.journals[current_substage.name]
+                nodes_before_seeds = len(journal.nodes)
                 # Run multi-seed eval BEFORE emitting stage completed event
-                # This ensures "Stage Completed" only appears after seeds + aggregation finish
-                multi_seed_ok = self._perform_multi_seed_eval_if_needed(
+                # This ensures timeline order: iterations -> seeds -> aggregation -> stage complete
+                self._perform_multi_seed_eval_if_needed(
                     agent=agent,
                     current_substage=current_substage,
                     step_callback=step_callback,
                 )
-                if not multi_seed_ok:
-                    # If multi-seed eval failed, we should still try to advance to next stage
-                    # Setting current_stage = None here would prevent that
-                    # Instead, let the caller handle this case
-                    pass
-                # Emit stage completed event AFTER multi-seed eval (seeds + aggregation) finishes
+                nodes_after_seeds = len(journal.nodes)
+                seeds_were_added = nodes_after_seeds > nodes_before_seeds
+                # Only emit final progress event if no seed nodes were added
+                # When seeds run, the seed/aggregation events provide progress tracking
+                # Emitting an "Iteration X/Y" event after seeds causes duplicate timeline entries
+                if not seeds_were_added:
+                    self._emit_final_progress_if_needed(
+                        current_substage=current_substage,
+                        journal=journal,
+                    )
+                # Emit stage completed event AFTER final progress
                 if current_substage.name not in self._substage_completed_emitted:
                     self._emit_substage_completed_event(
                         current_substage=current_substage,

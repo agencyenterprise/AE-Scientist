@@ -23,15 +23,84 @@ export const STAGE_SUMMARIES: Record<string, string> = {
 };
 
 /**
+ * Backend stage slugs - the canonical source of truth for stage identifiers.
+ * These match the stage names used by the backend (e.g., "4_ablation_studies" -> "ablation_studies").
+ */
+export const STAGE_SLUG = {
+  INITIAL_IMPLEMENTATION: "initial_implementation",
+  BASELINE_TUNING: "baseline_tuning",
+  CREATIVE_RESEARCH: "creative_research",
+  ABLATION_STUDIES: "ablation_studies",
+  PAPER_GENERATION: "paper_generation",
+} as const;
+
+/**
  * Maps frontend stage IDs (stage_1, etc.) to backend stage slugs (initial_implementation, etc.)
  */
 export const STAGE_ID_TO_SLUG: Record<string, string> = {
-  stage_1: "initial_implementation",
-  stage_2: "baseline_tuning",
-  stage_3: "creative_research",
-  stage_4: "ablation_studies",
-  stage_5: "paper_generation",
+  stage_1: STAGE_SLUG.INITIAL_IMPLEMENTATION,
+  stage_2: STAGE_SLUG.BASELINE_TUNING,
+  stage_3: STAGE_SLUG.CREATIVE_RESEARCH,
+  stage_4: STAGE_SLUG.ABLATION_STUDIES,
+  stage_5: STAGE_SLUG.PAPER_GENERATION,
 };
+
+/**
+ * All stage slugs in order
+ */
+export const STAGE_SLUGS = [
+  STAGE_SLUG.INITIAL_IMPLEMENTATION,
+  STAGE_SLUG.BASELINE_TUNING,
+  STAGE_SLUG.CREATIVE_RESEARCH,
+  STAGE_SLUG.ABLATION_STUDIES,
+  STAGE_SLUG.PAPER_GENERATION,
+] as const;
+
+/**
+ * Stages 1-4 are skippable (paper_generation is NOT skippable)
+ */
+export const SKIPPABLE_STAGE_SLUGS = [
+  STAGE_SLUG.INITIAL_IMPLEMENTATION,
+  STAGE_SLUG.BASELINE_TUNING,
+  STAGE_SLUG.CREATIVE_RESEARCH,
+  STAGE_SLUG.ABLATION_STUDIES,
+] as const;
+
+/**
+ * Pipeline stage metadata for UI components
+ */
+export const PIPELINE_STAGES = [
+  {
+    id: 1,
+    key: STAGE_SLUG.INITIAL_IMPLEMENTATION,
+    title: "Baseline Implementation",
+    description: "Generate working baseline implementation with basic functional correctness",
+  },
+  {
+    id: 2,
+    key: STAGE_SLUG.BASELINE_TUNING,
+    title: "Baseline Tuning",
+    description: "Hyperparameter optimization to improve baseline performance",
+  },
+  {
+    id: 3,
+    key: STAGE_SLUG.CREATIVE_RESEARCH,
+    title: "Creative Research",
+    description: "Novel improvements, plotting, and visualization generation",
+  },
+  {
+    id: 4,
+    key: STAGE_SLUG.ABLATION_STUDIES,
+    title: "Ablation Studies",
+    description: "Component analysis to validate individual contributions",
+  },
+  {
+    id: 5,
+    key: STAGE_SLUG.PAPER_GENERATION,
+    title: "Paper Generation",
+    description: "Plot aggregation, citation gathering, paper writeup, and peer review",
+  },
+] as const;
 
 // =============================================================================
 // STAGE UTILITY FUNCTIONS

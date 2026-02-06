@@ -25,7 +25,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
-import { extractStageSlug } from "@/shared/lib/stage-utils";
+import { extractStageSlug, PIPELINE_STAGES, SKIPPABLE_STAGE_SLUGS } from "@/shared/lib/stage-utils";
 import type { components } from "@/types/api.gen";
 import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
@@ -35,15 +35,11 @@ type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
 type ExecutionType = components["schemas"]["ExecutionType"];
 
 // Define expected pipeline stages in order - these are the stages we show as placeholders
-// until they actually start
-const EXPECTED_STAGES = [
+// until they actually start. Uses centralized PIPELINE_STAGES from stage-utils.
+const EXPECTED_STAGES: readonly { id: string; name: string }[] = [
   { id: "_run_start", name: "Run Initialization" },
-  { id: "initial_implementation", name: "Baseline Implementation" },
-  { id: "baseline_tuning", name: "Baseline Tuning" },
-  { id: "creative_research", name: "Creative Research" },
-  { id: "ablation", name: "Ablation Studies" },
-  { id: "paper_generation", name: "Paper Generation" },
-] as const;
+  ...PIPELINE_STAGES.map(stage => ({ id: stage.key, name: stage.title })),
+];
 
 interface ResearchActivityFeedProps {
   runId: string;
@@ -1212,15 +1208,9 @@ function StageSection({
   // Normalize the slug for lookup in stageSkipState (which uses extracted slugs as keys)
   const normalizedSlug = extractStageSlug(stageSlug) ?? stageSlug;
 
-  // Stages 1-4 are skippable: initial_implementation, baseline_tuning, creative_research, ablation
-  // Stage 5 (paper_generation) is NOT skippable
-  const SKIPPABLE_STAGES = [
-    "initial_implementation",
-    "baseline_tuning",
-    "creative_research",
-    "ablation",
-  ];
-  const isSkippableStage = SKIPPABLE_STAGES.includes(normalizedSlug);
+  // Stages 1-4 are skippable, Stage 5 (paper_generation) is NOT skippable
+  // Uses centralized SKIPPABLE_STAGE_SLUGS from stage-utils
+  const isSkippableStage = (SKIPPABLE_STAGE_SLUGS as readonly string[]).includes(normalizedSlug);
 
   // Button is shown for stages 1-3 while in progress, but disabled when:
   // - No skip window is open (no best node found yet)

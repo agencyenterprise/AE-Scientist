@@ -9,7 +9,12 @@ import type {
   ResearchRunCodeExecution,
 } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
-import { extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
+import {
+  extractStageSlug,
+  getSummaryText,
+  PIPELINE_STAGES,
+  STAGE_SLUG,
+} from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
@@ -30,41 +35,6 @@ interface ResearchPipelineStagesProps {
   skipPendingStage?: string | null;
   className?: string;
 }
-
-// Define pipeline stages with their metadata
-// These match the actual backend stage slugs used in the research pipeline
-const PIPELINE_STAGES = [
-  {
-    id: 1,
-    key: "initial_implementation",
-    title: "Baseline Implementation",
-    description: "Generate working baseline implementation with basic functional correctness",
-  },
-  {
-    id: 2,
-    key: "baseline_tuning",
-    title: "Baseline Tuning",
-    description: "Hyperparameter optimization to improve baseline performance",
-  },
-  {
-    id: 3,
-    key: "creative_research",
-    title: "Creative Research",
-    description: "Novel improvements, plotting, and visualization generation",
-  },
-  {
-    id: 4,
-    key: "ablation_studies",
-    title: "Ablation Studies",
-    description: "Component analysis to validate individual contributions",
-  },
-  {
-    id: 5,
-    key: "paper_generation",
-    title: "Paper Generation",
-    description: "Plot aggregation, citation gathering, paper writeup, and peer review",
-  },
-] as const;
 
 interface StageInfo {
   status: "pending" | "in_progress" | "completed";
@@ -177,7 +147,7 @@ export function ResearchPipelineStages({
    */
   const getStageInfo = (stageKey: string): StageInfo => {
     // Stage 5 (paper_generation) uses paperGenerationProgress instead of stageProgress
-    if (stageKey === "paper_generation") {
+    if (stageKey === STAGE_SLUG.PAPER_GENERATION) {
       if (paperGenerationProgress.length === 0) {
         return {
           status: "pending",
@@ -295,7 +265,7 @@ export function ResearchPipelineStages({
       <div className="flex flex-col gap-6">
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
-          const isPaperGeneration = stage.key === "paper_generation";
+          const isPaperGeneration = stage.key === STAGE_SLUG.PAPER_GENERATION;
           const latestSummary = isPaperGeneration
             ? null
             : getLatestSummaryForStage(stage.key, substageSummaries);
