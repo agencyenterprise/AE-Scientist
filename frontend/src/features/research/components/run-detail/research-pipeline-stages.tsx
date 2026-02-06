@@ -8,7 +8,6 @@ import type {
   SubstageSummary,
   ResearchRunCodeExecution,
 } from "@/types/research";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import { extractStageSlug, getSummaryText } from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
@@ -78,96 +77,6 @@ interface StageInfo {
   details: StageProgress | null;
 }
 
-/**
- * Unified segment interface for progress bars
- */
-interface Segment {
-  label: string;
-}
-
-/**
- * Unified segmented progress bar component
- * Used for both node-based progress (Stages 1-4) and step-based progress (Stage 5)
- */
-interface SegmentedProgressBarProps {
-  segments: Segment[];
-  emptyMessage?: string;
-}
-
-function SegmentedProgressBar({
-  segments,
-  emptyMessage = "No progress yet",
-}: SegmentedProgressBarProps) {
-  if (segments.length === 0) {
-    return <div className="text-xs text-slate-500">{emptyMessage}</div>;
-  }
-
-  return (
-    <div className="flex gap-1 w-full">
-      {segments.map((segment, index) => (
-        <Tooltip key={index}>
-          <TooltipTrigger asChild>
-            <div className="h-2 flex-1 rounded-sm transition-all duration-300 cursor-help bg-blue-500" />
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="text-xs">{segment.label}</p>
-          </TooltipContent>
-        </Tooltip>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Get segments array for a stage (one segment per node)
- * Falls back to synthetic segments from stage progress if no node events exist
- */
-const getNodeSegments = (
-  stageKey: string,
-  substageEvents: SubstageEvent[],
-  stageProgress: StageProgress[]
-): Segment[] => {
-  // Filter nodes for this stage
-  const stageNodes = substageEvents.filter(node => {
-    const slug = extractStageSlug(node.stage);
-    return slug === stageKey;
-  });
-
-  // If we have actual node events, use them
-  if (stageNodes.length > 0) {
-    // Sort by creation time (chronological order)
-    const sortedNodes = stageNodes.sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-
-    // Map each node to Segment with tooltip label
-    return sortedNodes.map((_, index) => ({
-      label: `Node ${index + 1}`,
-    }));
-  }
-
-  // FALLBACK: If no node events, derive segments from stage progress aggregate data
-  const stageProgresses = stageProgress.filter(progress => {
-    const slug = extractStageSlug(progress.stage);
-    return slug === stageKey;
-  });
-
-  if (stageProgresses.length === 0) {
-    return [];
-  }
-
-  // Use the latest progress event
-  const latestProgress = stageProgresses[stageProgresses.length - 1];
-  if (!latestProgress) return [];
-  const { good_nodes, buggy_nodes } = latestProgress;
-  const totalNodes = good_nodes + buggy_nodes;
-
-  // Create synthetic segments
-  return Array.from({ length: totalNodes }, (_, i) => ({
-    label: `Node ${i + 1}`,
-  }));
-};
-
 const formatNodeId = (nodeId: string): string => {
   if (nodeId.length <= 12) return nodeId;
   return `${nodeId.slice(0, 6)}…${nodeId.slice(-4)}`;
@@ -202,32 +111,6 @@ const STEP_LABELS: Record<string, string> = {
   citation_gathering: "Citation Gathering",
   paper_writeup: "Paper Writeup",
   paper_review: "Paper Review",
-};
-
-/**
- * Get segments for paper generation (Stage 5)
- * Shows only completed and current steps
- */
-const getPaperGenerationSegments = (events: PaperGenerationEvent[]): Segment[] => {
-  if (events.length === 0) {
-    return [];
-  }
-
-  const latestEvent = events[events.length - 1];
-  if (!latestEvent) {
-    return [];
-  }
-
-  const currentStepIndex = PAPER_GENERATION_STEPS.findIndex(s => s.key === latestEvent.step);
-
-  // Return segments for completed and current steps only
-  return PAPER_GENERATION_STEPS.filter((step, index) => {
-    const isCompleted = index < currentStepIndex;
-    const isCurrent = step.key === latestEvent.step;
-    return isCompleted || isCurrent;
-  }).map(step => ({
-    label: step.label,
-  }));
 };
 
 export function ResearchPipelineStages({
@@ -413,10 +296,6 @@ export function ResearchPipelineStages({
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
           const isPaperGeneration = stage.key === "paper_generation";
-          const segments = isPaperGeneration
-            ? getPaperGenerationSegments(paperGenerationProgress)
-            : getNodeSegments(stage.key, substageEvents, stageProgress);
-          const emptyMessage = isPaperGeneration ? "No steps yet" : "No nodes yet";
           const latestSummary = isPaperGeneration
             ? null
             : getLatestSummaryForStage(stage.key, substageSummaries);
@@ -538,9 +417,6 @@ export function ResearchPipelineStages({
                   onTerminateExecution={onTerminateExecution}
                 />
               )}
-
-              {/* Unified progress bar for all stages */}
-              <SegmentedProgressBar segments={segments} emptyMessage={emptyMessage} />
 
               {!isPaperGeneration && latestSummary && (
                 <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3 space-y-3">

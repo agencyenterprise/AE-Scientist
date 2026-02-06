@@ -760,9 +760,33 @@ class ParallelAgent:
 
         return nodes_to_process
 
-    def step(self) -> None:
+    def step(self, *, iteration: int, max_iterations: int) -> None:
         """Drive one iteration: select nodes, submit work, collect results, update state."""
         self.stage_skip.ensure_no_skip_pending()
+
+        # Emit goal node progress event BEFORE starting execution
+        # This ensures the event is sent before seed events (fixing race condition)
+        try:
+            best_node = self.journal.get_best_node()
+            self.event_callback(
+                RunStageProgressEvent(
+                    stage=self.stage_name,
+                    iteration=iteration,
+                    max_iterations=max_iterations,
+                    progress=(
+                        (max(iteration - 1, 0) / max_iterations) if max_iterations > 0 else 0.0
+                    ),
+                    total_nodes=len(self.journal.nodes),
+                    buggy_nodes=len(self.journal.buggy_nodes),
+                    good_nodes=len(self.journal.good_nodes),
+                    best_metric=str(best_node.metric) if best_node else None,
+                    is_seed_node=False,
+                    is_seed_agg_node=False,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit goal node progress event")
+
         logger.debug("Selecting nodes to process")
         nodes_to_process = self._select_parallel_nodes()
         logger.debug(f"Selected nodes: {[n.id if n else None for n in nodes_to_process]}")

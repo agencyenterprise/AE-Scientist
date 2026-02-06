@@ -567,13 +567,9 @@ def resume_run(
             except Exception:
                 traceback.print_exc()
 
-        def iteration_started_callback(_stage: StageMeta, _journal: Journal) -> None:
-            return
-
         manager.run_stage(
             initial_substage=next_meta,
             step_callback=step_callback,
-            iteration_started_callback=iteration_started_callback,
         )
         outcome = manager.get_run_outcome()
         return RunExecutionOutcome(

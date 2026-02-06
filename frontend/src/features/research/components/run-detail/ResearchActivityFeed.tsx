@@ -239,9 +239,11 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     const endTime =
       isCompleted && timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null;
 
-    // Get max_iterations and current iteration from regular progress_update events (not seed)
+    // Get max_iterations and current iteration from regular progress_update events (not seed or aggregation)
     const regularProgressEvents = progressEvents.filter(
-      e => !("is_seed_node" in e && e.is_seed_node)
+      e =>
+        !("is_seed_node" in e && e.is_seed_node) &&
+        !("is_seed_agg_node" in e && e.is_seed_agg_node)
     );
     const lastRegularProgress =
       regularProgressEvents.length > 0
@@ -400,7 +402,7 @@ function getEventColor(type: string) {
   }
 }
 
-function getEventLabel(type: string) {
+function getEventLabel(type: string, event?: TimelineEvent) {
   switch (type) {
     case "run_started":
       return "Research Started";
@@ -409,7 +411,13 @@ function getEventLabel(type: string) {
     case "stage_completed":
       return "Stage Completed";
     case "progress_update":
-      return "Progress Update";
+      if (event && "is_seed_node" in event && event.is_seed_node) {
+        return "Seed Evaluation";
+      }
+      if (event && "is_seed_agg_node" in event && event.is_seed_agg_node) {
+        return "Aggregation";
+      }
+      return "Iteration";
     case "node_result":
       return "Result Ready";
     case "node_execution_started":
@@ -541,7 +549,7 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
 
   const icon = getEventIcon(event.type);
   const colorClass = getEventColor(event.type);
-  const label = getEventLabel(event.type);
+  const label = getEventLabel(event.type, event);
 
   // Check if this is an active codex execution (started but not completed)
   const isActiveExecution =
@@ -994,6 +1002,122 @@ function GroupedEventsList({
   );
 }
 
+/**
+ * A 3-phase progress bar showing iterations, seeds, and aggregation progress.
+ * Each phase has its own fill and hover tooltip.
+ */
+function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
+  const isCompleted = stage.status === "completed";
+
+  // Calculate progress for each phase (0 to 1)
+  // If stage is completed, show 100% for phases that ran (even with early exit)
+  const iterationProgress = isCompleted
+    ? 1 // Stage completed = iterations done (even if early exit)
+    : stage.maxNodes && stage.maxNodes > 0
+      ? Math.min((stage.currentIteration || 0) / stage.maxNodes, 1)
+      : 0;
+
+  const seedProgress = isCompleted && stage.hasSeedEvaluation
+    ? 1 // Stage completed with seeds = seeds done
+    : stage.totalSeeds && stage.totalSeeds > 0
+      ? Math.min((stage.currentSeed || 0) / stage.totalSeeds, 1)
+      : 0;
+
+  const aggregationProgress = isCompleted && stage.hasAggregation
+    ? 1 // Stage completed with aggregation = aggregation done
+    : stage.totalAggregations && stage.totalAggregations > 0
+      ? Math.min((stage.currentAggregation || 0) / stage.totalAggregations, 1)
+      : 0;
+
+  // Show all 3 phases for stages that are in progress or completed
+  const isActiveOrCompleted = stage.status === "in_progress" || stage.status === "completed";
+  const showSeeds = isActiveOrCompleted;
+  const showAggregation = isActiveOrCompleted;
+
+  // If no progress data at all, don't show the bar
+  if (!stage.maxNodes && stage.status === "pending") {
+    return null;
+  }
+
+  const phases = [
+    {
+      id: "iterations",
+      label: "Iterations",
+      progress: iterationProgress,
+      current: stage.currentIteration || 0,
+      total: stage.maxNodes || 0,
+      color: "bg-blue-500",
+      bgColor: "bg-blue-500/20",
+      show: stage.maxNodes !== null && stage.maxNodes > 0,
+      isActive: stage.status === "in_progress" && !stage.seedEvalInProgress && !stage.aggregationInProgress,
+    },
+    {
+      id: "seeds",
+      label: "Seeds",
+      progress: seedProgress,
+      current: stage.currentSeed || 0,
+      total: stage.totalSeeds || 0,
+      color: "bg-pink-500",
+      bgColor: "bg-pink-500/20",
+      show: showSeeds,
+      isActive: stage.seedEvalInProgress,
+    },
+    {
+      id: "aggregation",
+      label: "Aggregation",
+      progress: aggregationProgress,
+      current: stage.currentAggregation || 0,
+      total: stage.totalAggregations || 0,
+      color: "bg-teal-500",
+      bgColor: "bg-teal-500/20",
+      show: showAggregation,
+      isActive: stage.aggregationInProgress,
+    },
+  ].filter(phase => phase.show);
+
+  if (phases.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-1 w-full mt-2">
+      {phases.map((phase) => (
+        <Tooltip key={phase.id}>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "relative h-2 rounded-sm overflow-hidden cursor-help transition-all",
+                phase.bgColor,
+                // Give iterations more weight, seeds and aggregation smaller
+                phase.id === "iterations" ? "flex-[3]" : "flex-1"
+              )}
+            >
+              {/* Fill bar */}
+              <div
+                className={cn(
+                  "absolute inset-y-0 left-0 rounded-sm transition-all duration-500",
+                  phase.color,
+                  phase.isActive && "animate-pulse"
+                )}
+                style={{ width: `${phase.progress * 100}%` }}
+              />
+              {/* Active indicator */}
+              {phase.isActive && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className={cn("w-1 h-1 rounded-full bg-white animate-ping")} />
+                </div>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {phase.label}: {phase.current}/{phase.total || "?"}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
 function StageSection({
   stage,
   isExpanded,
@@ -1177,7 +1301,11 @@ function StageSection({
                 </Tooltip>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+
+            {/* 3-phase progress bar - only for experiment stages (1-4) */}
+            {isSkippableStage && <StagePhaseProgressBar stage={stage} />}
+
+            <p className="text-xs text-muted-foreground mt-1.5">
               {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
               {duration && ` • ${duration}`}
             </p>
@@ -1214,20 +1342,6 @@ function StageSection({
               </Tooltip>
             </div>
           )}
-          <span className="text-sm font-medium text-foreground">{stage.progress}%</span>
-          <div className="w-16 sm:w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                stage.status === "completed"
-                  ? "bg-emerald-500"
-                  : stage.status === "in_progress"
-                    ? "bg-yellow-500"
-                    : "bg-slate-500"
-              )}
-              style={{ width: `${stage.progress}%` }}
-            />
-          </div>
         </div>
       </div>
 
@@ -1310,11 +1424,25 @@ export function ResearchActivityFeed({
   const stageGroups = useMemo(() => groupEventsByStage(events), [events]);
 
   useEffect(() => {
+    // Auto-expand in-progress stage, auto-collapse completed stages
     const inProgressStage = stageGroups.find(s => s.status === "in_progress");
-    if (inProgressStage && !expandedStages.has(inProgressStage.stageId)) {
-      setExpandedStages(prev => new Set([...prev, inProgressStage.stageId]));
-    }
-  }, [stageGroups, expandedStages]);
+    const completedStageIds = stageGroups
+      .filter(s => s.status === "completed")
+      .map(s => s.stageId);
+
+    setExpandedStages(prev => {
+      const next = new Set(prev);
+      // Collapse completed stages
+      for (const id of completedStageIds) {
+        next.delete(id);
+      }
+      // Expand in-progress stage
+      if (inProgressStage) {
+        next.add(inProgressStage.stageId);
+      }
+      return next;
+    });
+  }, [stageGroups]);
 
   const toggleStage = useCallback((stageId: string) => {
     setExpandedStages(prev => {

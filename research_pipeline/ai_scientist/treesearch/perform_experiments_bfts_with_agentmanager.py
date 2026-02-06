@@ -19,7 +19,7 @@ from typing import Callable
 from .agent_manager import AgentManager, RunOutcome
 from .config import load_cfg, load_task_desc, prep_agent_workspace, save_run
 from .evaluation_metric import define_evaluation_metric_spec_via_llm
-from .events import BaseEvent, RunLogEvent, RunStageProgressEvent
+from .events import BaseEvent, RunLogEvent
 from .journal import Journal
 from .log_summarization import overall_summarize
 from .node_summary import generate_node_summary
@@ -69,60 +69,7 @@ def perform_experiments_bfts(
         evaluation_metric_spec=evaluation_metric_spec,
     )
 
-    # Track per-stage iteration state to avoid duplicate progress events and
-    # to ensure iteration counts start from 1 for each main stage.
-    last_reported_iteration_by_stage: dict[str, int] = {}
     stage_best_node_summary_written: set[str] = set()
-
-    def iteration_started_callback(stage: StageMeta, journal: Journal) -> None:
-        attempt_iteration = manager.get_attempt_iteration(stage.name)
-        if attempt_iteration == 0:
-            return
-        if stage.max_iterations > 0:
-            iteration_display = min(attempt_iteration, stage.max_iterations)
-        else:
-            iteration_display = attempt_iteration
-
-        best_node = journal.get_best_node()
-        good_nodes_list = journal.good_nodes
-        good_nodes_count = len(good_nodes_list)
-
-        stage_completed = manager.has_stage_completed(stage.name)
-        previous_iteration = last_reported_iteration_by_stage.get(stage.name)
-        stage_complete = stage.max_iterations > 0 and attempt_iteration > stage.max_iterations
-        iteration_increased = previous_iteration is None or iteration_display > previous_iteration
-        needs_final_event = (
-            stage_complete
-            and previous_iteration is not None
-            and previous_iteration < stage.max_iterations
-        )
-        should_emit = iteration_display > 0 and (iteration_increased or needs_final_event)
-        if should_emit and not stage_completed:
-            last_reported_iteration_by_stage[stage.name] = iteration_display
-            final_iteration = iteration_display
-            # Report progress based on completed iterations, not started iterations
-            # When iteration N starts, N-1 iterations have completed
-            completed_iterations = max(iteration_display - 1, 0)
-            final_progress = (
-                completed_iterations / stage.max_iterations if stage.max_iterations > 0 else 0.0
-            )
-            if stage_complete:
-                final_progress = 1.0
-
-            event_callback(
-                RunStageProgressEvent(
-                    stage=stage.name,
-                    iteration=final_iteration,
-                    max_iterations=stage.max_iterations,
-                    progress=final_progress,
-                    total_nodes=len(journal.nodes),
-                    buggy_nodes=len(journal.buggy_nodes),
-                    good_nodes=good_nodes_count,
-                    best_metric=str(best_node.metric) if best_node else None,
-                    is_seed_node=False,
-                    is_seed_agg_node=False,
-                )
-            )
 
     def step_callback(stage: StageMeta, journal: Journal) -> None:
         # Persist progress snapshot and emit progress events after each step
@@ -225,10 +172,7 @@ def perform_experiments_bfts(
             )
         )
 
-    manager.run(
-        step_callback=step_callback,
-        iteration_started_callback=iteration_started_callback,
-    )
+    manager.run(step_callback=step_callback)
     outcome = manager.get_run_outcome()
 
     if cfg.generate_report:

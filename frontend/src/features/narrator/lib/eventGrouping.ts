@@ -192,7 +192,7 @@ export function getEventTypeLabel(type: string): string {
     run_started: "Run Started",
     stage_started: "Stage Started",
     stage_completed: "Stage Completed",
-    progress_update: "Progress Update",
+    progress_update: "Iteration",
     node_result: "Node Result",
     node_execution_started: "Execution Started",
     node_execution_completed: "Execution Completed",
