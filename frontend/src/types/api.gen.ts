@@ -2852,6 +2852,14 @@ export interface components {
             gpu_prices: {
                 [key: string]: number | null;
             };
+            /** Gpu Display Names */
+            gpu_display_names: {
+                [key: string]: string;
+            };
+            /** Gpu Vram Gb */
+            gpu_vram_gb: {
+                [key: string]: number | null;
+            };
         };
         /** HTTPValidationError */
         HTTPValidationError: {

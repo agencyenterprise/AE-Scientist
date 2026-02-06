@@ -10,6 +10,8 @@ interface CreateProjectModalProps {
   isLoading?: boolean;
   availableGpuTypes: string[];
   gpuPrices: Record<string, number | null>;
+  gpuDisplayNames: Record<string, string>;
+  gpuVramGb: Record<string, number | null>;
   selectedGpuType: string | null;
   onSelectGpuType: (gpuType: string) => void;
   isGpuTypeLoading?: boolean;
@@ -28,6 +30,8 @@ export function CreateProjectModal({
   isLoading = false,
   availableGpuTypes,
   gpuPrices,
+  gpuDisplayNames,
+  gpuVramGb,
   selectedGpuType,
   onSelectGpuType,
   isGpuTypeLoading = false,
@@ -105,8 +109,11 @@ export function CreateProjectModal({
                     </option>
                   )}
                   {availableGpuTypes.map(gpuType => {
+                    const baseName = gpuDisplayNames[gpuType] || gpuType;
+                    const vram = gpuVramGb[gpuType];
+                    const displayName = vram ? `${baseName} (${vram} GB VRAM)` : baseName;
                     const priceLabel = formatHourlyPrice(gpuPrices[gpuType]);
-                    const optionLabel = priceLabel ? `${gpuType} — ${priceLabel}` : gpuType;
+                    const optionLabel = priceLabel ? `${displayName} — ${priceLabel}` : displayName;
                     return (
                       <option key={gpuType} value={gpuType}>
                         {optionLabel}

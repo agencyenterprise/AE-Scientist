@@ -420,6 +420,8 @@ class GPUShortagePayload(BaseModel):
 class GpuTypeListResponse(BaseModel):
     gpu_types: Annotated[list[str], Field(title="Gpu Types")]
     gpu_prices: Annotated[dict[str, float | None], Field(title="Gpu Prices")]
+    gpu_display_names: Annotated[dict[str, str], Field(title="Gpu Display Names")]
+    gpu_vram_gb: Annotated[dict[str, int | None], Field(title="Gpu Vram Gb")]
 
 
 class HardwareStatsPartition(BaseModel):

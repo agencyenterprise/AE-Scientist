@@ -1,5 +1,5 @@
 from .runpod_artifacts import upload_runpod_artifacts_via_ssh
-from .runpod_gpu_pricing import get_gpu_type_prices, warm_gpu_price_cache
+from .runpod_gpu_details import get_gpu_display_info, get_gpu_type_prices, warm_gpu_price_cache
 from .runpod_initialization import CONTAINER_DISK_GB, WORKSPACE_DISK_GB
 from .runpod_manager import (
     POD_READY_POLL_INTERVAL_SECONDS,
@@ -48,4 +48,5 @@ __all__ = [
     "RunPodManager",
     "warm_gpu_price_cache",
     "get_gpu_type_prices",
+    "get_gpu_display_info",
 ]

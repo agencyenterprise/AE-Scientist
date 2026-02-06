@@ -22,10 +22,13 @@ import {
   FlaskConical,
   StopCircle,
   Radio,
+  HelpCircle,
 } from "lucide-react";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
+import { extractStageSlug } from "@/shared/lib/stage-utils";
 import type { components } from "@/types/api.gen";
 import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
+import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
 type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
@@ -36,6 +39,14 @@ interface ResearchActivityFeedProps {
   maxHeight?: string;
   /** Handler to terminate an active execution. If not provided, terminate buttons won't appear. */
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+  /** Current run status (e.g., "running", "completed", "failed") */
+  runStatus?: string;
+  /** Map of stage slugs to their skip window state */
+  stageSkipState?: StageSkipStateMap;
+  /** Stage currently being skipped (pending confirmation from backend) */
+  skipPendingStage?: string | null;
+  /** Handler to skip a stage. If not provided, skip buttons won't appear. */
+  onSkipStage?: (stageSlug: string) => Promise<void>;
 }
 
 interface ParsedSseFrame {
@@ -789,20 +800,8 @@ function EventDetails({ event }: { event: TimelineEvent }) {
       ) : null;
 
     case "progress_update":
-      // For seed nodes, show "Seed X/Y"; for regular nodes, iteration is already shown in header badge
-      if (
-        "is_seed_node" in event &&
-        event.is_seed_node &&
-        "iteration" in event &&
-        "max_iterations" in event
-      ) {
-        return (
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Seed {event.iteration}/{event.max_iterations}
-          </p>
-        );
-      }
-      // Don't show iteration for regular nodes - it's already displayed in the stage header badge
+      // Don't show iteration info here - it's already displayed in the event headline
+      // and in the stage header badge
       return null;
 
     case "node_result": {
@@ -1001,13 +1000,70 @@ function StageSection({
   onToggle,
   allEvents,
   onTerminateExecution,
+  runStatus,
+  stageSkipState,
+  skipPendingStage,
+  onSkipStage,
 }: {
   stage: StageGroup;
   isExpanded: boolean;
   onToggle: () => void;
   allEvents: TimelineEvent[];
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+  runStatus?: string;
+  stageSkipState?: StageSkipStateMap;
+  skipPendingStage?: string | null;
+  onSkipStage?: (stageSlug: string) => Promise<void>;
 }) {
+  const [isSkipDialogOpen, setIsSkipDialogOpen] = useState(false);
+  const [isSkipSubmitting, setIsSkipSubmitting] = useState(false);
+  const [skipError, setSkipError] = useState<string | null>(null);
+
+  // Determine if this stage can be skipped
+  const stageSlug = stage.stageId;
+  // Normalize the slug for lookup in stageSkipState (which uses extracted slugs as keys)
+  const normalizedSlug = extractStageSlug(stageSlug) ?? stageSlug;
+
+  // Stages 1-4 are skippable: initial_implementation, baseline_tuning, creative_research, ablation
+  // Stage 5 (paper_generation) is NOT skippable
+  const SKIPPABLE_STAGES = [
+    "initial_implementation",
+    "baseline_tuning",
+    "creative_research",
+    "ablation",
+  ];
+  const isSkippableStage = SKIPPABLE_STAGES.includes(normalizedSlug);
+
+  // Button is shown for stages 1-3 while in progress, but disabled when:
+  // - No skip window is open (no best node found yet)
+  // - Run is not running
+  // - No skip handler provided
+  const hasSkipWindow = stageSkipState && normalizedSlug in stageSkipState;
+  const isStageCompleted = stage.status === "completed";
+  const canShowSkipButton = isSkippableStage && onSkipStage && !isStageCompleted;
+  const isSkipEnabled = hasSkipWindow && runStatus === "running";
+
+  const effectiveSkipPending = skipPendingStage === normalizedSlug || isSkipSubmitting;
+
+  const handleSkipClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsSkipDialogOpen(true);
+    setSkipError(null);
+  };
+
+  const handleConfirmSkip = async () => {
+    if (!onSkipStage) return;
+    setIsSkipSubmitting(true);
+    setSkipError(null);
+    try {
+      await onSkipStage(normalizedSlug);
+      setIsSkipDialogOpen(false);
+    } catch (err) {
+      setSkipError(err instanceof Error ? err.message : "Failed to skip stage");
+    } finally {
+      setIsSkipSubmitting(false);
+    }
+  };
   const statusBadge = {
     completed: (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400">
@@ -1032,11 +1088,9 @@ function StageSection({
 
   return (
     <div className="border border-border rounded-lg overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full p-3 sm:p-4 hover:bg-muted/30 transition-colors text-left"
-      >
-        <div className="flex items-start gap-2 sm:gap-3">
+      <div className="w-full flex items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4 hover:bg-muted/30 transition-colors">
+        {/* Clickable toggle area */}
+        <button onClick={onToggle} className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left">
           <ChevronRight
             className={cn(
               "h-4 w-4 text-muted-foreground shrink-0 transition-transform mt-1",
@@ -1120,33 +1174,59 @@ function StageSection({
                 </Tooltip>
               )}
             </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
+              {duration && ` • ${duration}`}
+            </p>
+          </div>
+        </button>
 
-            {/* Progress bar and event count - on separate row */}
-            <div className="flex items-center justify-between gap-3 mt-2">
-              <p className="text-xs text-muted-foreground">
-                {stage.events.length} event{stage.events.length !== 1 ? "s" : ""}
-                {duration && ` • ${duration}`}
-              </p>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-sm font-medium text-foreground">{stage.progress}%</span>
-                <div className="w-16 sm:w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      stage.status === "completed"
-                        ? "bg-emerald-500"
-                        : stage.status === "in_progress"
-                          ? "bg-yellow-500"
-                          : "bg-slate-500"
-                    )}
-                    style={{ width: `${stage.progress}%` }}
-                  />
-                </div>
-              </div>
+        {/* Actions area - not nested in button */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {canShowSkipButton && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSkipClick}
+                disabled={!isSkipEnabled || effectiveSkipPending}
+                className="h-7 px-2 text-xs"
+              >
+                {effectiveSkipPending ? "Skipping…" : "Skip Stage"}
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-64 text-xs">
+                  {isSkipEnabled
+                    ? "A best node has been found. You can skip remaining goal node iterations and proceed directly to seed evaluation and aggregation."
+                    : "Skip becomes available once a best node is found for this stage. Skipping will stop remaining goal node iterations."}
+                </TooltipContent>
+              </Tooltip>
             </div>
+          )}
+          <span className="text-sm font-medium text-foreground">{stage.progress}%</span>
+          <div className="w-16 sm:w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                stage.status === "completed"
+                  ? "bg-emerald-500"
+                  : stage.status === "in_progress"
+                    ? "bg-yellow-500"
+                    : "bg-slate-500"
+              )}
+              style={{ width: `${stage.progress}%` }}
+            />
           </div>
         </div>
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="border-t border-border bg-muted/10">
@@ -1159,6 +1239,50 @@ function StageSection({
           </div>
         </div>
       )}
+
+      {/* Skip Stage Confirmation Modal */}
+      {onSkipStage && (
+        <Modal
+          isOpen={isSkipDialogOpen}
+          onClose={() => !effectiveSkipPending && setIsSkipDialogOpen(false)}
+          title="Skip current stage?"
+          maxWidth="max-w-lg"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              Skipping <span className="font-semibold text-white">{stage.stageName}</span> will stop
+              remaining &quot;goal&quot; node iterations and proceed directly to seed evaluation and
+              aggregation using the current best node.
+            </p>
+            <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
+              <p className="text-sm text-yellow-200">
+                <span className="font-semibold">Warning:</span> Skipping early may affect the
+                quality of your experiment. Additional iterations could potentially find better
+                solutions. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          {skipError && <p className="mt-4 text-sm text-red-400">{skipError}</p>}
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSkipDialogOpen(false)}
+              disabled={effectiveSkipPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmSkip}
+              disabled={effectiveSkipPending}
+            >
+              {effectiveSkipPending ? "Skipping..." : "Skip Stage"}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1167,6 +1291,10 @@ export function ResearchActivityFeed({
   runId,
   maxHeight = "500px",
   onTerminateExecution,
+  runStatus,
+  stageSkipState,
+  skipPendingStage,
+  onSkipStage,
 }: ResearchActivityFeedProps) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -1364,6 +1492,10 @@ export function ResearchActivityFeed({
                 onToggle={() => toggleStage(stage.stageId)}
                 allEvents={events}
                 onTerminateExecution={onTerminateExecution}
+                runStatus={runStatus}
+                stageSkipState={stageSkipState}
+                skipPendingStage={skipPendingStage}
+                onSkipStage={onSkipStage}
               />
             ))}
           </div>

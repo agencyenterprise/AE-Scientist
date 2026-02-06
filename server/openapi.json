@@ -6577,12 +6577,35 @@
             },
             "type": "object",
             "title": "Gpu Prices"
+          },
+          "gpu_display_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Gpu Display Names"
+          },
+          "gpu_vram_gb": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Gpu Vram Gb"
           }
         },
         "type": "object",
         "required": [
           "gpu_types",
-          "gpu_prices"
+          "gpu_prices",
+          "gpu_display_names",
+          "gpu_vram_gb"
         ],
         "title": "GpuTypeListResponse"
       },

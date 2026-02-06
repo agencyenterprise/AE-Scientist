@@ -252,6 +252,8 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
         onConfirm={handleConfirmCreateProject}
         availableGpuTypes={projectState.gpuTypes}
         gpuPrices={projectState.gpuPrices}
+        gpuDisplayNames={projectState.gpuDisplayNames}
+        gpuVramGb={projectState.gpuVramGb}
         selectedGpuType={projectState.selectedGpuType}
         onSelectGpuType={projectState.setSelectedGpuType}
         isGpuTypeLoading={projectState.isGpuTypeLoading}

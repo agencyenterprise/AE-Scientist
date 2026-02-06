@@ -52,6 +52,7 @@ from app.services.research_pipeline.runpod import (
     TerminationNotFoundError,
     TerminationRequestError,
     fetch_pod_ready_metadata,
+    get_gpu_display_info,
     get_gpu_type_prices,
     get_pipeline_startup_grace_seconds,
     get_supported_gpu_types,
@@ -108,6 +109,8 @@ class LaunchResearchRunRequest(BaseModel):
 class GpuTypeListResponse(BaseModel):
     gpu_types: list[str]
     gpu_prices: dict[str, float | None]
+    gpu_display_names: dict[str, str]
+    gpu_vram_gb: dict[str, int | None]
 
 
 @router.get(
@@ -117,9 +120,21 @@ class GpuTypeListResponse(BaseModel):
 async def list_research_gpu_types() -> GpuTypeListResponse:
     gpu_types = get_supported_gpu_types()
     prices = await get_gpu_type_prices(gpu_types=gpu_types)
+    display_info = await get_gpu_display_info(gpu_types=gpu_types)
+    # Sort GPU types by price (cheapest first), with unknown prices at the end
+    sorted_gpu_types = sorted(
+        gpu_types,
+        key=lambda gpu: (prices.get(gpu) is None, prices.get(gpu) or float("inf")),
+    )
     return GpuTypeListResponse(
-        gpu_types=gpu_types,
-        gpu_prices={gpu_type: prices.get(gpu_type) for gpu_type in gpu_types},
+        gpu_types=sorted_gpu_types,
+        gpu_prices={gpu_type: prices.get(gpu_type) for gpu_type in sorted_gpu_types},
+        gpu_display_names={
+            gpu_type: display_info[gpu_type].display_name for gpu_type in sorted_gpu_types
+        },
+        gpu_vram_gb={
+            gpu_type: display_info[gpu_type].memory_in_gb for gpu_type in sorted_gpu_types
+        },
     )
 
 

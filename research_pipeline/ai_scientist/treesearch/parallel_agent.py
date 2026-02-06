@@ -443,6 +443,28 @@ class ParallelAgent:
                 "user_feedback_payload": "",
                 "node_index": next_node_index + idx,
             }
+
+            # Emit seed evaluation progress event BEFORE starting execution
+            # This ensures the event is sent before aggregation events
+            try:
+                seed_number = completed_seeds_before + idx + 1
+                self.event_callback(
+                    RunStageProgressEvent(
+                        stage=self.stage_name,
+                        iteration=seed_number,
+                        max_iterations=total_seeds,
+                        progress=float(seed_number) / float(total_seeds),
+                        total_nodes=total_seeds,
+                        buggy_nodes=0,
+                        good_nodes=seed_number,
+                        best_metric=None,
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    )
+                )
+            except Exception:
+                logger.exception("Failed to emit seed evaluation progress event (started)")
+
             future = executor.submit(process_node, **task)
             futures.append(future)
             execution_ids.append(execution_id)
@@ -490,26 +512,6 @@ class ParallelAgent:
                     seed,
                 )
                 execution_registry.clear_execution(execution_id)
-
-                # Emit seed evaluation progress event (using stage progress with is_seed_node=True)
-                try:
-                    completed_total = completed_seeds_before + idx + 1
-                    self.event_callback(
-                        RunStageProgressEvent(
-                            stage=self.stage_name,
-                            iteration=completed_total,
-                            max_iterations=total_seeds,
-                            progress=float(completed_total) / float(total_seeds),
-                            total_nodes=total_seeds,
-                            buggy_nodes=0,
-                            good_nodes=completed_total,
-                            best_metric=None,
-                            is_seed_node=True,
-                            is_seed_agg_node=False,
-                        )
-                    )
-                except Exception:
-                    logger.exception("Failed to emit seed evaluation progress event (completed)")
 
                 # Release GPU after this seed completes
                 proc_id = seed_process_ids[idx]

@@ -23,6 +23,8 @@ export function LaunchResearchButton({
     handleConfirmLaunch,
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,
@@ -45,6 +47,8 @@ export function LaunchResearchButton({
         isLoading={isLaunching}
         availableGpuTypes={gpuTypes}
         gpuPrices={gpuPrices}
+        gpuDisplayNames={gpuDisplayNames}
+        gpuVramGb={gpuVramGb}
         selectedGpuType={selectedGpuType}
         onSelectGpuType={setSelectedGpuType}
         isGpuTypeLoading={isGpuTypeLoading}

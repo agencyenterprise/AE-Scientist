@@ -5,6 +5,7 @@ import { InitializationStatusBanner } from "../initialization-status-banner";
 import { ResearchRunError } from "../research-run-error";
 import { ResearchActivityFeed } from "../ResearchActivityFeed";
 import type { ArtifactMetadata, LlmReviewResponse, ResearchRunInfo } from "@/types/research";
+import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 import { cn } from "@/shared/lib/utils";
 import { ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
 
@@ -30,6 +31,9 @@ interface OverviewTabProps {
   reviewLoading: boolean;
   onViewEvaluation?: () => void;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
+  stageSkipState?: StageSkipStateMap;
+  skipPendingStage?: string | null;
+  onSkipStage?: (stageSlug: string) => Promise<void>;
 }
 
 export function OverviewTab({
@@ -41,6 +45,9 @@ export function OverviewTab({
   reviewLoading,
   onViewEvaluation,
   onTerminateExecution,
+  stageSkipState,
+  skipPendingStage,
+  onSkipStage,
 }: OverviewTabProps) {
   const isCompleted = run.status === "completed" || run.status === "failed";
 
@@ -69,6 +76,10 @@ export function OverviewTab({
         runId={runId}
         maxHeight="600px"
         onTerminateExecution={onTerminateExecution}
+        runStatus={run.status}
+        stageSkipState={stageSkipState}
+        skipPendingStage={skipPendingStage}
+        onSkipStage={onSkipStage}
       />
     </div>
   );

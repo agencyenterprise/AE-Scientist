@@ -15,6 +15,8 @@ export function useLaunchResearch(conversationId: number | null) {
   const {
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     refreshGpuTypes,
@@ -74,6 +76,8 @@ export function useLaunchResearch(conversationId: number | null) {
     handleConfirmLaunch,
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,

@@ -751,8 +751,9 @@ class AgentManager:
                 )
             logger.debug(f"Feedback from _check_stage_completion: {main_stage_feedback}")
 
-            # If substage completes, emit event (even if main stage also completes)
-            if substage_complete:
+            # If substage completes but main stage doesn't, emit event now.
+            # If main stage also completes, defer the event until after multi-seed eval.
+            if substage_complete and not main_stage_complete:
                 self._emit_substage_completed_event(
                     current_substage=current_substage,
                     journal=self.journals[current_substage.name],

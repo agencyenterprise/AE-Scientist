@@ -49,6 +49,9 @@ export default function ResearchRunDetailPage() {
     stopPending,
     stopError,
     handleStopRun,
+    stageSkipState,
+    skipPendingStage,
+    handleSkipStage,
     seedPending,
     seedError,
     handleSeedNewIdea,
@@ -264,6 +267,9 @@ export default function ResearchRunDetailPage() {
               reviewLoading={reviewLoading}
               onViewEvaluation={() => setActiveTab("evaluation")}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
+              stageSkipState={stageSkipState}
+              skipPendingStage={skipPendingStage}
+              onSkipStage={conversationId ? handleSkipStage : undefined}
             />
           </TabsContent>
 

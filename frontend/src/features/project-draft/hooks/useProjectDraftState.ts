@@ -26,6 +26,8 @@ interface UseProjectDraftStateReturn {
   updateProjectDraft: (ideaData: { title: string; idea_markdown: string }) => Promise<void>;
   gpuTypes: string[];
   gpuPrices: Record<string, number | null>;
+  gpuDisplayNames: Record<string, string>;
+  gpuVramGb: Record<string, number | null>;
   selectedGpuType: string | null;
   isGpuTypeLoading: boolean;
   setSelectedGpuType: (gpuType: string) => void;
@@ -46,6 +48,8 @@ export function useProjectDraftState({
   const {
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     refreshGpuTypes,
@@ -135,6 +139,8 @@ export function useProjectDraftState({
     updateProjectDraft: dataState.updateProjectDraft,
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     setSelectedGpuType,

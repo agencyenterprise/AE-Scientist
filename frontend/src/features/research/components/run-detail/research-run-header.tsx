@@ -1,10 +1,13 @@
 "use client";
 
-import { ArrowLeft, ExternalLink, Loader2, Sprout, StopCircle } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ExternalLink, HelpCircle, Loader2, Sprout, StopCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { getStatusBadge } from "../../utils/research-utils";
 import { Button } from "@/shared/components/ui/button";
+import { Modal } from "@/shared/components/Modal";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 
 interface ResearchRunHeaderProps {
   title: string;
@@ -38,8 +41,18 @@ export function ResearchRunHeader({
   seedError = null,
 }: ResearchRunHeaderProps) {
   const router = useRouter();
+  const [isSeedDialogOpen, setIsSeedDialogOpen] = useState(false);
 
   const canSeedIdea = status === "completed" && conversationId !== null;
+
+  const handleSeedClick = () => {
+    setIsSeedDialogOpen(true);
+  };
+
+  const handleConfirmSeed = () => {
+    setIsSeedDialogOpen(false);
+    onSeedNewIdea?.();
+  };
 
   return (
     <div className="sticky top-0 z-20 -mx-6 -mt-6 mb-4 border-b border-border bg-background/95 px-6 py-4 backdrop-blur-sm">
@@ -98,22 +111,39 @@ export function ResearchRunHeader({
           )}
 
           {canSeedIdea && onSeedNewIdea && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onSeedNewIdea}
-              disabled={seedPending}
-              className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
-            >
-              {seedPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sprout className="h-4 w-4" />
-              )}
-              <span className="hidden sm:inline">
-                {seedPending ? "Seeding..." : "Seed New Idea"}
-              </span>
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSeedClick}
+                disabled={seedPending}
+                className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+              >
+                {seedPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sprout className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {seedPending ? "Seeding..." : "Seed New Idea"}
+                </span>
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-72 text-xs">
+                  Creates a new research idea based on this run. The evaluation results will be
+                  combined with the original idea and fed to an LLM to generate an improved version.
+                  During paper generation, the LLM will have access to the artifacts from this run.
+                </TooltipContent>
+              </Tooltip>
+            </div>
           )}
 
           {canStopRun && (
@@ -148,6 +178,51 @@ export function ResearchRunHeader({
             </p>
           )}
         </div>
+      )}
+
+      {/* Seed New Idea Confirmation Modal */}
+      {onSeedNewIdea && (
+        <Modal
+          isOpen={isSeedDialogOpen}
+          onClose={() => !seedPending && setIsSeedDialogOpen(false)}
+          title="Seed New Research Idea"
+          maxWidth="max-w-lg"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-300">
+              This will create a new research idea based on the results of this run.
+            </p>
+            <ul className="text-sm text-slate-300 list-disc list-inside space-y-2">
+              <li>
+                The <span className="text-white font-medium">evaluation results</span> from this run
+                will be combined with the original idea and fed to an LLM to generate an improved
+                version.
+              </li>
+              <li>
+                During <span className="text-white font-medium">paper generation</span>, the LLM
+                will have access to the artifacts from this run.
+              </li>
+            </ul>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSeedDialogOpen(false)}
+              disabled={seedPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirmSeed}
+              disabled={seedPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {seedPending ? "Seeding..." : "Seed New Idea"}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

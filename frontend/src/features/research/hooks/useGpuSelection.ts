@@ -6,6 +6,8 @@ import type { ResearchGpuTypesResponse } from "@/types";
 interface UseGpuSelectionResult {
   gpuTypes: string[];
   gpuPrices: Record<string, number | null>;
+  gpuDisplayNames: Record<string, string>;
+  gpuVramGb: Record<string, number | null>;
   selectedGpuType: string | null;
   isGpuTypeLoading: boolean;
   refreshGpuTypes: () => Promise<void>;
@@ -15,6 +17,8 @@ interface UseGpuSelectionResult {
 export function useGpuSelection(): UseGpuSelectionResult {
   const [gpuTypes, setGpuTypes] = useState<string[]>([]);
   const [gpuPrices, setGpuPrices] = useState<Record<string, number | null>>({});
+  const [gpuDisplayNames, setGpuDisplayNames] = useState<Record<string, string>>({});
+  const [gpuVramGb, setGpuVramGb] = useState<Record<string, number | null>>({});
   const [selectedGpuType, setSelectedGpuType] = useState<string | null>(null);
   const [isGpuTypeLoading, setIsGpuTypeLoading] = useState(true);
 
@@ -26,8 +30,12 @@ export function useGpuSelection(): UseGpuSelectionResult {
       const response = data as ResearchGpuTypesResponse;
       const list = response.gpu_types ?? [];
       const prices = response.gpu_prices ?? {};
+      const displayNames = response.gpu_display_names ?? {};
+      const vramGb = response.gpu_vram_gb ?? {};
       setGpuTypes(list);
       setGpuPrices(prices);
+      setGpuDisplayNames(displayNames);
+      setGpuVramGb(vramGb);
       setSelectedGpuType(previous => {
         if (previous && list.includes(previous)) {
           return previous;
@@ -41,6 +49,8 @@ export function useGpuSelection(): UseGpuSelectionResult {
       console.error("Failed to load GPU types", error);
       setGpuTypes([]);
       setGpuPrices({});
+      setGpuDisplayNames({});
+      setGpuVramGb({});
       setSelectedGpuType(null);
     } finally {
       setIsGpuTypeLoading(false);
@@ -58,6 +68,8 @@ export function useGpuSelection(): UseGpuSelectionResult {
   return {
     gpuTypes,
     gpuPrices,
+    gpuDisplayNames,
+    gpuVramGb,
     selectedGpuType,
     isGpuTypeLoading,
     refreshGpuTypes,
