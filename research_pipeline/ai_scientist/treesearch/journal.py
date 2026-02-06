@@ -460,7 +460,7 @@ class Journal:
         seed_node_ids = [n.id[:8] for n in nodes if n.is_seed_node]
         if seed_node_ids:
             logger.debug(f"Found {len(seed_node_ids)} seed node(s) to exclude: {seed_node_ids}")
-        candidate_nodes = [n for n in nodes if not n.is_seed_node]
+        candidate_nodes = [n for n in nodes if not n.is_seed_node and not n.is_seed_agg_node]
         if not candidate_nodes:
             candidate_nodes = nodes
             logger.debug(

@@ -126,7 +126,7 @@ def _summarize_best_node_block(*, journal: Journal) -> dict[str, Any]:
         child for child in best_node.children if child.is_seed_node and not child.is_seed_agg_node
     ]
     agg_node = next(
-        (child for child in best_node.children if child.is_seed_node and child.is_seed_agg_node),
+        (child for child in best_node.children if child.is_seed_agg_node),
         None,
     )
     if agg_node is None:
@@ -150,7 +150,7 @@ def _summarize_ablations(*, journal: Journal) -> list[dict[str, Any]]:
         if root.is_buggy:
             continue
         agg_node = next(
-            (child for child in root.children if child.is_seed_node and child.is_seed_agg_node),
+            (child for child in root.children if child.is_seed_agg_node),
             None,
         )
         source_node = agg_node if agg_node is not None else root
