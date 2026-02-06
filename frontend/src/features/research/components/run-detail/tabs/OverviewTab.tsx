@@ -77,6 +77,7 @@ export function OverviewTab({
         maxHeight="600px"
         onTerminateExecution={onTerminateExecution}
         runStatus={run.status}
+        terminationStatus={run.termination_status}
         stageSkipState={stageSkipState}
         skipPendingStage={skipPendingStage}
         onSkipStage={onSkipStage}

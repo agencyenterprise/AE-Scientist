@@ -34,6 +34,17 @@ type ResearchRunState = components["schemas"]["ResearchRunState"];
 type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
 type ExecutionType = components["schemas"]["ExecutionType"];
 
+// Define expected pipeline stages in order - these are the stages we show as placeholders
+// until they actually start
+const EXPECTED_STAGES = [
+  { id: "_run_start", name: "Run Initialization" },
+  { id: "initial_implementation", name: "Baseline Implementation" },
+  { id: "baseline_tuning", name: "Baseline Tuning" },
+  { id: "creative_research", name: "Creative Research" },
+  { id: "ablation", name: "Ablation Studies" },
+  { id: "paper_generation", name: "Paper Generation" },
+] as const;
+
 interface ResearchActivityFeedProps {
   runId: string;
   maxHeight?: string;
@@ -41,6 +52,8 @@ interface ResearchActivityFeedProps {
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
   /** Current run status (e.g., "running", "completed", "failed") */
   runStatus?: string;
+  /** Current termination status */
+  terminationStatus?: components["schemas"]["ResearchRunInfo"]["termination_status"];
   /** Map of stage slugs to their skip window state */
   stageSkipState?: StageSkipStateMap;
   /** Stage currently being skipped (pending confirmation from backend) */
@@ -185,21 +198,25 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
   const filteredEvents = filterNodeExecutionEvents(events);
 
   const stageMap = new Map<string, TimelineEvent[]>();
-  const stageOrder: string[] = [];
 
   for (const event of filteredEvents) {
     const stageId = getEventStage(event);
 
     if (!stageMap.has(stageId)) {
       stageMap.set(stageId, []);
-      stageOrder.push(stageId);
     }
     stageMap.get(stageId)!.push(event);
   }
 
-  return stageOrder.map(stageId => {
-    const stageEvents = stageMap.get(stageId) || [];
+  // Normalize stage IDs from events to match EXPECTED_STAGES
+  // e.g., "1_initial_implementation_1_baseline" -> "initial_implementation"
+  const normalizeStageId = (stageId: string): string => {
+    const extracted = extractStageSlug(stageId);
+    return extracted ?? stageId;
+  };
 
+  // Helper to create a StageGroup from events
+  const createStageGroup = (stageId: string, stageEvents: TimelineEvent[]): StageGroup => {
     const isRunStartStage = stageId === "_run_start";
     const isRunEndStage = stageId === "_run_end";
 
@@ -242,8 +259,7 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     // Get max_iterations and current iteration from regular progress_update events (not seed or aggregation)
     const regularProgressEvents = progressEvents.filter(
       e =>
-        !("is_seed_node" in e && e.is_seed_node) &&
-        !("is_seed_agg_node" in e && e.is_seed_agg_node)
+        !("is_seed_node" in e && e.is_seed_node) && !("is_seed_agg_node" in e && e.is_seed_agg_node)
     );
     const lastRegularProgress =
       regularProgressEvents.length > 0
@@ -274,7 +290,6 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       if ("iteration" in lastSeedProgress && "max_iterations" in lastSeedProgress) {
         currentSeed = lastSeedProgress.iteration as number;
         totalSeeds = lastSeedProgress.max_iterations as number;
-        // Seed eval is in progress if current < total and stage is not completed
         seedEvalInProgress =
           !isCompleted && currentSeed !== null && totalSeeds !== null && currentSeed < totalSeeds;
       }
@@ -294,7 +309,6 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       if ("iteration" in lastAggProgress && "max_iterations" in lastAggProgress) {
         currentAggregation = lastAggProgress.iteration as number;
         totalAggregations = lastAggProgress.max_iterations as number;
-        // Aggregation is in progress if progress < 1.0 and stage is not completed
         const aggProgress =
           "progress" in lastAggProgress ? (lastAggProgress.progress as number) : 0;
         aggregationInProgress =
@@ -324,7 +338,54 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       aggregationInProgress,
       hasAggregation,
     };
+  };
+
+  // Helper to create a placeholder StageGroup for stages that haven't started
+  const createPlaceholderStage = (stageId: string, stageName: string): StageGroup => ({
+    stageId,
+    stageName,
+    status: "pending",
+    events: [],
+    progress: 0,
+    startTime: null,
+    endTime: null,
+    maxNodes: null,
+    currentIteration: null,
+    currentSeed: null,
+    totalSeeds: null,
+    seedEvalInProgress: false,
+    hasSeedEvaluation: false,
+    currentAggregation: null,
+    totalAggregations: null,
+    aggregationInProgress: false,
+    hasAggregation: false,
   });
+
+  // Build the stage list in expected order, including placeholders
+  const result: StageGroup[] = [];
+
+  // Process stages in expected order
+  for (const expectedStage of EXPECTED_STAGES) {
+    // Find matching stage from events (handle both exact and prefixed IDs)
+    let matchingStageId: string | null = null;
+    for (const stageId of stageMap.keys()) {
+      if (normalizeStageId(stageId) === expectedStage.id || stageId === expectedStage.id) {
+        matchingStageId = stageId;
+        break;
+      }
+    }
+
+    if (matchingStageId) {
+      // Stage has events - process normally
+      const stageEvents = stageMap.get(matchingStageId) || [];
+      result.push(createStageGroup(matchingStageId, stageEvents));
+    } else {
+      // Stage hasn't started yet - add placeholder
+      result.push(createPlaceholderStage(expectedStage.id, expectedStage.name));
+    }
+  }
+
+  return result;
 }
 
 function formatDuration(startTime: string | null, endTime: string | null): string {
@@ -1017,17 +1078,19 @@ function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
       ? Math.min((stage.currentIteration || 0) / stage.maxNodes, 1)
       : 0;
 
-  const seedProgress = isCompleted && stage.hasSeedEvaluation
-    ? 1 // Stage completed with seeds = seeds done
-    : stage.totalSeeds && stage.totalSeeds > 0
-      ? Math.min((stage.currentSeed || 0) / stage.totalSeeds, 1)
-      : 0;
+  const seedProgress =
+    isCompleted && stage.hasSeedEvaluation
+      ? 1 // Stage completed with seeds = seeds done
+      : stage.totalSeeds && stage.totalSeeds > 0
+        ? Math.min((stage.currentSeed || 0) / stage.totalSeeds, 1)
+        : 0;
 
-  const aggregationProgress = isCompleted && stage.hasAggregation
-    ? 1 // Stage completed with aggregation = aggregation done
-    : stage.totalAggregations && stage.totalAggregations > 0
-      ? Math.min((stage.currentAggregation || 0) / stage.totalAggregations, 1)
-      : 0;
+  const aggregationProgress =
+    isCompleted && stage.hasAggregation
+      ? 1 // Stage completed with aggregation = aggregation done
+      : stage.totalAggregations && stage.totalAggregations > 0
+        ? Math.min((stage.currentAggregation || 0) / stage.totalAggregations, 1)
+        : 0;
 
   // Show all 3 phases for stages that are in progress or completed
   const isActiveOrCompleted = stage.status === "in_progress" || stage.status === "completed";
@@ -1049,7 +1112,8 @@ function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
       color: "bg-blue-500",
       bgColor: "bg-blue-500/20",
       show: stage.maxNodes !== null && stage.maxNodes > 0,
-      isActive: stage.status === "in_progress" && !stage.seedEvalInProgress && !stage.aggregationInProgress,
+      isActive:
+        stage.status === "in_progress" && !stage.seedEvalInProgress && !stage.aggregationInProgress,
     },
     {
       id: "seeds",
@@ -1081,7 +1145,7 @@ function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
 
   return (
     <div className="flex items-center gap-1 w-full mt-2">
-      {phases.map((phase) => (
+      {phases.map(phase => (
         <Tooltip key={phase.id}>
           <TooltipTrigger asChild>
             <div
@@ -1409,6 +1473,7 @@ export function ResearchActivityFeed({
   maxHeight = "500px",
   onTerminateExecution,
   runStatus,
+  terminationStatus,
   stageSkipState,
   skipPendingStage,
   onSkipStage,
@@ -1421,14 +1486,31 @@ export function ResearchActivityFeed({
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const stageGroups = useMemo(() => groupEventsByStage(events), [events]);
+  // Check if the run has finished (terminal status or terminated)
+  const isRunFinished =
+    runStatus === "completed" || runStatus === "failed" || terminationStatus === "terminated";
+
+  const stageGroups = useMemo(() => {
+    const groups = groupEventsByStage(events);
+
+    // If the run is finished, we shouldn't show any stages as "in_progress"
+    // Mark in_progress stages with events as "completed" (they were interrupted)
+    if (isRunFinished) {
+      return groups.map(stage => {
+        if (stage.status === "in_progress") {
+          return { ...stage, status: "completed" as const };
+        }
+        return stage;
+      });
+    }
+
+    return groups;
+  }, [events, isRunFinished]);
 
   useEffect(() => {
     // Auto-expand in-progress stage, auto-collapse completed stages
     const inProgressStage = stageGroups.find(s => s.status === "in_progress");
-    const completedStageIds = stageGroups
-      .filter(s => s.status === "completed")
-      .map(s => s.stageId);
+    const completedStageIds = stageGroups.filter(s => s.status === "completed").map(s => s.stageId);
 
     setExpandedStages(prev => {
       const next = new Set(prev);
