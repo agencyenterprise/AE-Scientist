@@ -68,27 +68,30 @@ def handle_stage_progress_event(
     Transform stage_progress event into timeline event.
 
     Creates:
-    - StageStartedEvent (if iteration == 1 AND stage not already started)
-    - ProgressUpdateEvent (otherwise)
+    - StageStartedEvent (if iteration == 1 AND stage not already started), followed by
+    - ProgressUpdateEvent (always)
     """
     now = datetime.now(timezone.utc)
+    events: List[TimelineEvent] = []
+    offset_ms = 0
 
-    # If iteration == 1 AND stage not already started, this is stage start
+    # If iteration == 1 AND stage not already started, emit stage start FIRST
     if event.iteration == 1 and state and not is_stage_started(state, event.stage):
         stage_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
-        return [
+        events.append(
             StageStartedEvent(
                 id=str(uuid.uuid4()),
-                timestamp=now,
+                timestamp=now + timedelta(milliseconds=offset_ms),
                 stage=event.stage,
                 node_id=None,
                 headline=f"Starting {stage_name}",
                 stage_name=stage_name,
                 goal=None,
             )
-        ]
+        )
+        offset_ms += 10
 
-    # Otherwise, it's a progress update
+    # Always emit the progress update (so frontend gets iteration count)
     stage_name = STAGE_NAMES.get(event.stage, event.stage)
 
     # Create different focus text based on node type
@@ -120,10 +123,10 @@ def handle_stage_progress_event(
         except (ValueError, TypeError):
             pass
 
-    return [
+    events.append(
         ProgressUpdateEvent(
             id=str(uuid.uuid4()),
-            timestamp=now,
+            timestamp=now + timedelta(milliseconds=offset_ms),
             stage=event.stage,
             node_id=None,
             headline=headline,
@@ -134,7 +137,9 @@ def handle_stage_progress_event(
             is_seed_node=event.is_seed_node,
             is_seed_agg_node=event.is_seed_agg_node,
         )
-    ]
+    )
+
+    return events
 
 
 def handle_substage_completed_event(
