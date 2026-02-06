@@ -194,9 +194,7 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         raise
 
     try:
-        tmp["plan"] = [
-            textwrap.fill(str(n.plan) if n.plan is not None else "", width=80) for n in jou.nodes
-        ]
+        tmp["plan"] = [str(n.plan) if n.plan is not None else "" for n in jou.nodes]
     except Exception as e:
         logger.error(f"Error setting plan: {e}")
         raise
@@ -217,10 +215,7 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         raise
 
     try:
-        tmp["analysis"] = [
-            textwrap.fill(str(n.analysis) if n.analysis is not None else "", width=80)
-            for n in jou.nodes
-        ]
+        tmp["analysis"] = [str(n.analysis) if n.analysis is not None else "" for n in jou.nodes]
     except Exception as e:
         logger.error(f"Error setting analysis: {e}")
         raise

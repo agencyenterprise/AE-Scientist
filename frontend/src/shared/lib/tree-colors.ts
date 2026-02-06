@@ -218,17 +218,17 @@ export const NODE_TYPE_DESCRIPTIONS: Record<NodeType, string> = {
  */
 export const NODE_TYPE_LONG_DESCRIPTIONS: Record<NodeType, string> = {
   [NodeType.Root]:
-    "The starting implementation that establishes the baseline. This is the initial attempt to solve the research problem.",
+    "The starting point for a stage's exploration. This node establishes the baseline implementation that subsequent nodes will attempt to debug, improve, or tune.",
   [NodeType.Debug]:
-    "The scientist identified a bug or failure in the parent implementation and generated a fix. These nodes represent debugging attempts to get the code working again.",
+    "The parent node failed with an error, and this node attempts to fix the bug. Debug nodes reuse the parent's approach while addressing the specific failure.",
   [NodeType.Improve]:
-    "The parent implementation succeeded, and this node represents an attempt to improve performance or quality. The scientist applies optimizations while maintaining functionality.",
+    "The parent node succeeded, and this node attempts to improve performance or quality. The scientist applies optimizations while maintaining functionality.",
   [NodeType.Hyperparam]:
-    "Systematic exploration of hyperparameter values to find better configurations. The scientist varies parameters within the same general approach.",
+    "Systematic exploration of hyperparameter values to find better configurations. The scientist varies parameters like learning rate, batch size, or regularization strength.",
   [NodeType.Ablation]:
-    "Controlled removal of specific components to understand their individual contributions. The scientist isolates which parts of the code are most important.",
+    "Controlled removal or modification of specific components to understand their individual contributions. This validates which parts of the implementation are most important.",
   [NodeType.SeedNode]:
-    "Tests the robustness of the parent's implementation by running it with different random seeds. Unlike debug/improve nodes, this reuses the parent code with varied initialization.",
+    "Runs the parent's implementation with a different random seed to ensure statistical validity. Multiple seed nodes test whether results are robust or just lucky.",
   [NodeType.SeedAggNode]:
-    "Combines and analyzes results from multiple seed evaluation runs to assess statistical robustness. This node aggregates metrics and plots from individual seed runs into a consolidated view.",
+    "Consolidates results from multiple seed runs, computing means and standard deviations across runs. Generates combined visualizations showing statistical spread.",
 };

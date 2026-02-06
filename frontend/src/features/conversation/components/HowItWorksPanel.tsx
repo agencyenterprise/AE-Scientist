@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/shared/lib/api-client-typed";
 import { cn } from "@/shared/lib/utils";
-import { AlertTriangle, BarChart3, Clock4, DollarSign, FileText, GitBranch } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  Clock4,
+  DollarSign,
+  FileText,
+  GitBranch,
+  Layers,
+  Repeat,
+  GitMerge,
+} from "lucide-react";
 
 const FLOW_STEPS = [
   {
@@ -12,17 +22,62 @@ const FLOW_STEPS = [
     detail: "Writes training scripts and evaluation loops that can run end-to-end.",
   },
   {
-    title: "Agentic tree search",
+    title: "Tree-based experimentation",
     detail:
-      "Branches into alternative experiment ideas, exploring variations systematically before committing GPU time.",
-  },
-  {
-    title: "Run & analyze",
-    detail: "Executes selected experiments, logs metrics, and produces plots as runs complete.",
+      "Executes experiments as nodes in a tree, branching into variations, logging metrics, producing plots, and pruning underperforming paths based on results.",
   },
   {
     title: "Draft manuscript",
     detail: "Compiles findings into a structured paper with figures, tables, and citations.",
+  },
+];
+
+const PIPELINE_STAGES = [
+  {
+    id: 1,
+    title: "Baseline Implementation",
+    detail: "Generate working baseline implementation with basic functional correctness.",
+  },
+  {
+    id: 2,
+    title: "Baseline Tuning",
+    detail: "Hyperparameter optimization to improve baseline performance.",
+  },
+  {
+    id: 3,
+    title: "Creative Research",
+    detail: "Novel improvements, plotting, and visualization generation.",
+  },
+  {
+    id: 4,
+    title: "Ablation Studies",
+    detail: "Component analysis to validate individual contributions.",
+  },
+  {
+    id: 5,
+    title: "Paper Generation",
+    detail: "Plot aggregation, citation gathering, paper writeup, and peer review.",
+  },
+];
+
+const TREE_SEARCH_CONCEPTS = [
+  {
+    icon: Layers,
+    title: "Experiment Nodes",
+    detail:
+      "Each node in the tree represents an experiment variant with its own script, plan, metrics, and visualizations. The agent explores promising branches while pruning underperforming ones.",
+  },
+  {
+    icon: Repeat,
+    title: "Seed Nodes (Replication)",
+    detail:
+      "At the end of each stage, successful experiments spawn multiple seed nodes that run the same experiment with different random seeds to ensure statistical validity.",
+  },
+  {
+    icon: GitMerge,
+    title: "Aggregation Nodes",
+    detail:
+      "After seed nodes complete, an aggregation node consolidates results—computing means and standard deviations across runs and generating combined visualizations showing statistical spread.",
   },
 ];
 
@@ -102,6 +157,53 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             </li>
           ))}
         </ol>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="text-base font-semibold text-white">Pipeline stages</h3>
+        <p className="mt-2 text-slate-300">
+          The research pipeline progresses through five stages, each building on the previous:
+        </p>
+        <ol className="mt-3 space-y-2">
+          {PIPELINE_STAGES.map(stage => (
+            <li
+              key={stage.id}
+              className="flex items-start gap-3 rounded-xl border border-slate-800/40 bg-slate-900/30 p-3"
+            >
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-semibold text-emerald-300">
+                {stage.id}
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-white">{stage.title}</p>
+                <p className="text-xs text-slate-400">{stage.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="text-base font-semibold text-white">
+          Tree-based experimentation &amp; statistical validation
+        </h3>
+        <p className="mt-2 text-slate-300">
+          Within each stage, the agentic tree search explores experiment variations and ensures
+          results are statistically robust:
+        </p>
+        <div className="mt-3 space-y-3">
+          {TREE_SEARCH_CONCEPTS.map(concept => (
+            <div
+              key={concept.title}
+              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4"
+            >
+              <div className="flex items-center gap-3">
+                <concept.icon className="h-5 w-5 text-violet-400" />
+                <p className="text-sm font-semibold text-white">{concept.title}</p>
+              </div>
+              <p className="mt-2 text-slate-300">{concept.detail}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="mt-6 grid gap-4 md:grid-cols-3">
