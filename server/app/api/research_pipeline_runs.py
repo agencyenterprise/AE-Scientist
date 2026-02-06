@@ -93,6 +93,29 @@ class PodLaunchError(Exception):
         self.message = message
 
 
+def _get_user_friendly_runpod_error(exc: RunPodError) -> str:
+    """Convert a RunPod API error into a user-friendly message."""
+    error_str = str(exc).lower()
+
+    if "no instances currently available" in error_str:
+        return (
+            "No GPU instances are currently available for the selected GPU type. "
+            "Please try again later or select a different GPU type."
+        )
+
+    if exc.status == 401 or "unauthorized" in error_str:
+        return "Authentication error with GPU provider. Please contact support."
+
+    if exc.status == 429 or "rate limit" in error_str:
+        return "Too many requests to GPU provider. Please wait a moment and try again."
+
+    if exc.status >= 500:
+        return "The GPU provider is experiencing issues. Please try again later."
+
+    # Fallback for unknown errors
+    return "Failed to provision GPU instance. Please try again or select a different GPU type."
+
+
 class ResearchRunAcceptedResponse(BaseModel):
     status: str = "ok"
     run_id: str
@@ -325,44 +348,15 @@ async def create_and_launch_research_run(
     db = get_database()
     if not gpu_types:
         raise PodLaunchError("At least one GPU type must be provided.")
+
     run_id = f"rp-{uuid4().hex[:10]}"
     webhook_token, webhook_token_hash = generate_run_webhook_token()
-    await db.create_research_pipeline_run(
-        run_id=run_id,
-        idea_id=idea_data.idea_id,
-        idea_version_id=idea_data.version_id,
-        status="pending",
-        start_deadline_at=None,
-        cost=0.0,
-        last_billed_at=datetime.now(timezone.utc),
-        container_disk_gb=CONTAINER_DISK_GB,
-        volume_disk_gb=WORKSPACE_DISK_GB,
-        webhook_token_hash=webhook_token_hash,
-    )
-
-    # Get the run to extract cost info
-    run = await db.get_research_pipeline_run(run_id)
-
-    await initialize_run_state(
-        db=db,
-        run_id=run_id,
-        conversation_id=conversation_id,
-        idea_markdown=idea_data.idea_markdown,
-        idea_title=idea_data.title,
-        gpu_type=run.gpu_type if run else None,
-        cost_per_hour_cents=int(run.cost * 100) if run and run.cost else None,
-    )
-
     config_name = f"{run_id}_config.yaml"
+
+    # Try to launch the pod FIRST, before creating any DB records.
+    # This avoids creating orphaned "failed" records when GPU instances are unavailable.
     try:
-        logger.info("Launching research pipeline job in background for run_id=%s", run_id)
-
-        startup_grace_seconds = get_pipeline_startup_grace_seconds()
-        await db.update_research_pipeline_run(
-            run_id=run_id,
-            start_deadline_at=datetime.now(timezone.utc) + timedelta(seconds=startup_grace_seconds),
-        )
-
+        logger.info("Launching research pipeline pod for run_id=%s", run_id)
         pod_info = await launch_research_pipeline_run(
             title=idea_data.title,
             idea=idea_data.idea_markdown,
@@ -373,41 +367,50 @@ async def create_and_launch_research_run(
             parent_run_id=parent_run_id,
             webhook_token=webhook_token,
         )
-        await db.update_research_pipeline_run(
-            run_id=run_id,
-            status="initializing",
-            initialization_status="Downloading container image",
-            pod_update_info=PodUpdateInfo(
-                pod_id=pod_info.pod_id,
-                pod_name=pod_info.pod_name,
-                gpu_type=pod_info.gpu_type,
-                cost=pod_info.cost,
-                public_ip=None,
-                ssh_port=None,
-                pod_host_id=None,
-            ),
-        )
-        asyncio.create_task(_wait_for_pod_ready(db=db, pod_info=pod_info, run_id=run_id))
-        return run_id, pod_info
-
-    except (RunPodError, FileNotFoundError, ValueError, RuntimeError) as exc:
+    except RunPodError as exc:
+        logger.warning("Failed to launch pod for run_id=%s: %s", run_id, exc)
+        raise PodLaunchError(_get_user_friendly_runpod_error(exc)) from None
+    except (FileNotFoundError, ValueError, RuntimeError):
         logger.exception("Failed to launch research pipeline run.")
-        run_before = await db.get_research_pipeline_run(run_id)
-        await db.update_research_pipeline_run(
-            run_id=run_id, status="failed", error_message=str(exc)
-        )
-        await db.insert_research_pipeline_run_event(
-            run_id=run_id,
-            event_type="status_changed",
-            metadata={
-                "from_status": run_before.status if run_before else None,
-                "to_status": "failed",
-                "reason": "launch_error",
-                "error_message": str(exc),
-            },
-            occurred_at=datetime.now(timezone.utc),
-        )
-        raise PodLaunchError(str(exc)) from None
+        raise PodLaunchError(
+            "Failed to prepare research run. Please try again or contact support."
+        ) from None
+
+    # Pod created successfully - now create the DB record
+    startup_grace_seconds = get_pipeline_startup_grace_seconds()
+    await db.create_research_pipeline_run(
+        run_id=run_id,
+        idea_id=idea_data.idea_id,
+        idea_version_id=idea_data.version_id,
+        status="initializing",
+        start_deadline_at=datetime.now(timezone.utc) + timedelta(seconds=startup_grace_seconds),
+        cost=pod_info.cost,
+        last_billed_at=datetime.now(timezone.utc),
+        container_disk_gb=CONTAINER_DISK_GB,
+        volume_disk_gb=WORKSPACE_DISK_GB,
+        webhook_token_hash=webhook_token_hash,
+        pod_id=pod_info.pod_id,
+        pod_name=pod_info.pod_name,
+        gpu_type=pod_info.gpu_type,
+    )
+
+    await initialize_run_state(
+        db=db,
+        run_id=run_id,
+        conversation_id=conversation_id,
+        idea_markdown=idea_data.idea_markdown,
+        idea_title=idea_data.title,
+        gpu_type=pod_info.gpu_type,
+        cost_per_hour_cents=int(pod_info.cost * 100) if pod_info.cost else None,
+    )
+
+    await db.update_research_pipeline_run(
+        run_id=run_id,
+        initialization_status="Downloading container image",
+    )
+
+    asyncio.create_task(_wait_for_pod_ready(db=db, pod_info=pod_info, run_id=run_id))
+    return run_id, pod_info
 
 
 @router.post(

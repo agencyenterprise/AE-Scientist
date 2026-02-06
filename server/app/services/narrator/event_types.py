@@ -22,7 +22,7 @@ class RunStartedEventData(BaseModel):
     """Internal event data for run_started events (used by narrator)."""
 
     started_running_at: str
-    gpu_type: Optional[str]
+    gpu_type: str
     cost_per_hour_cents: Optional[int]
 
 

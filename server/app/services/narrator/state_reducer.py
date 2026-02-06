@@ -208,9 +208,8 @@ def handle_run_started(state: ResearchRunState, event: RunStartedEvent) -> State
         "updated_at": event.timestamp,
     }
 
-    # Set GPU type and cost if provided
-    if event.gpu_type:
-        changes["gpu_type"] = event.gpu_type
+    # Set GPU type and cost
+    changes["gpu_type"] = event.gpu_type
 
     if event.cost_per_hour_cents:
         changes["cost_per_hour_cents"] = event.cost_per_hour_cents

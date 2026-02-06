@@ -12,7 +12,7 @@ export interface ResearchBoardCardProps {
   status: string;
   currentStage: string | null;
   progress: number | null;
-  gpuType: string | null;
+  gpuType: string;
   createdByName: string;
   createdAt: string;
   artifactsCount: number;

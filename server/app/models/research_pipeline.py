@@ -83,7 +83,7 @@ class ResearchRunListItem(BaseModel):
             "(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)."
         ),
     )
-    gpu_type: Optional[str] = Field(None, description="GPU type used for the run")
+    gpu_type: str = Field(..., description="GPU type used for the run")
     cost: float = Field(..., description="Hourly RunPod cost (USD) captured when the pod launched")
     best_metric: Optional[str] = Field(None, description="Best metric from latest progress event")
     created_by_name: str = Field(..., description="Name of the user who created the run")

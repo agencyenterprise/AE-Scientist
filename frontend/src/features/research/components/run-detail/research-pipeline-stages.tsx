@@ -723,7 +723,7 @@ function ActiveExecutionCard({
       <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 space-y-3">
         <div className="flex flex-col gap-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-            Codex execution in progress
+            Coding agent execution in progress
           </p>
           <p className="text-sm font-mono text-white">{formatNodeId(executionId)}</p>
           <p className="text-xs text-slate-400">
@@ -738,7 +738,7 @@ function ActiveExecutionCard({
           <details className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
             <summary className="cursor-pointer text-xs font-semibold text-slate-200">
               <div className="flex items-center justify-between gap-2">
-                <span>Codex task</span>
+                <span>Coding agent task</span>
                 <span
                   onClick={event => {
                     event.preventDefault();

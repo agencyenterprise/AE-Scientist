@@ -138,7 +138,7 @@ export type RunStatus = "pending" | "running" | "completed" | "failed";
 export interface IdeationQueueRunItemProps {
   runId: string;
   status: string;
-  gpuType: string | null;
+  gpuType: string;
   createdAt: string;
 }
 

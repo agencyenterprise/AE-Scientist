@@ -12,7 +12,7 @@ export interface ResearchBoardCardBodyProps {
   errorMessage: string | null;
   currentStage: string | null;
   progress: number | null;
-  gpuType: string | null;
+  gpuType: string;
 }
 
 /**

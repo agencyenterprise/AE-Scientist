@@ -8,7 +8,7 @@ interface ResearchRunStatsProps {
   status: string;
   currentStage: string | null;
   progress: number | null;
-  gpuType: string | null;
+  gpuType: string;
   artifactsCount: number;
 }
 

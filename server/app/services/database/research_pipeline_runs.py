@@ -77,9 +77,9 @@ class ResearchPipelineRun(NamedTuple):
     idea_version_id: int
     status: str
     initialization_status: str
-    pod_id: Optional[str]
-    pod_name: Optional[str]
-    gpu_type: Optional[str]
+    pod_id: str
+    pod_name: str
+    gpu_type: str
     public_ip: Optional[str]
     ssh_port: Optional[str]
     pod_host_id: Optional[str]
@@ -126,6 +126,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         container_disk_gb: int,
         volume_disk_gb: int,
         webhook_token_hash: str,
+        pod_id: str,
+        pod_name: str,
+        gpu_type: str,
         started_running_at: Optional[datetime] = None,
     ) -> int:
         if status not in PIPELINE_RUN_STATUSES:
@@ -148,10 +151,13 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         volume_disk_gb,
                         webhook_token_hash,
                         hw_billing_status,
+                        pod_id,
+                        pod_name,
+                        gpu_type,
                         created_at,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -166,6 +172,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                         volume_disk_gb,
                         webhook_token_hash,
                         "pending",  # hw_billing_status starts as pending
+                        pod_id,
+                        pod_name,
+                        gpu_type,
                         now,
                         now,
                     ),
@@ -486,12 +495,14 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         - conversation_id: The conversation ID
         - title: The idea title from idea_versions
         - idea_markdown: The idea markdown content from idea_versions
+        - gpu_type: The GPU type used for the run
 
         Returns None if the run doesn't exist.
         """
         query = """
             SELECT
                 rpr.idea_id,
+                rpr.gpu_type,
                 i.conversation_id,
                 iv.title,
                 iv.idea_markdown
@@ -523,9 +534,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             idea_version_id=row["idea_version_id"],
             status=row["status"],
             initialization_status=cast(str, row.get("initialization_status") or "pending"),
-            pod_id=row.get("pod_id"),
-            pod_name=row.get("pod_name"),
-            gpu_type=row.get("gpu_type"),
+            pod_id=row["pod_id"],
+            pod_name=row["pod_name"],
+            gpu_type=row["gpu_type"],
             public_ip=row.get("public_ip"),
             ssh_port=row.get("ssh_port"),
             pod_host_id=row.get("pod_host_id"),

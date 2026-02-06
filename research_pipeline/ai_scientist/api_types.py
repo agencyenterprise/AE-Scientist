@@ -1342,16 +1342,13 @@ class ResearchRunInfo(BaseModel):
             title="Idea Version Id",
         ),
     ]
-    pod_id: Annotated[
-        str | None,
-        Field(description="RunPod identifier, when available", title="Pod Id"),
-    ] = None
+    pod_id: Annotated[str, Field(description="RunPod identifier", title="Pod Id")]
     pod_name: Annotated[
-        str | None, Field(description="Human-friendly pod name", title="Pod Name")
-    ] = None
+        str, Field(description="Human-friendly pod name", title="Pod Name")
+    ]
     gpu_type: Annotated[
-        str | None, Field(description="Requested GPU type", title="Gpu Type")
-    ] = None
+        str, Field(description="GPU type used for the run", title="Gpu Type")
+    ]
     cost: Annotated[
         float,
         Field(
@@ -1505,8 +1502,8 @@ class ResearchRunListItem(BaseModel):
         ),
     ] = None
     gpu_type: Annotated[
-        str | None, Field(description="GPU type used for the run", title="Gpu Type")
-    ] = None
+        str, Field(description="GPU type used for the run", title="Gpu Type")
+    ]
     cost: Annotated[
         float,
         Field(
@@ -1817,16 +1814,13 @@ class ResearchRunSummary(BaseModel):
             title="Idea Version Id",
         ),
     ]
-    pod_id: Annotated[
-        str | None,
-        Field(description="RunPod identifier, when available", title="Pod Id"),
-    ] = None
+    pod_id: Annotated[str, Field(description="RunPod identifier", title="Pod Id")]
     pod_name: Annotated[
-        str | None, Field(description="Human-friendly pod name", title="Pod Name")
-    ] = None
+        str, Field(description="Human-friendly pod name", title="Pod Name")
+    ]
     gpu_type: Annotated[
-        str | None, Field(description="Requested GPU type", title="Gpu Type")
-    ] = None
+        str, Field(description="GPU type used for the run", title="Gpu Type")
+    ]
     cost: Annotated[
         float,
         Field(
@@ -1966,9 +1960,7 @@ class RunStartedEvent(BaseModel):
     ] = None
     type: Annotated[Literal["run_started"], Field(title="Type")] = "run_started"
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    gpu_type: Annotated[
-        str | None, Field(description="GPU type allocated", title="Gpu Type")
-    ] = None
+    gpu_type: Annotated[str, Field(description="GPU type allocated", title="Gpu Type")]
     cost_per_hour_cents: Annotated[
         int | None,
         Field(description="Cost per hour in cents", title="Cost Per Hour Cents"),
@@ -3093,7 +3085,7 @@ class ResearchRunState(BaseModel):
         AwareDatetime | None, Field(title="Started Running At")
     ] = None
     completed_at: Annotated[AwareDatetime | None, Field(title="Completed At")] = None
-    gpu_type: Annotated[str | None, Field(title="Gpu Type")] = None
+    gpu_type: Annotated[str, Field(title="Gpu Type")]
     estimated_cost_cents: Annotated[int | None, Field(title="Estimated Cost Cents")] = (
         None
     )

@@ -580,99 +580,90 @@ class PodTerminationWorker:
             )
 
         # Step B: terminate pod (always attempt on final attempt even if upload failed).
-        if run.pod_id:
-            try:
-                logger.info("Terminating pod (run_id=%s pod_id=%s).", run_id, run.pod_id)
-                await self._runpod_manager.delete_pod(run.pod_id)
-                await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
+        try:
+            logger.info("Terminating pod (run_id=%s pod_id=%s).", run_id, run.pod_id)
+            await self._runpod_manager.delete_pod(run.pod_id)
+            await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
+            logger.info(
+                "Pod termination acknowledged (run_id=%s pod_id=%s).",
+                run_id,
+                run.pod_id,
+            )
+        except RunPodError as exc:
+            logger.exception(
+                "RunPod pod termination threw an exception (run_id=%s pod_id=%s status=%s).",
+                run_id,
+                run.pod_id,
+                exc.status,
+            )
+            if exc.status == 404:
                 logger.info(
-                    "Pod termination acknowledged (run_id=%s pod_id=%s).",
+                    "Pod already gone (404); treating as terminated (run_id=%s pod_id=%s).",
                     run_id,
                     run.pod_id,
                 )
-            except RunPodError as exc:
-                logger.exception(
-                    "RunPod pod termination threw an exception (run_id=%s pod_id=%s status=%s).",
-                    run_id,
-                    run.pod_id,
-                    exc.status,
+                await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
+            else:
+                error_message = (
+                    f"RunPod pod termination failed for run {run_id} "
+                    f"(pod_id={run.pod_id}, status={exc.status}): {exc}"
                 )
-                if exc.status == 404:
+                logger.warning("%s", error_message)
+                if attempt_number < _TERMINATION_MAX_UPLOAD_ATTEMPTS:
                     logger.info(
-                        "Pod already gone (404); treating as terminated (run_id=%s pod_id=%s).",
+                        "Rescheduling termination due to pod termination error (run_id=%s attempt=%s/%s).",
                         run_id,
-                        run.pod_id,
+                        attempt_number,
+                        _TERMINATION_MAX_UPLOAD_ATTEMPTS,
                     )
-                    await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
-                else:
-                    error_message = (
-                        f"RunPod pod termination failed for run {run_id} "
-                        f"(pod_id={run.pod_id}, status={exc.status}): {exc}"
-                    )
-                    logger.warning("%s", error_message)
-                    if attempt_number < _TERMINATION_MAX_UPLOAD_ATTEMPTS:
-                        logger.info(
-                            "Rescheduling termination due to pod termination error (run_id=%s attempt=%s/%s).",
-                            run_id,
-                            attempt_number,
-                            _TERMINATION_MAX_UPLOAD_ATTEMPTS,
-                        )
-                        await db.reschedule_research_pipeline_run_termination(
-                            run_id=run_id,
-                            attempts=attempt_number,
-                            error=error_message,
-                        )
-                        updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                        publish_termination_status_event(run_id=run_id, termination=updated)
-                        return
-
-                    sentry_sdk.capture_message(error_message, level="error")
-                    await db.mark_research_pipeline_run_termination_failed(
+                    await db.reschedule_research_pipeline_run_termination(
                         run_id=run_id,
                         attempts=attempt_number,
                         error=error_message,
                     )
                     updated = await db.get_research_pipeline_run_termination(run_id=run_id)
                     publish_termination_status_event(run_id=run_id, termination=updated)
-                    logger.warning(
-                        "Termination failed; emitting complete (run_id=%s status=%s).",
-                        run_id,
+                    return
+
+                sentry_sdk.capture_message(error_message, level="error")
+                await db.mark_research_pipeline_run_termination_failed(
+                    run_id=run_id,
+                    attempts=attempt_number,
+                    error=error_message,
+                )
+                updated = await db.get_research_pipeline_run_termination(run_id=run_id)
+                publish_termination_status_event(run_id=run_id, termination=updated)
+                logger.warning(
+                    "Termination failed; emitting complete (run_id=%s status=%s).",
+                    run_id,
+                    run.status,
+                )
+                # Map status to valid SSE status values
+                early_sse_status: Literal["pending", "running", "completed", "failed", "cancelled"]
+                if run.status == "initializing":
+                    # If terminated during initialization, treat as cancelled
+                    early_sse_status = "cancelled"
+                elif run.status in ("pending", "running", "completed", "failed", "cancelled"):
+                    early_sse_status = cast(
+                        Literal["pending", "running", "completed", "failed", "cancelled"],
                         run.status,
                     )
-                    # Map status to valid SSE status values
-                    early_sse_status: Literal[
-                        "pending", "running", "completed", "failed", "cancelled"
-                    ]
-                    if run.status == "initializing":
-                        # If terminated during initialization, treat as cancelled
-                        early_sse_status = "cancelled"
-                    elif run.status in ("pending", "running", "completed", "failed", "cancelled"):
-                        early_sse_status = cast(
-                            Literal["pending", "running", "completed", "failed", "cancelled"],
-                            run.status,
-                        )
-                    else:
-                        # Unknown status, default to failed
-                        early_sse_status = "failed"
+                else:
+                    # Unknown status, default to failed
+                    early_sse_status = "failed"
 
-                    publish_stream_event(
-                        run_id,
-                        SSECompleteEvent(
-                            type="complete",
-                            data=ResearchRunCompleteData(
-                                status=early_sse_status,
-                                success=run.status == "completed",
-                                message=run.error_message,
-                            ),
+                publish_stream_event(
+                    run_id,
+                    SSECompleteEvent(
+                        type="complete",
+                        data=ResearchRunCompleteData(
+                            status=early_sse_status,
+                            success=run.status == "completed",
+                            message=run.error_message,
                         ),
-                    )
-                    return
-        else:
-            logger.info(
-                "Run has no pod_id; treating as terminated (run_id=%s).",
-                run_id,
-            )
-            await db.mark_research_pipeline_run_termination_pod_terminated(run_id=run_id)
+                    ),
+                )
+                return
 
         logger.info("Marking termination as terminated (run_id=%s).", run_id)
         await db.mark_research_pipeline_run_termination_terminated(
@@ -683,29 +674,28 @@ class PodTerminationWorker:
         publish_termination_status_event(run_id=run_id, termination=updated)
 
         # Record pod billing summary now that termination is complete
-        if run.pod_id:
-            billing_context = termination.last_trigger or "termination_worker"
-            logger.info(
-                "Recording pod billing summary (run_id=%s pod_id=%s context=%s).",
+        billing_context = termination.last_trigger or "termination_worker"
+        logger.info(
+            "Recording pod billing summary (run_id=%s pod_id=%s context=%s).",
+            run_id,
+            run.pod_id,
+            billing_context,
+        )
+        try:
+            # Cast db to DatabaseManager for billing function
+            await _record_pod_billing_event(
+                cast(DatabaseManager, db),
+                run_id=run_id,
+                pod_id=run.pod_id,
+                context=billing_context,
+            )
+        except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+            # Best-effort billing recording - don't fail termination if it fails
+            logger.exception(
+                "Failed to record pod billing summary (run_id=%s pod_id=%s).",
                 run_id,
                 run.pod_id,
-                billing_context,
             )
-            try:
-                # Cast db to DatabaseManager for billing function
-                await _record_pod_billing_event(
-                    cast(DatabaseManager, db),
-                    run_id=run_id,
-                    pod_id=run.pod_id,
-                    context=billing_context,
-                )
-            except Exception:  # noqa: BLE001  # pylint: disable=broad-exception-caught
-                # Best-effort billing recording - don't fail termination if it fails
-                logger.exception(
-                    "Failed to record pod billing summary (run_id=%s pod_id=%s).",
-                    run_id,
-                    run.pod_id,
-                )
 
         if upload_failed_error is not None and attempt_number >= _TERMINATION_MAX_UPLOAD_ATTEMPTS:
             sentry_sdk.capture_message(

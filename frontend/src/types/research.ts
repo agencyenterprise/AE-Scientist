@@ -73,7 +73,7 @@ export interface ResearchRun {
   ideaMarkdown: string | null; // Full idea content in markdown format
   currentStage: string | null;
   progress: number | null;
-  gpuType: string | null;
+  gpuType: string;
   bestMetric: string | null;
   createdByName: string;
   createdAt: string;

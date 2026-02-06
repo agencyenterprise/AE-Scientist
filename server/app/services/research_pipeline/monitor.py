@@ -26,11 +26,7 @@ from app.services.research_pipeline.pod_termination_worker import (
     notify_termination_requested,
     publish_termination_status_event,
 )
-from app.services.research_pipeline.runpod import (
-    RunPodError,
-    RunPodManager,
-    get_supported_gpu_types,
-)
+from app.services.research_pipeline.runpod import RunPodError, RunPodManager
 
 
 class ResearchRunStore(Protocol):
@@ -274,7 +270,7 @@ class ResearchPipelineMonitor:
             # Try restart instead of immediate failure
             actual_db = get_database()
             webhook_token, webhook_token_hash = generate_run_webhook_token()
-            gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
+            gpu_types = [run.gpu_type]
             restarted = await attempt_pod_restart(
                 db=actual_db,
                 run=run,
@@ -346,7 +342,7 @@ class ResearchPipelineMonitor:
                 # Try restart instead of immediate failure
                 actual_db = get_database()
                 webhook_token, webhook_token_hash = generate_run_webhook_token()
-                gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
+                gpu_types = [run.gpu_type]
                 restarted = await attempt_pod_restart(
                     db=actual_db,
                     run=run,
@@ -368,45 +364,44 @@ class ResearchPipelineMonitor:
         if run.heartbeat_failures > 0:
             await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
 
-        if run.pod_id:
-            try:
-                pod = await self._runpod_manager.get_pod(run.pod_id)
-                status = pod.get("desiredStatus")
-                if status == "PENDING":
-                    logger.info(
-                        "Run %s pod %s still pending startup; waiting for readiness.",
-                        run.run_id,
-                        run.pod_id,
+        try:
+            pod = await self._runpod_manager.get_pod(run.pod_id)
+            status = pod.get("desiredStatus")
+            if status == "PENDING":
+                logger.info(
+                    "Run %s pod %s still pending startup; waiting for readiness.",
+                    run.run_id,
+                    run.pod_id,
+                )
+            elif status not in ("RUNNING", "PENDING"):
+                logger.warning(
+                    "Run %s pod %s returned unexpected status '%s'; attempting restart.",
+                    run.run_id,
+                    run.pod_id,
+                    status,
+                )
+                # Try restart instead of immediate failure
+                actual_db = get_database()
+                webhook_token, webhook_token_hash = generate_run_webhook_token()
+                gpu_types = [run.gpu_type]
+                restarted = await attempt_pod_restart(
+                    db=actual_db,
+                    run=run,
+                    reason="container_died",
+                    gpu_types=gpu_types,
+                    webhook_token=webhook_token,
+                    webhook_token_hash=webhook_token_hash,
+                )
+                if not restarted:
+                    # Max restarts exceeded, fail permanently
+                    await self._fail_run(
+                        db,
+                        run,
+                        f"Pod status is {status} after {run.restart_count} restart attempt(s).",
+                        "container_died",
                     )
-                elif status not in ("RUNNING", "PENDING"):
-                    logger.warning(
-                        "Run %s pod %s returned unexpected status '%s'; attempting restart.",
-                        run.run_id,
-                        run.pod_id,
-                        status,
-                    )
-                    # Try restart instead of immediate failure
-                    actual_db = get_database()
-                    webhook_token, webhook_token_hash = generate_run_webhook_token()
-                    gpu_types = [run.gpu_type] if run.gpu_type else get_supported_gpu_types()
-                    restarted = await attempt_pod_restart(
-                        db=actual_db,
-                        run=run,
-                        reason="container_died",
-                        gpu_types=gpu_types,
-                        webhook_token=webhook_token,
-                        webhook_token_hash=webhook_token_hash,
-                    )
-                    if not restarted:
-                        # Max restarts exceeded, fail permanently
-                        await self._fail_run(
-                            db,
-                            run,
-                            f"Pod status is {status} after {run.restart_count} restart attempt(s).",
-                            "container_died",
-                        )
-            except RunPodError as exc:
-                logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
+        except RunPodError as exc:
+            logger.warning("Failed to poll RunPod status for %s: %s", run.pod_id, exc)
 
         await self._bill_run_if_needed(db, run, now)
 

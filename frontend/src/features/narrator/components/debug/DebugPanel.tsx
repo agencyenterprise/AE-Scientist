@@ -49,7 +49,7 @@ export function DebugPanel({ state }: DebugPanelProps) {
     ideaTitle: state.idea_title ?? "N/A",
     startedRunningAt: state.started_running_at ?? "N/A",
     completedAt: state.completed_at ?? "N/A",
-    gpuType: state.gpu_type ?? "N/A",
+    gpuType: state.gpu_type,
     estimatedCostCents: state.estimated_cost_cents ?? "N/A",
     actualCostCents: state.actual_cost_cents ?? "N/A",
     costPerHourCents: state.cost_per_hour_cents ?? "N/A",

@@ -91,7 +91,11 @@ class PresignedUrlUploader:
     def _log_progress(self, message: str) -> None:
         """Log progress message and call callback if available."""
         logger.info(message)
-        print(message, flush=True)
+        try:
+            print(message, flush=True)
+        except BrokenPipeError:
+            # SSH pipe may be closed but upload can still succeed via HTTPS
+            pass
         self._progress_callback(message)
 
     def upload(self, *, request: ArtifactUploadRequest) -> tuple[str, str, int]:

@@ -72,17 +72,16 @@ async def attempt_pod_restart(
 
     # Step 1: Terminate the old pod (best effort)
     old_pod_id = run.pod_id
-    if old_pod_id:
-        try:
-            await terminate_pod(pod_id=old_pod_id)
-            logger.info("Terminated old pod %s for run %s", old_pod_id, run.run_id)
-        except Exception as exc:
-            logger.warning(
-                "Failed to terminate old pod %s for run %s: %s (continuing with restart)",
-                old_pod_id,
-                run.run_id,
-                exc,
-            )
+    try:
+        await terminate_pod(pod_id=old_pod_id)
+        logger.info("Terminated old pod %s for run %s", old_pod_id, run.run_id)
+    except Exception as exc:
+        logger.warning(
+            "Failed to terminate old pod %s for run %s: %s (continuing with restart)",
+            old_pod_id,
+            run.run_id,
+            exc,
+        )
 
     # Step 2: Get the idea data needed to relaunch
     idea_data = await db.get_run_idea_data(run.run_id)
@@ -93,10 +92,9 @@ async def attempt_pod_restart(
     # Step 3: Launch new pod (preserve original pod name by extracting username)
     # Pod name format: "aescientist_{username}_{run_id}"
     original_username = "User"
-    if run.pod_name:
-        parts = run.pod_name.split("_", 2)
-        if len(parts) >= 2:
-            original_username = parts[1]
+    parts = run.pod_name.split("_", 2)
+    if len(parts) >= 2:
+        original_username = parts[1]
 
     try:
         pod_info = await launch_research_pipeline_run(

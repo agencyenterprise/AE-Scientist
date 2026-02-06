@@ -795,7 +795,7 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
 function EventDetails({ event }: { event: TimelineEvent }) {
   switch (event.type) {
     case "run_started":
-      return "gpu_type" in event && event.gpu_type ? (
+      return "gpu_type" in event ? (
         <p className="text-xs text-muted-foreground mt-0.5">GPU: {event.gpu_type}</p>
       ) : null;
 
@@ -1090,7 +1090,10 @@ function StageSection({
     <div className="border border-border rounded-lg overflow-hidden">
       <div className="w-full flex items-center justify-between gap-2 sm:gap-4 p-3 sm:p-4 hover:bg-muted/30 transition-colors">
         {/* Clickable toggle area */}
-        <button onClick={onToggle} className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left">
+        <button
+          onClick={onToggle}
+          className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 text-left"
+        >
           <ChevronRight
             className={cn(
               "h-4 w-4 text-muted-foreground shrink-0 transition-transform mt-1",

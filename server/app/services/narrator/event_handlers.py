@@ -384,10 +384,7 @@ def handle_run_started_event(
         timestamp = datetime.now(timezone.utc)
 
     # Generate headline
-    if event.gpu_type:
-        headline = f"Research Run Started on {event.gpu_type}"
-    else:
-        headline = "Research Run Started"
+    headline = f"Research Run Started on {event.gpu_type}"
 
     return [
         RunStartedEvent(

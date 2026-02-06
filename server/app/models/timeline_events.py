@@ -286,7 +286,7 @@ class RunStartedEvent(TimelineEventBase):
     type: Literal["run_started"] = "run_started"
 
     headline: str = Field(..., description="Short headline")
-    gpu_type: Optional[str] = Field(None, description="GPU type allocated")
+    gpu_type: str = Field(..., description="GPU type allocated")
     cost_per_hour_cents: Optional[int] = Field(None, description="Cost per hour in cents")
 
 

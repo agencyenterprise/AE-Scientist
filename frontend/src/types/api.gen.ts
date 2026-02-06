@@ -4683,19 +4683,19 @@ export interface components {
             idea_version_id: number;
             /**
              * Pod Id
-             * @description RunPod identifier, when available
+             * @description RunPod identifier
              */
-            pod_id?: string | null;
+            pod_id: string;
             /**
              * Pod Name
              * @description Human-friendly pod name
              */
-            pod_name?: string | null;
+            pod_name: string;
             /**
              * Gpu Type
-             * @description Requested GPU type
+             * @description GPU type used for the run
              */
-            gpu_type?: string | null;
+            gpu_type: string;
             /**
              * Cost
              * @description Hourly RunPod cost (USD) captured when the run launched
@@ -4901,7 +4901,7 @@ export interface components {
              * Gpu Type
              * @description GPU type used for the run
              */
-            gpu_type?: string | null;
+            gpu_type: string;
             /**
              * Cost
              * @description Hourly RunPod cost (USD) captured when the pod launched
@@ -5249,7 +5249,7 @@ export interface components {
             /** Completed At */
             completed_at?: string | null;
             /** Gpu Type */
-            gpu_type?: string | null;
+            gpu_type: string;
             /** Estimated Cost Cents */
             estimated_cost_cents?: number | null;
             /** Actual Cost Cents */
@@ -5383,19 +5383,19 @@ export interface components {
             idea_version_id: number;
             /**
              * Pod Id
-             * @description RunPod identifier, when available
+             * @description RunPod identifier
              */
-            pod_id?: string | null;
+            pod_id: string;
             /**
              * Pod Name
              * @description Human-friendly pod name
              */
-            pod_name?: string | null;
+            pod_name: string;
             /**
              * Gpu Type
-             * @description Requested GPU type
+             * @description GPU type used for the run
              */
-            gpu_type?: string | null;
+            gpu_type: string;
             /**
              * Cost
              * @description Hourly RunPod cost (USD) captured when the run launched
@@ -5692,7 +5692,7 @@ export interface components {
              * Gpu Type
              * @description GPU type allocated
              */
-            gpu_type?: string | null;
+            gpu_type: string;
             /**
              * Cost Per Hour Cents
              * @description Cost per hour in cents

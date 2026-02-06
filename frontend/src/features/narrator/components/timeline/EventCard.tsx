@@ -90,9 +90,7 @@ function EventContent({ event, compact }: { event: TimelineEvent; compact: boole
     case "run_started":
       return (
         <div className={`${textClass} text-slate-300 space-y-1`}>
-          {"gpu_type" in event && event.gpu_type && (
-            <p className="font-medium">GPU: {event.gpu_type}</p>
-          )}
+          {"gpu_type" in event && <p className="font-medium">GPU: {event.gpu_type}</p>}
           {"cost_per_hour_cents" in event &&
             event.cost_per_hour_cents !== undefined &&
             event.cost_per_hour_cents !== null && (

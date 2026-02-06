@@ -76,7 +76,7 @@ class ResearchRunState(BaseModel):
     updated_at: datetime
     started_running_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    gpu_type: Optional[str] = None
+    gpu_type: str
     estimated_cost_cents: Optional[int] = None
     actual_cost_cents: Optional[int] = None
     cost_per_hour_cents: Optional[int] = None
@@ -95,6 +95,7 @@ def create_initial_state(
     *,
     run_id: str,
     conversation_id: int,
+    gpu_type: str,
     status: Literal["pending", "running", "completed", "failed", "cancelled"] = "pending",
     idea_markdown: Optional[str] = None,
     idea_title: Optional[str] = None,
@@ -177,6 +178,7 @@ def create_initial_state(
         idea_markdown=idea_markdown,
         idea_title=idea_title,
         stages=standard_stages,
+        gpu_type=gpu_type,
         created_at=now,
         updated_at=now,
     )

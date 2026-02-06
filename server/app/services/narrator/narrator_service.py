@@ -367,10 +367,12 @@ async def _get_or_create_state_locked(
         conversation_id = run_idea_data["conversation_id"]
         idea_title = run_idea_data["title"]
         idea_markdown = run_idea_data["idea_markdown"]
+        gpu_type = run_idea_data["gpu_type"]
 
         current_state = create_initial_state(
             run_id=run_id,
             conversation_id=conversation_id,
+            gpu_type=gpu_type,
             status="running",
             idea_markdown=idea_markdown,
             idea_title=idea_title,
@@ -394,7 +396,7 @@ async def initialize_run_state(
     conversation_id: int,
     idea_markdown: Optional[str] = None,
     idea_title: Optional[str] = None,
-    gpu_type: Optional[str] = None,
+    gpu_type: str,
     cost_per_hour_cents: Optional[int] = None,
 ) -> ResearchRunState:
     """
@@ -408,7 +410,7 @@ async def initialize_run_state(
         conversation_id: Associated conversation ID
         idea_markdown: Optional research idea content
         idea_title: Optional research idea title
-        gpu_type: Optional GPU type
+        gpu_type: GPU type used for the run
         cost_per_hour_cents: Optional cost per hour in cents
 
     Returns:
@@ -418,14 +420,13 @@ async def initialize_run_state(
     initial_state = create_initial_state(
         run_id=run_id,
         conversation_id=conversation_id,
+        gpu_type=gpu_type,
         status="pending",
         idea_markdown=idea_markdown,
         idea_title=idea_title,
     )
 
     # Add cost information
-    if gpu_type:
-        initial_state = initial_state.model_copy(update={"gpu_type": gpu_type})
     if cost_per_hour_cents:
         initial_state = initial_state.model_copy(
             update={"cost_per_hour_cents": cost_per_hour_cents}
@@ -437,75 +438,3 @@ async def initialize_run_state(
     logger.debug("Narrator: Initialized state for run=%s", run_id)
 
     return initial_state
-
-
-# ============================================================================
-# HELPER: REBUILD STATE FROM EVENTS
-# ============================================================================
-
-
-async def rebuild_state_from_events(
-    db: DatabaseManager,
-    *,
-    run_id: str,
-) -> Optional[ResearchRunState]:
-    """
-    Rebuild state by replaying all timeline events.
-
-    This is useful for:
-    - Recovering from state corruption
-    - Testing reducer logic
-    - Debugging state issues
-
-    Args:
-        db: Database manager
-        run_id: Research run ID
-
-    Returns:
-        Rebuilt state or None if no events found
-    """
-    # Get all timeline events for this run
-    event_rows = await db.get_timeline_events(run_id)
-
-    if not event_rows:
-        logger.warning("Narrator: No events found for run=%s", run_id)
-        return None
-
-    logger.debug(
-        "Narrator: Rebuilding state from %d events for run=%s",
-        len(event_rows),
-        run_id,
-    )
-
-    # Get initial state (or create if missing)
-    initial_state = await db.get_research_run_state(run_id)
-    if initial_state is None:
-        # Create minimal initial state
-        initial_state = create_initial_state(
-            run_id=run_id,
-            conversation_id=0,  # Placeholder
-            status="running",
-        )
-
-    # Clear timeline (we'll rebuild it)
-    initial_state.timeline = []
-
-    # Replay events
-    current_state = initial_state
-    # TODO: implement this
-    # for event_row in event_rows:
-    #     # Parse event_data back into TimelineEvent
-    #     # Note: This requires proper deserialization based on event_type
-    #     # event_data = event_row["event_data"]
-
-    #     # For now, we'll skip the actual replay since we need proper
-    #     # TimelineEvent deserialization. This is a TODO for later.
-    #     # The structure is here, implementation can be completed when needed.
-    #     pass
-
-    # Persist rebuilt state
-    await db.upsert_research_run_state(run_id=run_id, state=current_state)
-
-    logger.debug("Narrator: State rebuilt successfully for run=%s", run_id)
-
-    return current_state

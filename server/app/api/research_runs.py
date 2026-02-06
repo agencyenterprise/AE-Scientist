@@ -49,7 +49,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         idea_hypothesis=idea_hypothesis,
         current_stage=row.get("current_stage"),
         progress=row.get("progress"),
-        gpu_type=row.get("gpu_type"),
+        gpu_type=row["gpu_type"],
         cost=float(row["cost"]),
         best_metric=row.get("best_metric"),
         created_by_name=row["created_by_name"],

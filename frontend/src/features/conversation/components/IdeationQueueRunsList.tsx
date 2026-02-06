@@ -100,7 +100,7 @@ export function IdeationQueueRunsList({ conversationId }: IdeationQueueRunsListP
             key={run.run_id}
             runId={run.run_id}
             status={run.status}
-            gpuType={run.gpu_type ?? null}
+            gpuType={run.gpu_type}
             createdAt={run.created_at}
           />
         ))}

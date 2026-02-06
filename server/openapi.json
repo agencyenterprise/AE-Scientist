@@ -9815,40 +9815,19 @@
             "description": "Idea version ID associated with the run"
           },
           "pod_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Pod Id",
-            "description": "RunPod identifier, when available"
+            "description": "RunPod identifier"
           },
           "pod_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Pod Name",
             "description": "Human-friendly pod name"
           },
           "gpu_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Gpu Type",
-            "description": "Requested GPU type"
+            "description": "GPU type used for the run"
           },
           "cost": {
             "type": "number",
@@ -10021,6 +10000,9 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "pod_id",
+          "pod_name",
+          "gpu_type",
           "cost",
           "created_at",
           "updated_at",
@@ -10272,14 +10254,7 @@
             "description": "Overall pipeline progress (0-1) computed as completed-stages-only buckets (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)."
           },
           "gpu_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Gpu Type",
             "description": "GPU type used for the run"
           },
@@ -10369,6 +10344,7 @@
           "status",
           "initialization_status",
           "idea_title",
+          "gpu_type",
           "cost",
           "created_by_name",
           "created_at",
@@ -11011,14 +10987,7 @@
             "title": "Completed At"
           },
           "gpu_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Gpu Type"
           },
           "estimated_cost_cents": {
@@ -11077,7 +11046,8 @@
           "status",
           "conversation_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "gpu_type"
         ],
         "title": "ResearchRunState",
         "description": "Complete state of a research run. Single source of truth for frontend."
@@ -11358,40 +11328,19 @@
             "description": "Idea version ID associated with the run"
           },
           "pod_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Pod Id",
-            "description": "RunPod identifier, when available"
+            "description": "RunPod identifier"
           },
           "pod_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Pod Name",
             "description": "Human-friendly pod name"
           },
           "gpu_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Gpu Type",
-            "description": "Requested GPU type"
+            "description": "GPU type used for the run"
           },
           "cost": {
             "type": "number",
@@ -11481,6 +11430,9 @@
           "status",
           "idea_id",
           "idea_version_id",
+          "pod_id",
+          "pod_name",
+          "gpu_type",
           "cost",
           "created_at",
           "updated_at"
@@ -11986,14 +11938,7 @@
             "description": "Short headline"
           },
           "gpu_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Gpu Type",
             "description": "GPU type allocated"
           },
@@ -12015,7 +11960,8 @@
           "id",
           "timestamp",
           "stage",
-          "headline"
+          "headline",
+          "gpu_type"
         ],
         "title": "RunStartedEvent",
         "description": "Emitted when the research run actually starts executing (container is ready).\n\nEmission Criteria:\n- Triggered by run_started events from research pipeline\n- Marks the transition from \"pending\" to \"running\"\n- First event in the timeline (after creation)\n\nFrequency: 1 per run (always the first event)"

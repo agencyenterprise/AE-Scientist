@@ -80,7 +80,7 @@ export function RunCostTab({
           </div>
           <div>
             <dt className="text-xs text-slate-400">GPU Type</dt>
-            <dd className="font-mono text-sm text-white">{run.gpu_type || "—"}</dd>
+            <dd className="font-mono text-sm text-white">{run.gpu_type}</dd>
           </div>
         </dl>
       </div>

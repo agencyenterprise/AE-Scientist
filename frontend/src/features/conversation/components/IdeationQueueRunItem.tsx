@@ -42,7 +42,7 @@ function IdeationQueueRunItemComponent({
         <span className="font-mono text-xs text-slate-400 truncate">{truncateRunId(runId)}</span>
       </div>
       <div className="flex items-center gap-2 sm:gap-3 text-[10px] text-slate-500 shrink-0">
-        {gpuType && <span className="hidden sm:inline">{gpuType}</span>}
+        <span className="hidden sm:inline">{gpuType}</span>
         <span>{formatRelativeTime(createdAt)}</span>
         <ArrowRight className="h-3 w-3 text-slate-600" />
       </div>
