@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState, useRef } from "react";
 
 import { ProtectedRoute } from "@/shared/components/ProtectedRoute";
+import { useVisibilityRefresh } from "@/shared/hooks/useVisibilityRefresh";
 import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRun } from "@/shared/lib/api-adapters";
 import { convertApiResearchRunList } from "@/shared/lib/api-adapters";
@@ -77,6 +78,9 @@ export default function ResearchLayout({ children }: ResearchLayoutProps) {
   useEffect(() => {
     loadResearchRuns();
   }, [loadResearchRuns]);
+
+  // Refresh data when user returns to the tab
+  useVisibilityRefresh(loadResearchRuns);
 
   // Reset to page 1 when filters change
   const handleSetSearchTerm = useCallback((term: string) => {
