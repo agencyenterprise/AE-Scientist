@@ -74,7 +74,6 @@ export function OverviewTab({
 
       <ResearchActivityFeed
         runId={runId}
-        maxHeight="600px"
         onTerminateExecution={onTerminateExecution}
         runStatus={run.status}
         terminationStatus={run.termination_status}

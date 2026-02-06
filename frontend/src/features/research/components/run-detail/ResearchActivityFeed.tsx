@@ -1465,7 +1465,7 @@ function StageSection({
 
 export function ResearchActivityFeed({
   runId,
-  maxHeight = "500px",
+  maxHeight,
   onTerminateExecution,
   runStatus,
   terminationStatus,
@@ -1690,8 +1690,8 @@ export function ResearchActivityFeed({
           <p className="text-xs mt-1">Events will appear as the research progresses.</p>
         </div>
       ) : (
-        <ScrollArea ref={scrollAreaRef} style={{ height: maxHeight }}>
-          <div className="space-y-3 pr-4">
+        <ScrollArea ref={scrollAreaRef} style={maxHeight ? { height: maxHeight } : undefined}>
+          <div className="space-y-3">
             {stageGroups.map(stage => (
               <StageSection
                 key={stage.stageId}
