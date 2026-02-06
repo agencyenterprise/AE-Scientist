@@ -61,6 +61,7 @@ export const sseStreamResource = defineResource({
       reconnectAttempts: 0,
       reconnectTimeoutId: null as ReturnType<typeof setTimeout> | null,
       accumulatedEvents: [] as TimelineEvent[],
+      connectionFailed: false,
     };
 
     const eventSubscription = createSubscription<TimelineEvent>();
@@ -154,6 +155,7 @@ export const sseStreamResource = defineResource({
           }
 
           state.reconnectAttempts = 0;
+          state.connectionFailed = false;
           if (!narratorStore.isConnected()) {
             narratorStore.setConnectionStatus(connectionStatusKeywords.connected);
           }
@@ -209,12 +211,12 @@ export const sseStreamResource = defineResource({
               }
             }, delay);
           } else {
+            state.connectionFailed = true;
             // eslint-disable-next-line no-console
             console.error(
-              "[Narrator SSE] Max reconnection attempts reached. Connection permanently lost."
+              "[Narrator SSE] Max reconnection attempts reached. Will retry when tab becomes visible."
             );
-            narratorStore.setError("Max reconnection attempts reached. Please refresh the page.");
-            narratorStore.setConnectionStatus(connectionStatusKeywords.error);
+            narratorStore.setConnectionStatus(connectionStatusKeywords.disconnected);
           }
         }
       },
@@ -262,7 +264,7 @@ export const sseStreamResource = defineResource({
 
     // Start connection when runId changes
     narratorStore.useStore.subscribe(
-      state => state.runId,
+      s => s.runId,
       runId => {
         if (runId) {
           api.connectToStream(runId);
@@ -270,15 +272,37 @@ export const sseStreamResource = defineResource({
       }
     );
 
+    // Auto-reconnect when user returns to the tab
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && state.currentRunId) {
+        // If connection failed or we're disconnected, reset attempts and reconnect
+        if (state.connectionFailed || !narratorStore.isConnected()) {
+          if (isDevelopment) {
+            // eslint-disable-next-line no-console
+            console.log("[Narrator SSE] Tab became visible, attempting to reconnect...");
+          }
+          state.reconnectAttempts = 0;
+          state.connectionFailed = false;
+          api.connectToStream(state.currentRunId);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return {
       isConnected: narratorStore.isConnected,
       reconnectStream: api.reconnectStream,
       stopCurrentStream: api.stopCurrentStream,
       useEventSubscription: api.useEventSubscription,
+      cleanup: () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        api.stopCurrentStream();
+      },
     };
   },
   halt: instance => {
-    instance.stopCurrentStream();
+    instance.cleanup();
   },
 });
 
