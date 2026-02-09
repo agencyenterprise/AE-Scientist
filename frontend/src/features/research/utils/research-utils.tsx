@@ -218,10 +218,10 @@ export type TooltipKey = keyof typeof TOOLTIP_EXPLANATIONS;
 /**
  * Converts backend stage ids into a human-readable label.
  *
- * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
+ * Backend format: {stage_number}_{stage_slug}
  * Examples:
  * - "5_paper_generation" -> "5: Paper Generation"
- * - "2_baseline_tuning_2_optimization" -> "2: Baseline Tuning"
+ * - "2_baseline_tuning" -> "2: Baseline Tuning"
  */
 const STAGE_LABEL_BY_NUMBER: Record<string, string> = {
   "1": "1: Baseline Implementation",

@@ -103,7 +103,7 @@ class NodeResultEvent(TimelineEventBase):
     Emitted when a node completes execution.
 
     Emission Criteria:
-    - Triggered when substage_event arrives with node completion
+    - Triggered when stage_event arrives with node completion
     - Includes metrics from corresponding stage_progress event
     - Emitted for each node that completes (success or failure)
 
@@ -129,8 +129,8 @@ class StageCompletedEvent(TimelineEventBase):
     Emitted when a stage completes.
 
     Emission Criteria:
-    - Triggered when substage_completed event arrives
-    - Enriched with data from substage_summary event (already LLM-generated)
+    - Triggered when stage_completed event arrives
+    - Enriched with data from stage_summary event (already LLM-generated)
     - Emitted once per stage completion
 
     Frequency: 5 per run (one per stage)
@@ -139,9 +139,7 @@ class StageCompletedEvent(TimelineEventBase):
     type: Literal["stage_completed"] = "stage_completed"
 
     headline: str = Field(..., description="Short headline")
-    summary: Optional[str] = Field(
-        None, description="What was accomplished (from substage_summary)"
-    )
+    summary: Optional[str] = Field(None, description="What was accomplished (from stage_summary)")
 
     best_node_id: Optional[str] = Field(None, description="ID of best node from this stage")
     best_metrics: Optional[MetricCollection] = Field(None, description="Best metrics achieved")
@@ -151,7 +149,7 @@ class StageCompletedEvent(TimelineEventBase):
     failed_attempts: int = Field(0, description="Nodes that failed")
 
     confidence: Optional[Literal["high", "medium", "low"]] = Field(
-        None, description="Confidence in results (from substage_summary)"
+        None, description="Confidence in results (from stage_summary)"
     )
 
 

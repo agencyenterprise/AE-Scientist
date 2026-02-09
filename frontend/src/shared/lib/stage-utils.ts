@@ -179,7 +179,7 @@ export function stageName(stageId: string): string {
 /**
  * Extract the leading stage number from a backend stage name
  *
- * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
+ * Backend format: {stage_number}_{stage_slug}
  * Examples:
  *   "1_initial_implementation" → "1"
  *   "5_paper_generation" → "5"
@@ -199,7 +199,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Extract stage slug from backend stage name
  *
- * Backend format: {stage_number}_{stage_slug}[_{substage_number}_{substage_slug}...]
+ * Backend format: {stage_number}_{stage_slug}
  * Examples:
  *   "1_initial_implementation" → "initial_implementation"
  *   "2_baseline_tuning_2_optimization" → "baseline_tuning"
@@ -211,12 +211,12 @@ export function extractStageSlug(stageName: string): string | null {
   // Need at least 2 parts: stage_number + slug
   if (parts.length < 2) return null;
 
-  // Skip first part (stage number), collect parts until we hit next number (substage number)
+  // Skip first part (stage number), collect parts until we hit next number
   const slugParts: string[] = [];
   for (let i = 1; i < parts.length; i++) {
     const part = parts[i];
     if (!part) continue;
-    // Stop when we hit a number (substage number)
+    // Stop when we hit a number
     if (/^\d+$/.test(part)) break;
     slugParts.push(part);
   }

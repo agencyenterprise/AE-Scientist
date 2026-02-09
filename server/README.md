@@ -492,7 +492,7 @@ Use this to exercise the research pipeline flow without provisioning a real RunP
 - Behavior:
   - Exposes `/pods`, `/pods/{id}`, `/billing/pods`, and `/graphql` with the same shape the real RunPod API uses.
   - Creates a per-run fake runner that finishes in ~10 minutes (or faster with `SPEED`), emitting:
-    - `run-started`, heartbeats, stage progress (4 stages × 3 iterations), substage-completed, logs, and `run-finished`.
+    - `run-started`, heartbeats, stage progress (4 stages × 3 iterations), stage-completed, logs, and `run-finished`.
     - Token usage, hardware stats, figure reviews, and LLM review webhooks.
     - One small fake artifact uploaded to S3 and recorded in `rp_artifacts`.
   - Pod metadata uses `pod_id=fake-...`, `publicIp=127.0.0.1`, `portMappings={"22": "0"}` so readiness checks pass; SSH log upload is effectively skipped.

@@ -8323,7 +8323,7 @@
           "outcome"
         ],
         "title": "NodeResultEvent",
-        "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered when substage_event arrives with node completion\n- Includes metrics from corresponding stage_progress event\n- Emitted for each node that completes (success or failure)\n\nFrequency: 10-50 per stage (varies by stage complexity)"
+        "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered when stage_event arrives with node completion\n- Includes metrics from corresponding stage_progress event\n- Emitted for each node that completes (success or failure)\n\nFrequency: 10-50 per stage (varies by stage complexity)"
       },
       "PaperDownloadResponse": {
         "properties": {
@@ -12317,7 +12317,7 @@
               }
             ],
             "title": "Summary",
-            "description": "What was accomplished (from substage_summary)"
+            "description": "What was accomplished (from stage_summary)"
           },
           "best_node_id": {
             "anyOf": [
@@ -12375,7 +12375,7 @@
               }
             ],
             "title": "Confidence",
-            "description": "Confidence in results (from substage_summary)"
+            "description": "Confidence in results (from stage_summary)"
           }
         },
         "type": "object",
@@ -12386,7 +12386,7 @@
           "headline"
         ],
         "title": "StageCompletedEvent",
-        "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when substage_completed event arrives\n- Enriched with data from substage_summary event (already LLM-generated)\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
+        "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when stage_completed event arrives\n- Enriched with data from stage_summary event (already LLM-generated)\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
       },
       "StageCompletedPayload": {
         "properties": {

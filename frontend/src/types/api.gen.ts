@@ -3847,7 +3847,7 @@ export interface components {
          * @description Emitted when a node completes execution.
          *
          *     Emission Criteria:
-         *     - Triggered when substage_event arrives with node completion
+         *     - Triggered when stage_event arrives with node completion
          *     - Includes metrics from corresponding stage_progress event
          *     - Emitted for each node that completes (success or failure)
          *
@@ -5819,8 +5819,8 @@ export interface components {
          * @description Emitted when a stage completes.
          *
          *     Emission Criteria:
-         *     - Triggered when substage_completed event arrives
-         *     - Enriched with data from substage_summary event (already LLM-generated)
+         *     - Triggered when stage_completed event arrives
+         *     - Enriched with data from stage_summary event (already LLM-generated)
          *     - Emitted once per stage completion
          *
          *     Frequency: 5 per run (one per stage)
@@ -5859,7 +5859,7 @@ export interface components {
             headline: string;
             /**
              * Summary
-             * @description What was accomplished (from substage_summary)
+             * @description What was accomplished (from stage_summary)
              */
             summary?: string | null;
             /**
@@ -5889,7 +5889,7 @@ export interface components {
             failed_attempts: number;
             /**
              * Confidence
-             * @description Confidence in results (from substage_summary)
+             * @description Confidence in results (from stage_summary)
              */
             confidence?: ("high" | "medium" | "low") | null;
         };

@@ -2948,7 +2948,7 @@ class StageCompletedEventOutput(BaseModel):
     summary: Annotated[
         str | None,
         Field(
-            description="What was accomplished (from substage_summary)", title="Summary"
+            description="What was accomplished (from stage_summary)", title="Summary"
         ),
     ] = None
     best_node_id: Annotated[
@@ -2973,8 +2973,7 @@ class StageCompletedEventOutput(BaseModel):
     confidence: Annotated[
         Confidence | None,
         Field(
-            description="Confidence in results (from substage_summary)",
-            title="Confidence",
+            description="Confidence in results (from stage_summary)", title="Confidence"
         ),
     ] = None
 

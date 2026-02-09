@@ -143,7 +143,7 @@ export function ResearchPipelineStages({
   };
   /**
    * Get aggregated stage information for a given main stage
-   * Handles multiple substages within a main stage by using the latest progress
+   * Handles multiple iterations within a main stage by using the latest progress
    */
   const getStageInfo = (stageKey: string): StageInfo => {
     // Stage 5 (paper_generation) uses paperGenerationProgress instead of stageProgress
