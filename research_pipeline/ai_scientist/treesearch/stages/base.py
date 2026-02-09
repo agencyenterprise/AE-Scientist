@@ -28,10 +28,6 @@ class StageMeta:
         return self.identifier.number
 
     @property
-    def slug(self) -> str:
-        return self.identifier.slug
-
-    @property
     def name(self) -> str:
         return self.identifier.prefixed_name
 

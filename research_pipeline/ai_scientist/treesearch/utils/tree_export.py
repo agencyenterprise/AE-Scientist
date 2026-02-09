@@ -10,6 +10,8 @@ import numpy as np
 from igraph import Graph  # type: ignore[import-untyped]
 from numpy.typing import NDArray
 
+from ai_scientist.api_types import ExperimentalStageId
+
 from ...tree_viz_store import TreeVizStore
 from ..journal import Journal, Node
 
@@ -20,15 +22,6 @@ class TelemetryLike(Protocol):
     run_id: str
     webhook_url: str | None
     webhook_token: str | None
-
-
-def _normalize_stage_id(stage_name: str) -> str:
-    """Normalize stage name to stage_N format (e.g., 'stage_1')."""
-    if stage_name.startswith("stage_"):
-        parts = stage_name.split("_")
-        if len(parts) >= 2 and parts[1].isdigit():
-            return f"stage_{parts[1]}"
-    return stage_name
 
 
 def get_edges(journal: Journal) -> Iterator[tuple[int, int]]:
@@ -467,12 +460,21 @@ def generate(
                 webhook_token=telemetry_cfg.webhook_token,
                 run_id=telemetry_cfg.run_id,
             )
-            store.upsert(
-                run_id=telemetry_cfg.run_id,
-                stage_id=_normalize_stage_id(stage_name),
-                viz=tree_struct,
-                version=1,
-            )
+            # stage_name is StageIdentifier.prefixed_name (e.g., "1_initial_implementation")
+            # which matches ExperimentalStageId values directly
+            try:
+                stage_id = ExperimentalStageId(stage_name)
+                store.upsert(
+                    run_id=telemetry_cfg.run_id,
+                    stage=stage_id,
+                    viz=tree_struct,
+                    version=1,
+                )
+            except ValueError:
+                logger.warning(
+                    "Could not convert stage_name=%s to ExperimentalStageId, skipping tree viz storage",
+                    stage_name,
+                )
     except Exception as e:
         logger.exception(f"Error storing tree viz to database: {e}")
 

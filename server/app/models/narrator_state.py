@@ -10,14 +10,14 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from .timeline_events import MetricCollection, TimelineEvent
+from .timeline_events import MetricCollection, StageId, TimelineEvent
 
 
 class ActiveNode(BaseModel):
     """Represents a node currently executing in the research pipeline."""
 
     execution_id: str = Field(..., description="Unique execution ID")
-    stage: str = Field(..., description="Stage identifier")
+    stage: StageId = Field(..., description="Stage identifier")
     status: Literal["running", "completed", "failed"] = Field(
         default="running", description="Current execution status"
     )
@@ -30,7 +30,7 @@ class ActiveNode(BaseModel):
 class StageGoal(BaseModel):
     """Goal and metadata for a pipeline stage."""
 
-    stage: str = Field(..., description="Stage identifier")
+    stage: StageId = Field(..., description="Stage identifier")
     title: str = Field(..., description="Display title")
     goal: Optional[str] = Field(None, description="What we're trying to achieve")
     approach: Optional[str] = Field(None, description="How we're approaching it")
@@ -60,7 +60,7 @@ class ResearchRunState(BaseModel):
     idea_title: Optional[str] = None
     idea_markdown: Optional[str] = None
     stages: List[StageGoal] = Field(default_factory=list)
-    current_stage: Optional[str] = None
+    current_stage: Optional[StageId] = None
     current_stage_goal: Optional[StageGoal] = None
     timeline: List[TimelineEvent] = Field(default_factory=list)
     current_focus: Optional[str] = None
@@ -105,7 +105,7 @@ def create_initial_state(
 
     standard_stages = [
         StageGoal(
-            stage="1_initial_implementation",
+            stage=StageId.initial_implementation,
             title="Initial Implementation",
             status="pending",
             goal=None,  # TODO: fill in
@@ -118,7 +118,7 @@ def create_initial_state(
             progress=None,  # TODO: fill in
         ),
         StageGoal(
-            stage="2_baseline_tuning",
+            stage=StageId.baseline_tuning,
             title="Baseline Tuning",
             status="pending",
             goal=None,
@@ -131,7 +131,7 @@ def create_initial_state(
             progress=None,
         ),
         StageGoal(
-            stage="3_creative_research",
+            stage=StageId.creative_research,
             title="Creative Research",
             status="pending",
             goal=None,
@@ -144,7 +144,7 @@ def create_initial_state(
             progress=None,
         ),
         StageGoal(
-            stage="4_ablation_studies",
+            stage=StageId.ablation_studies,
             title="Ablation Studies",
             status="pending",
             goal=None,
@@ -157,7 +157,7 @@ def create_initial_state(
             progress=None,
         ),
         StageGoal(
-            stage="5_paper_generation",
+            stage=StageId.paper_generation,
             title="Paper Generation",
             status="pending",
             goal=None,

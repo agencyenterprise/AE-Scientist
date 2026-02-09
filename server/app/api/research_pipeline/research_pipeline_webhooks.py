@@ -35,6 +35,7 @@ from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEven
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunStageSkipWindowUpdate
 from app.models.sse import ResearchRunStageSummaryEvent as SSEStageSummaryEvent
+from app.models.timeline_events import StageId
 from app.services import DatabaseManager, get_database
 from app.services.billing_guard import charge_for_llm_usage
 from app.services.narrator.event_types import RunFinishedEventData, RunStartedEventData
@@ -458,9 +459,10 @@ async def ingest_stage_summary(
     )
     now = datetime.now(timezone.utc)
     created_at = now.isoformat()
+    # Cast ExperimentalStageId to StageId (all experimental stages are valid stage IDs)
     summary_model = ResearchRunStageSummary(
         id=_next_stream_event_id(),
-        stage=event.stage,
+        stage=StageId(event.stage.value),
         summary=event.summary,
         created_at=created_at,
     )
@@ -472,10 +474,19 @@ async def ingest_stage_summary(
         ),
     )
 
+    # Narrator: Ingest event for timeline (creates StageTransitionEvent)
+    await ingest_narration_event(
+        db,
+        run_id=run_id,
+        event_type="stage_summary",
+        event_data=event,
+    )
+
     # Persist to database
+    # Cast ExperimentalStageId to StageId (all experimental stages are valid stage IDs)
     await db.insert_stage_summary_event(
         run_id=run_id,
-        stage=event.stage,
+        stage=StageId(event.stage.value),
         summary=event.summary,
         created_at=now,
     )
@@ -538,7 +549,7 @@ async def ingest_tree_viz_stored(
     # Persist to database
     tree_viz_id = await db.upsert_tree_viz(
         run_id=run_id,
-        stage_id=event.stage_id,
+        stage=event.stage,
         viz=event.viz,
         version=event.version,
     )
@@ -546,7 +557,7 @@ async def ingest_tree_viz_stored(
     logger.debug(
         "Tree viz stored: run=%s stage=%s tree_viz_id=%s version=%s",
         run_id,
-        event.stage_id,
+        event.stage,
         tree_viz_id,
         event.version,
     )
@@ -558,7 +569,7 @@ async def ingest_tree_viz_stored(
         run_id=run_id,
         event_type="tree_viz_stored",
         metadata={
-            "stage_id": event.stage_id,
+            "stage": event.stage,
             "tree_viz_id": tree_viz_id,
             "version": event.version,
         },
@@ -662,7 +673,7 @@ async def ingest_running_code(
                 type="code_execution_started",
                 data=ResearchRunCodeExecutionStartedData(
                     execution_id=event.execution_id,
-                    stage_name=event.stage_name,
+                    stage=event.stage,
                     run_type=event.run_type,
                     code=event.code,
                     started_at=event.started_at,
@@ -683,7 +694,7 @@ async def ingest_running_code(
     await cast(DatabaseManager, db).upsert_code_execution_event(
         run_id=run_id,
         execution_id=event.execution_id,
-        stage_name=event.stage_name,
+        stage=event.stage,
         run_type=event.run_type,
         execution_type=event.execution_type.value,
         code=event.code,
@@ -712,7 +723,7 @@ async def ingest_run_completed(
                 type="code_execution_completed",
                 data=ResearchRunCodeExecutionCompletedData(
                     execution_id=event.execution_id,
-                    stage_name=event.stage_name,
+                    stage=event.stage,
                     run_type=event.run_type,
                     status=event.status,
                     exec_time=event.exec_time,
@@ -734,7 +745,7 @@ async def ingest_run_completed(
     await cast(DatabaseManager, db).upsert_code_execution_event(
         run_id=run_id,
         execution_id=event.execution_id,
-        stage_name=event.stage_name,
+        stage=event.stage,
         run_type=event.run_type,
         execution_type=event.execution_type.value,
         status=event.status,

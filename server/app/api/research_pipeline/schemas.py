@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.timeline_events import ExperimentalStageId, StageId
+
 # Import narrator event types - these are the source of truth for event schemas
 # used by both the webhook validation AND the narrator pipeline
 from app.services.narrator.event_types import (
@@ -127,7 +129,7 @@ class ReviewCompletedPayload(BaseModel):
 
 
 class StageSkipWindowEventModel(BaseModel):
-    stage: str
+    stage: StageId
     state: Literal["opened", "closed"]
     timestamp: str
     reason: Optional[str] = None
@@ -138,7 +140,7 @@ class StageSkipWindowPayload(BaseModel):
 
 
 class TreeVizStoredEvent(BaseModel):
-    stage_id: str
+    stage: ExperimentalStageId
     version: int
     viz: Dict[str, Any]
 
@@ -163,7 +165,7 @@ class CodexEventPayload(BaseModel):
 class CodexEventItem(BaseModel):
     """Single codex event for bulk insertion."""
 
-    stage: str
+    stage: StageId
     node: int
     event_type: str
     event_content: dict[str, Any]

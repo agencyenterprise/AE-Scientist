@@ -9,12 +9,7 @@ import type {
   ResearchRunCodeExecution,
 } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
-import {
-  extractStageSlug,
-  getSummaryText,
-  PIPELINE_STAGES,
-  STAGE_SLUG,
-} from "@/shared/lib/stage-utils";
+import { extractStageNumber, PIPELINE_STAGES, STAGE_ID } from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
 import { Button } from "@/shared/components/ui/button";
 import { ApiError } from "@/shared/lib/api-client";
@@ -31,7 +26,7 @@ interface ResearchPipelineStagesProps {
   runfileExecution?: ResearchRunCodeExecution | null;
   runStatus: string;
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
-  onSkipStage?: (stageSlug: string) => Promise<void>;
+  onSkipStage?: (stageId: string) => Promise<void>;
   skipPendingStage?: string | null;
   className?: string;
 }
@@ -56,7 +51,7 @@ const getLatestSummaryForStage = (
   stageKey: string,
   summaries: StageSummary[]
 ): StageSummary | null => {
-  const matches = summaries.filter(summary => extractStageSlug(summary.stage) === stageKey);
+  const matches = summaries.filter(summary => summary.stage === stageKey);
   if (matches.length === 0) {
     return null;
   }
@@ -147,7 +142,7 @@ export function ResearchPipelineStages({
    */
   const getStageInfo = (stageKey: string): StageInfo => {
     // Stage 5 (paper_generation) uses paperGenerationProgress instead of stageProgress
-    if (stageKey === STAGE_SLUG.PAPER_GENERATION) {
+    if (stageKey === STAGE_ID.PAPER_GENERATION) {
       if (paperGenerationProgress.length === 0) {
         return {
           status: "pending",
@@ -187,10 +182,7 @@ export function ResearchPipelineStages({
     }
 
     // Stages 1-4 use stageProgress
-    const stageProgresses = stageProgress.filter(progress => {
-      const slug = extractStageSlug(progress.stage);
-      return slug === stageKey;
-    });
+    const stageProgresses = stageProgress.filter(progress => progress.stage === stageKey);
 
     // No progress data yet for this stage
     if (stageProgresses.length === 0) {
@@ -216,15 +208,11 @@ export function ResearchPipelineStages({
     }
 
     const progressPercent = Math.round(latestProgress.progress * 100);
-    const hasCompletedEvent = stageEvents.some(event => {
-      const slug = extractStageSlug(event.stage);
-      return slug === stageKey;
-    });
+    const hasCompletedEvent = stageEvents.some(event => event.stage === stageKey);
 
     // Check if this is the currently active stage by looking at the GLOBAL latest progress
     const globalLatestProgress = stageProgress[stageProgress.length - 1];
-    const isCurrentlyActive =
-      globalLatestProgress && extractStageSlug(globalLatestProgress.stage) === stageKey;
+    const isCurrentlyActive = globalLatestProgress && globalLatestProgress.stage === stageKey;
 
     // Check if paper generation has started (which means all stages 1-4 are complete)
     const paperGenerationStarted = paperGenerationProgress.length > 0;
@@ -265,11 +253,11 @@ export function ResearchPipelineStages({
       <div className="flex flex-col gap-6">
         {PIPELINE_STAGES.map(stage => {
           const info = getStageInfo(stage.key);
-          const isPaperGeneration = stage.key === STAGE_SLUG.PAPER_GENERATION;
+          const isPaperGeneration = stage.key === STAGE_ID.PAPER_GENERATION;
           const latestSummary = isPaperGeneration
             ? null
             : getLatestSummaryForStage(stage.key, stageSummaries);
-          const summaryText = latestSummary ? getSummaryText(latestSummary) : null;
+          const summaryText = latestSummary?.summary ?? null;
 
           const latestPaperEvent =
             isPaperGeneration && paperGenerationProgress.length > 0
@@ -285,7 +273,7 @@ export function ResearchPipelineStages({
             runStatus === "running" &&
             stageExecution &&
             stageExecution.status === "running" &&
-            extractStageSlug(stageExecution.stage_name) === stage.key;
+            stageExecution.stage === stage.key;
 
           const displayMax = info.maxIterations ?? info.iteration ?? 0;
           const displayIteration =
@@ -573,8 +561,9 @@ function ActiveExecutionCard({
           </p>
           <p className="text-sm font-mono text-white">{formatNodeId(executionId)}</p>
           <p className="text-xs text-slate-400">
-            Stage {codexExecution?.stage_name ?? runfileExecution?.stage_name ?? "-"} • Started{" "}
-            {codexStartedAtLabel}
+            Stage{" "}
+            {extractStageNumber(codexExecution?.stage ?? runfileExecution?.stage ?? "") ?? "-"} •
+            Started {codexStartedAtLabel}
           </p>
           <p className="text-xs text-emerald-200">
             Running for <span className="font-semibold">{formattedCodexDuration}</span>

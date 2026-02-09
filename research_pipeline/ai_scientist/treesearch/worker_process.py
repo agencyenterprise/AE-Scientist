@@ -12,6 +12,7 @@ from typing import Any, Callable, Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
+from ai_scientist.api_types import StageId as ApiStageName
 from ai_scientist.llm import structured_query_with_schema
 
 from . import execution_registry
@@ -983,7 +984,7 @@ def _run_codex_cli(
     event_callback(
         RunningCodeEvent(
             execution_id=execution_id,
-            stage_name=stage_name,
+            stage=ApiStageName(stage_name),
             code=codex_task_content,
             started_at=started_at,
             run_type=RunType.CODEX_EXECUTION,
@@ -1062,7 +1063,7 @@ def _run_codex_cli(
             event_callback(
                 RunCompletedEvent(
                     execution_id=execution_id,
-                    stage_name=stage_name,
+                    stage=ApiStageName(stage_name),
                     status=status_value,
                     exec_time=exec_time,
                     completed_at=completed_at,
@@ -1089,7 +1090,7 @@ def _run_codex_cli(
         event_callback(
             RunningCodeEvent(
                 execution_id=execution_id,
-                stage_name=stage_name,
+                stage=ApiStageName(stage_name),
                 code=runfile_content,
                 started_at=runfile_started_at,
                 run_type=RunType.RUNFILE_EXECUTION,
@@ -1131,7 +1132,7 @@ def _run_codex_cli(
     event_callback(
         RunCompletedEvent(
             execution_id=execution_id,
-            stage_name=stage_name,
+            stage=ApiStageName(stage_name),
             status=status,
             exec_time=exec_time,
             completed_at=completed_at,

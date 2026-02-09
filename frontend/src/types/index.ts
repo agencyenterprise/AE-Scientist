@@ -46,6 +46,8 @@ export type ResearchRunCostResponse =
   import("./api.gen").components["schemas"]["ResearchRunCostResponse"];
 export type ResearchRunAcceptedResponse =
   import("./api.gen").components["schemas"]["ResearchRunAcceptedResponse"];
+export type StageId = import("./api.gen").components["schemas"]["StageId"];
+export type ExperimentalStageId = import("./api.gen").components["schemas"]["ExperimentalStageId"];
 export type ChatStreamEvent = import("./api.gen").components["schemas"]["ChatStreamEvent"];
 export type ConversationImportStreamEvent =
   import("./api.gen").components["schemas"]["ConversationImportStreamEvent"];

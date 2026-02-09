@@ -148,7 +148,7 @@ class FakeRunnerCore:
             self._webhooks.publish_run_completed(
                 RunCompletedEventPayload(
                     execution_id=execution_id,
-                    stage_name=record.stage_name,
+                    stage=record.stage,
                     run_type=RunType(record.run_type),
                     execution_type=ExecutionType.stage_goal,  # Default for terminations
                     status=RunCompletedStatus.failed,
@@ -163,7 +163,7 @@ class FakeRunnerCore:
             logger.exception(
                 "Failed to publish terminated execution webhook for %s (stage=%s)",
                 execution_id,
-                record.stage_name,
+                record.stage,
             )
         with _lock:
             latest = _executions_by_id.get(execution_id)

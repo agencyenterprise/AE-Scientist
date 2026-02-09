@@ -1,0 +1,32 @@
+Summarize the transition between research stages for a user watching the experiment progress.
+
+## Research Project
+{{ idea_title }}
+
+## Just Completed: Stage {{ completed_stage_number }} - {{ completed_stage_name }}
+Goals: {{ completed_stage_goals }}
+
+Results:
+- Total attempts: {{ total_nodes }}
+- Successful: {{ good_nodes }}
+- Best metric: {{ best_metric | default("N/A", true) }}
+{% if best_node_analysis %}
+- Key finding: {{ best_node_analysis[:300] }}
+{% endif %}
+
+{% if next_stage_name %}
+## Up Next: Stage {{ next_stage_number }} - {{ next_stage_name }}
+Goals: {{ next_stage_goals }}
+{% else %}
+## Final Stage Complete
+The experimental stages are finished. Paper generation will begin next.
+{% endif %}
+
+---
+
+Write a 2-3 sentence transition summary that:
+1. Highlights the key achievement from the completed stage (be specific about metrics if available)
+2. Explains why we're ready to move on
+3. Sets expectations for what the next stage will focus on
+
+Keep it concise, accessible, and avoid jargon. Write in present tense.

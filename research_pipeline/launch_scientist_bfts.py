@@ -563,7 +563,7 @@ def resume_run(
 
         def step_callback(stage: StageMeta, journal: Journal) -> None:
             try:
-                save_run(cfg=cfg_obj, journal=journal, stage_name=f"stage_{stage.name}")
+                save_run(cfg=cfg_obj, journal=journal, stage_name=stage.name)
             except Exception:
                 traceback.print_exc()
 

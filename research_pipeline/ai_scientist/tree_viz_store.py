@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from ai_scientist.api_types import TreeVizStoredEvent
+from ai_scientist.api_types import ExperimentalStageId, TreeVizStoredEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class TreeVizStore:
         self,
         *,
         run_id: str,
-        stage_id: str,
+        stage: ExperimentalStageId,
         viz: dict[str, Any],
         version: int,
     ) -> None:
@@ -48,7 +48,7 @@ class TreeVizStore:
                 webhook_client.publish(
                     kind="tree_viz_stored",
                     payload=TreeVizStoredEvent(
-                        stage_id=stage_id,
+                        stage=stage,
                         version=version,
                         viz=viz,
                     ),
@@ -56,18 +56,18 @@ class TreeVizStore:
                 logger.info(
                     "Published tree_viz_stored webhook: run=%s stage=%s",
                     run_id,
-                    stage_id,
+                    stage,
                 )
             except Exception:
                 logger.exception(
                     "Failed to publish tree_viz_stored webhook for run=%s stage=%s",
                     run_id,
-                    stage_id,
+                    stage,
                 )
                 raise
         else:
             logger.warning(
                 "No webhook client configured for tree viz storage: run=%s stage=%s",
                 run_id,
-                stage_id,
+                stage,
             )

@@ -27,7 +27,7 @@ def handle_stage_started(state: ResearchRunState, event: StageStartedEvent) -> S
     """Handle stage_started event."""
     changes: Dict[str, Any] = {
         "current_stage": event.stage,
-        "current_focus": f"Starting {event.stage_name}",
+        "current_focus": event.headline,
         "updated_at": datetime.now(timezone.utc),
         "timeline": state.timeline + [event],
     }
@@ -83,7 +83,6 @@ def handle_stage_completed(
 
     if event.best_metrics:
         changes["best_metrics"] = event.best_metrics
-        changes["best_node_id"] = event.best_node_id
 
     return StateUpdateResult(changes=changes)
 

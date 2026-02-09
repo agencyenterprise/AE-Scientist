@@ -7,6 +7,7 @@ from typing import Any, Dict, Literal, Optional, Tuple
 from pydantic import BaseModel as PydanticBaseModel
 
 from ai_scientist.api_types import ExecutionType as ApiExecutionType
+from ai_scientist.api_types import ExperimentalStageId as ApiExperimentalStage
 from ai_scientist.api_types import (
     PaperGenerationProgressEvent as PaperGenerationProgressEventPayload,
 )
@@ -19,6 +20,7 @@ from ai_scientist.api_types import (
 )
 from ai_scientist.api_types import RunType as ApiRunType
 from ai_scientist.api_types import StageCompletedEventInput as StageCompletedEventPayload
+from ai_scientist.api_types import StageId as ApiStage
 from ai_scientist.api_types import StageProgressEvent as StageProgressEventPayload
 from ai_scientist.api_types import (
     StageSkipWindowEventModel,
@@ -104,7 +106,7 @@ class BaseEvent:
 
 @dataclass(frozen=True)
 class RunStageProgressEvent(BaseEvent):
-    stage: str
+    stage: ApiStage
     iteration: int
     max_iterations: int
     progress: float
@@ -203,7 +205,7 @@ class CodexEvent(BaseEvent):
 class StageCompletedEvent(BaseEvent):
     """Event emitted when a stage completes."""
 
-    stage: str  # Full stage identifier, e.g. "2_baseline_tuning"
+    stage: ApiStage  # Full stage identifier, e.g. "2_baseline_tuning"
     main_stage_number: int
     reason: str
     summary: Dict[str, Any]
@@ -233,10 +235,10 @@ class StageCompletedEvent(BaseEvent):
 
 @dataclass(frozen=True)
 class StageSummaryEvent(BaseEvent):
-    """Event emitted with the LLM phase summary for a stage."""
+    """Event emitted with the LLM-generated transition summary for a stage."""
 
-    stage: str
-    summary: Dict[str, Any]
+    stage: ApiExperimentalStage
+    transition_summary: str
 
     def type(self) -> str:
         return "ai.run.stage_summary"
@@ -244,13 +246,13 @@ class StageSummaryEvent(BaseEvent):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "stage": self.stage,
-            "summary": self.summary,
+            "transition_summary": self.transition_summary,
         }
 
     def persistence_record(self) -> PersistenceRecord:
         event = StageSummaryEventPayload(
             stage=self.stage,
-            summary=self.summary,
+            summary=self.transition_summary,
         )
         return ("stage_summary", event)
 
@@ -311,7 +313,7 @@ class PaperGenerationProgressEvent(BaseEvent):
 @dataclass(frozen=True)
 class RunningCodeEvent(BaseEvent):
     execution_id: str
-    stage_name: str
+    stage: ApiStage
     code: str
     started_at: datetime
     run_type: RunType
@@ -326,7 +328,7 @@ class RunningCodeEvent(BaseEvent):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "execution_id": self.execution_id,
-            "stage_name": self.stage_name,
+            "stage": self.stage,
             "run_type": self.run_type.value,
             "execution_type": self.execution_type.value,
             "code": self.code,
@@ -339,7 +341,7 @@ class RunningCodeEvent(BaseEvent):
     def persistence_record(self) -> PersistenceRecord:
         event = RunningCodeEventPayload(
             execution_id=self.execution_id,
-            stage_name=self.stage_name,
+            stage=self.stage,
             run_type=ApiRunType(self.run_type.value),
             execution_type=ApiExecutionType(self.execution_type.value),
             code=self.code,
@@ -354,7 +356,7 @@ class RunningCodeEvent(BaseEvent):
 @dataclass(frozen=True)
 class RunCompletedEvent(BaseEvent):
     execution_id: str
-    stage_name: str
+    stage: ApiStage
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: datetime
@@ -370,7 +372,7 @@ class RunCompletedEvent(BaseEvent):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "execution_id": self.execution_id,
-            "stage_name": self.stage_name,
+            "stage": self.stage,
             "run_type": self.run_type.value,
             "execution_type": self.execution_type.value,
             "status": self.status,
@@ -384,7 +386,7 @@ class RunCompletedEvent(BaseEvent):
     def persistence_record(self) -> PersistenceRecord:
         event = RunCompletedEventPayload(
             execution_id=self.execution_id,
-            stage_name=self.stage_name,
+            stage=self.stage,
             run_type=ApiRunType(self.run_type.value),
             execution_type=ApiExecutionType(self.execution_type.value),
             status=RunCompletedStatus(self.status),
@@ -399,7 +401,7 @@ class RunCompletedEvent(BaseEvent):
 
 @dataclass(frozen=True)
 class StageSkipWindowEvent(BaseEvent):
-    stage: str
+    stage: ApiStage
     state: Literal["opened", "closed"]
     timestamp: datetime
     reason: Optional[str] = None

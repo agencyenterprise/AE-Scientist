@@ -79,7 +79,7 @@ class ExecutionRecord(NamedTuple):
     """Record of a code execution."""
 
     run_id: str
-    stage_name: str
+    stage: str
     run_type: str
     started_at: datetime
     status: str

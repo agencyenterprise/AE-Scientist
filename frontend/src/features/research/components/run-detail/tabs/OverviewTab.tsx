@@ -33,7 +33,7 @@ interface OverviewTabProps {
   onTerminateExecution?: (executionId: string, feedback: string) => Promise<void>;
   stageSkipState?: StageSkipStateMap;
   skipPendingStage?: string | null;
-  onSkipStage?: (stageSlug: string) => Promise<void>;
+  onSkipStage?: (stageId: string) => Promise<void>;
 }
 
 export function OverviewTab({

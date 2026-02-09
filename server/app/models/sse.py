@@ -26,6 +26,7 @@ from app.models.research_pipeline import (
     RunType,
     TreeVizItem,
 )
+from app.models.timeline_events import StageId
 from app.services.chat_models import ChatStatus
 
 # ----------------------------------------------------------------------------
@@ -308,7 +309,7 @@ class ResearchRunTerminationStatusEvent(BaseModel):
 
 class ResearchRunCodeExecutionStartedData(BaseModel):
     execution_id: str
-    stage_name: str
+    stage: StageId
     run_type: RunType
     code: str
     started_at: str
@@ -321,7 +322,7 @@ class ResearchRunCodeExecutionStartedEvent(BaseModel):
 
 class ResearchRunCodeExecutionCompletedData(BaseModel):
     execution_id: str
-    stage_name: str
+    stage: StageId
     run_type: RunType
     status: Literal["success", "failed"]
     exec_time: float
@@ -334,7 +335,7 @@ class ResearchRunCodeExecutionCompletedEvent(BaseModel):
 
 
 class ResearchRunStageSkipWindowUpdate(BaseModel):
-    stage: str
+    stage: StageId
     state: Literal["opened", "closed"]
     timestamp: str
     reason: Optional[str] = None

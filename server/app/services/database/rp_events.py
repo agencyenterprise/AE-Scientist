@@ -10,13 +10,15 @@ from typing import Any, Dict, List, NamedTuple, Optional, Protocol, Sequence
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from app.models.timeline_events import StageId
+
 from .base import ConnectionProvider
 
 
 class CodexEventItemProtocol(Protocol):
     """Protocol for codex event items to avoid circular imports."""
 
-    stage: str
+    stage: StageId
     node: int
     event_type: str
     event_content: dict[str, Any]
@@ -26,7 +28,7 @@ class CodexEventItemProtocol(Protocol):
 class StageProgressEvent(NamedTuple):
     id: int
     run_id: str
-    stage: str
+    stage: StageId
     iteration: int
     max_iterations: int
     progress: float
@@ -41,7 +43,7 @@ class StageProgressEvent(NamedTuple):
 class StageCompletedEvent(NamedTuple):
     id: int
     run_id: str
-    stage: str
+    stage: StageId
     summary: dict
     created_at: datetime
 
@@ -49,8 +51,8 @@ class StageCompletedEvent(NamedTuple):
 class StageSummaryEvent(NamedTuple):
     id: int
     run_id: str
-    stage: str
-    summary: dict
+    stage: StageId
+    summary: str
     created_at: datetime
 
 
@@ -69,7 +71,7 @@ class CodeExecutionEvent(NamedTuple):
     id: int
     run_id: str
     execution_id: str
-    stage_name: str
+    stage: StageId
     run_type: str
     execution_type: str  # stage_goal, seed, aggregation, metrics
     code: str
@@ -85,7 +87,7 @@ class CodeExecutionEvent(NamedTuple):
 class StageSkipWindowRecord(NamedTuple):
     id: int
     run_id: str
-    stage: str
+    stage: StageId
     opened_at: datetime
     opened_reason: Optional[str]
     closed_at: Optional[datetime]
@@ -97,7 +99,7 @@ class StageSkipWindowRecord(NamedTuple):
 class CodexEventRecord(NamedTuple):
     id: int
     run_id: str
-    stage: str
+    stage: StageId
     node: int
     event_type: str
     event_content: dict
@@ -113,7 +115,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         self,
         *,
         run_id: str,
-        stage: str,
+        stage: StageId,
         iteration: int,
         max_iterations: int,
         progress: float,
@@ -186,7 +188,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         self,
         *,
         run_id: str,
-        stage: str,
+        stage: StageId,
         summary: dict,
         created_at: Optional[datetime] = None,
     ) -> int:
@@ -212,8 +214,8 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         self,
         *,
         run_id: str,
-        stage: str,
-        summary: dict,
+        stage: StageId,
+        summary: str,
         created_at: Optional[datetime] = None,
     ) -> int:
         """Insert a stage summary event and return its ID."""
@@ -227,7 +229,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (run_id, stage, Jsonb(summary), created_at),
+                    (run_id, stage, summary, created_at),
                 )
                 result = await cursor.fetchone()
                 if not result:
@@ -276,7 +278,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         self,
         *,
         run_id: str,
-        stage: str,
+        stage: StageId,
         node: int,
         event_type: str,
         event_content: dict,
@@ -342,7 +344,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         *,
         run_id: str,
         execution_id: str,
-        stage_name: str,
+        stage: StageId,
         run_type: str,
         execution_type: str,
         code: Optional[str] = None,
@@ -362,7 +364,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 await cursor.execute(
                     """
                     INSERT INTO rp_code_execution_events
-                        (run_id, execution_id, stage_name, run_type, execution_type, code, status,
+                        (run_id, execution_id, stage, run_type, execution_type, code, status,
                          started_at, completed_at, exec_time, node_index, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (run_id, execution_id, run_type)
@@ -378,7 +380,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     (
                         run_id,
                         execution_id,
-                        stage_name,
+                        stage,
                         run_type,
                         execution_type,
                         code,
@@ -400,7 +402,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         self,
         *,
         run_id: str,
-        stage: str,
+        stage: StageId,
         state: str,
         timestamp: datetime,
         reason: Optional[str] = None,
@@ -575,7 +577,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
             SELECT id,
                    run_id,
                    execution_id,
-                   stage_name,
+                   stage,
                    run_type,
                    execution_type,
                    code,
@@ -608,7 +610,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                    id,
                    run_id,
                    execution_id,
-                   stage_name,
+                   stage,
                    run_type,
                    execution_type,
                    code,

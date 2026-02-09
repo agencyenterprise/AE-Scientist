@@ -104,9 +104,7 @@ function EventContent({ event, compact }: { event: TimelineEvent; compact: boole
     case "stage_started":
       return (
         <div className={`${textClass} text-slate-300 space-y-1`}>
-          {"stage_name" in event && event.stage_name && (
-            <p className="font-medium">{event.stage_name}</p>
-          )}
+          {"headline" in event && event.headline && <p className="font-medium">{event.headline}</p>}
           {"goal" in event && event.goal && <p className="text-slate-400">{event.goal}</p>}
         </div>
       );
@@ -114,7 +112,7 @@ function EventContent({ event, compact }: { event: TimelineEvent; compact: boole
     case "stage_completed":
       return (
         <div className={`${textClass} text-slate-300 space-y-2`}>
-          {"summary" in event && event.summary && <p>{event.summary}</p>}
+          <p>Stage completed</p>
         </div>
       );
 

@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from app.models.conversations import ResearchRunSummary
+from app.models.timeline_events import ExperimentalStageId, StageId
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.database.research_pipeline_runs import (
@@ -205,7 +206,7 @@ class ResearchRunInfo(ResearchRunSummary):
 
 
 class ResearchRunStageProgress(BaseModel):
-    stage: str = Field(..., description="Stage identifier")
+    stage: StageId = Field(..., description="Stage identifier")
     iteration: int = Field(..., description="Current iteration number")
     max_iterations: int = Field(..., description="Maximum iterations for the stage")
     progress: float = Field(..., description="Progress percentage (0-1)")
@@ -262,7 +263,7 @@ class ResearchRunEvent(BaseModel):
 
 class ResearchRunStageEvent(BaseModel):
     id: int = Field(..., description="Unique identifier of the stage completion event")
-    stage: str = Field(..., description="Stage identifier")
+    stage: StageId = Field(..., description="Stage identifier")
     node_id: Optional[str] = Field(
         None,
         description="Optional identifier associated with the stage (reserved for future use)",
@@ -283,8 +284,8 @@ class ResearchRunStageEvent(BaseModel):
 
 class ResearchRunStageSummary(BaseModel):
     id: int = Field(..., description="Unique identifier of the stage summary event")
-    stage: str = Field(..., description="Stage identifier")
-    summary: dict = Field(..., description="LLM-generated summary payload")
+    stage: StageId = Field(..., description="Stage identifier")
+    summary: str = Field(..., description="LLM-generated transition summary")
     created_at: str = Field(..., description="ISO timestamp when the summary was recorded")
 
     @staticmethod
@@ -299,7 +300,7 @@ class ResearchRunStageSummary(BaseModel):
 
 class ResearchRunStageSkipWindow(BaseModel):
     id: int = Field(..., description="Unique identifier for the skip window record")
-    stage: str = Field(..., description="Stage identifier where skipping became possible")
+    stage: StageId = Field(..., description="Stage identifier where skipping became possible")
     opened_at: str = Field(..., description="ISO timestamp when the window opened")
     opened_reason: Optional[str] = Field(None, description="Reason provided when the window opened")
     closed_at: Optional[str] = Field(
@@ -354,7 +355,7 @@ class ResearchRunCodeExecution(BaseModel):
     """Latest code execution snapshot for a run."""
 
     execution_id: str = Field(..., description="Unique identifier for the code execution attempt")
-    stage_name: str = Field(..., description="Stage name reported by the research pipeline")
+    stage: StageId = Field(..., description="Stage identifier")
     run_type: RunType = Field(
         ...,
         description="Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command).",
@@ -369,7 +370,7 @@ class ResearchRunCodeExecution(BaseModel):
     def from_db_record(record: "CodeExecutionEvent") -> "ResearchRunCodeExecution":
         return ResearchRunCodeExecution(
             execution_id=record.execution_id,
-            stage_name=record.stage_name,
+            stage=record.stage,
             run_type=parse_run_type(run_type=record.run_type),
             code=record.code,
             status=record.status,
@@ -421,7 +422,7 @@ class TreeVizItem(BaseModel):
 
     id: int = Field(..., description="Tree viz identifier")
     run_id: str = Field(..., description="Research run identifier")
-    stage_id: str = Field(..., description="Stage identifier (stage_1..stage_4)")
+    stage: ExperimentalStageId = Field(..., description="Stage identifier")
     version: int = Field(..., description="Version counter for the stored viz")
     viz: dict = Field(..., description="Tree visualization payload")
     created_at: str = Field(..., description="ISO timestamp when the viz was stored")
@@ -432,7 +433,7 @@ class TreeVizItem(BaseModel):
         return TreeVizItem(
             id=record.id,
             run_id=record.run_id,
-            stage_id=record.stage_id,
+            stage=record.stage,
             version=record.version,
             viz=record.viz,
             created_at=record.created_at.isoformat(),

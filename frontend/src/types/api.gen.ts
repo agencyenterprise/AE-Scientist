@@ -1533,7 +1533,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}": {
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1544,7 +1544,7 @@ export interface paths {
          * Get Tree Viz
          * @description Fetch tree viz payload for a specific stage.
          */
-        get: operations["get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get"];
+        get: operations["get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1920,11 +1920,8 @@ export interface components {
              * @description Unique execution ID
              */
             execution_id: string;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /**
              * Status
              * @description Current execution status
@@ -2319,8 +2316,7 @@ export interface components {
          * @description Single codex event for bulk insertion.
          */
         CodexEventItem: {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["StageId"];
             /** Node */
             node: number;
             /** Event Type */
@@ -2731,6 +2727,12 @@ export interface components {
          * @enum {string}
          */
         ExecutionType: "stage_goal" | "seed" | "aggregation" | "metrics";
+        /**
+         * ExperimentalStageId
+         * @description Experimental stage identifier (stages 1-4 only).
+         * @enum {string}
+         */
+        ExperimentalStageId: "1_initial_implementation" | "2_baseline_tuning" | "3_creative_research" | "4_ablation_studies";
         /** FigureReviewEvent */
         FigureReviewEvent: {
             /** Figure Name */
@@ -3699,11 +3701,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -3785,11 +3784,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -3865,11 +3861,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -3973,11 +3966,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -4293,11 +4283,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -4441,11 +4428,8 @@ export interface components {
              * @description Unique identifier for the code execution attempt
              */
             execution_id: string;
-            /**
-             * Stage Name
-             * @description Stage name reported by the research pipeline
-             */
-            stage_name: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /** @description Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command). */
             run_type: components["schemas"]["RunType"];
             /**
@@ -4478,8 +4462,7 @@ export interface components {
         ResearchRunCodeExecutionCompletedData: {
             /** Execution Id */
             execution_id: string;
-            /** Stage Name */
-            stage_name: string;
+            stage: components["schemas"]["StageId"];
             run_type: components["schemas"]["RunType"];
             /**
              * Status
@@ -4504,8 +4487,7 @@ export interface components {
         ResearchRunCodeExecutionStartedData: {
             /** Execution Id */
             execution_id: string;
-            /** Stage Name */
-            stage_name: string;
+            stage: components["schemas"]["StageId"];
             run_type: components["schemas"]["RunType"];
             /** Code */
             code: string;
@@ -5096,11 +5078,8 @@ export interface components {
              * @description Unique identifier of the stage completion event
              */
             id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Optional identifier associated with the stage (reserved for future use)
@@ -5128,11 +5107,8 @@ export interface components {
         };
         /** ResearchRunStageProgress */
         ResearchRunStageProgress: {
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /**
              * Iteration
              * @description Current iteration number
@@ -5190,11 +5166,8 @@ export interface components {
              * @description Unique identifier for the skip window record
              */
             id: number;
-            /**
-             * Stage
-             * @description Stage identifier where skipping became possible
-             */
-            stage: string;
+            /** @description Stage identifier where skipping became possible */
+            stage: components["schemas"]["StageId"];
             /**
              * Opened At
              * @description ISO timestamp when the window opened
@@ -5227,8 +5200,7 @@ export interface components {
         };
         /** ResearchRunStageSkipWindowUpdate */
         ResearchRunStageSkipWindowUpdate: {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["StageId"];
             /**
              * State
              * @enum {string}
@@ -5246,16 +5218,13 @@ export interface components {
              * @description Unique identifier of the stage summary event
              */
             id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /**
              * Summary
-             * @description LLM-generated summary payload
+             * @description LLM-generated transition summary
              */
-            summary: Record<string, never>;
+            summary: string;
             /**
              * Created At
              * @description ISO timestamp when the summary was recorded
@@ -5294,11 +5263,10 @@ export interface components {
             idea_markdown?: string | null;
             /** Stages */
             stages?: components["schemas"]["StageGoal"][];
-            /** Current Stage */
-            current_stage?: string | null;
+            current_stage?: components["schemas"]["StageId"] | null;
             current_stage_goal?: components["schemas"]["StageGoal"] | null;
             /** Timeline */
-            timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent-Output"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
+            timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent-Output"] | components["schemas"]["StageTransitionEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
             /** Current Focus */
             current_focus?: string | null;
             /** Active Nodes */
@@ -5517,8 +5485,7 @@ export interface components {
         RunCompletedEventPayload: {
             /** Execution Id */
             execution_id: string;
-            /** Stage Name */
-            stage_name: string;
+            stage: components["schemas"]["StageId"];
             /**
              * Status
              * @enum {string}
@@ -5565,11 +5532,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -5676,11 +5640,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -5745,8 +5706,7 @@ export interface components {
         RunningCodeEventPayload: {
             /** Execution Id */
             execution_id: string;
-            /** Stage Name */
-            stage_name: string;
+            stage: components["schemas"]["StageId"];
             /** Code */
             code: string;
             /** Started At */
@@ -5787,8 +5747,7 @@ export interface components {
         };
         /** SkipStageRequest */
         SkipStageRequest: {
-            /** Stage */
-            stage?: string | null;
+            stage?: components["schemas"]["StageId"] | null;
             /** Reason */
             reason?: string | null;
         };
@@ -5805,8 +5764,7 @@ export interface components {
         };
         /** StageCompletedEvent */
         "StageCompletedEvent-Input": {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["StageId"];
             /** Main Stage Number */
             main_stage_number: number;
             /** Reason */
@@ -5820,7 +5778,6 @@ export interface components {
          *
          *     Emission Criteria:
          *     - Triggered when stage_completed event arrives
-         *     - Enriched with data from stage_summary event (already LLM-generated)
          *     - Emitted once per stage completion
          *
          *     Frequency: 5 per run (one per stage)
@@ -5837,11 +5794,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -5857,41 +5811,8 @@ export interface components {
              * @description Short headline
              */
             headline: string;
-            /**
-             * Summary
-             * @description What was accomplished (from stage_summary)
-             */
-            summary?: string | null;
-            /**
-             * Best Node Id
-             * @description ID of best node from this stage
-             */
-            best_node_id?: string | null;
             /** @description Best metrics achieved */
             best_metrics?: components["schemas"]["MetricCollection"] | null;
-            /**
-             * Total Attempts
-             * @description Total nodes explored
-             * @default 0
-             */
-            total_attempts: number;
-            /**
-             * Successful Attempts
-             * @description Nodes that completed successfully
-             * @default 0
-             */
-            successful_attempts: number;
-            /**
-             * Failed Attempts
-             * @description Nodes that failed
-             * @default 0
-             */
-            failed_attempts: number;
-            /**
-             * Confidence
-             * @description Confidence in results (from stage_summary)
-             */
-            confidence?: ("high" | "medium" | "low") | null;
         };
         /** StageCompletedPayload */
         StageCompletedPayload: {
@@ -5902,11 +5823,8 @@ export interface components {
          * @description Goal and metadata for a pipeline stage.
          */
         StageGoal: {
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["StageId"];
             /**
              * Title
              * @description Display title
@@ -5978,10 +5896,15 @@ export interface components {
              */
             good_nodes: number;
         };
+        /**
+         * StageId
+         * @description Stage identifier for all stages including paper generation.
+         * @enum {string}
+         */
+        StageId: "1_initial_implementation" | "2_baseline_tuning" | "3_creative_research" | "4_ablation_studies" | "5_paper_generation";
         /** StageProgressEvent */
         StageProgressEvent: {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["StageId"];
             /** Iteration */
             iteration: number;
             /** Max Iterations */
@@ -6007,8 +5930,7 @@ export interface components {
         };
         /** StageSkipWindowEventModel */
         StageSkipWindowEventModel: {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["StageId"];
             /**
              * State
              * @enum {string}
@@ -6046,11 +5968,8 @@ export interface components {
              * @description When this event occurred
              */
             timestamp: string;
-            /**
-             * Stage
-             * @description Stage identifier (e.g., '1_initial_implementation')
-             */
-            stage: string;
+            /** @description Stage identifier (e.g., '1_initial_implementation') */
+            stage: components["schemas"]["StageId"];
             /**
              * Node Id
              * @description Node ID if event relates to specific node
@@ -6067,26 +5986,69 @@ export interface components {
              */
             headline: string;
             /**
-             * Stage Name
-             * @description Human-readable stage name
-             */
-            stage_name: string;
-            /**
              * Goal
              * @description What we're trying to achieve
              */
             goal?: string | null;
         };
-        /** StageSummaryEvent */
+        /**
+         * StageSummaryEvent
+         * @description Event containing the LLM-generated transition summary for a stage.
+         */
         StageSummaryEvent: {
-            /** Stage */
-            stage: string;
+            stage: components["schemas"]["ExperimentalStageId"];
             /** Summary */
-            summary: Record<string, never>;
+            summary: string;
         };
         /** StageSummaryPayload */
         StageSummaryPayload: {
             event: components["schemas"]["StageSummaryEvent"];
+        };
+        /**
+         * StageTransitionEvent
+         * @description Emitted when transitioning between stages with an LLM-generated summary.
+         *
+         *     Emission Criteria:
+         *     - Triggered by stage_summary events from research pipeline
+         *     - Contains LLM-generated narrative about what was accomplished and what's next
+         *     - Emitted after StageCompletedEvent, before next StageStartedEvent
+         *
+         *     Frequency: 4 per run (one per experimental stage completion)
+         */
+        StageTransitionEvent: {
+            /**
+             * Id
+             * @description Unique event ID (UUID)
+             */
+            id: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description When this event occurred
+             */
+            timestamp: string;
+            /** @description Experimental stage identifier */
+            stage: components["schemas"]["ExperimentalStageId"];
+            /**
+             * Node Id
+             * @description Node ID if event relates to specific node
+             */
+            node_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_transition";
+            /**
+             * Headline
+             * @description Short headline
+             */
+            headline: string;
+            /**
+             * Transition Summary
+             * @description LLM-generated summary of what was accomplished and what comes next
+             */
+            transition_summary: string;
         };
         /**
          * SummaryResponse
@@ -6166,11 +6128,8 @@ export interface components {
              * @description Research run identifier
              */
             run_id: string;
-            /**
-             * Stage Id
-             * @description Stage identifier (stage_1..stage_4)
-             */
-            stage_id: string;
+            /** @description Stage identifier */
+            stage: components["schemas"]["ExperimentalStageId"];
             /**
              * Version
              * @description Version counter for the stored viz
@@ -6194,8 +6153,7 @@ export interface components {
         };
         /** TreeVizStoredEvent */
         TreeVizStoredEvent: {
-            /** Stage Id */
-            stage_id: string;
+            stage: components["schemas"]["ExperimentalStageId"];
             /** Version */
             version: number;
             /** Viz */
@@ -8865,14 +8823,14 @@ export interface operations {
             };
         };
     };
-    get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get: {
+    get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 conversation_id: number;
                 run_id: string;
-                stage_id: string;
+                stage: components["schemas"]["ExperimentalStageId"];
             };
             cookie?: never;
         };

@@ -203,9 +203,29 @@ export interface MergedTreeVizPayload {
   hyperparam_name?: Array<string | null>;
 }
 
-export interface MergedTreeViz extends Omit<TreeVizItem, "stage_id" | "viz"> {
-  stage_id: "full_tree";
+export interface MergedTreeViz extends Omit<TreeVizItem, "stage" | "viz"> {
+  stage: "full_tree";
   viz: MergedTreeVizPayload;
+}
+
+// ===========================================
+// Timeline event types (custom extensions)
+// ===========================================
+
+/**
+ * StageTransitionEvent - LLM-generated summary shown between stages
+ *
+ * This type extends the generated timeline events until the OpenAPI schema
+ * is regenerated to include it.
+ */
+export interface StageTransitionEvent {
+  id: string;
+  timestamp: string;
+  stage: string;
+  node_id: string | null;
+  type: "stage_transition";
+  headline: string;
+  transition_summary: string;
 }
 
 // ===========================================

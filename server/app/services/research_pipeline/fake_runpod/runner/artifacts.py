@@ -9,14 +9,23 @@ from typing import TYPE_CHECKING, Any
 # fmt: off
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
+    ExperimentalStageId,
     TreeVizStoredEvent,
 )
-# isort: on
-# fmt: on
 from research_pipeline.ai_scientist.artifact_manager import (  # type: ignore[import-not-found]
     ArtifactPublisher,
     ArtifactSpec,
 )
+# isort: on
+# fmt: on
+
+# Mapping from stage number to ExperimentalStageId
+_STAGE_NUMBER_TO_ID: dict[int, ExperimentalStageId] = {
+    1: ExperimentalStageId.field_1_initial_implementation,
+    2: ExperimentalStageId.field_2_baseline_tuning,
+    3: ExperimentalStageId.field_3_creative_research,
+    4: ExperimentalStageId.field_4_ablation_studies,
+}
 
 if TYPE_CHECKING:
     from .core import FakeRunnerCore
@@ -97,12 +106,16 @@ class ArtifactsMixin:
 
     def _store_tree_viz(self, *, stage_number: int, version: int = 1) -> None:
         """Store fake tree visualization data."""
-        stage_id = f"Stage_{stage_number}"
+        stage = _STAGE_NUMBER_TO_ID.get(stage_number)
+        if stage is None:
+            logger.warning("Unknown stage_number %d for tree viz storage", stage_number)
+            return
+
         data_path = self._data_dir / f"stage_{stage_number}_tree_data.json"
         if not data_path.exists():
-            logger.warning("Fake tree viz data not found for %s at %s", stage_id, data_path)
+            logger.warning("Fake tree viz data not found for %s at %s", stage, data_path)
             return
-        logger.info("Storing fake tree viz for %s from %s", stage_id, data_path)
+        logger.info("Storing fake tree viz for %s from %s", stage, data_path)
         with data_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
 
@@ -117,7 +130,7 @@ class ArtifactsMixin:
                     [
                         "# Codex task (fake)",
                         "",
-                        f"- stage: {stage_id}",
+                        f"- stage: {stage}",
                         f"- node_index: {idx}",
                         f"- version: {version}",
                         "",
@@ -146,14 +159,14 @@ class ArtifactsMixin:
                 logger.debug(
                     "Injected plot %s into node 0 plots/plot_paths for %s",
                     self._plot_filename,
-                    stage_id,
+                    stage,
                 )
 
         # Publish tree_viz_stored event via webhook (server will generate ID and persist to DB)
         try:
             self._webhooks.publish_tree_viz_stored(
                 TreeVizStoredEvent(
-                    stage_id=stage_id,
+                    stage=stage,
                     version=version,
                     viz=payload,  # Include full viz data in webhook
                 )
@@ -161,11 +174,11 @@ class ArtifactsMixin:
             logger.info(
                 "Posted tree_viz_stored webhook: run=%s stage=%s",
                 self._run_id,
-                stage_id,
+                stage,
             )
         except Exception:  # noqa: BLE001 - fake runner best-effort
             logger.exception(
                 "Failed to post tree_viz_stored webhook for run=%s stage=%s",
                 self._run_id,
-                stage_id,
+                stage,
             )

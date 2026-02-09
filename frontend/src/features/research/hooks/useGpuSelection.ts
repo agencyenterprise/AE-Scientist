@@ -40,9 +40,12 @@ export function useGpuSelection(): UseGpuSelectionResult {
         if (previous && list.includes(previous)) {
           return previous;
         }
-        const [preferredGpu] = list;
-        const fallbackGpu: string | null = preferredGpu ?? null;
-        return fallbackGpu;
+        const preferredGpu = "NVIDIA GeForce RTX 5090";
+        if (list.includes(preferredGpu)) {
+          return preferredGpu;
+        }
+        const [firstGpu] = list;
+        return firstGpu ?? null;
       });
     } catch (error) {
       // eslint-disable-next-line no-console

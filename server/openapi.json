@@ -4004,14 +4004,14 @@
         }
       }
     },
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}": {
+    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}": {
       "get": {
         "tags": [
           "research-pipeline"
         ],
         "summary": "Get Tree Viz",
         "description": "Fetch tree viz payload for a specific stage.",
-        "operationId": "get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage_id__get",
+        "operationId": "get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get",
         "parameters": [
           {
             "name": "conversation_id",
@@ -4032,12 +4032,11 @@
             }
           },
           {
-            "name": "stage_id",
+            "name": "stage",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Stage Id"
+              "$ref": "#/components/schemas/ExperimentalStageId"
             }
           }
         ],
@@ -4690,8 +4689,7 @@
             "description": "Unique execution ID"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier"
           },
           "status": {
@@ -5403,8 +5401,7 @@
       "CodexEventItem": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/StageId"
           },
           "node": {
             "type": "integer",
@@ -6386,6 +6383,17 @@
         ],
         "title": "ExecutionType",
         "description": "Type of execution categorizing what the code execution is for."
+      },
+      "ExperimentalStageId": {
+        "type": "string",
+        "enum": [
+          "1_initial_implementation",
+          "2_baseline_tuning",
+          "3_creative_research",
+          "4_ablation_studies"
+        ],
+        "title": "ExperimentalStageId",
+        "description": "Experimental stage identifier (stages 1-4 only)."
       },
       "FigureReviewEvent": {
         "properties": {
@@ -7998,8 +8006,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -8111,8 +8118,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -8214,8 +8220,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -8423,8 +8428,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -9103,8 +9107,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -9365,10 +9368,9 @@
             "title": "Execution Id",
             "description": "Unique identifier for the code execution attempt"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name",
-            "description": "Stage name reported by the research pipeline"
+          "stage": {
+            "$ref": "#/components/schemas/StageId",
+            "description": "Stage identifier"
           },
           "run_type": {
             "$ref": "#/components/schemas/RunType",
@@ -9424,7 +9426,7 @@
         "type": "object",
         "required": [
           "execution_id",
-          "stage_name",
+          "stage",
           "run_type",
           "status",
           "started_at"
@@ -9438,9 +9440,8 @@
             "type": "string",
             "title": "Execution Id"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name"
+          "stage": {
+            "$ref": "#/components/schemas/StageId"
           },
           "run_type": {
             "$ref": "#/components/schemas/RunType"
@@ -9465,7 +9466,7 @@
         "type": "object",
         "required": [
           "execution_id",
-          "stage_name",
+          "stage",
           "run_type",
           "status",
           "exec_time",
@@ -9500,9 +9501,8 @@
             "type": "string",
             "title": "Execution Id"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name"
+          "stage": {
+            "$ref": "#/components/schemas/StageId"
           },
           "run_type": {
             "$ref": "#/components/schemas/RunType"
@@ -9519,7 +9519,7 @@
         "type": "object",
         "required": [
           "execution_id",
-          "stage_name",
+          "stage",
           "run_type",
           "code",
           "started_at"
@@ -10639,8 +10639,7 @@
             "description": "Unique identifier of the stage completion event"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier"
           },
           "node_id": {
@@ -10699,8 +10698,7 @@
       "ResearchRunStageProgress": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier"
           },
           "iteration": {
@@ -10793,8 +10791,7 @@
             "description": "Unique identifier for the skip window record"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier where skipping became possible"
           },
           "opened_at": {
@@ -10871,8 +10868,7 @@
       "ResearchRunStageSkipWindowUpdate": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/StageId"
           },
           "state": {
             "type": "string",
@@ -10914,14 +10910,13 @@
             "description": "Unique identifier of the stage summary event"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier"
           },
           "summary": {
-            "type": "object",
+            "type": "string",
             "title": "Summary",
-            "description": "LLM-generated summary payload"
+            "description": "LLM-generated transition summary"
           },
           "created_at": {
             "type": "string",
@@ -11013,13 +11008,12 @@
           "current_stage": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/StageId"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Current Stage"
+            ]
           },
           "current_stage_goal": {
             "anyOf": [
@@ -11045,6 +11039,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/StageCompletedEvent-Output"
+                },
+                {
+                  "$ref": "#/components/schemas/StageTransitionEvent"
                 },
                 {
                   "$ref": "#/components/schemas/ProgressUpdateEvent"
@@ -11073,7 +11070,8 @@
                   "run_finished": "#/components/schemas/RunFinishedEvent",
                   "run_started": "#/components/schemas/RunStartedEvent",
                   "stage_completed": "#/components/schemas/StageCompletedEvent-Output",
-                  "stage_started": "#/components/schemas/StageStartedEvent"
+                  "stage_started": "#/components/schemas/StageStartedEvent",
+                  "stage_transition": "#/components/schemas/StageTransitionEvent"
                 }
               }
             },
@@ -11672,9 +11670,8 @@
             "type": "string",
             "title": "Execution Id"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name"
+          "stage": {
+            "$ref": "#/components/schemas/StageId"
           },
           "status": {
             "type": "string",
@@ -11714,7 +11711,7 @@
         "type": "object",
         "required": [
           "execution_id",
-          "stage_name",
+          "stage",
           "status",
           "exec_time",
           "completed_at",
@@ -11752,8 +11749,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -11952,8 +11948,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -12101,9 +12096,8 @@
             "type": "string",
             "title": "Execution Id"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name"
+          "stage": {
+            "$ref": "#/components/schemas/StageId"
           },
           "code": {
             "type": "string",
@@ -12135,7 +12129,7 @@
         "type": "object",
         "required": [
           "execution_id",
-          "stage_name",
+          "stage",
           "code",
           "started_at",
           "run_type",
@@ -12190,13 +12184,12 @@
           "stage": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/StageId"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Stage"
+            ]
           },
           "reason": {
             "anyOf": [
@@ -12238,8 +12231,7 @@
       "StageCompletedEvent-Input": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/StageId"
           },
           "main_stage_number": {
             "type": "integer",
@@ -12277,8 +12269,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -12307,30 +12298,6 @@
             "title": "Headline",
             "description": "Short headline"
           },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary",
-            "description": "What was accomplished (from stage_summary)"
-          },
-          "best_node_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Node Id",
-            "description": "ID of best node from this stage"
-          },
           "best_metrics": {
             "anyOf": [
               {
@@ -12341,41 +12308,6 @@
               }
             ],
             "description": "Best metrics achieved"
-          },
-          "total_attempts": {
-            "type": "integer",
-            "title": "Total Attempts",
-            "description": "Total nodes explored",
-            "default": 0
-          },
-          "successful_attempts": {
-            "type": "integer",
-            "title": "Successful Attempts",
-            "description": "Nodes that completed successfully",
-            "default": 0
-          },
-          "failed_attempts": {
-            "type": "integer",
-            "title": "Failed Attempts",
-            "description": "Nodes that failed",
-            "default": 0
-          },
-          "confidence": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "high",
-                  "medium",
-                  "low"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confidence",
-            "description": "Confidence in results (from stage_summary)"
           }
         },
         "type": "object",
@@ -12386,7 +12318,7 @@
           "headline"
         ],
         "title": "StageCompletedEvent",
-        "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when stage_completed event arrives\n- Enriched with data from stage_summary event (already LLM-generated)\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
+        "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when stage_completed event arrives\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
       },
       "StageCompletedPayload": {
         "properties": {
@@ -12403,8 +12335,7 @@
       "StageGoal": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier"
           },
           "title": {
@@ -12549,11 +12480,22 @@
         "title": "StageGoal",
         "description": "Goal and metadata for a pipeline stage."
       },
+      "StageId": {
+        "type": "string",
+        "enum": [
+          "1_initial_implementation",
+          "2_baseline_tuning",
+          "3_creative_research",
+          "4_ablation_studies",
+          "5_paper_generation"
+        ],
+        "title": "StageId",
+        "description": "Stage identifier for all stages including paper generation."
+      },
       "StageProgressEvent": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/StageId"
           },
           "iteration": {
             "type": "integer",
@@ -12629,8 +12571,7 @@
       "StageSkipWindowEventModel": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/StageId"
           },
           "state": {
             "type": "string",
@@ -12690,8 +12631,7 @@
             "description": "When this event occurred"
           },
           "stage": {
-            "type": "string",
-            "title": "Stage",
+            "$ref": "#/components/schemas/StageId",
             "description": "Stage identifier (e.g., '1_initial_implementation')"
           },
           "node_id": {
@@ -12720,11 +12660,6 @@
             "title": "Headline",
             "description": "Short headline"
           },
-          "stage_name": {
-            "type": "string",
-            "title": "Stage Name",
-            "description": "Human-readable stage name"
-          },
           "goal": {
             "anyOf": [
               {
@@ -12743,8 +12678,7 @@
           "id",
           "timestamp",
           "stage",
-          "headline",
-          "stage_name"
+          "headline"
         ],
         "title": "StageStartedEvent",
         "description": "Emitted when a stage begins.\n\nEmission Criteria:\n- Triggered when stage_progress event arrives with iteration = 0\n- OR when first stage_event arrives for a new stage\n- Emitted once per stage (5 times per run)\n\nFrequency: 5 per run (one per stage)"
@@ -12752,11 +12686,10 @@
       "StageSummaryEvent": {
         "properties": {
           "stage": {
-            "type": "string",
-            "title": "Stage"
+            "$ref": "#/components/schemas/ExperimentalStageId"
           },
           "summary": {
-            "type": "object",
+            "type": "string",
             "title": "Summary"
           }
         },
@@ -12765,7 +12698,8 @@
           "stage",
           "summary"
         ],
-        "title": "StageSummaryEvent"
+        "title": "StageSummaryEvent",
+        "description": "Event containing the LLM-generated transition summary for a stage."
       },
       "StageSummaryPayload": {
         "properties": {
@@ -12778,6 +12712,66 @@
           "event"
         ],
         "title": "StageSummaryPayload"
+      },
+      "StageTransitionEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique event ID (UUID)"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "When this event occurred"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/ExperimentalStageId",
+            "description": "Experimental stage identifier"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Node ID if event relates to specific node"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_transition"
+            ],
+            "const": "stage_transition",
+            "title": "Type",
+            "default": "stage_transition"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "description": "Short headline"
+          },
+          "transition_summary": {
+            "type": "string",
+            "title": "Transition Summary",
+            "description": "LLM-generated summary of what was accomplished and what comes next"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timestamp",
+          "stage",
+          "headline",
+          "transition_summary"
+        ],
+        "title": "StageTransitionEvent",
+        "description": "Emitted when transitioning between stages with an LLM-generated summary.\n\nEmission Criteria:\n- Triggered by stage_summary events from research pipeline\n- Contains LLM-generated narrative about what was accomplished and what's next\n- Emitted after StageCompletedEvent, before next StageStartedEvent\n\nFrequency: 4 per run (one per experimental stage completion)"
       },
       "SummaryResponse": {
         "properties": {
@@ -12908,10 +12902,9 @@
             "title": "Run Id",
             "description": "Research run identifier"
           },
-          "stage_id": {
-            "type": "string",
-            "title": "Stage Id",
-            "description": "Stage identifier (stage_1..stage_4)"
+          "stage": {
+            "$ref": "#/components/schemas/ExperimentalStageId",
+            "description": "Stage identifier"
           },
           "version": {
             "type": "integer",
@@ -12938,7 +12931,7 @@
         "required": [
           "id",
           "run_id",
-          "stage_id",
+          "stage",
           "version",
           "viz",
           "created_at",
@@ -12949,9 +12942,8 @@
       },
       "TreeVizStoredEvent": {
         "properties": {
-          "stage_id": {
-            "type": "string",
-            "title": "Stage Id"
+          "stage": {
+            "$ref": "#/components/schemas/ExperimentalStageId"
           },
           "version": {
             "type": "integer",
@@ -12964,7 +12956,7 @@
         },
         "type": "object",
         "required": [
-          "stage_id",
+          "stage",
           "version",
           "viz"
         ],

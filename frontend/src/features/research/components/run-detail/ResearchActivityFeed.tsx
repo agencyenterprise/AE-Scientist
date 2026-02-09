@@ -23,25 +23,30 @@ import {
   StopCircle,
   Radio,
   HelpCircle,
+  MessageSquareText,
 } from "lucide-react";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
 import { Markdown } from "@/shared/components/Markdown";
-import { extractStageSlug, PIPELINE_STAGES, SKIPPABLE_STAGE_SLUGS } from "@/shared/lib/stage-utils";
+import { PIPELINE_STAGES, SKIPPABLE_STAGES } from "@/shared/lib/stage-utils";
 import "highlight.js/styles/github-dark.css";
 import type { components } from "@/types/api.gen";
 import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
+import type { StageTransitionEvent } from "@/types/research";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
-type TimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
+type ApiTimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
+// Extended timeline event type to include StageTransitionEvent until OpenAPI schema is updated
+type TimelineEvent = ApiTimelineEvent | StageTransitionEvent;
 type ExecutionType = components["schemas"]["ExecutionType"];
 
 // Define expected pipeline stages in order - these are the stages we show as placeholders
 // until they actually start. Uses centralized PIPELINE_STAGES from stage-utils.
-const EXPECTED_STAGES: readonly { id: string; name: string }[] = [
-  { id: "_run_start", name: "Run Initialization" },
-  ...PIPELINE_STAGES.map(stage => ({ id: stage.key, name: stage.title })),
-];
+// Note: run_started/run_finished events are displayed separately, not as stage cards.
+const EXPECTED_STAGES: readonly { id: string; name: string }[] = PIPELINE_STAGES.map(stage => ({
+  id: stage.key,
+  name: stage.title,
+}));
 
 interface ResearchActivityFeedProps {
   runId: string;
@@ -52,12 +57,12 @@ interface ResearchActivityFeedProps {
   runStatus?: string;
   /** Current termination status */
   terminationStatus?: components["schemas"]["ResearchRunInfo"]["termination_status"];
-  /** Map of stage slugs to their skip window state */
+  /** Map of stage IDs to their skip window state */
   stageSkipState?: StageSkipStateMap;
   /** Stage currently being skipped (pending confirmation from backend) */
   skipPendingStage?: string | null;
   /** Handler to skip a stage. If not provided, skip buttons won't appear. */
-  onSkipStage?: (stageSlug: string) => Promise<void>;
+  onSkipStage?: (stageId: string) => Promise<void>;
 }
 
 interface ParsedSseFrame {
@@ -93,6 +98,8 @@ interface StageGroup {
   aggregationInProgress: boolean;
   /** Whether this stage has aggregation (from is_seed_agg_node flag) */
   hasAggregation: boolean;
+  /** LLM-generated transition summary (shown between stages) */
+  transitionSummary: string | null;
 }
 
 function parseSseFrame(text: string): ParsedSseFrame | null {
@@ -115,11 +122,14 @@ function parseSseFrame(text: string): ParsedSseFrame | null {
 }
 
 function getEventStage(event: TimelineEvent): string {
+  // Check for run lifecycle events FIRST - these are displayed separately, not in stage cards
+  // (even though they may have a stage field set in the backend)
+  if (event.type === "run_started") return "_run_start";
+  if (event.type === "run_finished") return "_run_end";
+
   if ("stage" in event && event.stage) {
     return event.stage as string;
   }
-  if (event.type === "run_started") return "_run_start";
-  if (event.type === "run_finished") return "_run_end";
   return "_unknown";
 }
 
@@ -206,13 +216,6 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     }
     stageMap.get(stageId)!.push(event);
   }
-
-  // Normalize stage IDs from events to match EXPECTED_STAGES
-  // e.g., "1_initial_implementation_1_baseline" -> "initial_implementation"
-  const normalizeStageId = (stageId: string): string => {
-    const extracted = extractStageSlug(stageId);
-    return extracted ?? stageId;
-  };
 
   // Helper to create a StageGroup from events
   const createStageGroup = (stageId: string, stageEvents: TimelineEvent[]): StageGroup => {
@@ -318,11 +321,20 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       }
     }
 
+    // Extract transition summary from stage_transition events (shown between stages)
+    const transitionEvent = stageEvents.find(e => e.type === "stage_transition") as
+      | StageTransitionEvent
+      | undefined;
+    const transitionSummary = transitionEvent?.transition_summary ?? null;
+
+    // Filter out stage_transition events from the events list (they're shown separately)
+    const filteredStageEvents = stageEvents.filter(e => e.type !== "stage_transition");
+
     return {
       stageId,
       stageName: getStageName(stageId),
       status: isCompleted ? "completed" : hasStarted ? "in_progress" : "pending",
-      events: stageEvents,
+      events: filteredStageEvents,
       progress,
       startTime,
       endTime,
@@ -336,6 +348,7 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
       totalAggregations,
       aggregationInProgress,
       hasAggregation,
+      transitionSummary,
     };
   };
 
@@ -358,6 +371,7 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
     totalAggregations: null,
     aggregationInProgress: false,
     hasAggregation: false,
+    transitionSummary: null,
   });
 
   // Build the stage list in expected order, including placeholders
@@ -365,10 +379,10 @@ function groupEventsByStage(events: TimelineEvent[]): StageGroup[] {
 
   // Process stages in expected order
   for (const expectedStage of EXPECTED_STAGES) {
-    // Find matching stage from events (handle both exact and prefixed IDs)
+    // Find matching stage from events
     let matchingStageId: string | null = null;
     for (const stageId of stageMap.keys()) {
-      if (normalizeStageId(stageId) === expectedStage.id || stageId === expectedStage.id) {
+      if (stageId === expectedStage.id) {
         matchingStageId = stageId;
         break;
       }
@@ -425,6 +439,8 @@ function getEventIcon(type: string) {
       return <Layers className="h-3.5 w-3.5" />;
     case "stage_completed":
       return <CheckCircle2 className="h-3.5 w-3.5" />;
+    case "stage_transition":
+      return <MessageSquareText className="h-3.5 w-3.5" />;
     case "progress_update":
       return <RefreshCw className="h-3.5 w-3.5" />;
     case "node_result":
@@ -448,6 +464,8 @@ function getEventColor(type: string) {
       return "text-emerald-400";
     case "stage_started":
       return "text-blue-400";
+    case "stage_transition":
+      return "text-indigo-400";
     case "progress_update":
       return "text-yellow-400";
     case "node_result":
@@ -470,6 +488,8 @@ function getEventLabel(type: string, event?: TimelineEvent) {
       return "Stage Started";
     case "stage_completed":
       return "Stage Completed";
+    case "stage_transition":
+      return "Stage Summary";
     case "progress_update":
       if (event && "is_seed_node" in event && event.is_seed_node) {
         return "Seed Run Started";
@@ -934,6 +954,8 @@ function EventDetails({ event }: { event: TimelineEvent }) {
         </span>
       ) : null;
 
+    // Note: stage_transition events are filtered out and rendered between stages
+
     default:
       return null;
   }
@@ -1235,6 +1257,66 @@ function StagePhaseProgressBar({ stage }: { stage: StageGroup }) {
   );
 }
 
+/**
+ * Banner displayed at the top of Research Activity when research has started.
+ * Shows GPU type and start time outside of stage cards.
+ */
+function ResearchStartedBanner({ event }: { event: TimelineEvent }) {
+  const gpuType = "gpu_type" in event ? (event.gpu_type as string) : null;
+  const timestamp = event.timestamp;
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 mb-3">
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20">
+        <Play className="h-4 w-4 text-emerald-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-emerald-300">Research Started</p>
+        <p className="text-xs text-slate-400">
+          {gpuType && <span>GPU: {gpuType} · </span>}
+          {formatTimeAgo(timestamp)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Banner displayed at the bottom of Research Activity when research has finished.
+ */
+function ResearchFinishedBanner({ event }: { event: TimelineEvent }) {
+  const status = "status" in event ? (event.status as string) : null;
+  const success = "success" in event ? (event.success as boolean) : false;
+  const timestamp = event.timestamp;
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-4 py-3 rounded-lg border mt-3",
+        success ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-center w-8 h-8 rounded-full",
+          success ? "bg-emerald-500/20" : "bg-red-500/20"
+        )}
+      >
+        <Flag className={cn("h-4 w-4", success ? "text-emerald-400" : "text-red-400")} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={cn("text-sm font-medium", success ? "text-emerald-300" : "text-red-300")}>
+          Research {success ? "Completed" : "Finished"}
+        </p>
+        <p className="text-xs text-slate-400">
+          {status && <span className="capitalize">{status} · </span>}
+          {formatTimeAgo(timestamp)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function StageSection({
   stage,
   isExpanded,
@@ -1254,31 +1336,28 @@ function StageSection({
   runStatus?: string;
   stageSkipState?: StageSkipStateMap;
   skipPendingStage?: string | null;
-  onSkipStage?: (stageSlug: string) => Promise<void>;
+  onSkipStage?: (stageId: string) => Promise<void>;
 }) {
   const [isSkipDialogOpen, setIsSkipDialogOpen] = useState(false);
   const [isSkipSubmitting, setIsSkipSubmitting] = useState(false);
   const [skipError, setSkipError] = useState<string | null>(null);
 
   // Determine if this stage can be skipped
-  const stageSlug = stage.stageId;
-  // Normalize the slug for lookup in stageSkipState (which uses extracted slugs as keys)
-  const normalizedSlug = extractStageSlug(stageSlug) ?? stageSlug;
+  const stageId = stage.stageId;
 
   // Stages 1-4 are skippable, Stage 5 (paper_generation) is NOT skippable
-  // Uses centralized SKIPPABLE_STAGE_SLUGS from stage-utils
-  const isSkippableStage = (SKIPPABLE_STAGE_SLUGS as readonly string[]).includes(normalizedSlug);
+  const isSkippableStage = (SKIPPABLE_STAGES as readonly string[]).includes(stageId);
 
   // Button is shown for stages 1-3 while in progress, but disabled when:
   // - No skip window is open (no best node found yet)
   // - Run is not running
   // - No skip handler provided
-  const hasSkipWindow = stageSkipState && normalizedSlug in stageSkipState;
+  const hasSkipWindow = stageSkipState && stageId in stageSkipState;
   const isStageCompleted = stage.status === "completed";
   const canShowSkipButton = isSkippableStage && onSkipStage && !isStageCompleted;
   const isSkipEnabled = hasSkipWindow && runStatus === "running";
 
-  const effectiveSkipPending = skipPendingStage === normalizedSlug || isSkipSubmitting;
+  const effectiveSkipPending = skipPendingStage === stageId || isSkipSubmitting;
 
   const handleSkipClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1291,7 +1370,7 @@ function StageSection({
     setIsSkipSubmitting(true);
     setSkipError(null);
     try {
-      await onSkipStage(normalizedSlug);
+      await onSkipStage(stageId);
       setIsSkipDialogOpen(false);
     } catch (err) {
       setSkipError(err instanceof Error ? err.message : "Failed to skip stage");
@@ -1468,6 +1547,16 @@ function StageSection({
         </div>
       )}
 
+      {/* Stage transition summary - footer of the card */}
+      {stage.transitionSummary && (
+        <div className="border-t border-indigo-500/20 bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-indigo-500/5 px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <MessageSquareText className="h-4 w-4 text-indigo-400 mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-slate-300 leading-relaxed">{stage.transitionSummary}</p>
+          </div>
+        </div>
+      )}
+
       {/* Skip Stage Confirmation Modal */}
       {onSkipStage && (
         <Modal
@@ -1537,13 +1626,28 @@ export function ResearchActivityFeed({
   const isRunFinished =
     runStatus === "completed" || runStatus === "failed" || terminationStatus === "terminated";
 
+  // Extract run lifecycle events (displayed separately from stage cards)
+  const runStartedEvent = useMemo(
+    () => events.find(e => e.type === "run_started") ?? null,
+    [events]
+  );
+  const runFinishedEvent = useMemo(
+    () => events.find(e => e.type === "run_finished") ?? null,
+    [events]
+  );
+
   const stageGroups = useMemo(() => {
     const groups = groupEventsByStage(events);
+
+    // Filter out run lifecycle pseudo-stages - they're displayed as banners instead
+    const filteredGroups = groups.filter(
+      g => g.stageId !== "_run_start" && g.stageId !== "_run_end"
+    );
 
     // If the run is finished, we shouldn't show any stages as "in_progress"
     // Mark in_progress stages with events as "completed" (they were interrupted)
     if (isRunFinished) {
-      return groups.map(stage => {
+      return filteredGroups.map(stage => {
         if (stage.status === "in_progress") {
           return { ...stage, status: "completed" as const };
         }
@@ -1551,7 +1655,7 @@ export function ResearchActivityFeed({
       });
     }
 
-    return groups;
+    return filteredGroups;
   }, [events, isRunFinished]);
 
   useEffect(() => {
@@ -1736,13 +1840,17 @@ export function ResearchActivityFeed({
         )}
       </div>
 
-      {stageGroups.length === 0 ? (
+      {stageGroups.length === 0 && !runStartedEvent ? (
         <div className="text-center py-8 text-slate-400">
           <p className="text-sm">No activity yet</p>
           <p className="text-xs mt-1">Events will appear as the research progresses.</p>
         </div>
       ) : (
         <ScrollArea ref={scrollAreaRef} style={maxHeight ? { height: maxHeight } : undefined}>
+          {/* Research Started banner - shown above stage cards */}
+          {runStartedEvent && <ResearchStartedBanner event={runStartedEvent} />}
+
+          {/* Stage cards */}
           <div className="space-y-3">
             {stageGroups.map(stage => (
               <StageSection
@@ -1759,6 +1867,9 @@ export function ResearchActivityFeed({
               />
             ))}
           </div>
+
+          {/* Research Finished banner - shown below stage cards */}
+          {runFinishedEvent && <ResearchFinishedBanner event={runFinishedEvent} />}
         </ScrollArea>
       )}
     </div>

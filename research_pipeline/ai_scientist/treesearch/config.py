@@ -284,7 +284,9 @@ def prep_agent_workspace(*, cfg: Config, config_path: Path) -> None:
 
 
 def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
-    save_dir = cfg.log_dir / stage_name
+    # stage_name is the StageIdentifier.prefixed_name (e.g., "1_initial_implementation")
+    # Add "stage_" prefix for directory naming only
+    save_dir = cfg.log_dir / f"stage_{stage_name}"
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # save journal

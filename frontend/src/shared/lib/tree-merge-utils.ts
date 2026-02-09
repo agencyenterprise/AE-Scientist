@@ -16,8 +16,8 @@ export type { StageZoneMetadata, MergedTreeVizPayload, MergedTreeViz };
 function sortStages(items: TreeVizItem[]): TreeVizItem[] {
   const order = ["stage_1", "stage_2", "stage_3", "stage_4"];
   return [...items].sort((a, b) => {
-    const normalizedA = normalizeStageId(a.stage_id);
-    const normalizedB = normalizeStageId(b.stage_id);
+    const normalizedA = normalizeStageId(a.stage);
+    const normalizedB = normalizeStageId(b.stage);
     return order.indexOf(normalizedA) - order.indexOf(normalizedB);
   });
 }
@@ -158,7 +158,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
     if (merged.zoneMetadata) {
       merged.zoneMetadata.push({
         stageIndex: stageIdx,
-        stageId: item.stage_id,
+        stageId: item.stage,
         zone: zone,
       });
     }
@@ -178,7 +178,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
 
     // Track stage info for each node
     const nodeCount = layout.length;
-    merged.stageIds.push(...Array(nodeCount).fill(item.stage_id));
+    merged.stageIds.push(...Array(nodeCount).fill(item.stage));
     merged.originalNodeIds.push(...Array.from({ length: nodeCount }, (_, i) => i));
 
     // Merge all parallel arrays
@@ -222,7 +222,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
 
     // Record this stage's metadata for inter-stage connections
     processedStages.push({
-      stageId: item.stage_id,
+      stageId: item.stage,
       stageIdx: stageIdx,
       globalOffset: globalNodeIndex,
       nodeCount: nodeCount,
@@ -284,7 +284,7 @@ export function mergeTreeVizItems(items: TreeVizItem[]): MergedTreeViz | null {
   return {
     id: -1, // Synthetic ID
     run_id: firstItem.run_id,
-    stage_id: "full_tree",
+    stage: "full_tree",
     version: 1,
     viz: merged,
     created_at: firstItem.created_at,

@@ -31,6 +31,7 @@ from app.models import (
     TreeVizItem,
 )
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
+from app.models.timeline_events import ExperimentalStageId, StageId
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_balance
 from app.services.database import DatabaseManager
@@ -176,7 +177,7 @@ class TerminateExecutionResponse(BaseModel):
 
 
 class SkipStageRequest(BaseModel):
-    stage: str | None = None
+    stage: StageId | None = None
     reason: str | None = None
 
 
@@ -1029,13 +1030,13 @@ async def list_tree_viz(
 
 
 @router.get(
-    "/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage_id}",
+    "/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}",
     response_model=TreeVizItem,
 )
 async def get_tree_viz(
     conversation_id: int,
     run_id: str,
-    stage_id: str,
+    stage: ExperimentalStageId,
     request: Request,
 ) -> TreeVizItem:
     """Fetch tree viz payload for a specific stage."""
@@ -1051,7 +1052,7 @@ async def get_tree_viz(
     run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
-    record = await db.get_tree_viz(run_id=run_id, stage_id=stage_id)
+    record = await db.get_tree_viz(run_id=run_id, stage=stage)
     if record is None:
         raise HTTPException(status_code=404, detail="Tree viz not found")
     return TreeVizItem.from_db_record(record)

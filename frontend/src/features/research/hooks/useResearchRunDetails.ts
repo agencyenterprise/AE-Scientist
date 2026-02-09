@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api-client-typed";
-import { extractStageSlug } from "@/shared/lib/stage-utils";
+import type { StageId } from "@/shared/lib/stage-utils";
 import type {
   ResearchRunDetails,
   ResearchRunInfo,
@@ -43,7 +43,7 @@ interface UseResearchRunDetailsReturn {
   handleStopRun: () => Promise<void>;
   stageSkipState: StageSkipStateMap;
   skipPendingStage: string | null;
-  handleSkipStage: (stageSlug: string) => Promise<void>;
+  handleSkipStage: (stageId: string) => Promise<void>;
   seedPending: boolean;
   seedError: string | null;
   handleSeedNewIdea: () => Promise<void>;
@@ -91,14 +91,10 @@ export function useResearchRunDetails({
     }
     const next: StageSkipStateMap = {};
     windows.forEach(window => {
-      if (window.closed_at) {
+      if (window.closed_at || !window.stage) {
         return;
       }
-      const slug = extractStageSlug(window.stage);
-      if (!slug) {
-        return;
-      }
-      next[slug] = {
+      next[window.stage] = {
         reason: window.opened_reason ?? null,
         updatedAt: window.opened_at,
       };
@@ -384,24 +380,24 @@ export function useResearchRunDetails({
   }, []);
 
   const handleStageSkipWindowUpdate = useCallback((event: StageSkipWindowUpdate) => {
-    const slug = extractStageSlug(event.stage);
-    if (!slug) {
+    if (!event.stage) {
       return;
     }
+    const stageId = event.stage;
     setStageSkipState(prev => {
       const next = { ...prev };
       if (event.state === "opened") {
-        next[slug] = {
+        next[stageId] = {
           reason: event.reason ?? null,
           updatedAt: event.timestamp,
         };
       } else {
-        delete next[slug];
+        delete next[stageId];
       }
       return next;
     });
     if (event.state === "closed") {
-      setSkipPendingStage(prev => (prev === slug ? null : prev));
+      setSkipPendingStage(prev => (prev === stageId ? null : prev));
     }
   }, []);
 
@@ -535,7 +531,7 @@ export function useResearchRunDetails({
   }, [conversationId, runId, stopPending]);
 
   const handleSkipStage = useCallback(
-    async (stageSlug: string) => {
+    async (stageId: string) => {
       if (!conversationId) {
         throw new Error("Conversation not available yet. Please try again.");
       }
@@ -546,12 +542,12 @@ export function useResearchRunDetails({
             path: { conversation_id: conversationId, run_id: runId },
           },
           body: {
-            stage: stageSlug,
+            stage: stageId as StageId,
           },
         }
       );
       if (skipError) throw new Error("Failed to skip stage");
-      setSkipPendingStage(stageSlug);
+      setSkipPendingStage(stageId);
     },
     [conversationId, runId]
   );

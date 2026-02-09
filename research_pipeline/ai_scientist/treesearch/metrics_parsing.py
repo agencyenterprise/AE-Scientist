@@ -6,6 +6,7 @@ from typing import Callable, List
 
 from pydantic import BaseModel, Field
 
+from ai_scientist.api_types import StageId as ApiStageName
 from ai_scientist.llm import structured_query_with_schema
 
 from .codex.codex_cli_runner import CodexCliRunner, build_codex_env
@@ -226,7 +227,7 @@ def generate_and_assign_metrics(
         event_callback(
             RunningCodeEvent(
                 execution_id=f"{node.id}_metrics",
-                stage_name=stage_identifier.prefixed_name,
+                stage=ApiStageName(stage_identifier.prefixed_name),
                 code=task_text,
                 started_at=started_at,
                 run_type=RunType.CODEX_EXECUTION,
@@ -248,7 +249,7 @@ def generate_and_assign_metrics(
         event_callback(
             RunCompletedEvent(
                 execution_id=f"{node.id}_metrics",
-                stage_name=stage_identifier.prefixed_name,
+                stage=ApiStageName(stage_identifier.prefixed_name),
                 status="success" if exc_type is None else "failed",
                 exec_time=float(exec_time),
                 completed_at=completed_at,

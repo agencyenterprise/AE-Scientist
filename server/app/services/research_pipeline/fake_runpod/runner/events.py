@@ -131,7 +131,7 @@ class EventsMixin:
         with _lock:
             _executions_by_id[execution_id] = ExecutionRecord(
                 run_id=self._run_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=codex_run_type,
                 started_at=started_at,
                 status="running",
@@ -139,7 +139,7 @@ class EventsMixin:
         self._webhooks.publish_running_code(
             RunningCodeEventPayload(
                 execution_id=execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType(codex_run_type),
                 execution_type=ExecutionType.stage_goal,
                 code=fake_task_markdown,
@@ -159,7 +159,7 @@ class EventsMixin:
         self._webhooks.publish_running_code(
             RunningCodeEventPayload(
                 execution_id=execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType(runfile_run_type),
                 execution_type=ExecutionType.stage_goal,
                 code=fake_runfile_code,
@@ -193,7 +193,7 @@ class EventsMixin:
         self._webhooks.publish_run_completed(
             RunCompletedEventPayload(
                 execution_id=execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType(runfile_run_type),
                 execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
@@ -218,7 +218,7 @@ class EventsMixin:
         self._webhooks.publish_run_completed(
             RunCompletedEventPayload(
                 execution_id=execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType(codex_run_type),
                 execution_type=ExecutionType.stage_goal,
                 status=RunCompletedStatus.success,
@@ -240,7 +240,7 @@ class EventsMixin:
         self._webhooks.publish_running_code(
             RunningCodeEventPayload(
                 execution_id=metrics_execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType.runfile_execution,
                 execution_type=ExecutionType.metrics,
                 code="# Metrics parsing\nimport json\nwith open('metrics.json') as f:\n    metrics = json.load(f)\nprint(f'Parsed metrics: {metrics}')",
@@ -257,7 +257,7 @@ class EventsMixin:
         self._webhooks.publish_run_completed(
             RunCompletedEventPayload(
                 execution_id=metrics_execution_id,
-                stage_name=stage_name,
+                stage=stage_name,
                 run_type=RunType.runfile_execution,
                 execution_type=ExecutionType.metrics,
                 status=RunCompletedStatus.success,
@@ -442,6 +442,7 @@ class EventsMixin:
                     "buggy_nodes": 0,
                     "total_nodes": 0,
                     "llm_summary": f"Stage {stage_name} skipped.",
+                    "transition_summary": f"Stage {stage_name} was skipped. Moving on to the next stage in the research pipeline.",
                 }
                 self._enqueue_event(
                     kind="stage_completed",
@@ -457,7 +458,7 @@ class EventsMixin:
                         kind="stage_summary",
                         data=StageSummaryEvent(
                             stage=stage_name,
-                            summary=summary,
+                            summary=summary["transition_summary"],
                         ),
                     )
                 except Exception:
@@ -473,6 +474,18 @@ class EventsMixin:
                 continue
             # Emit seed evaluation progress events (3 seeds)
             self._emit_seed_evaluation_progress(stage_name=stage_name)
+            # Generate a realistic-looking transition summary based on stage
+            stage_number = stage_index + 1
+            transition_summaries = {
+                1: "Initial Implementation successfully established a working baseline with validation accuracy of 0.847. The model architecture and training pipeline are now stable, providing a solid foundation for hyperparameter optimization in the next stage.",
+                2: "Baseline Tuning improved performance to 0.891 through systematic hyperparameter search. Key findings include optimal learning rate of 1e-4 and batch size of 32. The model is now ready for creative exploration of novel techniques.",
+                3: "Creative Research discovered that adding attention mechanisms boosted accuracy to 0.923. Three promising approaches were identified, with the attention-augmented variant showing the most consistent improvements across datasets.",
+                4: "Ablation Studies confirmed the importance of the attention mechanism (contributing +4.2% accuracy) and validated that all proposed modifications are necessary. The final configuration achieves 0.931 accuracy with statistical significance across 5 seeds.",
+            }
+            transition_summary = transition_summaries.get(
+                stage_number,
+                f"Stage {stage_name} completed successfully with notable improvements in model performance.",
+            )
             summary = {
                 "goals": f"Goals for {stage_name}",
                 "feedback": "Reached max iterations",
@@ -481,6 +494,7 @@ class EventsMixin:
                 "buggy_nodes": 1,
                 "total_nodes": 3,
                 "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
+                "transition_summary": transition_summary,
             }
             logger.info("Emitting stage_completed for stage %s", stage_name)
             self._enqueue_event(
@@ -497,7 +511,7 @@ class EventsMixin:
                     kind="stage_summary",
                     data=StageSummaryEvent(
                         stage=stage_name,
-                        summary=summary,
+                        summary=transition_summary,
                     ),
                 )
             except Exception:
@@ -630,7 +644,7 @@ class EventsMixin:
                 self._webhooks.publish_running_code(
                     RunningCodeEventPayload(
                         execution_id=seed_execution_id,
-                        stage_name=stage_name,
+                        stage=stage_name,
                         run_type=RunType.runfile_execution,
                         execution_type=ExecutionType.seed,
                         code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
@@ -654,7 +668,7 @@ class EventsMixin:
                 self._webhooks.publish_run_completed(
                     RunCompletedEventPayload(
                         execution_id=seed_execution_id,
-                        stage_name=stage_name,
+                        stage=stage_name,
                         run_type=RunType.runfile_execution,
                         execution_type=ExecutionType.seed,
                         status=RunCompletedStatus.success,
@@ -738,7 +752,7 @@ class EventsMixin:
             self._webhooks.publish_running_code(
                 RunningCodeEventPayload(
                     execution_id=agg_execution_id,
-                    stage_name=stage_name,
+                    stage=stage_name,
                     run_type=RunType.codex_execution,
                     execution_type=ExecutionType.aggregation,
                     code="# Seed Aggregation\n# Combining results from all seed runs\nimport numpy as np\n\n# Aggregate metrics across seeds\nmetrics = [seed_0_metric, seed_1_metric, seed_2_metric]\nmean_metric = np.mean(metrics)\nstd_metric = np.std(metrics)",
@@ -762,7 +776,7 @@ class EventsMixin:
             self._webhooks.publish_run_completed(
                 RunCompletedEventPayload(
                     execution_id=agg_execution_id,
-                    stage_name=stage_name,
+                    stage=stage_name,
                     run_type=RunType.codex_execution,
                     execution_type=ExecutionType.aggregation,
                     status=RunCompletedStatus.success,

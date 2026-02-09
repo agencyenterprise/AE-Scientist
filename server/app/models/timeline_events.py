@@ -6,9 +6,34 @@ They transform raw execution events into user-friendly descriptions.
 """
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
+
+# ============================================================================
+# STAGE IDENTIFIERS (as StrEnum for stable OpenAPI type names)
+# ============================================================================
+
+
+class ExperimentalStageId(StrEnum):
+    """Experimental stage identifier (stages 1-4 only)."""
+
+    initial_implementation = "1_initial_implementation"
+    baseline_tuning = "2_baseline_tuning"
+    creative_research = "3_creative_research"
+    ablation_studies = "4_ablation_studies"
+
+
+class StageId(StrEnum):
+    """Stage identifier for all stages including paper generation."""
+
+    initial_implementation = "1_initial_implementation"
+    baseline_tuning = "2_baseline_tuning"
+    creative_research = "3_creative_research"
+    ablation_studies = "4_ablation_studies"
+    paper_generation = "5_paper_generation"
+
 
 # ============================================================================
 # PRIMITIVES
@@ -70,7 +95,7 @@ class TimelineEventBase(BaseModel):
 
     id: str = Field(..., description="Unique event ID (UUID)")
     timestamp: datetime = Field(..., description="When this event occurred")
-    stage: str = Field(..., description="Stage identifier (e.g., '1_initial_implementation')")
+    stage: StageId = Field(..., description="Stage identifier (e.g., '1_initial_implementation')")
     node_id: Optional[str] = Field(None, description="Node ID if event relates to specific node")
 
 
@@ -94,7 +119,6 @@ class StageStartedEvent(TimelineEventBase):
     type: Literal["stage_started"] = "stage_started"
 
     headline: str = Field(..., description="Short headline")
-    stage_name: str = Field(..., description="Human-readable stage name")
     goal: Optional[str] = Field(None, description="What we're trying to achieve")
 
 
@@ -130,7 +154,6 @@ class StageCompletedEvent(TimelineEventBase):
 
     Emission Criteria:
     - Triggered when stage_completed event arrives
-    - Enriched with data from stage_summary event (already LLM-generated)
     - Emitted once per stage completion
 
     Frequency: 5 per run (one per stage)
@@ -139,18 +162,7 @@ class StageCompletedEvent(TimelineEventBase):
     type: Literal["stage_completed"] = "stage_completed"
 
     headline: str = Field(..., description="Short headline")
-    summary: Optional[str] = Field(None, description="What was accomplished (from stage_summary)")
-
-    best_node_id: Optional[str] = Field(None, description="ID of best node from this stage")
     best_metrics: Optional[MetricCollection] = Field(None, description="Best metrics achieved")
-
-    total_attempts: int = Field(0, description="Total nodes explored")
-    successful_attempts: int = Field(0, description="Nodes that completed successfully")
-    failed_attempts: int = Field(0, description="Nodes that failed")
-
-    confidence: Optional[Literal["high", "medium", "low"]] = Field(
-        None, description="Confidence in results (from stage_summary)"
-    )
 
 
 class ProgressUpdateEvent(TimelineEventBase):
@@ -327,6 +339,31 @@ class RunFinishedEvent(TimelineEventBase):
     )
 
 
+class StageTransitionEvent(TimelineEventBase):
+    """
+    Emitted when transitioning between stages with an LLM-generated summary.
+
+    Emission Criteria:
+    - Triggered by stage_summary events from research pipeline
+    - Contains LLM-generated narrative about what was accomplished and what's next
+    - Emitted after StageCompletedEvent, before next StageStartedEvent
+
+    Frequency: 4 per run (one per experimental stage completion)
+    """
+
+    type: Literal["stage_transition"] = "stage_transition"
+
+    # Override stage to only allow experimental stages (1-4)
+    stage: ExperimentalStageId = Field(  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleVariableOverride]
+        ..., description="Experimental stage identifier"
+    )
+
+    headline: str = Field(..., description="Short headline")
+    transition_summary: str = Field(
+        ..., description="LLM-generated summary of what was accomplished and what comes next"
+    )
+
+
 # ============================================================================
 # TIMELINE EVENT UNION
 # ============================================================================
@@ -337,6 +374,7 @@ TimelineEvent = Annotated[
         StageStartedEvent,
         NodeResultEvent,
         StageCompletedEvent,
+        StageTransitionEvent,
         ProgressUpdateEvent,
         PaperGenerationStepEvent,
         NodeExecutionStartedEvent,

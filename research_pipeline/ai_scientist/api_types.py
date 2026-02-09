@@ -14,29 +14,6 @@ class Status(StrEnum):
     failed = "failed"
 
 
-class ActiveNode(BaseModel):
-    execution_id: Annotated[
-        str, Field(description="Unique execution ID", title="Execution Id")
-    ]
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    status: Annotated[
-        Status | None, Field(description="Current execution status", title="Status")
-    ] = "running"
-    started_at: Annotated[
-        AwareDatetime, Field(description="When execution started", title="Started At")
-    ]
-    completed_at: Annotated[
-        AwareDatetime | None,
-        Field(description="When execution completed", title="Completed At"),
-    ] = None
-    exec_time: Annotated[
-        float | None, Field(description="Execution time in seconds", title="Exec Time")
-    ] = None
-    run_type: Annotated[
-        str | None, Field(description="Type of run", title="Run Type")
-    ] = "main_execution"
-
-
 class ArtifactExistsRequest(BaseModel):
     artifact_type: Annotated[str, Field(title="Artifact Type")]
     filename: Annotated[str, Field(title="Filename")]
@@ -209,20 +186,8 @@ class ChildConversationInfo(BaseModel):
     status: Annotated[str, Field(description="Conversation status", title="Status")]
 
 
-class CodexEventItem(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    node: Annotated[int, Field(title="Node")]
-    event_type: Annotated[str, Field(title="Event Type")]
-    event_content: Annotated[dict[str, Any], Field(title="Event Content")]
-    occurred_at: Annotated[str, Field(title="Occurred At")]
-
-
 class CodexEventPayload(BaseModel):
     event: Annotated[dict[str, Any], Field(title="Event")]
-
-
-class CodexEventsBulkPayload(BaseModel):
-    events: Annotated[list[CodexEventItem], Field(title="Events")]
 
 
 class ConversationImportConflictItem(BaseModel):
@@ -364,6 +329,13 @@ class ExecutionType(StrEnum):
     seed = "seed"
     aggregation = "aggregation"
     metrics = "metrics"
+
+
+class ExperimentalStageId(StrEnum):
+    field_1_initial_implementation = "1_initial_implementation"
+    field_2_baseline_tuning = "2_baseline_tuning"
+    field_3_creative_research = "3_creative_research"
+    field_4_ablation_studies = "4_ablation_studies"
 
 
 class FigureReviewEvent(BaseModel):
@@ -896,119 +868,6 @@ class Status1(StrEnum):
     failed = "failed"
 
 
-class NodeExecutionCompletedEvent(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["node_execution_completed"], Field(title="Type")] = (
-        "node_execution_completed"
-    )
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    execution_id: Annotated[
-        str, Field(description="Unique execution ID", title="Execution Id")
-    ]
-    status: Annotated[Status1, Field(description="Execution status", title="Status")]
-    exec_time: Annotated[
-        float, Field(description="Execution time in seconds", title="Exec Time")
-    ]
-    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
-    execution_type: Annotated[
-        ExecutionType,
-        Field(
-            description="Type of execution (stage_goal, seed, aggregation, metrics)",
-            title="Execution Type",
-        ),
-    ]
-    is_seed_node: Annotated[
-        bool,
-        Field(
-            description="True if this is a seed evaluation node", title="Is Seed Node"
-        ),
-    ]
-    is_seed_agg_node: Annotated[
-        bool,
-        Field(
-            description="True if this is a seed aggregation node",
-            title="Is Seed Agg Node",
-        ),
-    ]
-    node_index: Annotated[
-        int,
-        Field(
-            description="1-based node index within the stage for display purposes",
-            title="Node Index",
-        ),
-    ]
-
-
-class NodeExecutionStartedEvent(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["node_execution_started"], Field(title="Type")] = (
-        "node_execution_started"
-    )
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    execution_id: Annotated[
-        str, Field(description="Unique execution ID", title="Execution Id")
-    ]
-    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
-    execution_type: Annotated[
-        ExecutionType,
-        Field(
-            description="Type of execution (stage_goal, seed, aggregation, metrics)",
-            title="Execution Type",
-        ),
-    ]
-    code_preview: Annotated[
-        str, Field(description="Full code being executed", title="Code Preview")
-    ]
-    is_seed_node: Annotated[
-        bool,
-        Field(
-            description="True if this is a seed evaluation node", title="Is Seed Node"
-        ),
-    ]
-    is_seed_agg_node: Annotated[
-        bool,
-        Field(
-            description="True if this is a seed aggregation node",
-            title="Is Seed Agg Node",
-        ),
-    ]
-    node_index: Annotated[
-        int,
-        Field(
-            description="1-based node index within the stage for display purposes",
-            title="Node Index",
-        ),
-    ]
-
-
 class Outcome(StrEnum):
     success = "success"
     failure = "failure"
@@ -1044,50 +903,6 @@ class PaperGenerationProgressEvent(BaseModel):
 
 class PaperGenerationProgressPayload(BaseModel):
     event: PaperGenerationProgressEvent
-
-
-class PaperGenerationStepEvent(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["paper_generation_step"], Field(title="Type")] = (
-        "paper_generation_step"
-    )
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    step: Annotated[Step, Field(description="Current step", title="Step")]
-    substep: Annotated[
-        str | None, Field(description="Substep if applicable", title="Substep")
-    ] = None
-    description: Annotated[
-        str | None,
-        Field(description="What's happening in this step", title="Description"),
-    ] = None
-    progress: Annotated[
-        float, Field(description="Overall progress (0.0-1.0)", title="Progress")
-    ]
-    step_progress: Annotated[
-        float,
-        Field(description="Progress within this step (0.0-1.0)", title="Step Progress"),
-    ]
-    details: Annotated[
-        dict[str, Any] | None,
-        Field(
-            description="Step-specific details (figures selected, citations found, etc.)",
-            title="Details",
-        ),
-    ] = None
 
 
 class PaperReviewStartedResponse(BaseModel):
@@ -1650,143 +1465,9 @@ class ResearchRunRunEvent(BaseModel):
     data: ResearchRunEvent
 
 
-class ResearchRunStageEvent(BaseModel):
-    id: Annotated[
-        int,
-        Field(
-            description="Unique identifier of the stage completion event", title="Id"
-        ),
-    ]
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    node_id: Annotated[
-        str | None,
-        Field(
-            description="Optional identifier associated with the stage (reserved for future use)",
-            title="Node Id",
-        ),
-    ] = None
-    summary: Annotated[
-        dict[str, Any],
-        Field(description="Summary payload stored for this stage", title="Summary"),
-    ]
-    created_at: Annotated[
-        str, Field(description="ISO timestamp of the event", title="Created At")
-    ]
-
-
-class ResearchRunStageEventStream(BaseModel):
-    type: Annotated[Literal["stage_event"], Field(title="Type")]
-    data: ResearchRunStageEvent
-
-
-class ResearchRunStageProgress(BaseModel):
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    iteration: Annotated[
-        int, Field(description="Current iteration number", title="Iteration")
-    ]
-    max_iterations: Annotated[
-        int,
-        Field(description="Maximum iterations for the stage", title="Max Iterations"),
-    ]
-    progress: Annotated[
-        float, Field(description="Progress percentage (0-1)", title="Progress")
-    ]
-    total_nodes: Annotated[
-        int, Field(description="Total nodes considered so far", title="Total Nodes")
-    ]
-    buggy_nodes: Annotated[
-        int, Field(description="Number of buggy nodes", title="Buggy Nodes")
-    ]
-    good_nodes: Annotated[
-        int, Field(description="Number of good nodes", title="Good Nodes")
-    ]
-    best_metric: Annotated[
-        str | None,
-        Field(description="Best metric reported at this stage", title="Best Metric"),
-    ] = None
-    created_at: Annotated[
-        str,
-        Field(
-            description="ISO timestamp when the event was recorded", title="Created At"
-        ),
-    ]
-
-
-class ResearchRunStageProgressEvent(BaseModel):
-    type: Annotated[Literal["stage_progress"], Field(title="Type")]
-    data: ResearchRunStageProgress
-
-
-class ResearchRunStageSkipWindow(BaseModel):
-    id: Annotated[
-        int,
-        Field(description="Unique identifier for the skip window record", title="Id"),
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier where skipping became possible", title="Stage"
-        ),
-    ]
-    opened_at: Annotated[
-        str,
-        Field(description="ISO timestamp when the window opened", title="Opened At"),
-    ]
-    opened_reason: Annotated[
-        str | None,
-        Field(
-            description="Reason provided when the window opened", title="Opened Reason"
-        ),
-    ] = None
-    closed_at: Annotated[
-        str | None,
-        Field(
-            description="ISO timestamp when the window closed (if closed)",
-            title="Closed At",
-        ),
-    ] = None
-    closed_reason: Annotated[
-        str | None,
-        Field(
-            description="Reason provided when the window closed", title="Closed Reason"
-        ),
-    ] = None
-
-
 class State(StrEnum):
     opened = "opened"
     closed = "closed"
-
-
-class ResearchRunStageSkipWindowUpdate(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    state: Annotated[State, Field(title="State")]
-    timestamp: Annotated[str, Field(title="Timestamp")]
-    reason: Annotated[str | None, Field(title="Reason")] = None
-
-
-class ResearchRunStageSummary(BaseModel):
-    id: Annotated[
-        int,
-        Field(description="Unique identifier of the stage summary event", title="Id"),
-    ]
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    summary: Annotated[
-        dict[str, Any],
-        Field(description="LLM-generated summary payload", title="Summary"),
-    ]
-    created_at: Annotated[
-        str,
-        Field(
-            description="ISO timestamp when the summary was recorded",
-            title="Created At",
-        ),
-    ]
-
-
-class ResearchRunStageSummaryEvent(BaseModel):
-    type: Annotated[Literal["stage_summary"], Field(title="Type")]
-    data: ResearchRunStageSummary
 
 
 class ResearchRunStopResponse(BaseModel):
@@ -1940,31 +1621,6 @@ class RunLogPayload(BaseModel):
     event: RunLogEvent
 
 
-class RunStartedEvent(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["run_started"], Field(title="Type")] = "run_started"
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    gpu_type: Annotated[str, Field(description="GPU type allocated", title="Gpu Type")]
-    cost_per_hour_cents: Annotated[
-        int | None,
-        Field(description="Cost per hour in cents", title="Cost Per Hour Cents"),
-    ] = None
-
-
 class RunTreeNodeResponse(BaseModel):
     run_id: Annotated[str, Field(title="Run Id")]
     idea_title: Annotated[str, Field(title="Idea Title")]
@@ -1984,22 +1640,6 @@ class RunType(StrEnum):
     runfile_execution = "runfile_execution"
 
 
-class RunningCodeEventPayload(BaseModel):
-    execution_id: Annotated[str, Field(title="Execution Id")]
-    stage_name: Annotated[str, Field(title="Stage Name")]
-    code: Annotated[str, Field(title="Code")]
-    started_at: Annotated[str, Field(title="Started At")]
-    run_type: RunType
-    execution_type: ExecutionType
-    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
-    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
-    node_index: Annotated[int, Field(title="Node Index")]
-
-
-class RunningCodePayload(BaseModel):
-    event: RunningCodeEventPayload
-
-
 class SeedFromRunResponse(BaseModel):
     conversation_id: Annotated[
         int, Field(description="ID of the new conversation", title="Conversation Id")
@@ -2008,31 +1648,9 @@ class SeedFromRunResponse(BaseModel):
     message: Annotated[str, Field(description="Success message", title="Message")]
 
 
-class SkipStageRequest(BaseModel):
-    stage: Annotated[str | None, Field(title="Stage")] = None
-    reason: Annotated[str | None, Field(title="Reason")] = None
-
-
 class SkipStageResponse(BaseModel):
     status: Annotated[Literal["pending"], Field(title="Status")]
     message: Annotated[str, Field(title="Message")]
-
-
-class StageCompletedEventInput(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    main_stage_number: Annotated[int, Field(title="Main Stage Number")]
-    reason: Annotated[str, Field(title="Reason")]
-    summary: Annotated[dict[str, Any], Field(title="Summary")]
-
-
-class Confidence(StrEnum):
-    high = "high"
-    medium = "medium"
-    low = "low"
-
-
-class StageCompletedPayload(BaseModel):
-    event: StageCompletedEventInput
 
 
 class Status8(StrEnum):
@@ -2042,52 +1660,16 @@ class Status8(StrEnum):
     skipped = "skipped"
 
 
-class StageGoal(BaseModel):
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    title: Annotated[str, Field(description="Display title", title="Title")]
-    goal: Annotated[
-        str | None, Field(description="What we're trying to achieve", title="Goal")
-    ] = None
-    approach: Annotated[
-        str | None, Field(description="How we're approaching it", title="Approach")
-    ] = None
-    success_criteria: Annotated[
-        str | None,
-        Field(description="How we know we're done", title="Success Criteria"),
-    ] = None
-    status: Annotated[
-        Status8 | None, Field(description="Current status", title="Status")
-    ] = "pending"
-    started_at: Annotated[
-        AwareDatetime | None,
-        Field(description="When stage started", title="Started At"),
-    ] = None
-    completed_at: Annotated[
-        AwareDatetime | None,
-        Field(description="When stage completed", title="Completed At"),
-    ] = None
-    current_iteration: Annotated[
-        int | None, Field(description="Current iteration", title="Current Iteration")
-    ] = None
-    max_iterations: Annotated[
-        int | None, Field(description="Maximum iterations", title="Max Iterations")
-    ] = None
-    progress: Annotated[
-        float | None, Field(description="Progress 0.0-1.0", title="Progress")
-    ] = None
-    total_nodes: Annotated[
-        int | None, Field(description="Total nodes in this stage", title="Total Nodes")
-    ] = 0
-    buggy_nodes: Annotated[
-        int | None, Field(description="Number of buggy nodes", title="Buggy Nodes")
-    ] = 0
-    good_nodes: Annotated[
-        int | None, Field(description="Number of good nodes", title="Good Nodes")
-    ] = 0
+class StageId(StrEnum):
+    field_1_initial_implementation = "1_initial_implementation"
+    field_2_baseline_tuning = "2_baseline_tuning"
+    field_3_creative_research = "3_creative_research"
+    field_4_ablation_studies = "4_ablation_studies"
+    field_5_paper_generation = "5_paper_generation"
 
 
 class StageProgressEvent(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
+    stage: StageId
     iteration: Annotated[int, Field(title="Iteration")]
     max_iterations: Annotated[int, Field(title="Max Iterations")]
     progress: Annotated[float, Field(title="Progress")]
@@ -2104,7 +1686,7 @@ class StageProgressPayload(BaseModel):
 
 
 class StageSkipWindowEventModel(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
+    stage: StageId
     state: Annotated[State, Field(title="State")]
     timestamp: Annotated[str, Field(title="Timestamp")]
     reason: Annotated[str | None, Field(title="Reason")] = None
@@ -2120,11 +1702,8 @@ class StageStartedEvent(BaseModel):
         AwareDatetime, Field(description="When this event occurred", title="Timestamp")
     ]
     stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
     ]
     node_id: Annotated[
         str | None,
@@ -2132,21 +1711,43 @@ class StageStartedEvent(BaseModel):
     ] = None
     type: Annotated[Literal["stage_started"], Field(title="Type")] = "stage_started"
     headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    stage_name: Annotated[
-        str, Field(description="Human-readable stage name", title="Stage Name")
-    ]
     goal: Annotated[
         str | None, Field(description="What we're trying to achieve", title="Goal")
     ] = None
 
 
 class StageSummaryEvent(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    summary: Annotated[dict[str, Any], Field(title="Summary")]
+    stage: ExperimentalStageId
+    summary: Annotated[str, Field(title="Summary")]
 
 
 class StageSummaryPayload(BaseModel):
     event: StageSummaryEvent
+
+
+class StageTransitionEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        ExperimentalStageId, Field(description="Experimental stage identifier")
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["stage_transition"], Field(title="Type")] = (
+        "stage_transition"
+    )
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    transition_summary: Annotated[
+        str,
+        Field(
+            description="LLM-generated summary of what was accomplished and what comes next",
+            title="Transition Summary",
+        ),
+    ]
 
 
 class SummaryResponse(BaseModel):
@@ -2190,9 +1791,7 @@ class TokenUsageResponse(BaseModel):
 class TreeVizItem(BaseModel):
     id: Annotated[int, Field(description="Tree viz identifier", title="Id")]
     run_id: Annotated[str, Field(description="Research run identifier", title="Run Id")]
-    stage_id: Annotated[
-        str, Field(description="Stage identifier (stage_1..stage_4)", title="Stage Id")
-    ]
+    stage: Annotated[ExperimentalStageId, Field(description="Stage identifier")]
     version: Annotated[
         int, Field(description="Version counter for the stored viz", title="Version")
     ]
@@ -2213,7 +1812,7 @@ class TreeVizItem(BaseModel):
 
 
 class TreeVizStoredEvent(BaseModel):
-    stage_id: Annotated[str, Field(title="Stage Id")]
+    stage: ExperimentalStageId
     version: Annotated[int, Field(title="Version")]
     viz: Annotated[dict[str, Any], Field(title="Viz")]
 
@@ -2264,6 +1863,29 @@ class WalletStreamEvent(RootModel[WalletBalanceEvent | WalletHeartbeatEvent]):
             title="WalletStreamEvent",
         ),
     ]
+
+
+class ActiveNode(BaseModel):
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
+    stage: Annotated[StageId, Field(description="Stage identifier")]
+    status: Annotated[
+        Status | None, Field(description="Current execution status", title="Status")
+    ] = "running"
+    started_at: Annotated[
+        AwareDatetime, Field(description="When execution started", title="Started At")
+    ]
+    completed_at: Annotated[
+        AwareDatetime | None,
+        Field(description="When execution completed", title="Completed At"),
+    ] = None
+    exec_time: Annotated[
+        float | None, Field(description="Execution time in seconds", title="Exec Time")
+    ] = None
+    run_type: Annotated[
+        str | None, Field(description="Type of run", title="Run Type")
+    ] = "main_execution"
 
 
 class AuthStatus(BaseModel):
@@ -2340,6 +1962,18 @@ class ChatStreamEvent(
             title="ChatStreamEvent",
         ),
     ]
+
+
+class CodexEventItem(BaseModel):
+    stage: StageId
+    node: Annotated[int, Field(title="Node")]
+    event_type: Annotated[str, Field(title="Event Type")]
+    event_content: Annotated[dict[str, Any], Field(title="Event Content")]
+    occurred_at: Annotated[str, Field(title="Occurred At")]
+
+
+class CodexEventsBulkPayload(BaseModel):
+    events: Annotated[list[CodexEventItem], Field(title="Events")]
 
 
 class ConversationCostResponse(BaseModel):
@@ -2513,17 +2147,121 @@ class MultipartUploadInitResponse(BaseModel):
     expires_in: Annotated[int, Field(title="Expires In")]
 
 
+class NodeExecutionCompletedEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["node_execution_completed"], Field(title="Type")] = (
+        "node_execution_completed"
+    )
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
+    status: Annotated[Status1, Field(description="Execution status", title="Status")]
+    exec_time: Annotated[
+        float, Field(description="Execution time in seconds", title="Exec Time")
+    ]
+    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
+    is_seed_node: Annotated[
+        bool,
+        Field(
+            description="True if this is a seed evaluation node", title="Is Seed Node"
+        ),
+    ]
+    is_seed_agg_node: Annotated[
+        bool,
+        Field(
+            description="True if this is a seed aggregation node",
+            title="Is Seed Agg Node",
+        ),
+    ]
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
+
+
+class NodeExecutionStartedEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["node_execution_started"], Field(title="Type")] = (
+        "node_execution_started"
+    )
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    execution_id: Annotated[
+        str, Field(description="Unique execution ID", title="Execution Id")
+    ]
+    run_type: Annotated[str, Field(description="Type of run", title="Run Type")]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Type of execution (stage_goal, seed, aggregation, metrics)",
+            title="Execution Type",
+        ),
+    ]
+    code_preview: Annotated[
+        str, Field(description="Full code being executed", title="Code Preview")
+    ]
+    is_seed_node: Annotated[
+        bool,
+        Field(
+            description="True if this is a seed evaluation node", title="Is Seed Node"
+        ),
+    ]
+    is_seed_agg_node: Annotated[
+        bool,
+        Field(
+            description="True if this is a seed aggregation node",
+            title="Is Seed Agg Node",
+        ),
+    ]
+    node_index: Annotated[
+        int,
+        Field(
+            description="1-based node index within the stage for display purposes",
+            title="Node Index",
+        ),
+    ]
+
+
 class NodeResultEvent(BaseModel):
     id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
     timestamp: Annotated[
         AwareDatetime, Field(description="When this event occurred", title="Timestamp")
     ]
     stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
     ]
     node_id: Annotated[
         str | None,
@@ -2548,6 +2286,47 @@ class NodeResultEvent(BaseModel):
     ] = None
     exec_time: Annotated[
         float | None, Field(description="Execution time in seconds", title="Exec Time")
+    ] = None
+
+
+class PaperGenerationStepEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["paper_generation_step"], Field(title="Type")] = (
+        "paper_generation_step"
+    )
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    step: Annotated[Step, Field(description="Current step", title="Step")]
+    substep: Annotated[
+        str | None, Field(description="Substep if applicable", title="Substep")
+    ] = None
+    description: Annotated[
+        str | None,
+        Field(description="What's happening in this step", title="Description"),
+    ] = None
+    progress: Annotated[
+        float, Field(description="Overall progress (0.0-1.0)", title="Progress")
+    ]
+    step_progress: Annotated[
+        float,
+        Field(description="Progress within this step (0.0-1.0)", title="Step Progress"),
+    ]
+    details: Annotated[
+        dict[str, Any] | None,
+        Field(
+            description="Step-specific details (figures selected, citations found, etc.)",
+            title="Details",
+        ),
     ] = None
 
 
@@ -2622,11 +2401,8 @@ class ProgressUpdateEvent(BaseModel):
         AwareDatetime, Field(description="When this event occurred", title="Timestamp")
     ]
     stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
     ]
     node_id: Annotated[
         str | None,
@@ -2679,13 +2455,7 @@ class ResearchRunCodeExecution(BaseModel):
             title="Execution Id",
         ),
     ]
-    stage_name: Annotated[
-        str,
-        Field(
-            description="Stage name reported by the research pipeline",
-            title="Stage Name",
-        ),
-    ]
+    stage: Annotated[StageId, Field(description="Stage identifier")]
     run_type: Annotated[
         RunType,
         Field(
@@ -2715,7 +2485,7 @@ class ResearchRunCodeExecution(BaseModel):
 
 class ResearchRunCodeExecutionCompletedData(BaseModel):
     execution_id: Annotated[str, Field(title="Execution Id")]
-    stage_name: Annotated[str, Field(title="Stage Name")]
+    stage: StageId
     run_type: RunType
     status: Annotated[Status1, Field(title="Status")]
     exec_time: Annotated[float, Field(title="Exec Time")]
@@ -2729,7 +2499,7 @@ class ResearchRunCodeExecutionCompletedEvent(BaseModel):
 
 class ResearchRunCodeExecutionStartedData(BaseModel):
     execution_id: Annotated[str, Field(title="Execution Id")]
-    stage_name: Annotated[str, Field(title="Stage Name")]
+    stage: StageId
     run_type: RunType
     code: Annotated[str, Field(title="Code")]
     started_at: Annotated[str, Field(title="Started At")]
@@ -2738,6 +2508,373 @@ class ResearchRunCodeExecutionStartedData(BaseModel):
 class ResearchRunCodeExecutionStartedEvent(BaseModel):
     type: Annotated[Literal["code_execution_started"], Field(title="Type")]
     data: ResearchRunCodeExecutionStartedData
+
+
+class ResearchRunPaperGenerationEvent(BaseModel):
+    type: Annotated[Literal["paper_generation_progress"], Field(title="Type")]
+    data: ResearchRunPaperGenerationProgress
+
+
+class ResearchRunStageEvent(BaseModel):
+    id: Annotated[
+        int,
+        Field(
+            description="Unique identifier of the stage completion event", title="Id"
+        ),
+    ]
+    stage: Annotated[StageId, Field(description="Stage identifier")]
+    node_id: Annotated[
+        str | None,
+        Field(
+            description="Optional identifier associated with the stage (reserved for future use)",
+            title="Node Id",
+        ),
+    ] = None
+    summary: Annotated[
+        dict[str, Any],
+        Field(description="Summary payload stored for this stage", title="Summary"),
+    ]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of the event", title="Created At")
+    ]
+
+
+class ResearchRunStageEventStream(BaseModel):
+    type: Annotated[Literal["stage_event"], Field(title="Type")]
+    data: ResearchRunStageEvent
+
+
+class ResearchRunStageProgress(BaseModel):
+    stage: Annotated[StageId, Field(description="Stage identifier")]
+    iteration: Annotated[
+        int, Field(description="Current iteration number", title="Iteration")
+    ]
+    max_iterations: Annotated[
+        int,
+        Field(description="Maximum iterations for the stage", title="Max Iterations"),
+    ]
+    progress: Annotated[
+        float, Field(description="Progress percentage (0-1)", title="Progress")
+    ]
+    total_nodes: Annotated[
+        int, Field(description="Total nodes considered so far", title="Total Nodes")
+    ]
+    buggy_nodes: Annotated[
+        int, Field(description="Number of buggy nodes", title="Buggy Nodes")
+    ]
+    good_nodes: Annotated[
+        int, Field(description="Number of good nodes", title="Good Nodes")
+    ]
+    best_metric: Annotated[
+        str | None,
+        Field(description="Best metric reported at this stage", title="Best Metric"),
+    ] = None
+    created_at: Annotated[
+        str,
+        Field(
+            description="ISO timestamp when the event was recorded", title="Created At"
+        ),
+    ]
+
+
+class ResearchRunStageProgressEvent(BaseModel):
+    type: Annotated[Literal["stage_progress"], Field(title="Type")]
+    data: ResearchRunStageProgress
+
+
+class ResearchRunStageSkipWindow(BaseModel):
+    id: Annotated[
+        int,
+        Field(description="Unique identifier for the skip window record", title="Id"),
+    ]
+    stage: Annotated[
+        StageId, Field(description="Stage identifier where skipping became possible")
+    ]
+    opened_at: Annotated[
+        str,
+        Field(description="ISO timestamp when the window opened", title="Opened At"),
+    ]
+    opened_reason: Annotated[
+        str | None,
+        Field(
+            description="Reason provided when the window opened", title="Opened Reason"
+        ),
+    ] = None
+    closed_at: Annotated[
+        str | None,
+        Field(
+            description="ISO timestamp when the window closed (if closed)",
+            title="Closed At",
+        ),
+    ] = None
+    closed_reason: Annotated[
+        str | None,
+        Field(
+            description="Reason provided when the window closed", title="Closed Reason"
+        ),
+    ] = None
+
+
+class ResearchRunStageSkipWindowUpdate(BaseModel):
+    stage: StageId
+    state: Annotated[State, Field(title="State")]
+    timestamp: Annotated[str, Field(title="Timestamp")]
+    reason: Annotated[str | None, Field(title="Reason")] = None
+
+
+class ResearchRunStageSummary(BaseModel):
+    id: Annotated[
+        int,
+        Field(description="Unique identifier of the stage summary event", title="Id"),
+    ]
+    stage: Annotated[StageId, Field(description="Stage identifier")]
+    summary: Annotated[
+        str, Field(description="LLM-generated transition summary", title="Summary")
+    ]
+    created_at: Annotated[
+        str,
+        Field(
+            description="ISO timestamp when the summary was recorded",
+            title="Created At",
+        ),
+    ]
+
+
+class ResearchRunStageSummaryEvent(BaseModel):
+    type: Annotated[Literal["stage_summary"], Field(title="Type")]
+    data: ResearchRunStageSummary
+
+
+class RunCompletedEventPayload(BaseModel):
+    execution_id: Annotated[str, Field(title="Execution Id")]
+    stage: StageId
+    status: Annotated[Status6, Field(title="Status")]
+    exec_time: Annotated[float, Field(title="Exec Time")]
+    completed_at: Annotated[str, Field(title="Completed At")]
+    run_type: RunType
+    execution_type: ExecutionType
+    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
+    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
+
+
+class RunCompletedPayload(BaseModel):
+    event: RunCompletedEventPayload
+
+
+class RunFinishedEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["run_finished"], Field(title="Type")] = "run_finished"
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    status: Annotated[Status7, Field(description="Final run status", title="Status")]
+    success: Annotated[
+        bool,
+        Field(description="Whether the run completed successfully", title="Success"),
+    ]
+    reason: Annotated[Reason, Field(description="Why the run finished", title="Reason")]
+    message: Annotated[
+        str | None,
+        Field(description="Human-readable completion message", title="Message"),
+    ] = None
+    summary: Annotated[
+        str | None,
+        Field(description="Summary of what was accomplished", title="Summary"),
+    ] = None
+    total_duration_seconds: Annotated[
+        float | None,
+        Field(
+            description="Total run duration in seconds", title="Total Duration Seconds"
+        ),
+    ] = None
+    stages_completed: Annotated[
+        int | None,
+        Field(description="Number of stages completed", title="Stages Completed"),
+    ] = 0
+    total_nodes_executed: Annotated[
+        int | None,
+        Field(description="Total nodes executed", title="Total Nodes Executed"),
+    ] = 0
+    best_result: Annotated[
+        MetricCollection | None, Field(description="Best result achieved if available")
+    ] = None
+
+
+class RunStartedEvent(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["run_started"], Field(title="Type")] = "run_started"
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    gpu_type: Annotated[str, Field(description="GPU type allocated", title="Gpu Type")]
+    cost_per_hour_cents: Annotated[
+        int | None,
+        Field(description="Cost per hour in cents", title="Cost Per Hour Cents"),
+    ] = None
+
+
+class RunningCodeEventPayload(BaseModel):
+    execution_id: Annotated[str, Field(title="Execution Id")]
+    stage: StageId
+    code: Annotated[str, Field(title="Code")]
+    started_at: Annotated[str, Field(title="Started At")]
+    run_type: RunType
+    execution_type: ExecutionType
+    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
+    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
+    node_index: Annotated[int, Field(title="Node Index")]
+
+
+class RunningCodePayload(BaseModel):
+    event: RunningCodeEventPayload
+
+
+class SkipStageRequest(BaseModel):
+    stage: StageId | None = None
+    reason: Annotated[str | None, Field(title="Reason")] = None
+
+
+class StageCompletedEventInput(BaseModel):
+    stage: StageId
+    main_stage_number: Annotated[int, Field(title="Main Stage Number")]
+    reason: Annotated[str, Field(title="Reason")]
+    summary: Annotated[dict[str, Any], Field(title="Summary")]
+
+
+class StageCompletedEventOutput(BaseModel):
+    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
+    timestamp: Annotated[
+        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
+    ]
+    stage: Annotated[
+        StageId,
+        Field(description="Stage identifier (e.g., '1_initial_implementation')"),
+    ]
+    node_id: Annotated[
+        str | None,
+        Field(description="Node ID if event relates to specific node", title="Node Id"),
+    ] = None
+    type: Annotated[Literal["stage_completed"], Field(title="Type")] = "stage_completed"
+    headline: Annotated[str, Field(description="Short headline", title="Headline")]
+    best_metrics: Annotated[
+        MetricCollection | None, Field(description="Best metrics achieved")
+    ] = None
+
+
+class StageCompletedPayload(BaseModel):
+    event: StageCompletedEventInput
+
+
+class StageGoal(BaseModel):
+    stage: Annotated[StageId, Field(description="Stage identifier")]
+    title: Annotated[str, Field(description="Display title", title="Title")]
+    goal: Annotated[
+        str | None, Field(description="What we're trying to achieve", title="Goal")
+    ] = None
+    approach: Annotated[
+        str | None, Field(description="How we're approaching it", title="Approach")
+    ] = None
+    success_criteria: Annotated[
+        str | None,
+        Field(description="How we know we're done", title="Success Criteria"),
+    ] = None
+    status: Annotated[
+        Status8 | None, Field(description="Current status", title="Status")
+    ] = "pending"
+    started_at: Annotated[
+        AwareDatetime | None,
+        Field(description="When stage started", title="Started At"),
+    ] = None
+    completed_at: Annotated[
+        AwareDatetime | None,
+        Field(description="When stage completed", title="Completed At"),
+    ] = None
+    current_iteration: Annotated[
+        int | None, Field(description="Current iteration", title="Current Iteration")
+    ] = None
+    max_iterations: Annotated[
+        int | None, Field(description="Maximum iterations", title="Max Iterations")
+    ] = None
+    progress: Annotated[
+        float | None, Field(description="Progress 0.0-1.0", title="Progress")
+    ] = None
+    total_nodes: Annotated[
+        int | None, Field(description="Total nodes in this stage", title="Total Nodes")
+    ] = 0
+    buggy_nodes: Annotated[
+        int | None, Field(description="Number of buggy nodes", title="Buggy Nodes")
+    ] = 0
+    good_nodes: Annotated[
+        int | None, Field(description="Number of good nodes", title="Good Nodes")
+    ] = 0
+
+
+class ChatHistoryResponse(BaseModel):
+    chat_messages: Annotated[
+        list[ChatMessage],
+        Field(description="List of chat messages", title="Chat Messages"),
+    ]
+
+
+class ConversationImportDoneData(BaseModel):
+    conversation: ConversationResponse | None = None
+    idea: Idea | None = None
+    error: Annotated[str | None, Field(title="Error")] = None
+
+
+class ConversationImportDoneEvent(BaseModel):
+    type: Annotated[Literal["done"], Field(title="Type")]
+    data: ConversationImportDoneData
+
+
+class ConversationImportStreamEvent(
+    RootModel[
+        ConversationImportSectionUpdateEvent
+        | ConversationImportStateEvent
+        | ConversationImportProgressEvent
+        | ConversationImportConflictEvent
+        | ConversationImportModelLimitEvent
+        | ConversationImportErrorEvent
+        | ConversationImportDoneEvent
+        | ConversationImportContentEvent
+        | ConversationImportMarkdownDeltaEvent
+    ]
+):
+    root: Annotated[
+        ConversationImportSectionUpdateEvent
+        | ConversationImportStateEvent
+        | ConversationImportProgressEvent
+        | ConversationImportConflictEvent
+        | ConversationImportModelLimitEvent
+        | ConversationImportErrorEvent
+        | ConversationImportDoneEvent
+        | ConversationImportContentEvent
+        | ConversationImportMarkdownDeltaEvent,
+        Field(
+            description="Root model for conversation import SSE stream events.",
+            discriminator="type",
+            title="ConversationImportStreamEvent",
+        ),
+    ]
 
 
 class ResearchRunDetailsResponse(BaseModel):
@@ -2844,11 +2981,6 @@ class ResearchRunInitialEventData(BaseModel):
     ] = None
 
 
-class ResearchRunPaperGenerationEvent(BaseModel):
-    type: Annotated[Literal["paper_generation_progress"], Field(title="Type")]
-    data: ResearchRunPaperGenerationProgress
-
-
 class ResearchRunStageCompletedEvent(BaseModel):
     type: Annotated[Literal["stage_completed"], Field(title="Type")]
     data: ResearchRunStageEvent
@@ -2859,179 +2991,6 @@ class ResearchRunStageSkipWindowEvent(BaseModel):
     data: ResearchRunStageSkipWindowUpdate
 
 
-class RunCompletedEventPayload(BaseModel):
-    execution_id: Annotated[str, Field(title="Execution Id")]
-    stage_name: Annotated[str, Field(title="Stage Name")]
-    status: Annotated[Status6, Field(title="Status")]
-    exec_time: Annotated[float, Field(title="Exec Time")]
-    completed_at: Annotated[str, Field(title="Completed At")]
-    run_type: RunType
-    execution_type: ExecutionType
-    is_seed_node: Annotated[bool, Field(title="Is Seed Node")]
-    is_seed_agg_node: Annotated[bool, Field(title="Is Seed Agg Node")]
-    node_index: Annotated[int, Field(title="Node Index")]
-
-
-class RunCompletedPayload(BaseModel):
-    event: RunCompletedEventPayload
-
-
-class RunFinishedEvent(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["run_finished"], Field(title="Type")] = "run_finished"
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    status: Annotated[Status7, Field(description="Final run status", title="Status")]
-    success: Annotated[
-        bool,
-        Field(description="Whether the run completed successfully", title="Success"),
-    ]
-    reason: Annotated[Reason, Field(description="Why the run finished", title="Reason")]
-    message: Annotated[
-        str | None,
-        Field(description="Human-readable completion message", title="Message"),
-    ] = None
-    summary: Annotated[
-        str | None,
-        Field(description="Summary of what was accomplished", title="Summary"),
-    ] = None
-    total_duration_seconds: Annotated[
-        float | None,
-        Field(
-            description="Total run duration in seconds", title="Total Duration Seconds"
-        ),
-    ] = None
-    stages_completed: Annotated[
-        int | None,
-        Field(description="Number of stages completed", title="Stages Completed"),
-    ] = 0
-    total_nodes_executed: Annotated[
-        int | None,
-        Field(description="Total nodes executed", title="Total Nodes Executed"),
-    ] = 0
-    best_result: Annotated[
-        MetricCollection | None, Field(description="Best result achieved if available")
-    ] = None
-
-
-class StageCompletedEventOutput(BaseModel):
-    id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
-    timestamp: Annotated[
-        AwareDatetime, Field(description="When this event occurred", title="Timestamp")
-    ]
-    stage: Annotated[
-        str,
-        Field(
-            description="Stage identifier (e.g., '1_initial_implementation')",
-            title="Stage",
-        ),
-    ]
-    node_id: Annotated[
-        str | None,
-        Field(description="Node ID if event relates to specific node", title="Node Id"),
-    ] = None
-    type: Annotated[Literal["stage_completed"], Field(title="Type")] = "stage_completed"
-    headline: Annotated[str, Field(description="Short headline", title="Headline")]
-    summary: Annotated[
-        str | None,
-        Field(
-            description="What was accomplished (from stage_summary)", title="Summary"
-        ),
-    ] = None
-    best_node_id: Annotated[
-        str | None,
-        Field(description="ID of best node from this stage", title="Best Node Id"),
-    ] = None
-    best_metrics: Annotated[
-        MetricCollection | None, Field(description="Best metrics achieved")
-    ] = None
-    total_attempts: Annotated[
-        int | None, Field(description="Total nodes explored", title="Total Attempts")
-    ] = 0
-    successful_attempts: Annotated[
-        int | None,
-        Field(
-            description="Nodes that completed successfully", title="Successful Attempts"
-        ),
-    ] = 0
-    failed_attempts: Annotated[
-        int | None, Field(description="Nodes that failed", title="Failed Attempts")
-    ] = 0
-    confidence: Annotated[
-        Confidence | None,
-        Field(
-            description="Confidence in results (from stage_summary)", title="Confidence"
-        ),
-    ] = None
-
-
-class ChatHistoryResponse(BaseModel):
-    chat_messages: Annotated[
-        list[ChatMessage],
-        Field(description="List of chat messages", title="Chat Messages"),
-    ]
-
-
-class ConversationImportDoneData(BaseModel):
-    conversation: ConversationResponse | None = None
-    idea: Idea | None = None
-    error: Annotated[str | None, Field(title="Error")] = None
-
-
-class ConversationImportDoneEvent(BaseModel):
-    type: Annotated[Literal["done"], Field(title="Type")]
-    data: ConversationImportDoneData
-
-
-class ConversationImportStreamEvent(
-    RootModel[
-        ConversationImportSectionUpdateEvent
-        | ConversationImportStateEvent
-        | ConversationImportProgressEvent
-        | ConversationImportConflictEvent
-        | ConversationImportModelLimitEvent
-        | ConversationImportErrorEvent
-        | ConversationImportDoneEvent
-        | ConversationImportContentEvent
-        | ConversationImportMarkdownDeltaEvent
-    ]
-):
-    root: Annotated[
-        ConversationImportSectionUpdateEvent
-        | ConversationImportStateEvent
-        | ConversationImportProgressEvent
-        | ConversationImportConflictEvent
-        | ConversationImportModelLimitEvent
-        | ConversationImportErrorEvent
-        | ConversationImportDoneEvent
-        | ConversationImportContentEvent
-        | ConversationImportMarkdownDeltaEvent,
-        Field(
-            description="Root model for conversation import SSE stream events.",
-            discriminator="type",
-            title="ConversationImportStreamEvent",
-        ),
-    ]
-
-
-class ResearchRunInitialEvent(BaseModel):
-    type: Annotated[Literal["initial"], Field(title="Type")]
-    data: ResearchRunInitialEventData
-
-
 class ResearchRunState(BaseModel):
     run_id: Annotated[str, Field(description="Unique run identifier", title="Run Id")]
     status: Annotated[Status3, Field(title="Status")]
@@ -3039,7 +2998,7 @@ class ResearchRunState(BaseModel):
     idea_title: Annotated[str | None, Field(title="Idea Title")] = None
     idea_markdown: Annotated[str | None, Field(title="Idea Markdown")] = None
     stages: Annotated[list[StageGoal] | None, Field(title="Stages")] = None
-    current_stage: Annotated[str | None, Field(title="Current Stage")] = None
+    current_stage: StageId | None = None
     current_stage_goal: StageGoal | None = None
     timeline: Annotated[
         list[
@@ -3048,6 +3007,7 @@ class ResearchRunState(BaseModel):
                 | StageStartedEvent
                 | NodeResultEvent
                 | StageCompletedEventOutput
+                | StageTransitionEvent
                 | ProgressUpdateEvent
                 | PaperGenerationStepEvent
                 | NodeExecutionStartedEvent
@@ -3085,6 +3045,11 @@ class ResearchRunState(BaseModel):
     )
     error_message: Annotated[str | None, Field(title="Error Message")] = None
     version: Annotated[int | None, Field(title="Version")] = 1
+
+
+class ResearchRunInitialEvent(BaseModel):
+    type: Annotated[Literal["initial"], Field(title="Type")]
+    data: ResearchRunInitialEventData
 
 
 class ResearchRunStreamEvent(

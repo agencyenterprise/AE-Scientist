@@ -27,7 +27,9 @@ from app.models.timeline_events import (
     RunFinishedEvent,
     RunStartedEvent,
     StageCompletedEvent,
+    StageId,
     StageStartedEvent,
+    StageTransitionEvent,
     TimelineEvent,
 )
 from app.services.narrator.event_types import (
@@ -76,15 +78,14 @@ def handle_stage_progress_event(
 
     # If iteration == 1 AND stage not already started, emit stage start FIRST
     if event.iteration == 1 and state and not is_stage_started(state, event.stage):
-        stage_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
+        stage_display_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
         events.append(
             StageStartedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=now + timedelta(milliseconds=offset_ms),
                 stage=event.stage,
                 node_id=None,
-                headline=f"Starting {stage_name}",
-                stage_name=stage_name,
+                headline=f"Starting {stage_display_name}",
                 goal=None,
             )
         )
@@ -148,14 +149,8 @@ def handle_stage_completed_event(
     now = datetime.now(timezone.utc)
     stage_name = STAGE_NAMES.get(event.stage, event.stage)
 
-    # Extract data from summary dict
-    summary = event.summary
-    best_node_id = summary.get("best_node_id")
-    total_attempts = summary.get("total_nodes", 0)
-    successful_attempts = summary.get("good_nodes", 0)
-    failed_attempts = summary.get("buggy_nodes", 0)
-
     # Extract best metric if available
+    summary = event.summary
     best_metrics = None
     best_metric_value = summary.get("best_metric")
     if best_metric_value:
@@ -174,39 +169,49 @@ def handle_stage_completed_event(
         except (ValueError, TypeError):
             pass
 
-    # Extract summary text if available
-    summary_text = summary.get("summary_text") or summary.get("reason")
-
     return [
         StageCompletedEvent(
             id=str(uuid.uuid4()),
             timestamp=now,
             stage=event.stage,
-            node_id=best_node_id,
+            node_id=None,
             headline=f"{stage_name} Complete",
-            summary=summary_text,
-            best_node_id=best_node_id,
             best_metrics=best_metrics,
-            total_attempts=total_attempts,
-            successful_attempts=successful_attempts,
-            failed_attempts=failed_attempts,
-            confidence=None,
         )
     ]
 
 
 def handle_stage_summary_event(
-    _event: StageSummaryEvent, _state: Optional[ResearchRunState]
+    event: StageSummaryEvent, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
-    Transform stage_summary event (LLM-generated) into enriched data.
+    Transform stage_summary event into StageTransitionEvent.
 
-    For now, we don't create a separate timeline event from this.
-    Instead, we use this data to enrich the StageCompletedEvent.
+    The stage_summary event contains an LLM-generated transition summary
+    that describes what was accomplished and what comes next.
     """
-    # Future: Extract insights, key learnings, confidence level
-    # For now, return empty list (no separate timeline event)
-    return []
+    now = datetime.now(timezone.utc)
+
+    # summary is now just the transition summary string
+    transition_summary = event.summary
+    if not transition_summary:
+        # No transition summary available, don't create event
+        return []
+
+    # Get stage information for headline
+    stage = event.stage
+    stage_name = STAGE_NAMES.get(stage, stage)
+
+    return [
+        StageTransitionEvent(
+            id=str(uuid.uuid4()),
+            timestamp=now,
+            stage=stage,
+            node_id=None,
+            headline=f"Completed {stage_name}",
+            transition_summary=transition_summary,
+        )
+    ]
 
 
 def handle_running_code_event(
@@ -231,16 +236,15 @@ def handle_running_code_event(
     offset_ms = 0
 
     # If stage hasn't started, emit stage_started event first
-    if state and not is_stage_started(state, event.stage_name):
-        stage_display_name = STAGE_NAMES.get(event.stage_name, event.stage_name) or event.stage_name
+    if state and not is_stage_started(state, event.stage):
+        stage_display_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
         events.append(
             StageStartedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=started_at + timedelta(milliseconds=offset_ms),
-                stage=event.stage_name,
+                stage=event.stage,
                 node_id=None,
                 headline=f"Starting {stage_display_name}",
-                stage_name=stage_display_name,
                 goal=None,
             )
         )
@@ -251,7 +255,7 @@ def handle_running_code_event(
         NodeExecutionStartedEvent(
             id=str(uuid.uuid4()),
             timestamp=started_at + timedelta(milliseconds=offset_ms),
-            stage=event.stage_name,
+            stage=event.stage,
             node_id=event.execution_id,
             headline=f"Node {event.node_index} started",
             execution_id=event.execution_id,
@@ -283,7 +287,7 @@ def handle_run_completed_event(
         NodeExecutionCompletedEvent(
             id=str(uuid.uuid4()),
             timestamp=completed_at,
-            stage=event.stage_name,
+            stage=event.stage,
             node_id=event.execution_id,
             headline=headline,
             execution_id=event.execution_id,
@@ -313,15 +317,14 @@ def handle_paper_generation_progress_event(
     events: List[TimelineEvent] = []
 
     # If stage not started, emit StageStartedEvent first
-    if state and not is_stage_started(state, "5_paper_generation"):
+    if state and not is_stage_started(state, StageId.paper_generation):
         events.append(
             StageStartedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=now + timedelta(milliseconds=offset_ms),
-                stage="5_paper_generation",
+                stage=StageId.paper_generation,
                 node_id=None,
                 headline="Starting Paper Generation",
-                stage_name="Paper Generation",
                 goal=None,
             )
         )
@@ -337,7 +340,7 @@ def handle_paper_generation_progress_event(
         PaperGenerationStepEvent(
             id=str(uuid.uuid4()),
             timestamp=now + timedelta(milliseconds=offset_ms),
-            stage="5_paper_generation",
+            stage=StageId.paper_generation,
             node_id=None,
             headline=headline,
             step=event.step,
@@ -356,16 +359,10 @@ def handle_paper_generation_progress_event(
             StageCompletedEvent(
                 id=str(uuid.uuid4()),
                 timestamp=now + timedelta(milliseconds=offset_ms),
-                stage="5_paper_generation",
+                stage=StageId.paper_generation,
                 node_id=None,
                 headline="Paper Generation Complete",
-                summary="Research paper completed with all sections, citations, and reviews",
-                best_node_id=None,
                 best_metrics=None,
-                total_attempts=1,
-                successful_attempts=1,
-                failed_attempts=0,
-                confidence=None,
             )
         )
 
@@ -393,7 +390,7 @@ def handle_run_started_event(
         RunStartedEvent(
             id=str(uuid.uuid4()),
             timestamp=timestamp,
-            stage="",  # No stage yet - run just started
+            stage=StageId.initial_implementation,  # Default to first stage
             node_id=None,
             headline=headline,
             gpu_type=event.gpu_type,
@@ -458,11 +455,14 @@ def handle_run_finished_event(
                 f"Run stopped after {stages_completed} stages. {event.message or 'Unknown error'}"
             )
 
+    current_stage = (
+        state.current_stage if state and state.current_stage else StageId.initial_implementation
+    )
     return [
         RunFinishedEvent(
             id=str(uuid.uuid4()),
             timestamp=datetime.now(timezone.utc),
-            stage=state.current_stage if state and state.current_stage else "unknown",
+            stage=current_stage,
             node_id=None,
             headline=headline,
             status=event.status,

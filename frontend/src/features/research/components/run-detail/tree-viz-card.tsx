@@ -5,7 +5,7 @@ import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
 import {
   stageLabel,
   getStageSummary,
-  getStageSlug,
+  STAGE_ID,
   FULL_TREE_STAGE_ID,
 } from "@/shared/lib/stage-utils";
 import { TreeVizViewer } from "./tree-viz-viewer";
@@ -31,27 +31,27 @@ interface Props {
 // Stage configuration with icons and colors for visual hierarchy
 const STAGE_CONFIG: Record<string, { icon: React.ReactNode; color: string; description: string }> =
   {
-    initial_implementation: {
+    [STAGE_ID.INITIAL_IMPLEMENTATION]: {
       icon: <CheckCircle2 className="h-3.5 w-3.5" />,
       color: "emerald",
       description: "Building the foundation - creating a working baseline implementation",
     },
-    baseline_tuning: {
+    [STAGE_ID.BASELINE_TUNING]: {
       icon: <FlaskConical className="h-3.5 w-3.5" />,
       color: "blue",
       description: "Fine-tuning parameters to optimize baseline performance",
     },
-    creative_research: {
+    [STAGE_ID.CREATIVE_RESEARCH]: {
       icon: <Sparkles className="h-3.5 w-3.5" />,
       color: "purple",
       description: "Exploring novel improvements and generating visualizations",
     },
-    ablation_studies: {
+    [STAGE_ID.ABLATION_STUDIES]: {
       icon: <GitBranch className="h-3.5 w-3.5" />,
       color: "amber",
       description: "Testing which components contribute most to the results",
     },
-    paper_generation: {
+    [STAGE_ID.PAPER_GENERATION]: {
       icon: <FileText className="h-3.5 w-3.5" />,
       color: "rose",
       description: "Compiling findings into a research paper",
@@ -60,9 +60,8 @@ const STAGE_CONFIG: Record<string, { icon: React.ReactNode; color: string; descr
 
 // Get stage config with fallback
 function getStageConfig(stageId: string) {
-  const slug = getStageSlug(stageId);
   return (
-    STAGE_CONFIG[slug ?? ""] ?? {
+    STAGE_CONFIG[stageId] ?? {
       icon: <GitBranch className="h-3.5 w-3.5" />,
       color: "slate",
       description: "Research exploration stage",
@@ -85,7 +84,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
     const sortedByDate = [...list].sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     );
-    return sortedByDate[0]?.stage_id ?? null;
+    return sortedByDate[0]?.stage ?? null;
   }, [hasViz, list]);
 
   // Derived selected stage ID - uses manual selection if set, otherwise auto-follows most recent
@@ -97,7 +96,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
       if (manuallySelectedStageId === FULL_TREE_STAGE_ID) {
         return FULL_TREE_STAGE_ID;
       }
-      if (list.find(v => v.stage_id === manuallySelectedStageId)) {
+      if (list.find(v => v.stage === manuallySelectedStageId)) {
         return manuallySelectedStageId;
       }
     }
@@ -115,7 +114,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
   const selectedViz = useMemo(() => {
     if (!hasViz || !selectedStageId) return null;
     if (selectedStageId === FULL_TREE_STAGE_ID) return mergedViz;
-    return list.find(v => v.stage_id === selectedStageId) ?? list[0];
+    return list.find(v => v.stage === selectedStageId) ?? list[0];
   }, [hasViz, selectedStageId, list, mergedViz]);
 
   // Find best node for the selected stage using the is_best_node array in the tree viz payload
@@ -203,14 +202,14 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
             </p>
             <div className="flex flex-wrap gap-2">
               {list.map(viz => {
-                const config = getStageConfig(viz.stage_id);
-                const isSelected = viz.stage_id === selectedStageId;
+                const config = getStageConfig(viz.stage);
+                const isSelected = viz.stage === selectedStageId;
                 return (
-                  <Tooltip key={`${viz.stage_id}-${viz.id}`}>
+                  <Tooltip key={`${viz.stage}-${viz.id}`}>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={() => setManuallySelectedStageId(viz.stage_id)}
+                        onClick={() => setManuallySelectedStageId(viz.stage)}
                         className={cn(
                           "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                           isSelected
@@ -220,7 +219,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
                         aria-pressed={isSelected}
                       >
                         {config.icon}
-                        <span>{stageLabel(viz.stage_id)}</span>
+                        <span>{stageLabel(viz.stage)}</span>
                       </button>
                     </TooltipTrigger>
                     <TooltipContent
@@ -260,7 +259,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
           </div>
 
           {/* Stage description */}
-          <StageDescription summary={getStageSummary(selectedViz.stage_id)} />
+          <StageDescription summary={getStageSummary(selectedViz.stage)} />
 
           {/* Tree visualization */}
           <TreeVizViewer
@@ -268,7 +267,7 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
             artifacts={artifacts}
             conversationId={conversationId}
             runId={runId}
-            stageId={selectedViz.stage_id}
+            stageId={selectedViz.stage}
             bestNodeId={bestNodeForSelectedStage}
           />
         </>

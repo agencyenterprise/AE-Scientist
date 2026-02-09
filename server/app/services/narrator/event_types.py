@@ -12,6 +12,7 @@ from typing import Any, Dict, Literal, Optional, Union
 from pydantic import BaseModel
 
 from app.models.research_pipeline import ExecutionType, RunType
+from app.models.timeline_events import ExperimentalStageId, StageId
 
 # ============================================================================
 # Internal Event Data Models (used by narrator, not exposed via API)
@@ -50,7 +51,7 @@ class RunFinishedEventData(BaseModel):
 
 
 class StageProgressEvent(BaseModel):
-    stage: str
+    stage: StageId
     iteration: int
     max_iterations: int
     progress: float
@@ -63,15 +64,17 @@ class StageProgressEvent(BaseModel):
 
 
 class StageCompletedEvent(BaseModel):
-    stage: str
+    stage: StageId
     main_stage_number: int
     reason: str
-    summary: Dict[str, Any]
+    summary: Dict[str, Any]  # Contains goals, feedback, metrics, etc.
 
 
 class StageSummaryEvent(BaseModel):
-    stage: str
-    summary: Dict[str, Any]
+    """Event containing the LLM-generated transition summary for a stage."""
+
+    stage: ExperimentalStageId  # Only experimental stages (1-4) produce summaries
+    summary: str  # The transition summary text
 
 
 class PaperGenerationProgressEvent(BaseModel):
@@ -84,7 +87,7 @@ class PaperGenerationProgressEvent(BaseModel):
 
 class RunningCodeEventPayload(BaseModel):
     execution_id: str
-    stage_name: str
+    stage: StageId
     code: str
     started_at: str
     run_type: RunType
@@ -96,7 +99,7 @@ class RunningCodeEventPayload(BaseModel):
 
 class RunCompletedEventPayload(BaseModel):
     execution_id: str
-    stage_name: str
+    stage: StageId
     status: Literal["success", "failed"]
     exec_time: float
     completed_at: str

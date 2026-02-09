@@ -24,6 +24,8 @@ from typing import List, Optional
 
 import sentry_sdk
 
+from ai_scientist.api_types import StageId as ApiStage
+
 from . import execution_registry
 from .codex.codex_task_types import (
     EvaluationMetricSpec,
@@ -265,7 +267,7 @@ class ParallelAgent:
             try:
                 self.event_callback(
                     RunStageProgressEvent(
-                        stage=self.stage_name,
+                        stage=ApiStage(self.stage_name),
                         iteration=1,
                         max_iterations=1,
                         progress=0.0,
@@ -432,7 +434,7 @@ class ParallelAgent:
                 seed_number = completed_seeds_before + idx + 1
                 self.event_callback(
                     RunStageProgressEvent(
-                        stage=self.stage_name,
+                        stage=ApiStage(self.stage_name),
                         iteration=seed_number,
                         max_iterations=total_seeds,
                         progress=float(seed_number) / float(total_seeds),
@@ -752,7 +754,7 @@ class ParallelAgent:
             best_node = self.journal.get_best_node()
             self.event_callback(
                 RunStageProgressEvent(
-                    stage=self.stage_name,
+                    stage=ApiStage(self.stage_name),
                     iteration=iteration,
                     max_iterations=max_iterations,
                     progress=(

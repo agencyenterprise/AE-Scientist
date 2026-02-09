@@ -3,34 +3,34 @@
  */
 import type { ReactNode } from "react";
 import { CheckCircle2, Clock, Loader2, AlertCircle } from "lucide-react";
-import { extractStageNumber } from "@/shared/lib/stage-utils";
+import { STAGE_ID, extractStageNumber } from "@/shared/lib/stage-utils";
 import { PaperGenerationEvent, StageProgress } from "@/types/research";
 
 /**
  * Stage descriptions for humanizing messages
  */
 const STAGE_DESCRIPTIONS: Record<string, { name: string; action: string; description: string }> = {
-  "1_baseline": {
+  [STAGE_ID.INITIAL_IMPLEMENTATION]: {
     name: "Baseline Implementation",
     action: "Building the foundation",
     description: "Creating the initial working implementation",
   },
-  "2_baseline_tuning": {
+  [STAGE_ID.BASELINE_TUNING]: {
     name: "Baseline Tuning",
     action: "Optimizing baseline",
     description: "Fine-tuning parameters for better performance",
   },
-  "3_creative": {
+  [STAGE_ID.CREATIVE_RESEARCH]: {
     name: "Creative Research",
     action: "Exploring creative approaches",
     description: "Testing innovative strategies and novel ideas",
   },
-  "4_ablation": {
+  [STAGE_ID.ABLATION_STUDIES]: {
     name: "Ablation Studies",
     action: "Analyzing component contributions",
     description: "Identifying which components matter most",
   },
-  "5_paper": {
+  [STAGE_ID.PAPER_GENERATION]: {
     name: "Paper Generation",
     action: "Writing the research paper",
     description: "Generating the final paper with results",
@@ -216,9 +216,8 @@ export const TOOLTIP_EXPLANATIONS = {
 export type TooltipKey = keyof typeof TOOLTIP_EXPLANATIONS;
 
 /**
- * Converts backend stage ids into a human-readable label.
+ * Converts backend stage IDs into a human-readable label.
  *
- * Backend format: {stage_number}_{stage_slug}
  * Examples:
  * - "5_paper_generation" -> "5: Paper Generation"
  * - "2_baseline_tuning" -> "2: Baseline Tuning"
@@ -490,7 +489,7 @@ export function getCurrentStageAndProgress(
       created_at: sp.created_at,
     })),
     ...paperGenerationProgress.map(pg => ({
-      stage: "5_paper_generation",
+      stage: STAGE_ID.PAPER_GENERATION,
       progress: pg.progress,
       created_at: pg.created_at,
     })),

@@ -144,7 +144,7 @@ function normalizeCodeExecution(
   }
   return {
     execution_id: snapshot.execution_id,
-    stage_name: snapshot.stage_name,
+    stage: snapshot.stage,
     run_type: snapshot.run_type as ResearchRunCodeExecution["run_type"],
     code: snapshot.code ?? null,
     status: snapshot.status,
@@ -159,7 +159,7 @@ function mapCodeExecutionStartedEvent(
 ): ResearchRunCodeExecution {
   return {
     execution_id: event.execution_id,
-    stage_name: event.stage_name,
+    stage: event.stage,
     run_type: (event.run_type ?? "codex_execution") as ResearchRunCodeExecution["run_type"],
     code: event.code,
     status: "running",

@@ -142,7 +142,7 @@ def perform_experiments_bfts(
                         stage_best_node_summary_written.add(stage.name)
 
             # Save the run as before
-            save_run(cfg, journal, stage_name=f"stage_{stage.name}")
+            save_run(cfg, journal, stage_name=stage.name)
 
             # Also emit a log event describing what's happening
             if good_nodes_count == 0 and len(journal.buggy_nodes) > 0:

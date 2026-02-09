@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple
 
+from ai_scientist.api_types import ExperimentalStageId as ApiExperimentalStage
+from ai_scientist.api_types import StageId as ApiStage
 from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
@@ -34,7 +36,12 @@ from .config import Config
 from .journal import Journal, Node
 from .metrics_extraction import analyze_progress, gather_stage_metrics, identify_issues
 from .parallel_agent import ParallelAgent
-from .phase_summary import PhaseDefinition, PhasePlanProgress, build_phase_summary
+from .phase_summary import (
+    PhaseDefinition,
+    PhasePlanProgress,
+    build_phase_summary,
+    generate_transition_summary,
+)
 from .stage_identifiers import StageIdentifier
 from .stage_skip_coordinator import SkipInProgressError, StageSkipCoordinator
 from .stages.base import Stage as StageImpl
@@ -164,7 +171,6 @@ class AgentManager:
         definition = PhaseDefinition(
             phase_id=stage_meta.name,
             main_stage_number=stage_meta.number,
-            stage_slug=stage_meta.slug,
             goals=stage_meta.goals,
         )
         self.phase_plan.append(definition)
@@ -232,7 +238,7 @@ class AgentManager:
         try:
             self.event_callback(
                 StageSkipWindowEvent(
-                    stage=stage_name,
+                    stage=ApiStage(stage_name),
                     state=state,
                     timestamp=datetime.now(timezone.utc),
                     reason=reason,
@@ -566,7 +572,7 @@ class AgentManager:
         try:
             self.event_callback(
                 RunStageProgressEvent(
-                    stage=current_substage.name,
+                    stage=ApiStage(current_substage.name),
                     iteration=final_iteration,
                     max_iterations=current_substage.max_iterations,
                     progress=1.0,
@@ -612,10 +618,62 @@ class AgentManager:
                         plan_progress=plan_progress,
                     )
                     summary["phase_summary"] = phase_summary.to_dict()
+
+                    # Generate LLM-based transition summary for display between stages
+                    logger.debug(
+                        "transition_summary.start stage=%s number=%d",
+                        current_substage.name,
+                        current_substage.number,
+                    )
+                    next_stage_identifier = current_substage.identifier.next_stage()
+                    next_stage_number = (
+                        next_stage_identifier.number if next_stage_identifier else None
+                    )
+                    logger.debug(
+                        "transition_summary.next_stage identifier=%s number=%s",
+                        next_stage_identifier,
+                        next_stage_number,
+                    )
+                    next_stage_goals = None
+                    if next_stage_identifier:
+                        next_stage_class = STAGE_CLASS_BY_IDENTIFIER.get(next_stage_identifier)
+                        logger.debug(
+                            "transition_summary.next_stage_class found=%s",
+                            next_stage_class is not None,
+                        )
+                        if next_stage_class:
+                            next_stage_goals = next_stage_class.DEFAULT_GOALS
+                    logger.debug(
+                        "transition_summary.params idea_title=%s completed_stage=%d "
+                        "journal_nodes=%d next_stage=%s model=%s temp=%s",
+                        self.title[:50] if self.title else None,
+                        current_substage.number,
+                        len(journal.nodes),
+                        next_stage_number,
+                        self.cfg.agent.feedback.model,
+                        self.cfg.agent.feedback.temperature,
+                    )
+
+                    transition_summary = generate_transition_summary(
+                        idea_title=self.title,
+                        completed_stage_number=current_substage.number,
+                        completed_stage_goals=current_substage.goals,
+                        journal=journal,
+                        next_stage_number=next_stage_number,
+                        next_stage_goals=next_stage_goals,
+                        model=self.cfg.agent.feedback.model,
+                        temperature=self.cfg.agent.feedback.temperature,
+                    )
+                    logger.debug(
+                        "transition_summary.generated stage=%s summary_len=%d",
+                        current_substage.name,
+                        len(transition_summary) if transition_summary else 0,
+                    )
+
                     self.event_callback(
                         StageSummaryEvent(
-                            stage=current_substage.name,
-                            summary=phase_summary.to_dict(),
+                            stage=ApiExperimentalStage(current_substage.name),
+                            transition_summary=transition_summary,
                         )
                     )
                 except Exception:
@@ -624,7 +682,7 @@ class AgentManager:
                     )
             self.event_callback(
                 StageCompletedEvent(
-                    stage=current_substage.name,
+                    stage=ApiStage(current_substage.name),
                     main_stage_number=current_substage.number,
                     reason=reason,
                     summary=summary,
@@ -875,7 +933,7 @@ class AgentManager:
         """Run the experiment through generated stages"""
         # Main stage loop
         while self.current_stage:
-            logger.info(f"Starting main stage: {self.current_stage.slug}")
+            logger.info(f"Starting main stage: {self.current_stage.name}")
             logger.info(f"Goals: {self.current_stage.goals}")
             # Run only the current main stage
             self.run_stage(
