@@ -25,7 +25,9 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
+import { Markdown } from "@/shared/components/Markdown";
 import { extractStageSlug, PIPELINE_STAGES, SKIPPABLE_STAGE_SLUGS } from "@/shared/lib/stage-utils";
+import "highlight.js/styles/github-dark.css";
 import type { components } from "@/types/api.gen";
 import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
@@ -792,9 +794,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
                 >
                   Task prompt:
                 </p>
-                <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
-                  {codexCodePreview}
-                </pre>
+                <div className="[&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0 [&_pre]:!m-0 [&_code]:text-[12px] [&_p]:text-[13px] [&_p]:text-slate-300 [&_li]:text-[13px] [&_li]:text-slate-300">
+                  <Markdown className="text-slate-300">{codexCodePreview}</Markdown>
+                </div>
               </div>
             </details>
           )}
@@ -819,17 +821,16 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
                 )}
               </summary>
               <div className="border-t border-emerald-500/20">
-                {"headline" in runfileEvent && (
-                  <p className="px-3 py-1 text-xs text-slate-500">{runfileEvent.headline}</p>
-                )}
                 {runfileCodePreview && (
                   <div className="max-h-96 overflow-y-auto p-3 pt-1">
                     <p className="text-[10px] uppercase tracking-wide text-emerald-400 mb-2">
                       Generated runfile.py:
                     </p>
-                    <pre className="text-xs font-mono text-slate-300 whitespace-pre-wrap">
-                      {runfileCodePreview}
-                    </pre>
+                    <div className="[&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0 [&_pre]:!m-0 [&_code]:text-[12px]">
+                      <Markdown className="text-slate-300">
+                        {"```python\n" + runfileCodePreview + "\n```"}
+                      </Markdown>
+                    </div>
                   </div>
                 )}
               </div>

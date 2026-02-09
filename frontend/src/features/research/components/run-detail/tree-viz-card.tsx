@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TreeVizItem, ArtifactMetadata, SubstageSummary } from "@/types/research";
-import { formatDateTime } from "@/shared/lib/date-utils";
+import type { TreeVizItem, ArtifactMetadata } from "@/types/research";
 import {
   stageLabel,
-  extractStageSlug,
-  getSummaryText,
   getStageSummary,
   getStageSlug,
   FULL_TREE_STAGE_ID,
@@ -29,7 +26,6 @@ interface Props {
   conversationId: number | null;
   runId: string;
   artifacts: ArtifactMetadata[];
-  substageSummaries?: SubstageSummary[];
 }
 
 // Stage configuration with icons and colors for visual hierarchy
@@ -74,13 +70,7 @@ function getStageConfig(stageId: string) {
   );
 }
 
-export function TreeVizCard({
-  treeViz,
-  conversationId,
-  runId,
-  artifacts,
-  substageSummaries,
-}: Props) {
+export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props) {
   const list = useMemo(() => treeViz ?? [], [treeViz]);
   const hasViz = list.length > 0 && conversationId !== null;
 
@@ -146,28 +136,6 @@ export function TreeVizCard({
 
     return bestNodeIndex >= 0 ? bestNodeIndex : null;
   }, [selectedViz]);
-
-  const stageSummaryText = useMemo(() => {
-    if (!selectedViz) return null;
-    if (!substageSummaries || substageSummaries.length === 0) return null;
-    if (selectedViz.stage_id === FULL_TREE_STAGE_ID) return null;
-
-    const stageKey = getStageSlug(selectedViz.stage_id);
-    if (!stageKey) return null;
-
-    const matches = substageSummaries.filter(
-      summary => extractStageSlug(summary.stage) === stageKey
-    );
-    if (matches.length === 0) return null;
-
-    const latest =
-      matches.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )[0] ?? null;
-    if (!latest) return null;
-
-    return getSummaryText(latest);
-  }, [selectedViz, substageSummaries]);
 
   return (
     <div className="w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6">
@@ -257,7 +225,7 @@ export function TreeVizCard({
                     </TooltipTrigger>
                     <TooltipContent
                       side="bottom"
-                      className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                      className="bg-slate-800 text-slate-200 border-slate-700 text-xs py-1.5 px-2"
                     >
                       {config.description}
                     </TooltipContent>
@@ -283,7 +251,7 @@ export function TreeVizCard({
                 </TooltipTrigger>
                 <TooltipContent
                   side="bottom"
-                  className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
+                  className="bg-slate-800 text-slate-200 border-slate-700 text-xs py-1.5 px-2"
                 >
                   View the complete research tree across all stages
                 </TooltipContent>
@@ -292,33 +260,7 @@ export function TreeVizCard({
           </div>
 
           {/* Stage description */}
-          <div className="mb-4 text-sm text-slate-300">
-            {getStageSummary(selectedViz.stage_id) ?? ""}
-          </div>
-
-          {/* Stage summary */}
-          {stageSummaryText && (
-            <div className="mb-4 w-full rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400 mb-2">
-                Stage Summary
-              </p>
-              <div className="text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
-                {stageSummaryText}
-              </div>
-            </div>
-          )}
-
-          {/* Timestamps */}
-          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-            <span>
-              <span className="text-slate-500">Started:</span>{" "}
-              {formatDateTime(selectedViz.created_at)}
-            </span>
-            <span>
-              <span className="text-slate-500">Updated:</span>{" "}
-              {formatDateTime(selectedViz.updated_at)}
-            </span>
-          </div>
+          <StageDescription summary={getStageSummary(selectedViz.stage_id)} />
 
           {/* Tree visualization */}
           <TreeVizViewer
@@ -333,4 +275,20 @@ export function TreeVizCard({
       )}
     </div>
   );
+}
+
+function StageDescription({ summary }: { summary: string | null | undefined }) {
+  if (!summary) return null;
+
+  // Check if the summary starts with "Goal:"
+  if (summary.startsWith("Goal:")) {
+    const rest = summary.slice(5).trim();
+    return (
+      <p className="mb-4 text-sm text-slate-300">
+        <span className="font-semibold text-emerald-400">Goal:</span> {rest}
+      </p>
+    );
+  }
+
+  return <p className="mb-4 text-sm text-slate-300">{summary}</p>;
 }

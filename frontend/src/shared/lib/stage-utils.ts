@@ -145,13 +145,31 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 /**
- * Convert stage ID to human-readable label
+ * Convert stage ID to human-readable label (e.g., "Stage 1", "Stage 2")
  */
 export function stageLabel(stageId: string): string {
   // Extract the number from "stage_N" or "Stage_N" format
   const match = stageId.match(/^[Ss]tage_(\d+)$/);
   if (match && match[1]) {
     return STAGE_LABELS[match[1]] ?? `Stage ${match[1]}`;
+  }
+
+  // Fallback: just replace underscore with space
+  return stageId.replace(/_/g, " ");
+}
+
+/**
+ * Convert stage ID to descriptive stage name (e.g., "Baseline Tuning", "Creative Research")
+ */
+export function stageName(stageId: string): string {
+  // Extract the number from "stage_N" or "Stage_N" format
+  const match = stageId.match(/^[Ss]tage_(\d+)$/);
+  if (match && match[1]) {
+    const stageNum = parseInt(match[1], 10);
+    const stage = PIPELINE_STAGES.find(s => s.id === stageNum);
+    if (stage) {
+      return stage.title;
+    }
   }
 
   // Fallback: just replace underscore with space

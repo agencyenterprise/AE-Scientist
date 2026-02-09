@@ -1,24 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type {
-  ArtifactMetadata,
-  TreeVizItem,
-  MergedTreeViz,
-  StageZoneMetadata,
-} from "@/types/research";
+import type { ArtifactMetadata, TreeVizItem, MergedTreeViz } from "@/types/research";
 import { fetchDownloadUrl } from "@/shared/lib/downloads";
-import { stageLabel, FULL_TREE_STAGE_ID } from "@/shared/lib/stage-utils";
+import { stageName } from "@/shared/lib/stage-utils";
 import {
   getNodeType,
   getBorderStyle,
   NODE_TYPE_COLORS,
   BORDER_STYLES,
   NODE_TYPE_LONG_DESCRIPTIONS,
-  BorderStyle,
 } from "@/shared/lib/tree-colors";
 import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
+import { Maximize2 } from "lucide-react";
+import { ReactFlowTree } from "./react-flow-tree";
+import { Markdown } from "@/shared/components/Markdown";
+import "highlight.js/styles/github-dark.css";
 
 type MetricName = {
   metric_name: string;
@@ -69,25 +68,6 @@ interface Props {
   bestNodeId?: number | null;
 }
 
-// =============================================================================
-// SVG VISUALIZATION CONSTANTS
-// =============================================================================
-
-// Node appearance
-const NODE_SIZE = 14;
-
-// ViewBox sizing - calibrated for good aspect ratio and readability
-const SINGLE_STAGE_VIEWBOX_HEIGHT = 100;
-const ADDITIONAL_HEIGHT_PER_STAGE = 33; // ~1.33x scaling per stage
-const VIEWBOX_TO_PIXELS_RATIO = 5; // viewBox 100 → 500px
-
-// Full Tree stage separator layout (in viewBox units)
-const LABEL_OFFSET_FROM_TOP = -7.0; // First stage: offset above zone top (prevents node overlap)
-const LABEL_OFFSET_FROM_DIVIDER = 7.0; // Other stages: offset below divider
-const DIVIDER_OFFSET = 2.0; // Offset from calculated position
-const LABEL_BG_HEIGHT = 5;
-const LABEL_BG_PADDING_TOP = 3.5;
-
 export function TreeVizViewer({
   viz,
   artifacts,
@@ -110,7 +90,6 @@ export function TreeVizViewer({
   const [selected, setSelected] = useState<number>(initialSelection);
   const [hoveredNodeId, setHoveredNodeId] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
-  const treeContainerRef = useRef<HTMLDivElement>(null);
 
   // Reset selection when the viz or bestNodeId changes (e.g., when switching stages)
   useEffect(() => {
@@ -147,16 +126,6 @@ export function TreeVizViewer({
   }, [payload, stageId]);
 
   const edges: Array<[number, number]> = payload.edges ?? [];
-
-  // Extract zone metadata for Full Tree view
-  const zoneMetadata = (payload as { zoneMetadata?: StageZoneMetadata[] }).zoneMetadata ?? [];
-  const isFullTree = stageId === FULL_TREE_STAGE_ID;
-
-  // Calculate dynamic viewBox height based on number of stages
-  // Full Tree view scales height based on stage count; single stage uses base height
-  const numStages = isFullTree ? zoneMetadata.length : 1;
-  const viewBoxHeight = SINGLE_STAGE_VIEWBOX_HEIGHT + (numStages - 1) * ADDITIONAL_HEIGHT_PER_STAGE;
-  const cssHeight = viewBoxHeight * VIEWBOX_TO_PIXELS_RATIO;
 
   const selectedNode = nodes[selected];
   const plotList = useMemo(() => {
@@ -218,81 +187,10 @@ export function TreeVizViewer({
     };
   }, [artifacts, plotList, conversationId, runId]);
 
-  // Render stage separators (dividers + labels) for Full Tree view
-  const renderStageSeparators = () => {
-    if (!isFullTree || zoneMetadata.length === 0) return null;
-
-    // Use the same coordinate transformation as nodes to avoid drift
-    // Full Tree nodes use: y * (viewBoxHeight - 10) + 5
-    const transformY = (y: number) => y * (viewBoxHeight - 10) + 5;
-
-    return (
-      <g className="stage-separators">
-        {zoneMetadata.map((meta, idx) => {
-          const isFirstStage = idx === 0;
-          const zoneStartY = transformY(meta.zone.min);
-
-          // Position divider in the middle of the padding gap between stages
-          let dividerY = zoneStartY;
-          if (!isFirstStage) {
-            const prevZone = zoneMetadata[idx - 1]?.zone;
-            if (prevZone) {
-              // Divider goes in the middle of the gap: between prevZone.max and meta.zone.min
-              dividerY = transformY((prevZone.max + meta.zone.min) / 2);
-            }
-          }
-
-          // Position labels consistently:
-          // - First stage: offset from zone start (no divider above)
-          // - Other stages: offset below divider line
-          const labelY = isFirstStage
-            ? zoneStartY + LABEL_OFFSET_FROM_TOP
-            : dividerY + LABEL_OFFSET_FROM_DIVIDER;
-          const labelText = stageLabel(meta.stageId);
-
-          return (
-            <g key={`separator-${meta.stageId}`}>
-              {/* Background rectangle behind label to prevent node overlap */}
-              <rect
-                x={1}
-                y={labelY - LABEL_BG_PADDING_TOP}
-                width={labelText.length * 2.5}
-                height={LABEL_BG_HEIGHT}
-                fill="#0f172a"
-                opacity={0.9}
-                className="select-none"
-              />
-
-              {/* Stage label */}
-              <text
-                x={2}
-                y={labelY}
-                fontSize="4"
-                fill="#64748b"
-                fontWeight="600"
-                className="select-none"
-              >
-                {labelText}
-              </text>
-
-              {/* Divider line (skip first stage, only draw between stages) */}
-              {!isFirstStage && (
-                <line
-                  x1={0}
-                  y1={dividerY + DIVIDER_OFFSET}
-                  x2={100}
-                  y2={dividerY + DIVIDER_OFFSET}
-                  stroke="#64748b"
-                  strokeWidth={0.4}
-                  strokeDasharray="2,2"
-                  opacity={0.6}
-                />
-              )}
-            </g>
-          );
-        })}
-      </g>
-    );
+  // Handle node hover from React Flow
+  const handleNodeHover = (nodeId: number | null, position: { x: number; y: number } | null) => {
+    setHoveredNodeId(nodeId);
+    setHoverPosition(position);
   };
 
   const selectedNodeType = selectedNode ? getNodeType(selectedNode.id, { nodes, edges }) : null;
@@ -315,130 +213,36 @@ export function TreeVizViewer({
 
   return (
     <div className="flex flex-col md:flex-row w-full gap-4 min-h-[400px] md:min-h-[500px] items-stretch">
-      <div className="w-full md:w-1/2 min-h-[300px] flex flex-col">
-        <div
-          ref={treeContainerRef}
-          className="relative flex-1 border border-slate-700 bg-slate-900"
-        >
-          {hoveredNodeId !== null && hoverPosition && nodes[hoveredNodeId] && (
-            <NodeHoverTooltip
-              position={hoverPosition}
-              node={nodes[hoveredNodeId]}
-              nodeType={getNodeType(hoveredNodeId, { nodes, edges })}
-            />
-          )}
-          <svg
-            viewBox={`0 -8 100 ${viewBoxHeight + 8}`}
-            preserveAspectRatio="xMidYMin meet"
-            className="w-full"
-            style={{ height: `${cssHeight}px` }}
-            onMouseLeave={() => {
-              setHoveredNodeId(null);
-              setHoverPosition(null);
-            }}
-          >
-            {/* Stage separators (rendered first as background) */}
-            {renderStageSeparators()}
-
-            {/* Edges */}
-            {edges.map(([parent, child], idx) => {
-              const p = nodes[parent];
-              const c = nodes[child];
-              if (!p || !c) return null;
-              const px = p.x * 85 + 7.5;
-              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
-              const py = isFullTree
-                ? p.y * (viewBoxHeight - 10) + 5
-                : p.y * (viewBoxHeight - 15) + 7.5;
-              const cx = c.x * 85 + 7.5;
-              const cy = isFullTree
-                ? c.y * (viewBoxHeight - 10) + 5
-                : c.y * (viewBoxHeight - 15) + 7.5;
-              return (
-                <line
-                  key={idx}
-                  x1={px}
-                  y1={py}
-                  x2={cx}
-                  y2={cy}
-                  stroke="#cbd5e1"
-                  strokeWidth={0.48}
-                />
-              );
-            })}
-            {nodes.map(node => {
-              const isSelected = node.id === selected;
-              const nodeType = getNodeType(node.id, { nodes, edges });
-              const nodeColor = NODE_TYPE_COLORS[nodeType].color;
-              const qualityBorder = getBorderStyle(node);
-              const borderConfig = BORDER_STYLES[qualityBorder];
-              const selectedBorderConfig = BORDER_STYLES[BorderStyle.Selected];
-              const strokeColor = isSelected ? selectedBorderConfig.stroke : borderConfig.stroke;
-              const strokeWidth = isSelected
-                ? selectedBorderConfig.strokeWidth
-                : borderConfig.strokeWidth;
-              const cx = node.x * 85 + 7.5;
-              // Full Tree uses full viewBox height scaling with small offset to prevent top clipping
-              const cy = isFullTree
-                ? node.y * (viewBoxHeight - 10) + 5
-                : node.y * (viewBoxHeight - 15) + 7.5;
-              return (
-                <g
-                  key={node.id}
-                  onClick={() => setSelected(node.id)}
-                  onMouseEnter={event => {
-                    if (!treeContainerRef.current) return;
-                    const rect = treeContainerRef.current.getBoundingClientRect();
-                    setHoveredNodeId(node.id);
-                    setHoverPosition({
-                      x: event.clientX - rect.left + 12,
-                      y: event.clientY - rect.top + 12,
-                    });
-                  }}
-                  onMouseMove={event => {
-                    if (!treeContainerRef.current) return;
-                    const rect = treeContainerRef.current.getBoundingClientRect();
-                    setHoverPosition({
-                      x: event.clientX - rect.left + 12,
-                      y: event.clientY - rect.top + 12,
-                    });
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredNodeId(null);
-                    setHoverPosition(null);
-                  }}
-                  className="cursor-pointer"
-                >
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={NODE_SIZE / 3}
-                    fill={nodeColor}
-                    stroke={strokeColor}
-                    strokeWidth={parseFloat(strokeWidth)}
-                  />
-                </g>
-              );
-            })}
-          </svg>
+      <div className="w-full md:w-1/2 min-h-[300px] flex flex-col relative">
+        {/* Tooltip rendered outside the overflow-hidden container */}
+        {hoveredNodeId !== null && hoverPosition && nodes[hoveredNodeId] && (
+          <NodeHoverTooltip
+            position={hoverPosition}
+            node={nodes[hoveredNodeId]}
+            nodeType={getNodeType(hoveredNodeId, { nodes, edges })}
+          />
+        )}
+        <div className="relative flex-1 border border-slate-700 bg-slate-900 rounded-lg overflow-hidden">
+          <ReactFlowTree
+            nodes={nodes}
+            edges={edges}
+            selectedNodeId={selected}
+            onNodeSelect={setSelected}
+            onNodeHover={handleNodeHover}
+          />
         </div>
       </div>
       <div className="w-full md:w-1/2 relative min-h-[300px] md:min-h-0">
-        <div className="md:absolute md:inset-0 rounded border border-slate-700 bg-slate-800 p-3 text-sm text-slate-100 overflow-y-auto">
+        <div className="md:absolute md:inset-0 rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm text-slate-100 overflow-y-auto">
           {selectedNode ? (
             <>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <InfoCard title="Overview">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold text-slate-100">
-                        {selectedNode.stageId ? stageLabel(selectedNode.stageId) : "Node Details"}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        Node {selectedNode.originalNodeId ?? selectedNode.id}
-                      </div>
-                    </div>
+                  <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-semibold text-slate-50 leading-tight">
+                        Node {selectedNode.originalNodeId ?? selectedNode.id}
+                      </h3>
                       {selectedNode.isSeedAggNode && <Badge tone="info">Seed Aggregate</Badge>}
                       {selectedNode.isSeedNode && <Badge tone="neutral">Seed</Badge>}
                       {selectedNode.excType ? (
@@ -449,26 +253,31 @@ export function TreeVizViewer({
                         <Badge tone="successMuted">Succeeded</Badge>
                       )}
                     </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                    {selectedNode.ablationName && (
-                      <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-200">
-                        Ablation: {selectedNode.ablationName}
-                      </span>
-                    )}
-                    {selectedNode.hyperparamName && (
-                      <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-200">
-                        Hyperparam: {selectedNode.hyperparamName}
-                      </span>
+                    {selectedNode.stageId && (
+                      <p className="text-xs text-slate-400">{stageName(selectedNode.stageId)}</p>
                     )}
                   </div>
+                  {(selectedNode.ablationName || selectedNode.hyperparamName) && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {selectedNode.ablationName && (
+                        <span className="rounded-md bg-slate-700/50 px-2 py-1 text-[11px] font-medium text-slate-200">
+                          Ablation: {selectedNode.ablationName}
+                        </span>
+                      )}
+                      {selectedNode.hyperparamName && (
+                        <span className="rounded-md bg-slate-700/50 px-2 py-1 text-[11px] font-medium text-slate-200">
+                          Hyperparam: {selectedNode.hyperparamName}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {(selectedNode.execTime !== null && selectedNode.execTime !== undefined) ||
                   selectedNode.execTimeFeedback ? (
-                    <div className="mt-2 text-xs text-slate-400">
+                    <div className="mt-3 pt-3 border-t border-slate-700/50 text-xs text-slate-400 space-y-0.5">
                       {selectedNode.execTime !== null && selectedNode.execTime !== undefined && (
-                        <div>
-                          Execution time:{" "}
-                          <span className="text-slate-300">
+                        <div className="flex items-center gap-1.5">
+                          <span>Execution time:</span>
+                          <span className="font-medium text-slate-200">
                             {formatExecutionTime(selectedNode.execTime)}
                           </span>
                         </div>
@@ -482,9 +291,11 @@ export function TreeVizViewer({
 
                 {selectedNode.excType && (
                   <InfoCard title="Exception" tone="danger">
-                    <div className="text-sm text-red-100">{selectedNode.excType}</div>
+                    <div className="text-[13px] font-medium text-red-100">
+                      {selectedNode.excType}
+                    </div>
                     {selectedNode.excInfo && selectedNode.excInfo.args && (
-                      <div className="mt-1 text-xs text-red-200">
+                      <div className="mt-2 text-xs text-red-200/80 leading-relaxed">
                         {String(selectedNode.excInfo.args[0])}
                       </div>
                     )}
@@ -492,20 +303,24 @@ export function TreeVizViewer({
                 )}
 
                 <InfoCard title="Node Type">
-                  <div className="text-sm font-semibold text-slate-100">
+                  <div className="text-[13px] font-semibold text-slate-100">
                     {selectedNodeTypeLabel}
                   </div>
-                  <div className="mt-1 text-xs text-slate-300 whitespace-pre-wrap">
+                  <div className="mt-1.5 text-xs text-slate-400 leading-relaxed">
                     {selectedNodeTypeDescription}
                   </div>
                 </InfoCard>
 
                 {showReasoning && (
                   <InfoCard title="Reasoning" collapsible>
-                    <TextBlock label="Analysis" value={normalizedAnalysis} variant="analysis" />
-                    {selectedNode.isSeedNode ? null : (
-                      <TextBlock label="Plan" value={normalizedPlan} variant="plan" />
-                    )}
+                    <div className="space-y-6">
+                      <TextBlock label="Analysis" value={normalizedAnalysis} variant="analysis" />
+                      {selectedNode.isSeedNode ? null : normalizedPlan ? (
+                        <div className="pt-4 mt-2 border-t border-slate-600">
+                          <TextBlock label="Plan" value={normalizedPlan} variant="plan" />
+                        </div>
+                      ) : null}
+                    </div>
                   </InfoCard>
                 )}
 
@@ -517,7 +332,7 @@ export function TreeVizViewer({
 
                 {datasetsTested.length > 0 && (
                   <InfoCard title="Datasets Tested" collapsible>
-                    <ul className="list-disc pl-4 text-xs text-slate-200">
+                    <ul className="list-disc pl-4 text-[13px] text-slate-200 space-y-0.5">
                       {datasetsTested.map(ds => (
                         <li key={ds}>{ds}</li>
                       ))}
@@ -541,12 +356,6 @@ export function TreeVizViewer({
                   </InfoCard>
                 )}
 
-                {selectedNode.plotAnalyses && selectedNode.plotAnalyses.length > 0 && (
-                  <InfoCard title="Plot Analyses" collapsible>
-                    <PlotAnalysesSection analyses={selectedNode.plotAnalyses} />
-                  </InfoCard>
-                )}
-
                 {normalizedVlmSummary.length > 0 && (
                   <InfoCard title="VLM Feedback" collapsible>
                     <VlmSection lines={normalizedVlmSummary} />
@@ -554,7 +363,7 @@ export function TreeVizViewer({
                 )}
 
                 <InfoCard title="Sources" collapsible>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5 pl-4">
                     <CollapsibleSection
                       label="Plot Plan"
                       value={selectedNode.plotPlan}
@@ -563,19 +372,19 @@ export function TreeVizViewer({
                     <CollapsibleSection
                       label="Plot Code"
                       value={selectedNode.plotCode}
-                      isMono
+                      renderAs="python"
                       copyLabel="Copy plot code"
                     />
                     <CollapsibleSection
                       label="Coding Agent Task"
                       value={selectedNode.codexTask}
-                      isMono
+                      renderAs="markdown"
                       copyLabel="Copy coding agent task"
                     />
                     <CollapsibleSection
                       label="Final Code"
                       value={selectedNode.code}
-                      isMono
+                      renderAs="python"
                       copyLabel="Copy code"
                     />
                   </div>
@@ -583,7 +392,9 @@ export function TreeVizViewer({
               </div>
             </>
           ) : (
-            <p className="text-slate-300">Select a node to inspect details.</p>
+            <div className="flex items-center justify-center h-full min-h-[200px]">
+              <p className="text-sm text-slate-400">Select a node to view details</p>
+            </div>
           )}
         </div>
       </div>
@@ -608,24 +419,25 @@ function InfoCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const toneClasses =
-    tone === "danger" ? "border-red-900/60 bg-red-950/40" : "border-slate-700 bg-slate-900/60";
-  const sizeClasses = size === "compact" ? "p-2" : "p-3";
+    tone === "danger" ? "border-red-900/50 bg-red-950/30" : "border-slate-700/80 bg-slate-900/50";
+  const sizeClasses = size === "compact" ? "p-2.5" : "p-3.5";
   return (
     <div className={`rounded-lg border ${sizeClasses} ${toneClasses}`}>
       <div className="flex items-center justify-between gap-2">
         {collapsible ? (
           <button
             type="button"
-            className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-100 transition-colors flex items-center gap-2"
+            className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5"
             onClick={() => setOpen(prev => !prev)}
           >
-            {open ? "▾" : "▸"} {title}
+            <span className="text-[9px]">{open ? "▼" : "▶"}</span>
+            <span>{title}</span>
           </button>
         ) : (
           <CardTitle>{title}</CardTitle>
         )}
       </div>
-      {(!collapsible || open) && <div className="mt-2">{children}</div>}
+      {(!collapsible || open) && <div className="mt-2.5">{children}</div>}
     </div>
   );
 }
@@ -646,13 +458,17 @@ function Badge({
   tone?: "neutral" | "info" | "success" | "successMuted" | "danger";
 }) {
   const toneClasses = {
-    neutral: "bg-slate-800 text-slate-200",
-    info: "bg-indigo-900/60 text-indigo-200",
-    success: "bg-emerald-900/60 text-emerald-200",
-    successMuted: "bg-emerald-900/40 text-emerald-200",
-    danger: "bg-red-900/60 text-red-200",
+    neutral: "bg-slate-700/60 text-slate-200 border-slate-600/50",
+    info: "bg-indigo-900/50 text-indigo-200 border-indigo-700/50",
+    success: "bg-emerald-900/50 text-emerald-200 border-emerald-700/50",
+    successMuted: "bg-emerald-900/30 text-emerald-300/80 border-emerald-800/30",
+    danger: "bg-red-900/50 text-red-200 border-red-700/50",
   };
-  return <span className={`rounded px-2 py-0.5 text-xs ${toneClasses[tone]}`}>{children}</span>;
+  return (
+    <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${toneClasses[tone]}`}>
+      {children}
+    </span>
+  );
 }
 
 function TextBlock({
@@ -665,14 +481,11 @@ function TextBlock({
   variant?: "analysis" | "plan";
 }) {
   if (!value) return null;
-  const labelClass =
-    variant === "plan"
-      ? "text-xs font-semibold text-slate-300"
-      : "text-[11px] font-semibold uppercase tracking-wide text-slate-400";
+  const labelClass = "text-[11px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5";
   const bodyClass =
     variant === "plan"
-      ? "whitespace-pre-wrap text-sm text-slate-100 border-l border-slate-700 pl-3"
-      : "whitespace-pre-wrap text-sm text-slate-100";
+      ? "whitespace-pre-wrap text-[13px] leading-relaxed text-slate-100 border-l-2 border-slate-600 pl-3"
+      : "whitespace-pre-wrap text-[13px] leading-relaxed text-slate-200";
   return (
     <div className="space-y-1">
       <div className={labelClass}>{label}</div>
@@ -685,41 +498,102 @@ function CollapsibleSection({
   label,
   value,
   isMono = false,
+  renderAs = "plain",
   copyText,
   copyLabel,
 }: {
   label: string;
   value: string;
   isMono?: boolean;
+  renderAs?: "plain" | "markdown" | "python";
   copyText?: string;
   copyLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  // Format content for rendering - must be before early return
+  const formattedContent = useMemo(() => {
+    if (renderAs === "python") {
+      return "```python\n" + value + "\n```";
+    }
+    return value;
+  }, [value, renderAs]);
+
   if (!value) return null;
   const effectiveCopyText = copyText ?? value;
   const canCopy = Boolean(copyLabel) && Boolean(effectiveCopyText.trim());
+
+  const renderContent = (inDialog = false) => {
+    if (renderAs === "markdown" || renderAs === "python") {
+      return (
+        <div
+          className={`${inDialog ? "h-full overflow-auto p-4" : "max-h-[400px] overflow-y-auto p-3"} [&_pre]:!bg-transparent [&_pre]:!border-0 [&_pre]:!p-0 [&_pre]:!m-0 [&_code]:text-[12px] [&_p]:text-[13px] [&_p]:text-slate-200 [&_li]:text-[13px] [&_li]:text-slate-200`}
+        >
+          <Markdown className="text-slate-200">{formattedContent}</Markdown>
+        </div>
+      );
+    }
+    // Plain mono text
+    return (
+      <pre
+        className={`${inDialog ? "h-full p-4" : "p-3 pr-10 max-h-[400px]"} text-[12px] font-mono text-slate-200 overflow-y-auto leading-relaxed whitespace-pre-wrap break-words`}
+      >
+        <code>{value}</code>
+      </pre>
+    );
+  };
+
+  const showExpandButton = isMono || renderAs === "markdown" || renderAs === "python";
+
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-2 hover:text-slate-100 transition-colors"
+          className="text-[12px] font-medium text-slate-300 flex items-center gap-1.5 hover:text-slate-100 transition-colors"
           onClick={() => setOpen(prev => !prev)}
         >
-          {open ? "▾" : "▸"} {label}
+          <span className="text-[9px] text-slate-500">{open ? "▼" : "▶"}</span>
+          <span>{label}</span>
         </button>
         {canCopy && <CopyToClipboardButton text={effectiveCopyText} label={copyLabel ?? ""} />}
       </div>
       {open &&
-        (isMono ? (
-          <div className="mt-2 rounded-lg border border-slate-700 bg-slate-950 overflow-hidden">
-            <pre className="p-3 text-xs font-mono text-slate-200 overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed">
-              <code>{value}</code>
-            </pre>
+        (showExpandButton ? (
+          <div className="mt-2 rounded-lg border border-slate-700/80 bg-slate-950 overflow-hidden relative">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="absolute top-2 right-2 p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors z-10"
+              title="Expand"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+            {renderContent(false)}
           </div>
         ) : (
-          <div className="mt-2 whitespace-pre-wrap text-sm text-slate-100">{value}</div>
+          <div className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-200">
+            {value}
+          </div>
         ))}
+
+      {/* Expanded dialog */}
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="!w-[98vw] !max-w-[98vw] !h-[95vh] !max-h-[95vh] bg-slate-900 border-slate-700 flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between gap-4 pr-8">
+              <DialogTitle className="text-slate-100">{label}</DialogTitle>
+              {canCopy && (
+                <CopyToClipboardButton text={effectiveCopyText} label={copyLabel ?? ""} />
+              )}
+            </div>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 rounded-lg border border-slate-700/80 bg-slate-950 overflow-hidden">
+            {renderContent(true)}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -774,7 +648,7 @@ function MetricsSection({ metrics }: { metrics: MetricEntry | null | undefined }
               )}
             </div>
             {metric.lower_is_better !== undefined && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 whitespace-nowrap">
                 {metric.lower_is_better ? "Lower is better" : "Higher is better"}
               </span>
             )}
@@ -812,41 +686,6 @@ function MetricsSection({ metrics }: { metrics: MetricEntry | null | undefined }
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function PlotAnalysesSection({
-  analyses,
-}: {
-  analyses: Array<PlotAnalysis | null> | null | undefined;
-}) {
-  if (!analyses || analyses.length === 0) return null;
-  return (
-    <div className="space-y-2">
-      {analyses.map((analysis: PlotAnalysis | null, idx: number) => {
-        if (!analysis) return null;
-        return (
-          <div
-            key={idx}
-            className="rounded border border-slate-700 bg-slate-900/50 p-2 text-xs text-slate-200"
-          >
-            {analysis.plot_path && (
-              <div className="text-[11px] font-semibold text-slate-300">{analysis.plot_path}</div>
-            )}
-            {analysis.analysis && (
-              <div className="mt-1 text-sm text-slate-100">{analysis.analysis}</div>
-            )}
-            {analysis.key_findings && analysis.key_findings.length > 0 && (
-              <ul className="mt-1 list-disc pl-4 text-slate-300">
-                {analysis.key_findings.map(finding => (
-                  <li key={finding}>{finding}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -929,7 +768,7 @@ function NodeHoverTooltip({
 
   return (
     <div
-      className="pointer-events-none absolute z-10 rounded-lg border border-slate-700 bg-slate-900/95 p-2.5 text-xs text-slate-200 shadow-lg backdrop-blur-sm"
+      className="pointer-events-none fixed z-50 rounded-lg border border-slate-700 bg-slate-900/95 p-2.5 text-xs text-slate-200 shadow-lg backdrop-blur-sm"
       style={{ left: position.x, top: position.y }}
     >
       <div className="flex items-center gap-2">

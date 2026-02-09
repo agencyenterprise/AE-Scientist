@@ -87,23 +87,24 @@ export const NODE_TYPE_COLORS: NodeColors = {
 /**
  * Border styles - indicate node quality/status
  * Adjust strokeWidth values to make borders more/less prominent in the visualization
+ * Note: These values are multiplied by 1.5 (normal) or 2 (selected) in the component
  */
 export const BORDER_STYLES: BorderStyles = {
   [BorderStyle.Normal]: {
     stroke: "#0f172a",
-    strokeWidth: "1.2",
+    strokeWidth: "1.5",
   },
   [BorderStyle.Best]: {
-    stroke: "#065F46",
-    strokeWidth: "1.2",
+    stroke: "#10B981", // Brighter emerald for better visibility
+    strokeWidth: "2.5",
   },
   [BorderStyle.Failed]: {
-    stroke: "#DC2626",
-    strokeWidth: "1.2",
+    stroke: "#EF4444", // Brighter red for better visibility
+    strokeWidth: "2.0",
   },
   [BorderStyle.Selected]: {
     stroke: "#fbbf24",
-    strokeWidth: "1.2",
+    strokeWidth: "2.0",
   },
 };
 

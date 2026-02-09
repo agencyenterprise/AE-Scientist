@@ -163,13 +163,7 @@ export default function ResearchRunDetailPage() {
     );
   }
 
-  const {
-    run,
-    stage_progress,
-    artifacts,
-    substage_summaries = [],
-    paper_generation_progress,
-  } = details;
+  const { run, stage_progress, artifacts, paper_generation_progress } = details;
 
   const canStopRun =
     conversationId !== null &&
@@ -283,7 +277,6 @@ export default function ResearchRunDetailPage() {
               conversationId={conversationId}
               runId={runId}
               artifacts={artifacts}
-              substageSummaries={substage_summaries}
             />
           </TabsContent>
 
