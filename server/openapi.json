@@ -4832,6 +4832,19 @@
         "title": "ArtifactPresignedUrlResponse",
         "description": "Response containing presigned S3 download URL."
       },
+      "ArtifactType": {
+        "type": "string",
+        "enum": [
+          "plot",
+          "paper_pdf",
+          "latex_archive",
+          "workspace_archive",
+          "llm_review",
+          "run_log"
+        ],
+        "title": "ArtifactType",
+        "description": "Supported artifact types for research pipeline runs."
+      },
       "ArtifactUploadedEvent": {
         "properties": {
           "artifact_type": {
@@ -9292,9 +9305,8 @@
             "description": "Artifact identifier"
           },
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type",
-            "description": "Artifact type label"
+            "$ref": "#/components/schemas/ArtifactType",
+            "description": "Artifact type"
           },
           "filename": {
             "type": "string",

@@ -278,8 +278,7 @@ def handle_run_completed_event(
     except (ValueError, AttributeError):
         completed_at = datetime.now(timezone.utc)
 
-    status_emoji = "✅" if event.status == "success" else "❌"
-    headline = f"{status_emoji} Node {event.node_index} {event.status} ({event.exec_time:.1f}s)"
+    headline = f"Node {event.node_index} {event.status} ({event.exec_time:.1f}s)"
 
     return [
         NodeExecutionCompletedEvent(

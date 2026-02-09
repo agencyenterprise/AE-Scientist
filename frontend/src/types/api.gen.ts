@@ -1997,6 +1997,12 @@ export interface components {
              */
             filename: string;
         };
+        /**
+         * ArtifactType
+         * @description Supported artifact types for research pipeline runs.
+         * @enum {string}
+         */
+        ArtifactType: "plot" | "paper_pdf" | "latex_archive" | "workspace_archive" | "llm_review" | "run_log";
         /** ArtifactUploadedEvent */
         ArtifactUploadedEvent: {
             /** Artifact Type */
@@ -4392,11 +4398,8 @@ export interface components {
              * @description Artifact identifier
              */
             id: number;
-            /**
-             * Artifact Type
-             * @description Artifact type label
-             */
-            artifact_type: string;
+            /** @description Artifact type */
+            artifact_type: components["schemas"]["ArtifactType"];
             /**
              * Filename
              * @description Original filename

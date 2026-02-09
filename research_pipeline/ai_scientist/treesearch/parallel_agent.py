@@ -341,24 +341,6 @@ class ParallelAgent:
                     aggregation_execution_id,
                     agg_node.id,
                 )
-                # Emit aggregation progress event (completed)
-                try:
-                    self.event_callback(
-                        RunStageProgressEvent(
-                            stage=self.stage_name,
-                            iteration=1,
-                            max_iterations=1,
-                            progress=1.0,
-                            total_nodes=1,
-                            buggy_nodes=0,
-                            good_nodes=1,
-                            best_metric=None,
-                            is_seed_node=False,
-                            is_seed_agg_node=True,
-                        )
-                    )
-                except Exception:
-                    logger.exception("Failed to emit aggregation progress event (completed)")
             except ExecutionTerminatedError:
                 logger.info(
                     "Seed aggregation was terminated intentionally; skipping aggregation node."

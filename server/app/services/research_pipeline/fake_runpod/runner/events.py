@@ -782,23 +782,3 @@ class EventsMixin:
             logger.exception(
                 "Failed to emit run_completed for seed aggregation in stage %s", stage_name
             )
-
-        # Emit aggregation progress event (1/1 aggregation)
-        try:
-            self._enqueue_event(
-                kind="run_stage_progress",
-                data=StageProgressEvent(
-                    stage=stage_name,
-                    iteration=1,
-                    max_iterations=1,
-                    progress=1.0,
-                    total_nodes=1,
-                    buggy_nodes=0,
-                    good_nodes=1,
-                    best_metric=None,
-                    is_seed_node=False,
-                    is_seed_agg_node=True,
-                ),
-            )
-        except Exception:
-            logger.exception("Failed to emit aggregation progress event for stage %s", stage_name)

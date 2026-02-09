@@ -62,6 +62,15 @@ class ArtifactPresignedUrlResponse(BaseModel):
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
 
 
+class ArtifactType(StrEnum):
+    plot = "plot"
+    paper_pdf = "paper_pdf"
+    latex_archive = "latex_archive"
+    workspace_archive = "workspace_archive"
+    llm_review = "llm_review"
+    run_log = "run_log"
+
+
 class ArtifactUploadedEvent(BaseModel):
     artifact_type: Annotated[str, Field(title="Artifact Type")]
     filename: Annotated[str, Field(title="Filename")]
@@ -1191,9 +1200,7 @@ class ResearchRunAcceptedResponse(BaseModel):
 
 class ResearchRunArtifactMetadata(BaseModel):
     id: Annotated[int, Field(description="Artifact identifier", title="Id")]
-    artifact_type: Annotated[
-        str, Field(description="Artifact type label", title="Artifact Type")
-    ]
+    artifact_type: Annotated[ArtifactType, Field(description="Artifact type")]
     filename: Annotated[str, Field(description="Original filename", title="Filename")]
     file_size: Annotated[
         int, Field(description="File size in bytes", title="File Size")

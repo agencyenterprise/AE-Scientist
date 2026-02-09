@@ -90,23 +90,9 @@ export function CostDetailsCard({
           <div className="bg-slate-800/50 rounded-lg p-4 border border-emerald-500/20">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-300">Total Cost</span>
-                {totalIsEstimated && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="px-1.5 py-0.5 text-[10px] font-medium bg-yellow-500/20 text-yellow-400 rounded">
-                        EST
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="max-w-xs bg-slate-800 text-slate-200 border-slate-700"
-                    >
-                      Hardware cost is estimated based on runtime. Final cost will be calculated
-                      after completion.
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+                <span className="text-sm font-medium text-slate-300">
+                  {totalIsEstimated ? "Total Cost (estimated)" : "Total Cost"}
+                </span>
               </div>
               <span className="font-mono text-2xl font-bold text-emerald-400">
                 {totalCostWithHw !== null

@@ -207,7 +207,7 @@ export const TOOLTIP_EXPLANATIONS = {
     "Overall completion percentage across all research stages (Baseline, Tuning, Creative, Ablation, Paper).",
   evaluation:
     "AI-generated assessment of the research quality based on originality, clarity, significance, and methodology.",
-  cost: "Estimated cost based on GPU compute time and API usage for this research run.",
+  cost: "Total cost including GPU compute time and API usage. Shows estimated cost while running, final cost after completion.",
   duration: "Time elapsed since the research started.",
   stage:
     "Current phase of the research pipeline. Research progresses through 5 stages: Baseline, Tuning, Creative, Ablation, and Paper Generation.",

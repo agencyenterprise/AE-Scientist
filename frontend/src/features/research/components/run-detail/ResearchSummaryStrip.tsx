@@ -194,18 +194,12 @@ export function ResearchSummaryStrip({
 
         {/* Total Cost */}
         <div className="flex flex-col">
-          <LabelWithTooltip label="Total Cost" tooltipKey="cost" />
+          <LabelWithTooltip
+            label={isEstimatedCost ? "Cost (estimated)" : "Total Cost"}
+            tooltipKey="cost"
+          />
           <span className="text-sm sm:text-base font-semibold text-white mt-1">
-            {totalCost !== null ? (
-              <>
-                {formatCurrency(totalCost)}
-                {isEstimatedCost && (
-                  <span className="ml-1 text-xs font-normal text-slate-400">(est)</span>
-                )}
-              </>
-            ) : (
-              "-"
-            )}
+            {totalCost !== null ? formatCurrency(totalCost) : "-"}
           </span>
         </div>
       </div>

@@ -32,6 +32,17 @@ class RunType(str, Enum):
     RUNFILE_EXECUTION = "runfile_execution"
 
 
+class ArtifactType(str, Enum):
+    """Supported artifact types for research pipeline runs."""
+
+    PLOT = "plot"
+    PAPER_PDF = "paper_pdf"
+    LATEX_ARCHIVE = "latex_archive"
+    WORKSPACE_ARCHIVE = "workspace_archive"
+    LLM_REVIEW = "llm_review"
+    RUN_LOG = "run_log"
+
+
 class ExecutionType(str, Enum):
     """Type of execution categorizing what the code execution is for."""
 
@@ -370,7 +381,7 @@ class ResearchRunCodeExecution(BaseModel):
 
 class ResearchRunArtifactMetadata(BaseModel):
     id: int = Field(..., description="Artifact identifier")
-    artifact_type: str = Field(..., description="Artifact type label")
+    artifact_type: ArtifactType = Field(..., description="Artifact type")
     filename: str = Field(..., description="Original filename")
     file_size: int = Field(..., description="File size in bytes")
     file_type: str = Field(..., description="MIME type")
@@ -386,7 +397,7 @@ class ResearchRunArtifactMetadata(BaseModel):
     ) -> "ResearchRunArtifactMetadata":
         return ResearchRunArtifactMetadata(
             id=artifact.id,
-            artifact_type=artifact.artifact_type,
+            artifact_type=ArtifactType(artifact.artifact_type),
             filename=artifact.filename,
             file_size=artifact.file_size,
             file_type=artifact.file_type,

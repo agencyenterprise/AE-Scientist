@@ -27,6 +27,7 @@ export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGen
 
 // Artifacts and selections
 export type ArtifactMetadataApi = components["schemas"]["ResearchRunArtifactMetadata"];
+export type ArtifactType = components["schemas"]["ArtifactType"];
 export type StageSkipWindowApi = components["schemas"]["ResearchRunStageSkipWindow"];
 export type StageSkipWindowUpdate = components["schemas"]["ResearchRunStageSkipWindowUpdate"];
 

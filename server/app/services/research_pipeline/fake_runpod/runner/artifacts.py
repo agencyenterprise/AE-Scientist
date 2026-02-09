@@ -49,7 +49,7 @@ class ArtifactsMixin:
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
-            artifact_type="fake_result",
+            artifact_type="workspace_archive",
             path=artifact_path,
             packaging="file",
             archive_name=None,

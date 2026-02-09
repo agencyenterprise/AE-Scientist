@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useConversationResearchRuns } from "@/features/conversation/hooks/useConversationResearchRuns";
 import {
   ResearchRunHeader,
@@ -9,6 +10,7 @@ import {
   ArtifactsTab,
   EvaluationTab,
   RunCostTab,
+  ARTIFACT_TYPES,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
@@ -127,6 +129,17 @@ export default function ResearchRunDetailPage() {
     [conversationId, runId]
   );
 
+  // Calculate displayed artifact count: exclude plots, count grouped PDFs as 1
+  // Must be before early returns to comply with Rules of Hooks
+  const displayedArtifactCount = useMemo(() => {
+    const artifacts = details?.artifacts ?? [];
+    const filtered = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PLOT);
+    const pdfCount = filtered.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF).length;
+    const otherCount = filtered.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF).length;
+    // PDFs are grouped, so count them as 1 if any exist
+    return otherCount + (pdfCount > 0 ? 1 : 0);
+  }, [details?.artifacts]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -157,6 +170,7 @@ export default function ResearchRunDetailPage() {
     substage_summaries = [],
     paper_generation_progress,
   } = details;
+
   const canStopRun =
     conversationId !== null &&
     (run.status === "running" || run.status === "initializing" || run.status === "pending");
@@ -234,7 +248,7 @@ export default function ResearchRunDetailPage() {
               <Package className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Artifacts</span>
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-                {artifacts.length}
+                {displayedArtifactCount}
               </span>
             </TabsTrigger>
             <TabsTrigger value="evaluation" className="gap-1.5 data-[state=active]:bg-background">

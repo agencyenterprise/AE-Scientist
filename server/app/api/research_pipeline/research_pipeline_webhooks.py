@@ -11,7 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.llm_providers import extract_model_name_and_provider
 from app.api.research_pipeline.utils import generate_run_webhook_token
 from app.api.research_pipeline_stream import StreamEventModel, publish_stream_event
-from app.models.research_pipeline import LlmReviewResponse, ResearchRunArtifactMetadata
+from app.models.research_pipeline import (
+    ArtifactType,
+    LlmReviewResponse,
+    ResearchRunArtifactMetadata,
+)
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import (
     ResearchRunPaperGenerationProgress,
@@ -352,7 +356,7 @@ async def ingest_artifact_uploaded(
 
     artifact_metadata = ResearchRunArtifactMetadata(
         id=artifact_id,
-        artifact_type=event.artifact_type,
+        artifact_type=ArtifactType(event.artifact_type),
         filename=event.filename,
         file_size=event.file_size,
         file_type=event.file_type,
