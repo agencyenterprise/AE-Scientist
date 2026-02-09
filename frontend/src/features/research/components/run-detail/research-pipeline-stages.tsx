@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type {
-  SubstageEvent,
+  StageEvent,
   StageProgress,
   PaperGenerationEvent,
-  SubstageSummary,
+  StageSummary,
   ResearchRunCodeExecution,
 } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
@@ -23,8 +23,8 @@ import { CopyToClipboardButton } from "@/shared/components/CopyToClipboardButton
 
 interface ResearchPipelineStagesProps {
   stageProgress: StageProgress[];
-  substageEvents: SubstageEvent[];
-  substageSummaries: SubstageSummary[];
+  stageEvents: StageEvent[];
+  stageSummaries: StageSummary[];
   paperGenerationProgress: PaperGenerationEvent[];
   stageSkipState: StageSkipStateMap;
   codexExecution?: ResearchRunCodeExecution | null;
@@ -54,8 +54,8 @@ const formatNodeId = (nodeId: string): string => {
 
 const getLatestSummaryForStage = (
   stageKey: string,
-  summaries: SubstageSummary[]
-): SubstageSummary | null => {
+  summaries: StageSummary[]
+): StageSummary | null => {
   const matches = summaries.filter(summary => extractStageSlug(summary.stage) === stageKey);
   if (matches.length === 0) {
     return null;
@@ -85,8 +85,8 @@ const STEP_LABELS: Record<string, string> = {
 
 export function ResearchPipelineStages({
   stageProgress,
-  substageEvents,
-  substageSummaries,
+  stageEvents,
+  stageSummaries,
   paperGenerationProgress,
   stageSkipState,
   codexExecution,
@@ -216,7 +216,7 @@ export function ResearchPipelineStages({
     }
 
     const progressPercent = Math.round(latestProgress.progress * 100);
-    const hasCompletedEvent = substageEvents.some(event => {
+    const hasCompletedEvent = stageEvents.some(event => {
       const slug = extractStageSlug(event.stage);
       return slug === stageKey;
     });
@@ -232,7 +232,7 @@ export function ResearchPipelineStages({
     // Determine status based on progress value OR good_nodes (early completion)
     // A stage is completed when:
     // 1. progress >= 1.0 (exhausted all iterations), OR
-    // 2. Has substage_completed event AND is no longer the active stage, OR
+    // 2. Has stage_completed event AND is no longer the active stage, OR
     // 3. Paper generation has started (stages 1-4 only)
     let status: "pending" | "in_progress" | "completed";
     if (
@@ -268,7 +268,7 @@ export function ResearchPipelineStages({
           const isPaperGeneration = stage.key === STAGE_SLUG.PAPER_GENERATION;
           const latestSummary = isPaperGeneration
             ? null
-            : getLatestSummaryForStage(stage.key, substageSummaries);
+            : getLatestSummaryForStage(stage.key, stageSummaries);
           const summaryText = latestSummary ? getSummaryText(latestSummary) : null;
 
           const latestPaperEvent =
@@ -392,7 +392,7 @@ export function ResearchPipelineStages({
                 <div className="mt-2 w-full rounded-lg border border-slate-800/60 bg-slate-900/60 p-3 space-y-3">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      Substage Summary
+                      Stage Summary
                     </p>
                     {summaryText && (
                       <div className="mt-1 max-h-32 overflow-y-auto text-xs leading-relaxed text-slate-200 whitespace-pre-wrap">

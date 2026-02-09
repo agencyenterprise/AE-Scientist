@@ -17,10 +17,10 @@ from app.services.database.rp_artifacts import ResearchPipelineArtifact
 from app.services.database.rp_events import (
     CodeExecutionEvent,
     PaperGenerationEvent,
+    StageCompletedEvent,
     StageProgressEvent,
     StageSkipWindowRecord,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
+    StageSummaryEvent,
 )
 from app.services.database.rp_tree_viz import TreeVizRecord
 
@@ -260,19 +260,19 @@ class ResearchRunEvent(BaseModel):
         )
 
 
-class ResearchRunSubstageEvent(BaseModel):
-    id: int = Field(..., description="Unique identifier of the sub-stage completion event")
+class ResearchRunStageEvent(BaseModel):
+    id: int = Field(..., description="Unique identifier of the stage completion event")
     stage: str = Field(..., description="Stage identifier")
     node_id: Optional[str] = Field(
         None,
-        description="Optional identifier associated with the sub-stage (reserved for future use)",
+        description="Optional identifier associated with the stage (reserved for future use)",
     )
-    summary: dict = Field(..., description="Summary payload stored for this sub-stage")
+    summary: dict = Field(..., description="Summary payload stored for this stage")
     created_at: str = Field(..., description="ISO timestamp of the event")
 
     @staticmethod
-    def from_db_record(event: SubstageCompletedEvent) -> "ResearchRunSubstageEvent":
-        return ResearchRunSubstageEvent(
+    def from_db_record(event: StageCompletedEvent) -> "ResearchRunStageEvent":
+        return ResearchRunStageEvent(
             id=event.id,
             stage=event.stage,
             node_id=None,
@@ -281,15 +281,15 @@ class ResearchRunSubstageEvent(BaseModel):
         )
 
 
-class ResearchRunSubstageSummary(BaseModel):
-    id: int = Field(..., description="Unique identifier of the sub-stage summary event")
+class ResearchRunStageSummary(BaseModel):
+    id: int = Field(..., description="Unique identifier of the stage summary event")
     stage: str = Field(..., description="Stage identifier")
     summary: dict = Field(..., description="LLM-generated summary payload")
     created_at: str = Field(..., description="ISO timestamp when the summary was recorded")
 
     @staticmethod
-    def from_db_record(event: SubstageSummaryEvent) -> "ResearchRunSubstageSummary":
-        return ResearchRunSubstageSummary(
+    def from_db_record(event: StageSummaryEvent) -> "ResearchRunStageSummary":
+        return ResearchRunStageSummary(
             id=event.id,
             stage=event.stage,
             summary=event.summary,
@@ -454,12 +454,12 @@ class ResearchRunDetailsResponse(BaseModel):
     stage_progress: List[ResearchRunStageProgress] = Field(
         default_factory=list, description="Stage progress telemetry"
     )
-    substage_events: List[ResearchRunSubstageEvent] = Field(
-        default_factory=list, description="Sub-stage completion events"
+    stage_events: List[ResearchRunStageEvent] = Field(
+        default_factory=list, description="Stage completion events"
     )
-    substage_summaries: List[ResearchRunSubstageSummary] = Field(
+    stage_summaries: List[ResearchRunStageSummary] = Field(
         default_factory=list,
-        description="LLM-generated summaries for completed sub-stages",
+        description="LLM-generated summaries for completed stages",
     )
     events: List[ResearchRunEvent] = Field(
         default_factory=list,

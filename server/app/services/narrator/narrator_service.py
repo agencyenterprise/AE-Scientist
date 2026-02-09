@@ -179,7 +179,7 @@ async def ingest_narration_event(
     Args:
         db: Database manager
         run_id: Research run ID
-        event_type: Type of execution event (stage_progress, substage_completed, etc.)
+        event_type: Type of execution event (stage_progress, stage_completed, etc.)
         event_data: Typed event data (Pydantic model)
 
     Pattern:

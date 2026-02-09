@@ -13,15 +13,15 @@ from app.services.narrator.event_types import (
     RunFinishedEventData,
     RunningCodeEventPayload,
     RunStartedEventData,
+    StageCompletedEvent,
     StageProgressEvent,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
+    StageSummaryEvent,
 )
 
 __all__ = [
     "StageProgressEvent",
-    "SubstageCompletedEvent",
-    "SubstageSummaryEvent",
+    "StageCompletedEvent",
+    "StageSummaryEvent",
     "PaperGenerationProgressEvent",
     "RunningCodeEventPayload",
     "RunCompletedEventPayload",
@@ -39,12 +39,12 @@ class StageProgressPayload(BaseModel):
     event: StageProgressEvent
 
 
-class SubstageCompletedPayload(BaseModel):
-    event: SubstageCompletedEvent
+class StageCompletedPayload(BaseModel):
+    event: StageCompletedEvent
 
 
-class SubstageSummaryPayload(BaseModel):
-    event: SubstageSummaryEvent
+class StageSummaryPayload(BaseModel):
+    event: StageSummaryEvent
 
 
 class RunStartedPayload(BaseModel):

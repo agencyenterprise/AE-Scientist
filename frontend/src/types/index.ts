@@ -51,9 +51,9 @@ export type ConversationImportStreamEvent =
   import("./api.gen").components["schemas"]["ConversationImportStreamEvent"];
 type ApiResearchRunStreamEvent =
   import("./api.gen").components["schemas"]["ResearchRunStreamEvent"];
-type SubstageSummaryStreamEvent = {
-  type: "substage_summary";
-  data: import("./research").SubstageSummary;
+type StageSummaryStreamEvent = {
+  type: "stage_summary";
+  data: import("./research").StageSummary;
 };
 type HwCostEstimateEvent = import("./research").HwCostEstimateEvent;
 type HwCostActualEvent = import("./research").HwCostActualEvent;
@@ -62,7 +62,7 @@ export type ResearchRunStreamEvent =
   | ApiResearchRunStreamEvent
   | HwCostEstimateEvent
   | HwCostActualEvent
-  | SubstageSummaryStreamEvent
+  | StageSummaryStreamEvent
   | TerminationStatusStreamEvent;
 export type WalletStreamEvent = import("./api.gen").components["schemas"]["WalletStreamEvent"];
 // Note: LLMPromptDeleteRequest does not exist in the schema; no alias exported.

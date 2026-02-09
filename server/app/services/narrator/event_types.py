@@ -62,14 +62,14 @@ class StageProgressEvent(BaseModel):
     is_seed_agg_node: bool
 
 
-class SubstageCompletedEvent(BaseModel):
+class StageCompletedEvent(BaseModel):
     stage: str
     main_stage_number: int
     reason: str
     summary: Dict[str, Any]
 
 
-class SubstageSummaryEvent(BaseModel):
+class StageSummaryEvent(BaseModel):
     stage: str
     summary: Dict[str, Any]
 
@@ -115,8 +115,8 @@ class RunCompletedEventPayload(BaseModel):
 # This provides type safety throughout the event processing pipeline.
 NarratorEvent = Union[
     StageProgressEvent,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
+    StageCompletedEvent,
+    StageSummaryEvent,
     PaperGenerationProgressEvent,
     RunningCodeEventPayload,
     RunCompletedEventPayload,

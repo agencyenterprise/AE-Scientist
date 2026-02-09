@@ -11,8 +11,8 @@ import type {
   ArtifactMetadata,
   PaperGenerationEvent,
   TreeVizItem,
-  SubstageSummary,
-  SubstageEvent,
+  StageSummary,
+  StageEvent,
   HwCostEstimateData,
   HwCostActualData,
   ResearchRunCodeExecution,
@@ -218,14 +218,14 @@ export function useResearchRunDetails({
     });
   }, []);
 
-  const handleSubstageSummary = useCallback((event: SubstageSummary) => {
+  const handleStageSummary = useCallback((event: StageSummary) => {
     setDetails(prev =>
       prev
-        ? prev.substage_summaries.some(summary => summary.id === event.id)
+        ? prev.stage_summaries.some(summary => summary.id === event.id)
           ? prev
           : {
               ...prev,
-              substage_summaries: [...prev.substage_summaries, event],
+              stage_summaries: [...prev.stage_summaries, event],
             }
         : null
     );
@@ -372,12 +372,12 @@ export function useResearchRunDetails({
     );
   }, []);
 
-  const handleSubstageCompleted = useCallback((event: SubstageEvent) => {
+  const handleStageCompleted = useCallback((event: StageEvent) => {
     setDetails(prev =>
       prev
         ? {
             ...prev,
-            substage_events: [...prev.substage_events, event],
+            stage_events: [...prev.stage_events, event],
           }
         : null
     );
@@ -463,8 +463,8 @@ export function useResearchRunDetails({
     onInitializationStatus: handleInitializationStatus,
     onHwCostEstimate: handleHwCostEstimate,
     onHwCostActual: handleHwCostActual,
-    onSubstageSummary: handleSubstageSummary,
-    onSubstageCompleted: handleSubstageCompleted,
+    onStageSummary: handleStageSummary,
+    onStageCompleted: handleStageCompleted,
     onError: handleSSEError,
     onCodeExecutionStarted: handleCodeExecutionStarted,
     onCodeExecutionCompleted: handleCodeExecutionCompleted,

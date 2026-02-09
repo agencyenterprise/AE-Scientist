@@ -15,12 +15,12 @@ from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-no
     RunLogEvent,
     RunningCodeEventPayload,
     RunType,
+    StageCompletedEventInput as StageCompletedEvent,
     StageProgressEvent,
     StageSkipWindowEventModel,
+    StageSummaryEvent,
     State as StageSkipState,
     Status6 as RunCompletedStatus,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
 )
 # isort: on
 # fmt: on
@@ -444,8 +444,8 @@ class EventsMixin:
                     "llm_summary": f"Stage {stage_name} skipped.",
                 }
                 self._enqueue_event(
-                    kind="substage_completed",
-                    data=SubstageCompletedEvent(
+                    kind="stage_completed",
+                    data=StageCompletedEvent(
                         stage=stage_name,
                         main_stage_number=stage_index + 1,
                         reason="skipped",
@@ -454,15 +454,15 @@ class EventsMixin:
                 )
                 try:
                     self._enqueue_event(
-                        kind="substage_summary",
-                        data=SubstageSummaryEvent(
+                        kind="stage_summary",
+                        data=StageSummaryEvent(
                             stage=stage_name,
                             summary=summary,
                         ),
                     )
                 except Exception:
                     logger.exception(
-                        "Failed to enqueue skipped-stage substage summary for stage %s",
+                        "Failed to enqueue skipped-stage stage summary for stage %s",
                         stage_name,
                     )
                 self._emit_stage_skip_window_event(
@@ -482,10 +482,10 @@ class EventsMixin:
                 "total_nodes": 3,
                 "llm_summary": f"Stage {stage_name} completed with synthetic findings.",
             }
-            logger.info("Emitting substage_completed for stage %s", stage_name)
+            logger.info("Emitting stage_completed for stage %s", stage_name)
             self._enqueue_event(
-                kind="substage_completed",
-                data=SubstageCompletedEvent(
+                kind="stage_completed",
+                data=StageCompletedEvent(
                     stage=stage_name,
                     main_stage_number=stage_index + 1,
                     reason="completed",
@@ -494,14 +494,14 @@ class EventsMixin:
             )
             try:
                 self._enqueue_event(
-                    kind="substage_summary",
-                    data=SubstageSummaryEvent(
+                    kind="stage_summary",
+                    data=StageSummaryEvent(
                         stage=stage_name,
                         summary=summary,
                     ),
                 )
             except Exception:
-                logger.exception("Failed to enqueue fake substage summary for stage %s", stage_name)
+                logger.exception("Failed to enqueue fake stage summary for stage %s", stage_name)
             logger.info(
                 "[FakeRunner %s] Stage %d/%d complete",
                 self._run_id[:8],

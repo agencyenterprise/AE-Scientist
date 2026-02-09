@@ -405,13 +405,11 @@ def telemetry_stage_progress(payload: Dict[str, object] = Body(...)) -> None:
     )
 
 
-@app.post("/telemetry/substage-completed", status_code=204)
-def telemetry_substage(payload: Dict[str, object] = Body(...)) -> None:
-    """Record substage completed telemetry."""
+@app.post("/telemetry/stage-completed", status_code=204)
+def telemetry_stage_completed(payload: Dict[str, object] = Body(...)) -> None:
+    """Record stage completed telemetry."""
     _telemetry_events.append(
-        TelemetryRecord(
-            path="/telemetry/substage-completed", payload=payload, received_at=time.time()
-        )
+        TelemetryRecord(path="/telemetry/stage-completed", payload=payload, received_at=time.time())
     )
 
 

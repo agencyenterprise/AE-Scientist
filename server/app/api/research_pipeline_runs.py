@@ -24,10 +24,10 @@ from app.models import (
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunPaperGenerationProgress,
+    ResearchRunStageEvent,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
-    ResearchRunSubstageEvent,
-    ResearchRunSubstageSummary,
+    ResearchRunStageSummary,
     TreeVizItem,
 )
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
@@ -493,17 +493,17 @@ async def get_research_run_details(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
 
-    stage_events = [
+    stage_progress_events = [
         ResearchRunStageProgress.from_db_record(event)
         for event in await db.list_stage_progress_events(run_id=run_id)
     ]
-    substage_events = [
-        ResearchRunSubstageEvent.from_db_record(event)
-        for event in await db.list_substage_completed_events(run_id=run_id)
+    stage_events = [
+        ResearchRunStageEvent.from_db_record(event)
+        for event in await db.list_stage_completed_events(run_id=run_id)
     ]
-    substage_summaries = [
-        ResearchRunSubstageSummary.from_db_record(event)
-        for event in await db.list_substage_summary_events(run_id=run_id)
+    stage_summaries = [
+        ResearchRunStageSummary.from_db_record(event)
+        for event in await db.list_stage_summary_events(run_id=run_id)
     ]
     artifacts = [
         ResearchRunArtifactMetadata.from_db_record(
@@ -547,9 +547,9 @@ async def get_research_run_details(
         run=ResearchRunInfo.from_db_record(
             run=run, termination=termination, parent_run_id=conversation.parent_run_id
         ),
-        stage_progress=stage_events,
-        substage_events=substage_events,
-        substage_summaries=substage_summaries,
+        stage_progress=stage_progress_events,
+        stage_events=stage_events,
+        stage_summaries=stage_summaries,
         events=run_events,
         artifacts=artifacts,
         paper_generation_progress=paper_gen_events,

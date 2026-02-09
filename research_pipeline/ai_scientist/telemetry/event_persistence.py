@@ -66,9 +66,9 @@ class WebhookClient:
     _EVENT_PATHS: dict[EventKind, str] = {
         "run_stage_progress": "/stage-progress",
         "run_log": "/run-log",
-        # Sub-stage completion events are also forwarded to the web server.
-        "substage_completed": "/substage-completed",
-        "substage_summary": "/substage-summary",
+        # Stage completion events are also forwarded to the web server.
+        "stage_completed": "/stage-completed",
+        "stage_summary": "/stage-summary",
         "paper_generation_progress": "/paper-generation-progress",
         "tree_viz_stored": "/tree-viz-stored",
         "running_code": "/running-code",

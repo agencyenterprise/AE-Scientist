@@ -1805,13 +1805,13 @@
         }
       }
     },
-    "/api/research-pipeline/events/{run_id}/substage-completed": {
+    "/api/research-pipeline/events/{run_id}/stage-completed": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
-        "summary": "Ingest Substage Completed",
-        "operationId": "ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post",
+        "summary": "Ingest Stage Completed",
+        "operationId": "ingest_stage_completed_api_research_pipeline_events__run_id__stage_completed_post",
         "parameters": [
           {
             "name": "run_id",
@@ -1837,7 +1837,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubstageCompletedPayload"
+                "$ref": "#/components/schemas/StageCompletedPayload"
               }
             }
           }
@@ -2021,13 +2021,13 @@
         }
       }
     },
-    "/api/research-pipeline/events/{run_id}/substage-summary": {
+    "/api/research-pipeline/events/{run_id}/stage-summary": {
       "post": {
         "tags": [
           "research-pipeline-events"
         ],
-        "summary": "Ingest Substage Summary",
-        "operationId": "ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post",
+        "summary": "Ingest Stage Summary",
+        "operationId": "ingest_stage_summary_api_research_pipeline_events__run_id__stage_summary_post",
         "parameters": [
           {
             "name": "run_id",
@@ -2053,7 +2053,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubstageSummaryPayload"
+                "$ref": "#/components/schemas/StageSummaryPayload"
               }
             }
           }
@@ -9645,21 +9645,21 @@
             "title": "Stage Progress",
             "description": "Stage progress telemetry"
           },
-          "substage_events": {
+          "stage_events": {
             "items": {
-              "$ref": "#/components/schemas/ResearchRunSubstageEvent"
+              "$ref": "#/components/schemas/ResearchRunStageEvent"
             },
             "type": "array",
-            "title": "Substage Events",
-            "description": "Sub-stage completion events"
+            "title": "Stage Events",
+            "description": "Stage completion events"
           },
-          "substage_summaries": {
+          "stage_summaries": {
             "items": {
-              "$ref": "#/components/schemas/ResearchRunSubstageSummary"
+              "$ref": "#/components/schemas/ResearchRunStageSummary"
             },
             "type": "array",
-            "title": "Substage Summaries",
-            "description": "LLM-generated summaries for completed sub-stages"
+            "title": "Stage Summaries",
+            "description": "LLM-generated summaries for completed stages"
           },
           "events": {
             "items": {
@@ -10154,19 +10154,19 @@
             "type": "array",
             "title": "Stage Progress"
           },
-          "substage_events": {
+          "stage_events": {
             "items": {
-              "$ref": "#/components/schemas/ResearchRunSubstageEvent"
+              "$ref": "#/components/schemas/ResearchRunStageEvent"
             },
             "type": "array",
-            "title": "Substage Events"
+            "title": "Stage Events"
           },
-          "substage_summaries": {
+          "stage_summaries": {
             "items": {
-              "$ref": "#/components/schemas/ResearchRunSubstageSummary"
+              "$ref": "#/components/schemas/ResearchRunStageSummary"
             },
             "type": "array",
-            "title": "Substage Summaries"
+            "title": "Stage Summaries"
           },
           "artifacts": {
             "items": {
@@ -10247,8 +10247,8 @@
         "required": [
           "run",
           "stage_progress",
-          "substage_events",
-          "substage_summaries",
+          "stage_events",
+          "stage_summaries",
           "artifacts",
           "tree_viz",
           "events",
@@ -10610,6 +10610,92 @@
         ],
         "title": "ResearchRunRunEvent"
       },
+      "ResearchRunStageCompletedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_completed"
+            ],
+            "const": "stage_completed",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageCompletedEvent"
+      },
+      "ResearchRunStageEvent": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the stage completion event"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id",
+            "description": "Optional identifier associated with the stage (reserved for future use)"
+          },
+          "summary": {
+            "type": "object",
+            "title": "Summary",
+            "description": "Summary payload stored for this stage"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of the event"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "summary",
+          "created_at"
+        ],
+        "title": "ResearchRunStageEvent"
+      },
+      "ResearchRunStageEventStream": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_event"
+            ],
+            "const": "stage_event",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageEvent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageEventStream"
+      },
       "ResearchRunStageProgress": {
         "properties": {
           "stage": {
@@ -10820,6 +10906,59 @@
         ],
         "title": "ResearchRunStageSkipWindowUpdate"
       },
+      "ResearchRunStageSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Unique identifier of the stage summary event"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage",
+            "description": "Stage identifier"
+          },
+          "summary": {
+            "type": "object",
+            "title": "Summary",
+            "description": "LLM-generated summary payload"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp when the summary was recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "summary",
+          "created_at"
+        ],
+        "title": "ResearchRunStageSummary"
+      },
+      "ResearchRunStageSummaryEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "stage_summary"
+            ],
+            "const": "stage_summary",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ResearchRunStageSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunStageSummaryEvent"
+      },
       "ResearchRunState": {
         "properties": {
           "run_id": {
@@ -10905,7 +11044,7 @@
                   "$ref": "#/components/schemas/NodeResultEvent"
                 },
                 {
-                  "$ref": "#/components/schemas/StageCompletedEvent"
+                  "$ref": "#/components/schemas/StageCompletedEvent-Output"
                 },
                 {
                   "$ref": "#/components/schemas/ProgressUpdateEvent"
@@ -10933,7 +11072,7 @@
                   "progress_update": "#/components/schemas/ProgressUpdateEvent",
                   "run_finished": "#/components/schemas/RunFinishedEvent",
                   "run_started": "#/components/schemas/RunStartedEvent",
-                  "stage_completed": "#/components/schemas/StageCompletedEvent",
+                  "stage_completed": "#/components/schemas/StageCompletedEvent-Output",
                   "stage_started": "#/components/schemas/StageStartedEvent"
                 }
               }
@@ -11151,16 +11290,16 @@
             "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
           },
           {
-            "$ref": "#/components/schemas/ResearchRunSubstageCompletedEvent"
+            "$ref": "#/components/schemas/ResearchRunStageCompletedEvent"
           },
           {
             "$ref": "#/components/schemas/ResearchRunPaperGenerationEvent"
           },
           {
-            "$ref": "#/components/schemas/ResearchRunSubstageEventStream"
+            "$ref": "#/components/schemas/ResearchRunStageEventStream"
           },
           {
-            "$ref": "#/components/schemas/ResearchRunSubstageSummaryEvent"
+            "$ref": "#/components/schemas/ResearchRunStageSummaryEvent"
           },
           {
             "$ref": "#/components/schemas/ResearchRunCodeExecutionStartedEvent"
@@ -11202,153 +11341,14 @@
             "paper_generation_progress": "#/components/schemas/ResearchRunPaperGenerationEvent",
             "review_completed": "#/components/schemas/ResearchRunReviewCompletedEvent",
             "run_event": "#/components/schemas/ResearchRunRunEvent",
+            "stage_completed": "#/components/schemas/ResearchRunStageCompletedEvent",
+            "stage_event": "#/components/schemas/ResearchRunStageEventStream",
             "stage_progress": "#/components/schemas/ResearchRunStageProgressEvent",
             "stage_skip_window": "#/components/schemas/ResearchRunStageSkipWindowEvent",
-            "substage_completed": "#/components/schemas/ResearchRunSubstageCompletedEvent",
-            "substage_event": "#/components/schemas/ResearchRunSubstageEventStream",
-            "substage_summary": "#/components/schemas/ResearchRunSubstageSummaryEvent",
+            "stage_summary": "#/components/schemas/ResearchRunStageSummaryEvent",
             "termination_status": "#/components/schemas/ResearchRunTerminationStatusEvent"
           }
         }
-      },
-      "ResearchRunSubstageCompletedEvent": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "substage_completed"
-            ],
-            "const": "substage_completed",
-            "title": "Type"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ResearchRunSubstageEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ResearchRunSubstageCompletedEvent"
-      },
-      "ResearchRunSubstageEvent": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Unique identifier of the sub-stage completion event"
-          },
-          "stage": {
-            "type": "string",
-            "title": "Stage",
-            "description": "Stage identifier"
-          },
-          "node_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Node Id",
-            "description": "Optional identifier associated with the sub-stage (reserved for future use)"
-          },
-          "summary": {
-            "type": "object",
-            "title": "Summary",
-            "description": "Summary payload stored for this sub-stage"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp of the event"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "stage",
-          "summary",
-          "created_at"
-        ],
-        "title": "ResearchRunSubstageEvent"
-      },
-      "ResearchRunSubstageEventStream": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "substage_event"
-            ],
-            "const": "substage_event",
-            "title": "Type"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ResearchRunSubstageEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ResearchRunSubstageEventStream"
-      },
-      "ResearchRunSubstageSummary": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id",
-            "description": "Unique identifier of the sub-stage summary event"
-          },
-          "stage": {
-            "type": "string",
-            "title": "Stage",
-            "description": "Stage identifier"
-          },
-          "summary": {
-            "type": "object",
-            "title": "Summary",
-            "description": "LLM-generated summary payload"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp when the summary was recorded"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "stage",
-          "summary",
-          "created_at"
-        ],
-        "title": "ResearchRunSubstageSummary"
-      },
-      "ResearchRunSubstageSummaryEvent": {
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "substage_summary"
-            ],
-            "const": "substage_summary",
-            "title": "Type"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ResearchRunSubstageSummary"
-          }
-        },
-        "type": "object",
-        "required": [
-          "type",
-          "data"
-        ],
-        "title": "ResearchRunSubstageSummaryEvent"
       },
       "ResearchRunSummary": {
         "properties": {
@@ -12235,7 +12235,35 @@
         ],
         "title": "SkipStageResponse"
       },
-      "StageCompletedEvent": {
+      "StageCompletedEvent-Input": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "main_stage_number": {
+            "type": "integer",
+            "title": "Main Stage Number"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "summary": {
+            "type": "object",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "main_stage_number",
+          "reason",
+          "summary"
+        ],
+        "title": "StageCompletedEvent"
+      },
+      "StageCompletedEvent-Output": {
         "properties": {
           "id": {
             "type": "string",
@@ -12359,6 +12387,18 @@
         ],
         "title": "StageCompletedEvent",
         "description": "Emitted when a stage completes.\n\nEmission Criteria:\n- Triggered when substage_completed event arrives\n- Enriched with data from substage_summary event (already LLM-generated)\n- Emitted once per stage completion\n\nFrequency: 5 per run (one per stage)"
+      },
+      "StageCompletedPayload": {
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/StageCompletedEvent-Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "title": "StageCompletedPayload"
       },
       "StageGoal": {
         "properties": {
@@ -12707,49 +12747,9 @@
           "stage_name"
         ],
         "title": "StageStartedEvent",
-        "description": "Emitted when a stage begins.\n\nEmission Criteria:\n- Triggered when stage_progress event arrives with iteration = 0\n- OR when first substage_event arrives for a new stage\n- Emitted once per stage (5 times per run)\n\nFrequency: 5 per run (one per stage)"
+        "description": "Emitted when a stage begins.\n\nEmission Criteria:\n- Triggered when stage_progress event arrives with iteration = 0\n- OR when first stage_event arrives for a new stage\n- Emitted once per stage (5 times per run)\n\nFrequency: 5 per run (one per stage)"
       },
-      "SubstageCompletedEvent": {
-        "properties": {
-          "stage": {
-            "type": "string",
-            "title": "Stage"
-          },
-          "main_stage_number": {
-            "type": "integer",
-            "title": "Main Stage Number"
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          },
-          "summary": {
-            "type": "object",
-            "title": "Summary"
-          }
-        },
-        "type": "object",
-        "required": [
-          "stage",
-          "main_stage_number",
-          "reason",
-          "summary"
-        ],
-        "title": "SubstageCompletedEvent"
-      },
-      "SubstageCompletedPayload": {
-        "properties": {
-          "event": {
-            "$ref": "#/components/schemas/SubstageCompletedEvent"
-          }
-        },
-        "type": "object",
-        "required": [
-          "event"
-        ],
-        "title": "SubstageCompletedPayload"
-      },
-      "SubstageSummaryEvent": {
+      "StageSummaryEvent": {
         "properties": {
           "stage": {
             "type": "string",
@@ -12765,19 +12765,19 @@
           "stage",
           "summary"
         ],
-        "title": "SubstageSummaryEvent"
+        "title": "StageSummaryEvent"
       },
-      "SubstageSummaryPayload": {
+      "StageSummaryPayload": {
         "properties": {
           "event": {
-            "$ref": "#/components/schemas/SubstageSummaryEvent"
+            "$ref": "#/components/schemas/StageSummaryEvent"
           }
         },
         "type": "object",
         "required": [
           "event"
         ],
-        "title": "SubstageSummaryPayload"
+        "title": "StageSummaryPayload"
       },
       "SummaryResponse": {
         "properties": {

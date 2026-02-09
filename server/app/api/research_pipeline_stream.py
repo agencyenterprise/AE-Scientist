@@ -10,10 +10,10 @@ from app.models.sse import ResearchRunInitializationStatusEvent as SSEInitializa
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
+from app.models.sse import ResearchRunStageEventStream as SSEStageEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
-from app.models.sse import ResearchRunSubstageEventStream as SSESubstageEvent
-from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
+from app.models.sse import ResearchRunStageSummaryEvent as SSEStageSummaryEvent
 from app.models.sse import ResearchRunTerminationStatusEvent as SSETerminationStatusEvent
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 StreamEventModel = Union[
     SSEStageProgressEvent,
     SSEPaperGenerationEvent,
-    SSESubstageEvent,
-    SSESubstageSummaryEvent,
+    SSEStageEvent,
+    SSEStageSummaryEvent,
     SSERunEvent,
     SSEInitializationStatusEvent,
     SSECompleteEvent,

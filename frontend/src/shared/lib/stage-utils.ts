@@ -1,4 +1,4 @@
-import type { SubstageSummary } from "@/types/research";
+import type { StageSummary } from "@/types/research";
 
 // =============================================================================
 // STAGE CONSTANTS
@@ -225,10 +225,10 @@ export function extractStageSlug(stageName: string): string | null {
 }
 
 /**
- * Extract display text from a SubstageSummary
+ * Extract display text from a StageSummary
  * Prefers the llm_summary field if available, otherwise JSON stringifies the summary
  */
-export function getSummaryText(summary: SubstageSummary): string {
+export function getSummaryText(summary: StageSummary): string {
   // Type assertion needed because backend returns dict which maps to Record<string, never>
   const summaryData = summary.summary as Record<string, unknown>;
   if (!isRecord(summaryData)) {

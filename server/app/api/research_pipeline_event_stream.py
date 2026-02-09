@@ -17,11 +17,11 @@ from app.models import (
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunPaperGenerationProgress,
+    ResearchRunStageEvent,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
+    ResearchRunStageSummary,
     ResearchRunStreamEvent,
-    ResearchRunSubstageEvent,
-    ResearchRunSubstageSummary,
     TreeVizItem,
 )
 from app.models.sse import ResearchRunInitialEventData
@@ -307,18 +307,18 @@ async def _build_initial_stream_payload(
     current_run: ResearchPipelineRun,
 ) -> dict:
     raw_run_events = await db.list_research_pipeline_run_events(run_id=run_id)
-    stage_events = [
+    stage_progress_events = [
         ResearchRunStageProgress.from_db_record(event).model_dump()
         for event in await db.list_stage_progress_events(run_id=run_id)
     ]
-    substage_events = [
-        ResearchRunSubstageEvent.from_db_record(event).model_dump()
-        for event in await db.list_substage_completed_events(run_id=run_id)
+    stage_events = [
+        ResearchRunStageEvent.from_db_record(event).model_dump()
+        for event in await db.list_stage_completed_events(run_id=run_id)
     ]
-    substage_summary_records = await db.list_substage_summary_events(run_id=run_id)
-    substage_summaries = [
-        ResearchRunSubstageSummary.from_db_record(event).model_dump()
-        for event in substage_summary_records
+    stage_summary_records = await db.list_stage_summary_events(run_id=run_id)
+    stage_summaries = [
+        ResearchRunStageSummary.from_db_record(event).model_dump()
+        for event in stage_summary_records
     ]
     artifacts = [
         ResearchRunArtifactMetadata.from_db_record(
@@ -372,9 +372,9 @@ async def _build_initial_stream_payload(
         "run": ResearchRunInfo.from_db_record(
             run=current_run, termination=termination, parent_run_id=parent_run_id
         ).model_dump(),
-        "stage_progress": stage_events,
-        "substage_events": substage_events,
-        "substage_summaries": substage_summaries,
+        "stage_progress": stage_progress_events,
+        "stage_events": stage_events,
+        "stage_summaries": stage_summaries,
         "artifacts": artifacts,
         "tree_viz": tree_viz,
         "events": run_events,

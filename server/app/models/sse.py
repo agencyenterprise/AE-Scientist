@@ -19,10 +19,10 @@ from app.models.research_pipeline import (
     ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunPaperGenerationProgress,
+    ResearchRunStageEvent,
     ResearchRunStageProgress,
     ResearchRunStageSkipWindow,
-    ResearchRunSubstageEvent,
-    ResearchRunSubstageSummary,
+    ResearchRunStageSummary,
     RunType,
     TreeVizItem,
 )
@@ -229,8 +229,8 @@ class ResearchRunHwCostActualEvent(BaseModel):
 class ResearchRunInitialEventData(BaseModel):
     run: ResearchRunInfo
     stage_progress: List[ResearchRunStageProgress]
-    substage_events: List[ResearchRunSubstageEvent]
-    substage_summaries: List[ResearchRunSubstageSummary]
+    stage_events: List[ResearchRunStageEvent]
+    stage_summaries: List[ResearchRunStageSummary]
     artifacts: List[ResearchRunArtifactMetadata]
     tree_viz: List[TreeVizItem]
     events: List[ResearchRunEvent]
@@ -345,9 +345,9 @@ class ResearchRunStageSkipWindowEvent(BaseModel):
     data: ResearchRunStageSkipWindowUpdate
 
 
-class ResearchRunSubstageCompletedEvent(BaseModel):
-    type: Literal["substage_completed"]
-    data: ResearchRunSubstageEvent
+class ResearchRunStageCompletedEvent(BaseModel):
+    type: Literal["stage_completed"]
+    data: ResearchRunStageEvent
 
 
 class ResearchRunPaperGenerationEvent(BaseModel):
@@ -355,14 +355,14 @@ class ResearchRunPaperGenerationEvent(BaseModel):
     data: ResearchRunPaperGenerationProgress
 
 
-class ResearchRunSubstageEventStream(BaseModel):
-    type: Literal["substage_event"]
-    data: ResearchRunSubstageEvent
+class ResearchRunStageEventStream(BaseModel):
+    type: Literal["stage_event"]
+    data: ResearchRunStageEvent
 
 
-class ResearchRunSubstageSummaryEvent(BaseModel):
-    type: Literal["substage_summary"]
-    data: ResearchRunSubstageSummary
+class ResearchRunStageSummaryEvent(BaseModel):
+    type: Literal["stage_summary"]
+    data: ResearchRunStageSummary
 
 
 class ResearchRunHeartbeatEvent(BaseModel):
@@ -395,10 +395,10 @@ ResearchRunEventUnion = Annotated[
         ResearchRunTerminationStatusEvent,
         ResearchRunArtifactEvent,
         ResearchRunReviewCompletedEvent,
-        ResearchRunSubstageCompletedEvent,
+        ResearchRunStageCompletedEvent,
         ResearchRunPaperGenerationEvent,
-        ResearchRunSubstageEventStream,
-        ResearchRunSubstageSummaryEvent,
+        ResearchRunStageEventStream,
+        ResearchRunStageSummaryEvent,
         ResearchRunCodeExecutionStartedEvent,
         ResearchRunCodeExecutionCompletedEvent,
         ResearchRunStageSkipWindowEvent,

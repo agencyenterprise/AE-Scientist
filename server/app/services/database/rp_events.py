@@ -38,7 +38,7 @@ class StageProgressEvent(NamedTuple):
     created_at: datetime
 
 
-class SubstageCompletedEvent(NamedTuple):
+class StageCompletedEvent(NamedTuple):
     id: int
     run_id: str
     stage: str
@@ -46,7 +46,7 @@ class SubstageCompletedEvent(NamedTuple):
     created_at: datetime
 
 
-class SubstageSummaryEvent(NamedTuple):
+class StageSummaryEvent(NamedTuple):
     id: int
     run_id: str
     stage: str
@@ -182,7 +182,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                     raise ValueError("Failed to insert run log event")
                 return int(result["id"])
 
-    async def insert_substage_completed_event(
+    async def insert_stage_completed_event(
         self,
         *,
         run_id: str,
@@ -190,14 +190,14 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         summary: dict,
         created_at: Optional[datetime] = None,
     ) -> int:
-        """Insert a substage completed event and return its ID."""
+        """Insert a stage completed event and return its ID."""
         if created_at is None:
             created_at = datetime.now()
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    INSERT INTO rp_substage_completed_events (run_id, stage, summary, created_at)
+                    INSERT INTO rp_stage_completed_events (run_id, stage, summary, created_at)
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
                     """,
@@ -205,10 +205,10 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 )
                 result = await cursor.fetchone()
                 if not result:
-                    raise ValueError("Failed to insert substage completed event")
+                    raise ValueError("Failed to insert stage completed event")
                 return int(result["id"])
 
-    async def insert_substage_summary_event(
+    async def insert_stage_summary_event(
         self,
         *,
         run_id: str,
@@ -216,14 +216,14 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
         summary: dict,
         created_at: Optional[datetime] = None,
     ) -> int:
-        """Insert a substage summary event and return its ID."""
+        """Insert a stage summary event and return its ID."""
         if created_at is None:
             created_at = datetime.now()
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    INSERT INTO rp_substage_summary_events (run_id, stage, summary, created_at)
+                    INSERT INTO rp_stage_summary_events (run_id, stage, summary, created_at)
                     VALUES (%s, %s, %s, %s)
                     RETURNING id
                     """,
@@ -231,7 +231,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 )
                 result = await cursor.fetchone()
                 if not result:
-                    raise ValueError("Failed to insert substage summary event")
+                    raise ValueError("Failed to insert stage summary event")
                 return int(result["id"])
 
     async def insert_paper_generation_event(
@@ -474,10 +474,10 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
                 rows = await cursor.fetchall()
         return [StageProgressEvent(**row) for row in (rows or [])]
 
-    async def list_substage_completed_events(self, run_id: str) -> List[SubstageCompletedEvent]:
+    async def list_stage_completed_events(self, run_id: str) -> List[StageCompletedEvent]:
         query = """
             SELECT id, run_id, stage, summary, created_at
-            FROM rp_substage_completed_events
+            FROM rp_stage_completed_events
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
@@ -485,16 +485,16 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(query, (run_id,))
                 rows = await cursor.fetchall()
-        return [SubstageCompletedEvent(**row) for row in (rows or [])]
+        return [StageCompletedEvent(**row) for row in (rows or [])]
 
-    async def list_substage_summary_events(self, run_id: str) -> List[SubstageSummaryEvent]:
+    async def list_stage_summary_events(self, run_id: str) -> List[StageSummaryEvent]:
         query = """
             SELECT id,
                    run_id,
                    stage,
                    summary,
                    created_at
-            FROM rp_substage_summary_events
+            FROM rp_stage_summary_events
             WHERE run_id = %s
             ORDER BY created_at ASC
         """
@@ -502,16 +502,16 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(query, (run_id,))
                 rows = await cursor.fetchall()
-        return [SubstageSummaryEvent(**row) for row in (rows or [])]
+        return [StageSummaryEvent(**row) for row in (rows or [])]
 
-    async def get_latest_substage_summary(self, run_id: str) -> Optional[SubstageSummaryEvent]:
+    async def get_latest_stage_summary(self, run_id: str) -> Optional[StageSummaryEvent]:
         query = """
             SELECT id,
                    run_id,
                    stage,
                    summary,
                    created_at
-            FROM rp_substage_summary_events
+            FROM rp_stage_summary_events
             WHERE run_id = %s
             ORDER BY created_at DESC
             LIMIT 1
@@ -520,7 +520,7 @@ class ResearchPipelineEventsMixin(ConnectionProvider):  # pylint: disable=abstra
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(query, (run_id,))
                 row = await cursor.fetchone()
-        return SubstageSummaryEvent(**row) if row else None
+        return StageSummaryEvent(**row) if row else None
 
     async def get_latest_stage_progress(self, run_id: str) -> Optional[StageProgressEvent]:
         """Fetch the most recent stage progress event for a run."""

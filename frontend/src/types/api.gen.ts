@@ -814,7 +814,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/{run_id}/substage-completed": {
+    "/api/research-pipeline/events/{run_id}/stage-completed": {
         parameters: {
             query?: never;
             header?: never;
@@ -823,8 +823,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ingest Substage Completed */
-        post: operations["ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post"];
+        /** Ingest Stage Completed */
+        post: operations["ingest_stage_completed_api_research_pipeline_events__run_id__stage_completed_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -882,7 +882,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/research-pipeline/events/{run_id}/substage-summary": {
+    "/api/research-pipeline/events/{run_id}/stage-summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -891,8 +891,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ingest Substage Summary */
-        post: operations["ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post"];
+        /** Ingest Stage Summary */
+        post: operations["ingest_stage_summary_api_research_pipeline_events__run_id__stage_summary_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4559,15 +4559,15 @@ export interface components {
              */
             stage_progress?: components["schemas"]["ResearchRunStageProgress"][];
             /**
-             * Substage Events
-             * @description Sub-stage completion events
+             * Stage Events
+             * @description Stage completion events
              */
-            substage_events?: components["schemas"]["ResearchRunSubstageEvent"][];
+            stage_events?: components["schemas"]["ResearchRunStageEvent"][];
             /**
-             * Substage Summaries
-             * @description LLM-generated summaries for completed sub-stages
+             * Stage Summaries
+             * @description LLM-generated summaries for completed stages
              */
-            substage_summaries?: components["schemas"]["ResearchRunSubstageSummary"][];
+            stage_summaries?: components["schemas"]["ResearchRunStageSummary"][];
             /**
              * Events
              * @description Audit events describing run-level lifecycle transitions
@@ -4841,10 +4841,10 @@ export interface components {
             run: components["schemas"]["ResearchRunInfo"];
             /** Stage Progress */
             stage_progress: components["schemas"]["ResearchRunStageProgress"][];
-            /** Substage Events */
-            substage_events: components["schemas"]["ResearchRunSubstageEvent"][];
-            /** Substage Summaries */
-            substage_summaries: components["schemas"]["ResearchRunSubstageSummary"][];
+            /** Stage Events */
+            stage_events: components["schemas"]["ResearchRunStageEvent"][];
+            /** Stage Summaries */
+            stage_summaries: components["schemas"]["ResearchRunStageSummary"][];
             /** Artifacts */
             artifacts: components["schemas"]["ResearchRunArtifactMetadata"][];
             /** Tree Viz */
@@ -5080,6 +5080,52 @@ export interface components {
             type: "run_event";
             data: components["schemas"]["ResearchRunEvent"];
         };
+        /** ResearchRunStageCompletedEvent */
+        ResearchRunStageCompletedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_completed";
+            data: components["schemas"]["ResearchRunStageEvent"];
+        };
+        /** ResearchRunStageEvent */
+        ResearchRunStageEvent: {
+            /**
+             * Id
+             * @description Unique identifier of the stage completion event
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Node Id
+             * @description Optional identifier associated with the stage (reserved for future use)
+             */
+            node_id?: string | null;
+            /**
+             * Summary
+             * @description Summary payload stored for this stage
+             */
+            summary: Record<string, never>;
+            /**
+             * Created At
+             * @description ISO timestamp of the event
+             */
+            created_at: string;
+        };
+        /** ResearchRunStageEventStream */
+        ResearchRunStageEventStream: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_event";
+            data: components["schemas"]["ResearchRunStageEvent"];
+        };
         /** ResearchRunStageProgress */
         ResearchRunStageProgress: {
             /**
@@ -5193,6 +5239,38 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** ResearchRunStageSummary */
+        ResearchRunStageSummary: {
+            /**
+             * Id
+             * @description Unique identifier of the stage summary event
+             */
+            id: number;
+            /**
+             * Stage
+             * @description Stage identifier
+             */
+            stage: string;
+            /**
+             * Summary
+             * @description LLM-generated summary payload
+             */
+            summary: Record<string, never>;
+            /**
+             * Created At
+             * @description ISO timestamp when the summary was recorded
+             */
+            created_at: string;
+        };
+        /** ResearchRunStageSummaryEvent */
+        ResearchRunStageSummaryEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "stage_summary";
+            data: components["schemas"]["ResearchRunStageSummary"];
+        };
         /**
          * ResearchRunState
          * @description Complete state of a research run. Single source of truth for frontend.
@@ -5220,7 +5298,7 @@ export interface components {
             current_stage?: string | null;
             current_stage_goal?: components["schemas"]["StageGoal"] | null;
             /** Timeline */
-            timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
+            timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent-Output"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
             /** Current Focus */
             current_focus?: string | null;
             /** Active Nodes */
@@ -5285,85 +5363,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunSubstageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunSubstageEventStream"] | components["schemas"]["ResearchRunSubstageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
-        /** ResearchRunSubstageCompletedEvent */
-        ResearchRunSubstageCompletedEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "substage_completed";
-            data: components["schemas"]["ResearchRunSubstageEvent"];
-        };
-        /** ResearchRunSubstageEvent */
-        ResearchRunSubstageEvent: {
-            /**
-             * Id
-             * @description Unique identifier of the sub-stage completion event
-             */
-            id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
-            /**
-             * Node Id
-             * @description Optional identifier associated with the sub-stage (reserved for future use)
-             */
-            node_id?: string | null;
-            /**
-             * Summary
-             * @description Summary payload stored for this sub-stage
-             */
-            summary: Record<string, never>;
-            /**
-             * Created At
-             * @description ISO timestamp of the event
-             */
-            created_at: string;
-        };
-        /** ResearchRunSubstageEventStream */
-        ResearchRunSubstageEventStream: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "substage_event";
-            data: components["schemas"]["ResearchRunSubstageEvent"];
-        };
-        /** ResearchRunSubstageSummary */
-        ResearchRunSubstageSummary: {
-            /**
-             * Id
-             * @description Unique identifier of the sub-stage summary event
-             */
-            id: number;
-            /**
-             * Stage
-             * @description Stage identifier
-             */
-            stage: string;
-            /**
-             * Summary
-             * @description LLM-generated summary payload
-             */
-            summary: Record<string, never>;
-            /**
-             * Created At
-             * @description ISO timestamp when the summary was recorded
-             */
-            created_at: string;
-        };
-        /** ResearchRunSubstageSummaryEvent */
-        ResearchRunSubstageSummaryEvent: {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "substage_summary";
-            data: components["schemas"]["ResearchRunSubstageSummary"];
-        };
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunStageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunStageEventStream"] | components["schemas"]["ResearchRunStageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /**
          * ResearchRunSummary
          * @description Lightweight overview of a research pipeline run.
@@ -5803,6 +5803,17 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** StageCompletedEvent */
+        "StageCompletedEvent-Input": {
+            /** Stage */
+            stage: string;
+            /** Main Stage Number */
+            main_stage_number: number;
+            /** Reason */
+            reason: string;
+            /** Summary */
+            summary: Record<string, never>;
+        };
         /**
          * StageCompletedEvent
          * @description Emitted when a stage completes.
@@ -5814,7 +5825,7 @@ export interface components {
          *
          *     Frequency: 5 per run (one per stage)
          */
-        StageCompletedEvent: {
+        "StageCompletedEvent-Output": {
             /**
              * Id
              * @description Unique event ID (UUID)
@@ -5881,6 +5892,10 @@ export interface components {
              * @description Confidence in results (from substage_summary)
              */
             confidence?: ("high" | "medium" | "low") | null;
+        };
+        /** StageCompletedPayload */
+        StageCompletedPayload: {
+            event: components["schemas"]["StageCompletedEvent-Input"];
         };
         /**
          * StageGoal
@@ -6014,7 +6029,7 @@ export interface components {
          *
          *     Emission Criteria:
          *     - Triggered when stage_progress event arrives with iteration = 0
-         *     - OR when first substage_event arrives for a new stage
+         *     - OR when first stage_event arrives for a new stage
          *     - Emitted once per stage (5 times per run)
          *
          *     Frequency: 5 per run (one per stage)
@@ -6062,31 +6077,16 @@ export interface components {
              */
             goal?: string | null;
         };
-        /** SubstageCompletedEvent */
-        SubstageCompletedEvent: {
-            /** Stage */
-            stage: string;
-            /** Main Stage Number */
-            main_stage_number: number;
-            /** Reason */
-            reason: string;
-            /** Summary */
-            summary: Record<string, never>;
-        };
-        /** SubstageCompletedPayload */
-        SubstageCompletedPayload: {
-            event: components["schemas"]["SubstageCompletedEvent"];
-        };
-        /** SubstageSummaryEvent */
-        SubstageSummaryEvent: {
+        /** StageSummaryEvent */
+        StageSummaryEvent: {
             /** Stage */
             stage: string;
             /** Summary */
             summary: Record<string, never>;
         };
-        /** SubstageSummaryPayload */
-        SubstageSummaryPayload: {
-            event: components["schemas"]["SubstageSummaryEvent"];
+        /** StageSummaryPayload */
+        StageSummaryPayload: {
+            event: components["schemas"]["StageSummaryEvent"];
         };
         /**
          * SummaryResponse
@@ -7492,7 +7492,7 @@ export interface operations {
             };
         };
     };
-    ingest_substage_completed_api_research_pipeline_events__run_id__substage_completed_post: {
+    ingest_stage_completed_api_research_pipeline_events__run_id__stage_completed_post: {
         parameters: {
             query?: never;
             header: {
@@ -7505,7 +7505,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SubstageCompletedPayload"];
+                "application/json": components["schemas"]["StageCompletedPayload"];
             };
         };
         responses: {
@@ -7632,7 +7632,7 @@ export interface operations {
             };
         };
     };
-    ingest_substage_summary_api_research_pipeline_events__run_id__substage_summary_post: {
+    ingest_stage_summary_api_research_pipeline_events__run_id__stage_summary_post: {
         parameters: {
             query?: never;
             header: {
@@ -7645,7 +7645,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SubstageSummaryPayload"];
+                "application/json": components["schemas"]["StageSummaryPayload"];
             };
         };
         responses: {

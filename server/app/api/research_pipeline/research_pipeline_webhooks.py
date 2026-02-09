@@ -17,12 +17,9 @@ from app.models.research_pipeline import (
     ResearchRunArtifactMetadata,
 )
 from app.models.research_pipeline import ResearchRunEvent as RPEvent
-from app.models.research_pipeline import (
-    ResearchRunPaperGenerationProgress,
-    ResearchRunStageProgress,
-)
-from app.models.research_pipeline import ResearchRunSubstageEvent as RPSubstageEvent
-from app.models.research_pipeline import ResearchRunSubstageSummary
+from app.models.research_pipeline import ResearchRunPaperGenerationProgress
+from app.models.research_pipeline import ResearchRunStageEvent as RPStageEvent
+from app.models.research_pipeline import ResearchRunStageProgress, ResearchRunStageSummary
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -33,10 +30,11 @@ from app.models.sse import ResearchRunInitializationStatusEvent as SSEInitializa
 from app.models.sse import ResearchRunPaperGenerationEvent as SSEPaperGenerationEvent
 from app.models.sse import ResearchRunReviewCompletedEvent as SSEReviewCompletedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
+from app.models.sse import ResearchRunStageCompletedEvent
 from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEvent
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
-from app.models.sse import ResearchRunStageSkipWindowUpdate, ResearchRunSubstageCompletedEvent
-from app.models.sse import ResearchRunSubstageSummaryEvent as SSESubstageSummaryEvent
+from app.models.sse import ResearchRunStageSkipWindowUpdate
+from app.models.sse import ResearchRunStageSummaryEvent as SSEStageSummaryEvent
 from app.services import DatabaseManager, get_database
 from app.services.billing_guard import charge_for_llm_usage
 from app.services.narrator.event_types import RunFinishedEventData, RunStartedEventData
@@ -65,10 +63,10 @@ from .schemas import (
     RunFinishedPayload,
     RunLogPayload,
     RunningCodePayload,
+    StageCompletedPayload,
     StageProgressPayload,
     StageSkipWindowPayload,
-    SubstageCompletedPayload,
-    SubstageSummaryPayload,
+    StageSummaryPayload,
     TokenUsagePayload,
     TreeVizStoredPayload,
 )
@@ -214,16 +212,16 @@ async def ingest_stage_progress(
     )
 
 
-@router.post("/{run_id}/substage-completed", status_code=status.HTTP_204_NO_CONTENT)
-async def ingest_substage_completed(
+@router.post("/{run_id}/stage-completed", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_stage_completed(
     run_id: str,
-    payload: SubstageCompletedPayload,
+    payload: StageCompletedPayload,
     _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.debug(
-        "RP sub-stage completed: run=%s stage=%s reason=%s",
+        "RP stage completed: run=%s stage=%s reason=%s",
         run_id,
         event.stage,
         event.reason,
@@ -232,7 +230,7 @@ async def ingest_substage_completed(
     summary = dict(event.summary)
     summary.setdefault("main_stage_number", event.main_stage_number)
     summary.setdefault("reason", event.reason)
-    substage_event = RPSubstageEvent(
+    stage_event = RPStageEvent(
         id=_next_stream_event_id(),
         stage=event.stage,
         node_id=None,
@@ -243,9 +241,9 @@ async def ingest_substage_completed(
         run_id=run_id,
         event=cast(
             StreamEventModel,
-            ResearchRunSubstageCompletedEvent(
-                type="substage_completed",
-                data=substage_event,
+            ResearchRunStageCompletedEvent(
+                type="stage_completed",
+                data=stage_event,
             ),
         ),
     )
@@ -254,12 +252,12 @@ async def ingest_substage_completed(
     await ingest_narration_event(
         db,
         run_id=run_id,
-        event_type="substage_completed",
+        event_type="stage_completed",
         event_data=event,
     )
 
     # Persist to database (summary already contains main_stage_number and reason)
-    await db.insert_substage_completed_event(
+    await db.insert_stage_completed_event(
         run_id=run_id,
         stage=event.stage,
         summary=summary,
@@ -445,22 +443,22 @@ async def ingest_review_completed(
     )
 
 
-@router.post("/{run_id}/substage-summary", status_code=status.HTTP_204_NO_CONTENT)
-async def ingest_substage_summary(
+@router.post("/{run_id}/stage-summary", status_code=status.HTTP_204_NO_CONTENT)
+async def ingest_stage_summary(
     run_id: str,
-    payload: SubstageSummaryPayload,
+    payload: StageSummaryPayload,
     _: None = Depends(verify_run_auth),
     db: DatabaseManager = Depends(get_database),
 ) -> None:
     event = payload.event
     logger.debug(
-        "RP sub-stage summary: run=%s stage=%s",
+        "RP stage summary: run=%s stage=%s",
         run_id,
         event.stage,
     )
     now = datetime.now(timezone.utc)
     created_at = now.isoformat()
-    summary_model = ResearchRunSubstageSummary(
+    summary_model = ResearchRunStageSummary(
         id=_next_stream_event_id(),
         stage=event.stage,
         summary=event.summary,
@@ -468,14 +466,14 @@ async def ingest_substage_summary(
     )
     publish_stream_event(
         run_id=run_id,
-        event=SSESubstageSummaryEvent(
-            type="substage_summary",
+        event=SSEStageSummaryEvent(
+            type="stage_summary",
             data=summary_model,
         ),
     )
 
     # Persist to database
-    await db.insert_substage_summary_event(
+    await db.insert_stage_summary_event(
         run_id=run_id,
         stage=event.stage,
         summary=event.summary,

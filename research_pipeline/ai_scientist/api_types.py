@@ -1650,6 +1650,35 @@ class ResearchRunRunEvent(BaseModel):
     data: ResearchRunEvent
 
 
+class ResearchRunStageEvent(BaseModel):
+    id: Annotated[
+        int,
+        Field(
+            description="Unique identifier of the stage completion event", title="Id"
+        ),
+    ]
+    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
+    node_id: Annotated[
+        str | None,
+        Field(
+            description="Optional identifier associated with the stage (reserved for future use)",
+            title="Node Id",
+        ),
+    ] = None
+    summary: Annotated[
+        dict[str, Any],
+        Field(description="Summary payload stored for this stage", title="Summary"),
+    ]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of the event", title="Created At")
+    ]
+
+
+class ResearchRunStageEventStream(BaseModel):
+    type: Annotated[Literal["stage_event"], Field(title="Type")]
+    data: ResearchRunStageEvent
+
+
 class ResearchRunStageProgress(BaseModel):
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
     iteration: Annotated[
@@ -1736,48 +1765,10 @@ class ResearchRunStageSkipWindowUpdate(BaseModel):
     reason: Annotated[str | None, Field(title="Reason")] = None
 
 
-class ResearchRunStopResponse(BaseModel):
-    run_id: Annotated[str, Field(title="Run Id")]
-    status: Annotated[str, Field(title="Status")]
-    message: Annotated[str, Field(title="Message")]
-
-
-class ResearchRunSubstageEvent(BaseModel):
+class ResearchRunStageSummary(BaseModel):
     id: Annotated[
         int,
-        Field(
-            description="Unique identifier of the sub-stage completion event",
-            title="Id",
-        ),
-    ]
-    stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
-    node_id: Annotated[
-        str | None,
-        Field(
-            description="Optional identifier associated with the sub-stage (reserved for future use)",
-            title="Node Id",
-        ),
-    ] = None
-    summary: Annotated[
-        dict[str, Any],
-        Field(description="Summary payload stored for this sub-stage", title="Summary"),
-    ]
-    created_at: Annotated[
-        str, Field(description="ISO timestamp of the event", title="Created At")
-    ]
-
-
-class ResearchRunSubstageEventStream(BaseModel):
-    type: Annotated[Literal["substage_event"], Field(title="Type")]
-    data: ResearchRunSubstageEvent
-
-
-class ResearchRunSubstageSummary(BaseModel):
-    id: Annotated[
-        int,
-        Field(
-            description="Unique identifier of the sub-stage summary event", title="Id"
-        ),
+        Field(description="Unique identifier of the stage summary event", title="Id"),
     ]
     stage: Annotated[str, Field(description="Stage identifier", title="Stage")]
     summary: Annotated[
@@ -1793,9 +1784,15 @@ class ResearchRunSubstageSummary(BaseModel):
     ]
 
 
-class ResearchRunSubstageSummaryEvent(BaseModel):
-    type: Annotated[Literal["substage_summary"], Field(title="Type")]
-    data: ResearchRunSubstageSummary
+class ResearchRunStageSummaryEvent(BaseModel):
+    type: Annotated[Literal["stage_summary"], Field(title="Type")]
+    data: ResearchRunStageSummary
+
+
+class ResearchRunStopResponse(BaseModel):
+    run_id: Annotated[str, Field(title="Run Id")]
+    status: Annotated[str, Field(title="Status")]
+    message: Annotated[str, Field(title="Message")]
 
 
 class ResearchRunSummary(BaseModel):
@@ -2021,10 +2018,21 @@ class SkipStageResponse(BaseModel):
     message: Annotated[str, Field(title="Message")]
 
 
+class StageCompletedEventInput(BaseModel):
+    stage: Annotated[str, Field(title="Stage")]
+    main_stage_number: Annotated[int, Field(title="Main Stage Number")]
+    reason: Annotated[str, Field(title="Reason")]
+    summary: Annotated[dict[str, Any], Field(title="Summary")]
+
+
 class Confidence(StrEnum):
     high = "high"
     medium = "medium"
     low = "low"
+
+
+class StageCompletedPayload(BaseModel):
+    event: StageCompletedEventInput
 
 
 class Status8(StrEnum):
@@ -2132,24 +2140,13 @@ class StageStartedEvent(BaseModel):
     ] = None
 
 
-class SubstageCompletedEvent(BaseModel):
-    stage: Annotated[str, Field(title="Stage")]
-    main_stage_number: Annotated[int, Field(title="Main Stage Number")]
-    reason: Annotated[str, Field(title="Reason")]
-    summary: Annotated[dict[str, Any], Field(title="Summary")]
-
-
-class SubstageCompletedPayload(BaseModel):
-    event: SubstageCompletedEvent
-
-
-class SubstageSummaryEvent(BaseModel):
+class StageSummaryEvent(BaseModel):
     stage: Annotated[str, Field(title="Stage")]
     summary: Annotated[dict[str, Any], Field(title="Summary")]
 
 
-class SubstageSummaryPayload(BaseModel):
-    event: SubstageSummaryEvent
+class StageSummaryPayload(BaseModel):
+    event: StageSummaryEvent
 
 
 class SummaryResponse(BaseModel):
@@ -2749,15 +2746,15 @@ class ResearchRunDetailsResponse(BaseModel):
         list[ResearchRunStageProgress] | None,
         Field(description="Stage progress telemetry", title="Stage Progress"),
     ] = None
-    substage_events: Annotated[
-        list[ResearchRunSubstageEvent] | None,
-        Field(description="Sub-stage completion events", title="Substage Events"),
+    stage_events: Annotated[
+        list[ResearchRunStageEvent] | None,
+        Field(description="Stage completion events", title="Stage Events"),
     ] = None
-    substage_summaries: Annotated[
-        list[ResearchRunSubstageSummary] | None,
+    stage_summaries: Annotated[
+        list[ResearchRunStageSummary] | None,
         Field(
-            description="LLM-generated summaries for completed sub-stages",
-            title="Substage Summaries",
+            description="LLM-generated summaries for completed stages",
+            title="Stage Summaries",
         ),
     ] = None
     events: Annotated[
@@ -2803,11 +2800,9 @@ class ResearchRunInitialEventData(BaseModel):
     stage_progress: Annotated[
         list[ResearchRunStageProgress], Field(title="Stage Progress")
     ]
-    substage_events: Annotated[
-        list[ResearchRunSubstageEvent], Field(title="Substage Events")
-    ]
-    substage_summaries: Annotated[
-        list[ResearchRunSubstageSummary], Field(title="Substage Summaries")
+    stage_events: Annotated[list[ResearchRunStageEvent], Field(title="Stage Events")]
+    stage_summaries: Annotated[
+        list[ResearchRunStageSummary], Field(title="Stage Summaries")
     ]
     artifacts: Annotated[list[ResearchRunArtifactMetadata], Field(title="Artifacts")]
     tree_viz: Annotated[list[TreeVizItem], Field(title="Tree Viz")]
@@ -2854,14 +2849,14 @@ class ResearchRunPaperGenerationEvent(BaseModel):
     data: ResearchRunPaperGenerationProgress
 
 
+class ResearchRunStageCompletedEvent(BaseModel):
+    type: Annotated[Literal["stage_completed"], Field(title="Type")]
+    data: ResearchRunStageEvent
+
+
 class ResearchRunStageSkipWindowEvent(BaseModel):
     type: Annotated[Literal["stage_skip_window"], Field(title="Type")]
     data: ResearchRunStageSkipWindowUpdate
-
-
-class ResearchRunSubstageCompletedEvent(BaseModel):
-    type: Annotated[Literal["substage_completed"], Field(title="Type")]
-    data: ResearchRunSubstageEvent
 
 
 class RunCompletedEventPayload(BaseModel):
@@ -2932,7 +2927,7 @@ class RunFinishedEvent(BaseModel):
     ] = None
 
 
-class StageCompletedEvent(BaseModel):
+class StageCompletedEventOutput(BaseModel):
     id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
     timestamp: Annotated[
         AwareDatetime, Field(description="When this event occurred", title="Timestamp")
@@ -3053,7 +3048,7 @@ class ResearchRunState(BaseModel):
                 RunStartedEvent
                 | StageStartedEvent
                 | NodeResultEvent
-                | StageCompletedEvent
+                | StageCompletedEventOutput
                 | ProgressUpdateEvent
                 | PaperGenerationStepEvent
                 | NodeExecutionStartedEvent
@@ -3103,10 +3098,10 @@ class ResearchRunStreamEvent(
         | ResearchRunTerminationStatusEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
-        | ResearchRunSubstageCompletedEvent
+        | ResearchRunStageCompletedEvent
         | ResearchRunPaperGenerationEvent
-        | ResearchRunSubstageEventStream
-        | ResearchRunSubstageSummaryEvent
+        | ResearchRunStageEventStream
+        | ResearchRunStageSummaryEvent
         | ResearchRunCodeExecutionStartedEvent
         | ResearchRunCodeExecutionCompletedEvent
         | ResearchRunStageSkipWindowEvent
@@ -3125,10 +3120,10 @@ class ResearchRunStreamEvent(
         | ResearchRunTerminationStatusEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
-        | ResearchRunSubstageCompletedEvent
+        | ResearchRunStageCompletedEvent
         | ResearchRunPaperGenerationEvent
-        | ResearchRunSubstageEventStream
-        | ResearchRunSubstageSummaryEvent
+        | ResearchRunStageEventStream
+        | ResearchRunStageSummaryEvent
         | ResearchRunCodeExecutionStartedEvent
         | ResearchRunCodeExecutionCompletedEvent
         | ResearchRunStageSkipWindowEvent

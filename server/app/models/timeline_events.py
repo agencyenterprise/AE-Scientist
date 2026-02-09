@@ -85,7 +85,7 @@ class StageStartedEvent(TimelineEventBase):
 
     Emission Criteria:
     - Triggered when stage_progress event arrives with iteration = 0
-    - OR when first substage_event arrives for a new stage
+    - OR when first stage_event arrives for a new stage
     - Emitted once per stage (5 times per run)
 
     Frequency: 5 per run (one per stage)

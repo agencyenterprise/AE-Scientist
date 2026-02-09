@@ -18,15 +18,15 @@ from ai_scientist.api_types import (
     RunningCodeEventPayload,
 )
 from ai_scientist.api_types import RunType as ApiRunType
+from ai_scientist.api_types import StageCompletedEventInput as StageCompletedEventPayload
 from ai_scientist.api_types import StageProgressEvent as StageProgressEventPayload
 from ai_scientist.api_types import (
     StageSkipWindowEventModel,
 )
+from ai_scientist.api_types import StageSummaryEvent as StageSummaryEventPayload
 from ai_scientist.api_types import State as StageSkipState
 from ai_scientist.api_types import Status6 as RunCompletedStatus
 from ai_scientist.api_types import Step as PaperGenerationStep
-from ai_scientist.api_types import SubstageCompletedEvent as SubstageCompletedEventPayload
-from ai_scientist.api_types import SubstageSummaryEvent as SubstageSummaryEventPayload
 
 
 def _sanitize_summary(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -59,8 +59,8 @@ class ExecutionType(str, Enum):
 EventKind = Literal[
     "run_stage_progress",
     "run_log",
-    "substage_completed",
-    "substage_summary",
+    "stage_completed",
+    "stage_summary",
     "paper_generation_progress",
     "tree_viz_stored",
     "running_code",
@@ -200,8 +200,8 @@ class CodexEvent(BaseEvent):
 
 
 @dataclass(frozen=True)
-class SubstageCompletedEvent(BaseEvent):
-    """Event emitted when a sub-stage completes."""
+class StageCompletedEvent(BaseEvent):
+    """Event emitted when a stage completes."""
 
     stage: str  # Full stage identifier, e.g. "2_baseline_tuning"
     main_stage_number: int
@@ -209,7 +209,7 @@ class SubstageCompletedEvent(BaseEvent):
     summary: Dict[str, Any]
 
     def type(self) -> str:
-        return "ai.run.substage_completed"
+        return "ai.run.stage_completed"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -222,24 +222,24 @@ class SubstageCompletedEvent(BaseEvent):
     def persistence_record(self) -> PersistenceRecord:
         # Persist a compact payload; detailed information lives in the summary.
         # Sanitize summary to ensure JSON serializability.
-        event = SubstageCompletedEventPayload(
+        event = StageCompletedEventPayload(
             stage=self.stage,
             main_stage_number=self.main_stage_number,
             reason=self.reason,
             summary=_sanitize_summary(self.summary),
         )
-        return ("substage_completed", event)
+        return ("stage_completed", event)
 
 
 @dataclass(frozen=True)
-class SubstageSummaryEvent(BaseEvent):
-    """Event emitted with the LLM phase summary for a sub-stage."""
+class StageSummaryEvent(BaseEvent):
+    """Event emitted with the LLM phase summary for a stage."""
 
     stage: str
     summary: Dict[str, Any]
 
     def type(self) -> str:
-        return "ai.run.substage_summary"
+        return "ai.run.stage_summary"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -248,11 +248,11 @@ class SubstageSummaryEvent(BaseEvent):
         }
 
     def persistence_record(self) -> PersistenceRecord:
-        event = SubstageSummaryEventPayload(
+        event = StageSummaryEventPayload(
             stage=self.stage,
             summary=self.summary,
         )
-        return ("substage_summary", event)
+        return ("stage_summary", event)
 
 
 @dataclass(frozen=True)

@@ -23,9 +23,9 @@ from ai_scientist.treesearch.events import (
     BaseEvent,
     RunLogEvent,
     RunStageProgressEvent,
+    StageCompletedEvent,
     StageSkipWindowEvent,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
+    StageSummaryEvent,
 )
 
 from . import stage_control
@@ -587,7 +587,7 @@ class AgentManager:
     def _emit_substage_completed_event(
         self, *, current_substage: StageMeta, journal: Journal, reason: str
     ) -> None:
-        """Emit SubstageCompletedEvent once per substage."""
+        """Emit StageCompletedEvent once per substage."""
         if current_substage.name in self._substage_completed_emitted:
             return
         try:
@@ -613,7 +613,7 @@ class AgentManager:
                     )
                     summary["phase_summary"] = phase_summary.to_dict()
                     self.event_callback(
-                        SubstageSummaryEvent(
+                        StageSummaryEvent(
                             stage=current_substage.name,
                             summary=phase_summary.to_dict(),
                         )
@@ -623,7 +623,7 @@ class AgentManager:
                         "Failed to generate phase summary for %s", current_substage.name
                     )
             self.event_callback(
-                SubstageCompletedEvent(
+                StageCompletedEvent(
                     stage=current_substage.name,
                     main_stage_number=current_substage.number,
                     reason=reason,
@@ -631,7 +631,7 @@ class AgentManager:
                 )
             )
         except Exception:
-            logger.exception("Failed to emit SubstageCompletedEvent")
+            logger.exception("Failed to emit StageCompletedEvent")
         self._substage_completed_emitted.add(current_substage.name)
 
     def has_stage_completed(self, stage_name: str) -> bool:

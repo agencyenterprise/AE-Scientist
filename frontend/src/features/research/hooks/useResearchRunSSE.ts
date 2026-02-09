@@ -8,8 +8,8 @@ import type {
   ArtifactMetadata,
   ResearchRunDetails,
   PaperGenerationEvent,
-  SubstageSummary,
-  SubstageEvent,
+  StageSummary,
+  StageEvent,
   HwCostEstimateData,
   HwCostActualData,
   ResearchRunCodeExecution,
@@ -36,8 +36,8 @@ interface UseResearchRunSSEOptions {
   onComplete: (status: string) => void;
   onRunEvent?: (event: unknown) => void;
   onTerminationStatus?: (event: TerminationStatusData) => void;
-  onSubstageSummary?: (event: SubstageSummary) => void;
-  onSubstageCompleted?: (event: SubstageEvent) => void;
+  onStageSummary?: (event: StageSummary) => void;
+  onStageCompleted?: (event: StageEvent) => void;
   onError?: (error: string) => void;
   onHwCostEstimate?: (event: HwCostEstimateData) => void;
   onHwCostActual?: (event: HwCostActualData) => void;
@@ -180,14 +180,14 @@ function normalizeStageSkipWindow(window: ApiStageSkipWindow): StageSkipWindow {
   };
 }
 
-function getInitialSubstageSummaries(data: InitialEventData): SubstageSummary[] {
+function getInitialStageSummaries(data: InitialEventData): StageSummary[] {
   if (
     typeof data === "object" &&
     data !== null &&
-    "substage_summaries" in data &&
-    Array.isArray((data as { substage_summaries?: unknown }).substage_summaries)
+    "stage_summaries" in data &&
+    Array.isArray((data as { stage_summaries?: unknown }).stage_summaries)
   ) {
-    return (data as { substage_summaries?: SubstageSummary[] }).substage_summaries ?? [];
+    return (data as { stage_summaries?: StageSummary[] }).stage_summaries ?? [];
   }
   return [];
 }
@@ -236,8 +236,8 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
   return {
     run: normalizeRunInfo(data.run),
     stage_progress: data.stage_progress.map(normalizeStageProgress),
-    substage_events: data.substage_events,
-    substage_summaries: getInitialSubstageSummaries(data),
+    stage_events: data.stage_events,
+    stage_summaries: getInitialStageSummaries(data),
     artifacts: data.artifacts,
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
     tree_viz: data.tree_viz,
@@ -264,8 +264,8 @@ export function useResearchRunSSE({
   onInitializationStatus,
   onHwCostEstimate,
   onHwCostActual,
-  onSubstageSummary,
-  onSubstageCompleted,
+  onStageSummary,
+  onStageCompleted,
   onError,
   onCodeExecutionStarted,
   onCodeExecutionCompleted,
@@ -396,11 +396,11 @@ export function useResearchRunSSE({
               case "review_completed":
                 onReviewCompleted?.(event.data as LlmReviewResponse);
                 break;
-              case "substage_summary":
-                onSubstageSummary?.(event.data as SubstageSummary);
+              case "stage_summary":
+                onStageSummary?.(event.data as StageSummary);
                 break;
-              case "substage_completed":
-                onSubstageCompleted?.(event.data as SubstageEvent);
+              case "stage_completed":
+                onStageCompleted?.(event.data as StageEvent);
                 break;
               case "paper_generation_progress":
                 onPaperGenerationProgress(event.data as PaperGenerationEvent);
@@ -500,10 +500,10 @@ export function useResearchRunSSE({
     onStageProgress,
     onInitializationStatus,
     onArtifact,
-    onSubstageCompleted,
+    onStageCompleted,
     onRunEvent,
     onTerminationStatus,
-    onSubstageSummary,
+    onStageSummary,
     onPaperGenerationProgress,
     onComplete,
     onHwCostEstimate,

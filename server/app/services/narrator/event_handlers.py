@@ -37,10 +37,9 @@ from app.services.narrator.event_types import (
     RunFinishedEventData,
     RunningCodeEventPayload,
     RunStartedEventData,
-    StageProgressEvent,
-    SubstageCompletedEvent,
-    SubstageSummaryEvent,
 )
+from app.services.narrator.event_types import StageCompletedEvent as StageCompletedEventPayload
+from app.services.narrator.event_types import StageProgressEvent, StageSummaryEvent
 from app.services.narrator.predicates import is_stage_started
 
 # ============================================================================
@@ -142,10 +141,10 @@ def handle_stage_progress_event(
     return events
 
 
-def handle_substage_completed_event(
-    event: SubstageCompletedEvent, _state: Optional[ResearchRunState]
+def handle_stage_completed_event(
+    event: StageCompletedEventPayload, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
-    """Transform substage_completed event into StageCompletedEvent."""
+    """Transform stage_completed event into StageCompletedEvent."""
     now = datetime.now(timezone.utc)
     stage_name = STAGE_NAMES.get(event.stage, event.stage)
 
@@ -196,11 +195,11 @@ def handle_substage_completed_event(
     ]
 
 
-def handle_substage_summary_event(
-    _event: SubstageSummaryEvent, _state: Optional[ResearchRunState]
+def handle_stage_summary_event(
+    _event: StageSummaryEvent, _state: Optional[ResearchRunState]
 ) -> List[TimelineEvent]:
     """
-    Transform substage_summary event (LLM-generated) into enriched data.
+    Transform stage_summary event (LLM-generated) into enriched data.
 
     For now, we don't create a separate timeline event from this.
     Instead, we use this data to enrich the StageCompletedEvent.
@@ -509,10 +508,10 @@ def process_execution_event(
     # This provides full type safety - the type checker knows the exact type in each branch
     if isinstance(event_data, StageProgressEvent):
         return handle_stage_progress_event(event_data, state)
-    elif isinstance(event_data, SubstageCompletedEvent):
-        return handle_substage_completed_event(event_data, state)
-    elif isinstance(event_data, SubstageSummaryEvent):
-        return handle_substage_summary_event(event_data, state)
+    elif isinstance(event_data, StageCompletedEventPayload):
+        return handle_stage_completed_event(event_data, state)
+    elif isinstance(event_data, StageSummaryEvent):
+        return handle_stage_summary_event(event_data, state)
     elif isinstance(event_data, PaperGenerationProgressEvent):
         return handle_paper_generation_progress_event(event_data, state)
     elif isinstance(event_data, RunningCodeEventPayload):

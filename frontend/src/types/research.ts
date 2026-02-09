@@ -21,8 +21,8 @@ export type ResearchRunDetailsApi = components["schemas"]["ResearchRunDetailsRes
 
 // Progress and events
 export type StageProgressApi = components["schemas"]["ResearchRunStageProgress"];
-export type SubstageEventApi = components["schemas"]["ResearchRunSubstageEvent"];
-export type SubstageSummaryApi = components["schemas"]["ResearchRunSubstageSummary"];
+export type StageEventApi = components["schemas"]["ResearchRunStageEvent"];
+export type StageSummaryApi = components["schemas"]["ResearchRunStageSummary"];
 export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGenerationProgress"];
 
 // Artifacts and selections
@@ -107,8 +107,8 @@ export type ResearchRunTerminationStatus =
 // uses snake_case for SSE event handling
 export type ResearchRunInfo = ResearchRunInfoApi;
 export type StageProgress = StageProgressApi;
-export type SubstageEvent = SubstageEventApi;
-export type SubstageSummary = SubstageSummaryApi;
+export type StageEvent = StageEventApi;
+export type StageSummary = StageSummaryApi;
 export type PaperGenerationEvent = PaperGenerationEventApi;
 export type ArtifactMetadata = ArtifactMetadataApi;
 export type StageSkipWindow = StageSkipWindowApi;
@@ -123,8 +123,8 @@ export type RunType = components["schemas"]["RunType"];
 export interface ResearchRunDetails {
   run: ResearchRunInfo;
   stage_progress: StageProgress[];
-  substage_events: SubstageEvent[];
-  substage_summaries: SubstageSummary[];
+  stage_events: StageEvent[];
+  stage_summaries: StageSummary[];
   artifacts: ArtifactMetadata[];
   paper_generation_progress: PaperGenerationEvent[];
   tree_viz: TreeVizItem[];
