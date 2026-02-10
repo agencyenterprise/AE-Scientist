@@ -10438,6 +10438,30 @@
             ],
             "title": "Parent Run Id",
             "description": "Parent run ID if this run's conversation was seeded from a previous run"
+          },
+          "evaluation_overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Overall",
+            "description": "Overall evaluation score (1-10) from LLM review, if available"
+          },
+          "evaluation_decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Decision",
+            "description": "Evaluation decision ('Accept' or 'Reject') from LLM review, if available"
           }
         },
         "type": "object",

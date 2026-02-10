@@ -82,6 +82,8 @@ export interface ResearchRun {
   errorMessage: string | null;
   conversationId: number;
   parentRunId: string | null;
+  evaluationOverall: number | null; // Overall evaluation score (1-10)
+  evaluationDecision: string | null; // 'Accept' or 'Reject'
 }
 
 export interface ResearchRunListResponse {

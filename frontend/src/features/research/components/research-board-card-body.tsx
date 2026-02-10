@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, Cpu } from "lucide-react";
+import { AlertCircle, Cpu, CheckCircle, XCircle } from "lucide-react";
 import { ProgressBar } from "@/shared/components/ui/progress-bar";
 import { Markdown } from "@/shared/components/Markdown";
 import { getStageBadge } from "../utils/research-utils";
@@ -13,6 +13,8 @@ export interface ResearchBoardCardBodyProps {
   currentStage: string | null;
   progress: number | null;
   gpuType: string;
+  evaluationOverall: number | null;
+  evaluationDecision: string | null;
 }
 
 /**
@@ -42,9 +44,13 @@ export function ResearchBoardCardBody({
   currentStage,
   progress,
   gpuType,
+  evaluationOverall,
+  evaluationDecision,
 }: ResearchBoardCardBodyProps) {
   // Truncate the markdown for card display
   const truncatedMarkdown = ideaMarkdown ? truncateText(ideaMarkdown, 500) : null;
+  const hasEvaluation = evaluationOverall !== null && evaluationDecision !== null;
+  const isAccepted = evaluationDecision === "Accept";
 
   return (
     <div className="p-5">
@@ -69,7 +75,7 @@ export function ResearchBoardCardBody({
       )}
 
       {/* Stats Grid */}
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
+      <div className="mt-5 grid gap-4 sm:grid-cols-4">
         {/* Stage */}
         <div>
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
@@ -95,6 +101,26 @@ export function ResearchBoardCardBody({
             <Cpu className="h-4 w-4 text-slate-500" />
             <span className="text-sm text-slate-300">{gpuType || "Not assigned"}</span>
           </div>
+        </div>
+
+        {/* Evaluation */}
+        <div>
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
+            Evaluation
+          </p>
+          {hasEvaluation ? (
+            <div
+              className={`flex items-center gap-2 ${
+                isAccepted ? "text-emerald-400" : "text-red-400"
+              }`}
+            >
+              {isAccepted ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+              <span className="text-sm font-medium">{isAccepted ? "PASS" : "FAIL"}</span>
+              <span className="text-sm text-slate-400">({evaluationOverall}/10)</span>
+            </div>
+          ) : (
+            <span className="text-sm text-slate-500">—</span>
+          )}
         </div>
       </div>
     </div>

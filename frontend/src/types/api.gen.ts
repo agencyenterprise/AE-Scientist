@@ -4975,6 +4975,16 @@ export interface components {
              * @description Parent run ID if this run's conversation was seeded from a previous run
              */
             parent_run_id?: string | null;
+            /**
+             * Evaluation Overall
+             * @description Overall evaluation score (1-10) from LLM review, if available
+             */
+            evaluation_overall?: number | null;
+            /**
+             * Evaluation Decision
+             * @description Evaluation decision ('Accept' or 'Reject') from LLM review, if available
+             */
+            evaluation_decision?: string | null;
         };
         /**
          * ResearchRunListResponse

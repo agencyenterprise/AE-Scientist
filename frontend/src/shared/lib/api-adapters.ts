@@ -139,6 +139,8 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     errorMessage: apiRun.error_message ?? null,
     conversationId: apiRun.conversation_id,
     parentRunId: apiRun.parent_run_id ?? null,
+    evaluationOverall: apiRun.evaluation_overall ?? null,
+    evaluationDecision: apiRun.evaluation_decision ?? null,
   };
 }
 

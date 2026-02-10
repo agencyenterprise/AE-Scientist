@@ -111,6 +111,14 @@ class ResearchRunListItem(BaseModel):
         None,
         description="Parent run ID if this run's conversation was seeded from a previous run",
     )
+    evaluation_overall: Optional[int] = Field(
+        None,
+        description="Overall evaluation score (1-10) from LLM review, if available",
+    )
+    evaluation_decision: Optional[str] = Field(
+        None,
+        description="Evaluation decision ('Accept' or 'Reject') from LLM review, if available",
+    )
 
 
 class ResearchRunListResponse(BaseModel):

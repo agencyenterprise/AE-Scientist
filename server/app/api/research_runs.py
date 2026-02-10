@@ -60,6 +60,8 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         conversation_id=row["conversation_id"],
         conversation_url=conversation_url,
         parent_run_id=row.get("parent_run_id"),
+        evaluation_overall=row.get("evaluation_overall"),
+        evaluation_decision=row.get("evaluation_decision"),
     )
 
 

@@ -129,13 +129,12 @@ export default function ResearchRunDetailPage() {
     [conversationId, runId]
   );
 
-  // Calculate displayed artifact count: exclude plots, count grouped PDFs as 1
+  // Calculate displayed artifact count: count grouped PDFs as 1 (plots already filtered by backend)
   // Must be before early returns to comply with Rules of Hooks
   const displayedArtifactCount = useMemo(() => {
     const artifacts = details?.artifacts ?? [];
-    const filtered = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PLOT);
-    const pdfCount = filtered.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF).length;
-    const otherCount = filtered.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF).length;
+    const pdfCount = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF).length;
+    const otherCount = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF).length;
     // PDFs are grouped, so count them as 1 if any exist
     return otherCount + (pdfCount > 0 ? 1 : 0);
   }, [details?.artifacts]);

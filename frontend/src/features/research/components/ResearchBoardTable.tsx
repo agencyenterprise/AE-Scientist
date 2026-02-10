@@ -27,6 +27,8 @@ export function ResearchBoardTable({ researchRuns }: ResearchBoardTableProps) {
       artifactsCount: run.artifactsCount,
       errorMessage: run.errorMessage,
       parentRunId: run.parentRunId,
+      evaluationOverall: run.evaluationOverall,
+      evaluationDecision: run.evaluationDecision,
     }));
   }, [researchRuns]);
 

@@ -1397,6 +1397,20 @@ class ResearchRunListItem(BaseModel):
             title="Parent Run Id",
         ),
     ] = None
+    evaluation_overall: Annotated[
+        int | None,
+        Field(
+            description="Overall evaluation score (1-10) from LLM review, if available",
+            title="Evaluation Overall",
+        ),
+    ] = None
+    evaluation_decision: Annotated[
+        str | None,
+        Field(
+            description="Evaluation decision ('Accept' or 'Reject') from LLM review, if available",
+            title="Evaluation Decision",
+        ),
+    ] = None
 
 
 class ResearchRunListResponse(BaseModel):

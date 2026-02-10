@@ -54,6 +54,7 @@ _PROGRESS_CTE_SQL = SQL(
     artifact_counts AS (
         SELECT run_id, COUNT(*) as count
         FROM rp_artifacts
+        WHERE artifact_type != 'plot'
         GROUP BY run_id
     )
 """
@@ -589,7 +590,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id,
                 c.url AS conversation_url,
-                c.parent_run_id
+                c.parent_run_id,
+                rev.overall AS evaluation_overall,
+                rev.decision AS evaluation_decision
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
@@ -597,6 +600,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             LEFT JOIN conversations c ON i.conversation_id = c.id
             LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
+            LEFT JOIN rp_llm_reviews rev ON r.run_id = rev.run_id
             WHERE r.run_id = %s
         """
         ).format(progress_cte=_PROGRESS_CTE_SQL)
@@ -690,7 +694,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 COALESCE(ac.count, 0) AS artifacts_count,
                 i.conversation_id,
                 c.url AS conversation_url,
-                c.parent_run_id
+                c.parent_run_id,
+                rev.overall AS evaluation_overall,
+                rev.decision AS evaluation_decision
             FROM research_pipeline_runs r
             JOIN ideas i ON r.idea_id = i.id
             JOIN idea_versions iv ON r.idea_version_id = iv.id
@@ -698,6 +704,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             LEFT JOIN conversations c ON i.conversation_id = c.id
             LEFT JOIN progress_with_calculations pc ON r.run_id = pc.run_id
             LEFT JOIN artifact_counts ac ON r.run_id = ac.run_id
+            LEFT JOIN rp_llm_reviews rev ON r.run_id = rev.run_id
             {where_clause}
             ORDER BY r.created_at DESC
             LIMIT %s OFFSET %s

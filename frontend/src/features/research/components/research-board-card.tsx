@@ -18,6 +18,8 @@ export interface ResearchBoardCardProps {
   artifactsCount: number;
   errorMessage: string | null;
   parentRunId: string | null;
+  evaluationOverall: number | null;
+  evaluationDecision: string | null;
 }
 
 export function ResearchBoardCard({
@@ -34,6 +36,8 @@ export function ResearchBoardCard({
   artifactsCount,
   errorMessage,
   parentRunId,
+  evaluationOverall,
+  evaluationDecision,
 }: ResearchBoardCardProps) {
   return (
     <div className="group rounded-2xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80">
@@ -50,6 +54,8 @@ export function ResearchBoardCard({
         currentStage={currentStage}
         progress={progress}
         gpuType={gpuType}
+        evaluationOverall={evaluationOverall}
+        evaluationDecision={evaluationDecision}
       />
       <ResearchBoardCardFooter
         runId={runId}

@@ -256,16 +256,11 @@ export function ResearchArtifactsList({
     runId,
   });
 
-  // Filter out plot artifacts
-  const filteredArtifacts = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PLOT);
+  // Separate PDFs from other artifacts (plot artifacts are already filtered out by backend)
+  const pdfArtifacts = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF);
+  const otherArtifacts = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF);
 
-  // Separate PDFs from other artifacts
-  const pdfArtifacts = filteredArtifacts.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF);
-  const otherArtifacts = filteredArtifacts.filter(
-    a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF
-  );
-
-  if (filteredArtifacts.length === 0) {
+  if (artifacts.length === 0) {
     return null;
   }
 
