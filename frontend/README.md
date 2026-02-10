@@ -17,7 +17,7 @@ The frontend provides an intuitive interface for:
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4
 - **Markdown**: react-markdown with KaTeX for math rendering
-- **API Types**: Auto-generated from backend OpenAPI schema
+- **API Types**: Auto-generated from server OpenAPI schema
 
 ## Setup
 
@@ -25,7 +25,7 @@ The frontend provides an intuitive interface for:
 
 - Node.js 20 or higher
 - npm or pnpm
-- Running backend server (see `../server/README.md`)
+- Running server (see `../server/README.md`)
 
 ### Installation
 
@@ -83,8 +83,8 @@ npm run style            # Lint and fix CSS with Stylelint
 
 ### API Types
 ```bash
-npm run gen:api-types              # Generate types from running backend
-npm run gen:api-types:from-file    # Generate types from backend/openapi.json
+npm run gen:api-types              # Generate types from running server
+npm run gen:api-types:from-file    # Generate types from server/openapi.json
 ```
 
 **Note**: Types are automatically regenerated during build via the `prebuild` script.
@@ -99,12 +99,12 @@ npm run fix-tailwind     # Fix Tailwind issues and restart dev server
 
 The frontend maintains type safety through auto-generated API types:
 
-1. **During Development**: 
-   - Run `npm run gen:api-types` to regenerate types from running backend
-   - Types update automatically when backend OpenAPI schema changes
+1. **During Development**:
+   - Run `npm run gen:api-types` to regenerate types from running server
+   - Types update automatically when server OpenAPI schema changes
 
 2. **During Build**:
-   - `prebuild` script generates types from `../backend/openapi.json`
+   - `prebuild` script generates types from `../server/openapi.json`
    - Ensures type consistency in production builds
 
 3. **Type Usage**:

@@ -42,19 +42,15 @@ This is automatically included in Docker/Linux environments but must be manually
 
 2. **Environment Configuration**
    ```bash
-   # Copy environment templates
+   # Copy environment template
    cp server/env.example server/.env
-   cp frontend/env.local.example frontend/.env.local
-   
-   # IMPORTANT: Edit both .env files with your Clerk credentials
-   # In server/.env:
+
+   # Edit server/.env with your Clerk credentials
    CLERK_SECRET_KEY="sk_test_your_clerk_secret_key"
    CLERK_PUBLISHABLE_KEY="pk_test_your_clerk_publishable_key"
-   
-   # In frontend/.env.local:
-   CLERK_SECRET_KEY="sk_test_your_clerk_secret_key"
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_your_clerk_publishable_key"
    ```
+
+   For frontend configuration, see [Frontend Documentation](../frontend/README.md).
 
 3. **Setup using Makefile (Recommended)**
    ```bash
@@ -69,23 +65,18 @@ This is automatically included in Docker/Linux environments but must be manually
    **🔒 First Run**: Visit `http://localhost:3000` → You'll be redirected to login page → Sign in with preferred method!
 
 4. **Manual Setup (Alternative)**
-   
-   **Backend:**
+
+   **Server:**
    ```bash
-   make venv-backend                    # Create virtual environment
-   make install-backend                 # Install dependencies in venv
-   make dev-backend                     # Start server using venv
-   ```
-   
-   **Frontend:**
-   ```bash
-   make install-frontend               # Install dependencies
-   make dev-frontend                   # Start development server
+   make install-server                  # Install dependencies
+   make dev-server                      # Start server
    ```
 
-### Development Servers
-- **Frontend**: http://localhost:3000
-- **Backend**: http://localhost:8000
+   For frontend setup, see [Frontend Documentation](../frontend/README.md).
+
+### Development Server
+- **Server**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
 
 ### Billing
 
@@ -186,7 +177,7 @@ AE Scientist exposes an MCP (Model Context Protocol) server that allows you to r
 
    **For Claude Code**, run this command in your terminal:
    ```bash
-   claude mcp add-json research-pipeline '{"type":"http","url":"https://your-backend-url/mcp","headers":{"Authorization":"Bearer mcp_your_api_key"}}'
+   claude mcp add-json research-pipeline '{"type":"http","url":"https://your-server-url/mcp","headers":{"Authorization":"Bearer mcp_your_api_key"}}'
    ```
 
    **For Cursor**, add this to your `.cursor/mcp.json` file:
@@ -194,7 +185,7 @@ AE Scientist exposes an MCP (Model Context Protocol) server that allows you to r
    {
      "mcpServers": {
        "research-pipeline": {
-         "url": "https://your-backend-url/mcp",
+         "url": "https://your-server-url/mcp",
          "headers": {
            "Authorization": "Bearer mcp_your_api_key"
          }
@@ -237,7 +228,7 @@ When a pipeline is launched successfully, the tool returns:
 
 ### Playwright Setup
 
-Playwright is used for browser automation in the server (e.g., scraping and browser-driven tests). After installing backend dependencies, install the browser binaries locally.
+Playwright is used for browser automation in the server (e.g., scraping and browser-driven tests). After installing server dependencies, install the browser binaries locally.
 
 ```bash
 # Install Playwright browsers inside the server virtualenv
@@ -253,7 +244,7 @@ Docker users: the server image installs Firefox via Playwright during build, so 
 
 ### Database Setup
 
-This application uses **PostgreSQL** as its database. You'll need to set up a PostgreSQL database before running the backend.
+This application uses **PostgreSQL** as its database. You'll need to set up a PostgreSQL database before running the server.
 
 #### Option 1: Use Railway PostgreSQL (Recommended for Production)
 1. Create a PostgreSQL database on Railway
@@ -304,7 +295,7 @@ This application uses **Alembic** for database schema management. The database s
 make migrate-db
 
 # Create a new migration (for developers making schema changes)
-cd backend && python migrate.py revision "add user preferences table"
+cd server && python migrate.py revision "add user preferences table"
 ```
 
 #### First Setup
@@ -312,10 +303,10 @@ When setting up the application for the first time:
 
 1. Set up your PostgreSQL database (see above)
 2. Run `make migrate-db` to create all tables
-3. Start the application with `make dev-backend`
+3. Start the application with `make dev-server`
 
 #### Development Workflow
-- The `make dev-backend` command automatically runs migrations before starting the server
+- The `make dev-server` command automatically runs migrations before starting the server
 - All database schema changes must be done through migration files
 - Never modify database schema directly in production
 
@@ -324,11 +315,11 @@ When you need to modify the database schema:
 
 1. **Create the migration file:**
    ```bash
-   cd backend
+   cd server
    python migrate.py revision "descriptive message about the change"
    ```
 
-2. **Edit the generated migration file** in `backend/database_migrations/versions/`
+2. **Edit the generated migration file** in `server/database_migrations/versions/`
    - Add your SQL DDL statements in the `upgrade()` function
    - Use `op.execute("CREATE TABLE ...")` for raw SQL
    - Add corresponding DROP statements in `downgrade()` if needed
@@ -339,7 +330,7 @@ When you need to modify the database schema:
    ```
 
 #### Migration Files
-- Location: `backend/database_migrations/versions/`
+- Location: `server/database_migrations/versions/`
 - Naming: Sequential numbers (0001_, 0002_, etc.)
 - Each migration includes upgrade and downgrade functions
 
@@ -383,7 +374,7 @@ This application supports file uploads (images and PDFs) stored in AWS S3. You'l
 5. Generate access keys for the user
 
 #### 3. Configure Environment Variables
-Add the following to your `backend/.env` file:
+Add the following to your `server/.env` file:
 
 ```bash
 # AWS S3 Configuration for File Uploads
@@ -393,12 +384,6 @@ AWS_REGION="us-east-1"  # or your preferred region
 AWS_S3_BUCKET_NAME="your_s3_bucket_name_here"
 ```
 
-## Running Tests
-```bash
-# Create/recreate test database manually
-make create-test-db
-
-```
 
 ## Environment Variables
 
@@ -426,14 +411,6 @@ The `env.example` file is organized into sections with clear `[REQUIRED]` and `[
 
 See `server/env.example` for the complete list with descriptions.
 
-### Frontend Configuration
-
-Copy `frontend/env.local.example` to `frontend/.env.local`:
-
-```bash
-cp frontend/env.local.example frontend/.env.local
-```
-
 ## Authentication
 
 This application now requires **Clerk authentication** for all users.
@@ -451,33 +428,28 @@ This application now requires **Clerk authentication** for all users.
 - Protected API endpoints (all routes except `/health`, `/docs`, `/auth/*`)
 
 **Important:**
-- `.env` and `.env.local` files are ignored by git for security
-- `env.example` files provide templates with default values
-- **Clerk credentials are required** - the app won't start without them
-- Frontend environment variables must be prefixed with `NEXT_PUBLIC_` to be accessible in the browser
+- `.env` files are ignored by git for security
+- `env.example` provides template with default values
+- **Clerk credentials are required** - the server won't start without them
 
 ## Available Scripts
 
-### Frontend
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run lint         # Run ESLint
-npm run lint:fix     # Fix ESLint issues
-npm run format       # Format code with Prettier
-npm run format:check # Check code formatting
-npm run style        # Lint CSS with Stylelint
-npm run gen:api-types            # Generate TS types from running backend /openapi.json
-npm run gen:api-types:from-file  # Generate TS types from backend/openapi.json
+make dev-server                          # Start development server (with auto-migrations)
+make install-server                      # Install dependencies
+make lint-server                         # Run all linters
+make migrate                             # Run database migrations
+make export-openapi                      # Export OpenAPI schema
+make gen-api-types                       # Generate TypeScript types for frontend
 ```
 
-### Backend
+### Manual Python Commands
 ```bash
 python -m uvicorn app.main:app --reload  # Start development server
 python -m black .                        # Format Python code
-python -m isort .                         # Sort Python imports
-python -m flake8 .                        # Lint Python code
-python -m mypy .                          # Type check Python code
+python -m isort .                        # Sort Python imports
+python -m ruff check .                   # Lint Python code
+python -m mypy .                         # Type check Python code
 ```
 
 ## Fake RunPod server (fast local validation)
@@ -499,17 +471,17 @@ Use this to exercise the research pipeline flow without provisioning a real RunP
 
 ## API Type Generation
 
-The frontend uses types generated directly from the backend's OpenAPI schema. Do not define duplicate hand-written API types.
+The frontend uses types generated directly from the server's OpenAPI schema. Do not define duplicate hand-written API types.
 
 - Generate schema and types from file:
   ```bash
   make gen-api-types
   ```
-  This exports `backend/openapi.json` and writes `frontend/src/types/api.gen.ts`.
+  This exports `server/openapi.json` and writes `frontend/src/types/api.gen.ts`.
 
-- Or generate directly from a running backend:
+- Or generate directly from a running server:
   ```bash
   cd frontend && npm run gen:api-types
   ```
 
-During builds, `prebuild` generates types from `backend/openapi.json` to avoid drift.
+During builds, `prebuild` generates types from `server/openapi.json` to avoid drift.
