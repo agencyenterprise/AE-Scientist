@@ -6,6 +6,7 @@ import logging
 import math
 import shutil
 import tempfile
+from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -505,7 +506,15 @@ class ArtifactPublisher:
             progress_callback=progress_callback,
         )
 
-    def publish(self, *, spec: ArtifactSpec) -> None:
+    def publish(self, *, spec: ArtifactSpec) -> Future[None] | None:
+        """Publish an artifact to S3 and emit a webhook event.
+
+        Returns:
+            A Future that completes when the webhook notification is sent,
+            or None if no webhook was sent (e.g., artifact skipped or no client).
+            Callers should wait on this Future before exiting to ensure the
+            artifact is recorded in the database.
+        """
         request = self._build_request(spec=spec)
         if request is None:
             logger.info(
@@ -513,7 +522,7 @@ class ArtifactPublisher:
                 spec.artifact_type,
                 spec.path,
             )
-            return
+            return None
 
         # Check if artifact already exists with same size (skip duplicate uploads)
         local_file_size = request.local_path.stat().st_size
@@ -528,7 +537,7 @@ class ArtifactPublisher:
                     spec.artifact_type,
                     local_file_size,
                 )
-                return
+                return None
             if exists_response.exists:
                 logger.info(
                     "Artifact %s exists but size differs (local=%d, s3=%s) - re-uploading",
@@ -549,19 +558,33 @@ class ArtifactPublisher:
 
         if self._webhook_client is not None:
             try:
-                self._webhook_client.publish(
-                    kind="artifact_uploaded",
-                    payload=ArtifactUploadedEvent(
-                        artifact_type=spec.artifact_type,
-                        filename=request.filename,
-                        file_size=file_size,
-                        file_type=file_type,
-                        created_at=created_at,
-                    ),
+                event_payload = ArtifactUploadedEvent(
+                    artifact_type=spec.artifact_type,
+                    filename=request.filename,
+                    file_size=file_size,
+                    file_type=file_type,
+                    created_at=created_at,
                 )
-                logger.info("Emitted artifact SSE event for %s", request.filename)
+                logger.info(
+                    "Publishing artifact_uploaded webhook: artifact_type=%s, filename=%s, file_size=%d, created_at=%s",
+                    spec.artifact_type,
+                    request.filename,
+                    file_size,
+                    created_at,
+                )
+                future = self._webhook_client.publish(
+                    kind="artifact_uploaded",
+                    payload=event_payload,
+                )
+                logger.info(
+                    "Emitted artifact_uploaded webhook for %s (future=%s)",
+                    request.filename,
+                    future,
+                )
+                return future
             except Exception:
                 logger.exception("Failed to emit artifact SSE event (non-fatal)")
+                return None
         else:
             logger.info(
                 "No webhook client available to emit artifact SSE event for artifact_type=%s, filename=%s, file_size=%s, file_type=%s",
@@ -570,6 +593,7 @@ class ArtifactPublisher:
                 file_size,
                 file_type,
             )
+            return None
 
     def close(self) -> None:
         shutil.rmtree(self._temp_dir, ignore_errors=True)
