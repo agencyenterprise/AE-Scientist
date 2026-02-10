@@ -3954,7 +3954,7 @@
           "research-pipeline"
         ],
         "summary": "List Tree Viz",
-        "description": "List stored tree visualizations for a run.",
+        "description": "List stored tree visualizations for a run with gzip compression support.",
         "operationId": "list_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz_get",
         "parameters": [
           {
@@ -3987,66 +3987,6 @@
                     "$ref": "#/components/schemas/TreeVizItem"
                   },
                   "title": "Response List Tree Viz Api Conversations  Conversation Id  Idea Research Run  Run Id  Tree Viz Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}": {
-      "get": {
-        "tags": [
-          "research-pipeline"
-        ],
-        "summary": "Get Tree Viz",
-        "description": "Fetch tree viz payload for a specific stage.",
-        "operationId": "get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get",
-        "parameters": [
-          {
-            "name": "conversation_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Conversation Id"
-            }
-          },
-          {
-            "name": "run_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Run Id"
-            }
-          },
-          {
-            "name": "stage",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/ExperimentalStageId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TreeVizItem"
                 }
               }
             }
@@ -9674,14 +9614,6 @@
             "title": "Artifacts",
             "description": "Artifacts uploaded for the run"
           },
-          "tree_viz": {
-            "items": {
-              "$ref": "#/components/schemas/TreeVizItem"
-            },
-            "type": "array",
-            "title": "Tree Viz",
-            "description": "Tree visualizations stored for this run"
-          },
           "paper_generation_progress": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunPaperGenerationProgress"
@@ -10172,13 +10104,6 @@
             "type": "array",
             "title": "Artifacts"
           },
-          "tree_viz": {
-            "items": {
-              "$ref": "#/components/schemas/TreeVizItem"
-            },
-            "type": "array",
-            "title": "Tree Viz"
-          },
           "paper_generation_progress": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunPaperGenerationProgress"
@@ -10240,7 +10165,6 @@
           "stage_events",
           "stage_summaries",
           "artifacts",
-          "tree_viz",
           "paper_generation_progress"
         ],
         "title": "ResearchRunInitialEventData"

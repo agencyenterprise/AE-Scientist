@@ -24,7 +24,6 @@ from app.models.research_pipeline import (
     ResearchRunStageSkipWindow,
     ResearchRunStageSummary,
     RunType,
-    TreeVizItem,
 )
 from app.models.timeline_events import StageId
 from app.services.chat_models import ChatStatus
@@ -233,7 +232,6 @@ class ResearchRunInitialEventData(BaseModel):
     stage_events: List[ResearchRunStageEvent]
     stage_summaries: List[ResearchRunStageSummary]
     artifacts: List[ResearchRunArtifactMetadata]
-    tree_viz: List[TreeVizItem]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
     stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
         default_factory=list,

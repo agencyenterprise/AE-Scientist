@@ -467,10 +467,6 @@ class ResearchRunDetailsResponse(BaseModel):
     artifacts: List[ResearchRunArtifactMetadata] = Field(
         default_factory=list, description="Artifacts uploaded for the run"
     )
-    tree_viz: List[TreeVizItem] = Field(
-        default_factory=list,
-        description="Tree visualizations stored for this run",
-    )
     paper_generation_progress: List[ResearchRunPaperGenerationProgress] = Field(
         default_factory=list, description="Paper generation progress events (Stage 5)"
     )

@@ -240,7 +240,7 @@ function mapInitialEventToDetails(data: InitialEventData): ResearchRunDetails {
     stage_summaries: getInitialStageSummaries(data),
     artifacts: data.artifacts,
     paper_generation_progress: data.paper_generation_progress.map(normalizePaperGenerationEvent),
-    tree_viz: data.tree_viz,
+    tree_viz: [],
     stage_skip_windows: rawStageSkipWindows.map(normalizeStageSkipWindow),
     hw_cost_estimate: initialHwCost,
     hw_cost_actual: initialHwCostActual,

@@ -1,4 +1,6 @@
 import asyncio
+import gzip
+import json
 import logging
 import math
 from datetime import datetime, timedelta, timezone
@@ -31,7 +33,7 @@ from app.models import (
     TreeVizItem,
 )
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
-from app.models.timeline_events import ExperimentalStageId, StageId
+from app.models.timeline_events import StageId
 from app.services import get_database
 from app.services.billing_guard import enforce_minimum_balance
 from app.services.database import DatabaseManager
@@ -517,10 +519,6 @@ async def get_research_run_details(
         ResearchRunEvent.from_db_record(event)
         for event in await db.list_research_pipeline_run_events(run_id=run_id)
     ]
-    tree_viz = [
-        TreeVizItem.from_db_record(record)
-        for record in await db.list_tree_viz_for_run(run_id=run_id)
-    ]
     paper_gen_events = [
         ResearchRunPaperGenerationProgress.from_db_record(event)
         for event in await db.list_paper_generation_events(run_id=run_id)
@@ -553,7 +551,6 @@ async def get_research_run_details(
         events=run_events,
         artifacts=artifacts,
         paper_generation_progress=paper_gen_events,
-        tree_viz=tree_viz,
         stage_skip_windows=stage_skip_windows,
         child_conversations=child_conversations,
     )
@@ -1010,8 +1007,8 @@ async def list_tree_viz(
     conversation_id: int,
     run_id: str,
     request: Request,
-) -> list[TreeVizItem]:
-    """List stored tree visualizations for a run."""
+) -> Response:
+    """List stored tree visualizations for a run with gzip compression support."""
     if conversation_id <= 0:
         raise HTTPException(status_code=400, detail="conversation_id must be positive")
     user = get_current_user(request)
@@ -1025,36 +1022,23 @@ async def list_tree_viz(
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
     records = await db.list_tree_viz_for_run(run_id=run_id)
-    return [TreeVizItem.from_db_record(record) for record in records]
+    tree_viz = [TreeVizItem.from_db_record(record).model_dump() for record in records]
 
+    json_bytes = json.dumps(tree_viz, separators=(",", ":")).encode("utf-8")
 
-@router.get(
-    "/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}",
-    response_model=TreeVizItem,
-)
-async def get_tree_viz(
-    conversation_id: int,
-    run_id: str,
-    stage: ExperimentalStageId,
-    request: Request,
-) -> TreeVizItem:
-    """Fetch tree viz payload for a specific stage."""
-    if conversation_id <= 0:
-        raise HTTPException(status_code=400, detail="conversation_id must be positive")
-    user = get_current_user(request)
-    db = get_database()
-    conversation = await db.get_conversation_by_id(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if conversation.user_id != user.id:
-        raise HTTPException(status_code=403, detail="You do not own this conversation")
-    run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail="Research run not found")
-    record = await db.get_tree_viz(run_id=run_id, stage=stage)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Tree viz not found")
-    return TreeVizItem.from_db_record(record)
+    accept_encoding = request.headers.get("accept-encoding", "")
+    if "gzip" in accept_encoding.lower():
+        compressed = gzip.compress(json_bytes, compresslevel=6)
+        return Response(
+            content=compressed,
+            media_type="application/json",
+            headers={
+                "Content-Encoding": "gzip",
+                "Vary": "Accept-Encoding",
+            },
+        )
+
+    return Response(content=json_bytes, media_type="application/json")
 
 
 # New run-tree router for endpoints not scoped to a conversation

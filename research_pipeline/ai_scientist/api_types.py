@@ -2891,10 +2891,6 @@ class ResearchRunDetailsResponse(BaseModel):
         list[ResearchRunArtifactMetadata] | None,
         Field(description="Artifacts uploaded for the run", title="Artifacts"),
     ] = None
-    tree_viz: Annotated[
-        list[TreeVizItem] | None,
-        Field(description="Tree visualizations stored for this run", title="Tree Viz"),
-    ] = None
     paper_generation_progress: Annotated[
         list[ResearchRunPaperGenerationProgress] | None,
         Field(
@@ -2928,7 +2924,6 @@ class ResearchRunInitialEventData(BaseModel):
         list[ResearchRunStageSummary], Field(title="Stage Summaries")
     ]
     artifacts: Annotated[list[ResearchRunArtifactMetadata], Field(title="Artifacts")]
-    tree_viz: Annotated[list[TreeVizItem], Field(title="Tree Viz")]
     paper_generation_progress: Annotated[
         list[ResearchRunPaperGenerationProgress],
         Field(title="Paper Generation Progress"),

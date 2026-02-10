@@ -1522,29 +1522,9 @@ export interface paths {
         };
         /**
          * List Tree Viz
-         * @description List stored tree visualizations for a run.
+         * @description List stored tree visualizations for a run with gzip compression support.
          */
         get: operations["list_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/conversations/{conversation_id}/idea/research-run/{run_id}/tree-viz/{stage}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Tree Viz
-         * @description Fetch tree viz payload for a specific stage.
-         */
-        get: operations["get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4556,11 +4536,6 @@ export interface components {
              */
             artifacts?: components["schemas"]["ResearchRunArtifactMetadata"][];
             /**
-             * Tree Viz
-             * @description Tree visualizations stored for this run
-             */
-            tree_viz?: components["schemas"]["TreeVizItem"][];
-            /**
              * Paper Generation Progress
              * @description Paper generation progress events (Stage 5)
              */
@@ -4824,8 +4799,6 @@ export interface components {
             stage_summaries: components["schemas"]["ResearchRunStageSummary"][];
             /** Artifacts */
             artifacts: components["schemas"]["ResearchRunArtifactMetadata"][];
-            /** Tree Viz */
-            tree_viz: components["schemas"]["TreeVizItem"][];
             /** Paper Generation Progress */
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
             /**
@@ -8740,39 +8713,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TreeVizItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_tree_viz_api_conversations__conversation_id__idea_research_run__run_id__tree_viz__stage__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                conversation_id: number;
-                run_id: string;
-                stage: components["schemas"]["ExperimentalStageId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TreeVizItem"];
                 };
             };
             /** @description Validation Error */

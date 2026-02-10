@@ -21,7 +21,6 @@ from app.models import (
     ResearchRunStageSkipWindow,
     ResearchRunStageSummary,
     ResearchRunStreamEvent,
-    TreeVizItem,
 )
 from app.models.sse import ResearchRunInitialEventData
 from app.services import get_database
@@ -327,10 +326,6 @@ async def _build_initial_stream_payload(
         ).model_dump()
         for artifact in await db.list_run_artifacts(run_id=run_id)
     ]
-    tree_viz = [
-        TreeVizItem.from_db_record(record).model_dump()
-        for record in await db.list_tree_viz_for_run(run_id=run_id)
-    ]
     paper_gen_events = [
         ResearchRunPaperGenerationProgress.from_db_record(event).model_dump()
         for event in await db.list_paper_generation_events(run_id=run_id)
@@ -374,7 +369,6 @@ async def _build_initial_stream_payload(
         "stage_events": stage_events,
         "stage_summaries": stage_summaries,
         "artifacts": artifacts,
-        "tree_viz": tree_viz,
         "paper_generation_progress": paper_gen_events,
         "code_executions": code_executions_snapshot,
         "stage_skip_windows": stage_skip_windows,
