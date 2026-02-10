@@ -115,10 +115,8 @@ class WebhookClient:
         payload: dict[str, Any],
         future: Future[None],
     ) -> None:
-        logger.info("[WebhookClient] Starting async POST to %s", url)
         try:
             self._post_with_retry(url=url, headers=headers, payload=payload)
-            logger.info("[WebhookClient] Successfully posted to %s", url)
         except Exception as exc:
             logger.exception(
                 "Failed to publish telemetry webhook after retries: url=%s auth=%s payload=%s",
@@ -131,7 +129,6 @@ class WebhookClient:
         else:
             if not future.done():
                 future.set_result(result=None)
-                logger.info("[WebhookClient] Future completed for %s", url)
 
     @retry(
         retry=retry_if_exception_type(requests.RequestException),
