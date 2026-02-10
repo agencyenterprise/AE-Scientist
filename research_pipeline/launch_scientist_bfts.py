@@ -30,6 +30,7 @@ from typing import Callable, NamedTuple, Optional, Protocol, cast
 from ae_paper_review import ReviewResponseModel, ReviewResult, load_paper
 from omegaconf import OmegaConf
 
+from ai_scientist.api_types import ArtifactType
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.perform_citations import gather_citations
@@ -687,7 +688,7 @@ def run_plot_aggregation(
             for plot_path in plot_paths:
                 artifact_callback(
                     ArtifactSpec(
-                        artifact_type="plot",
+                        artifact_type=ArtifactType.plot,
                         path=plot_path,
                         packaging="file",
                         archive_name=None,
@@ -769,7 +770,7 @@ def run_writeup_stage(
         try:
             artifact_callback(
                 ArtifactSpec(
-                    artifact_type="paper_pdf",
+                    artifact_type=ArtifactType.paper_pdf,
                     path=pdf_path,
                     packaging="file",
                     archive_name=None,
@@ -782,7 +783,7 @@ def run_writeup_stage(
         try:
             artifact_callback(
                 ArtifactSpec(
-                    artifact_type="latex_archive",
+                    artifact_type=ArtifactType.latex_archive,
                     path=latex_path,
                     packaging="zip",
                     archive_name=f"{run_dir_path.name}-latex.zip",
@@ -856,7 +857,7 @@ def run_review_stage(
     try:
         artifact_callback(
             ArtifactSpec(
-                artifact_type="llm_review",
+                artifact_type=ArtifactType.llm_review,
                 path=review_json_path,
                 packaging="file",
                 archive_name=None,
@@ -1080,7 +1081,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
             # But we want to be sure to upload the log file and workspace archive.
             artifact_callback(
                 ArtifactSpec(
-                    artifact_type="workspace_archive",
+                    artifact_type=ArtifactType.workspace_archive,
                     path=Path(base_cfg.workspace_dir),
                     packaging="zip",
                     archive_name="workspace.zip",
@@ -1099,7 +1100,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
             )
             artifact_callback(
                 ArtifactSpec(
-                    artifact_type="run_log",
+                    artifact_type=ArtifactType.run_log,
                     path=Path("/workspace/research_pipeline.log"),
                     packaging="file",
                     archive_name=None,

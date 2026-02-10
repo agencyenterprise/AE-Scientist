@@ -14,11 +14,6 @@ class Status(StrEnum):
     failed = "failed"
 
 
-class ArtifactExistsRequest(BaseModel):
-    artifact_type: Annotated[str, Field(title="Artifact Type")]
-    filename: Annotated[str, Field(title="Filename")]
-
-
 class ArtifactExistsResponse(BaseModel):
     exists: Annotated[bool, Field(title="Exists")]
     s3_key: Annotated[str, Field(title="S3 Key")]
@@ -46,10 +41,12 @@ class ArtifactType(StrEnum):
     workspace_archive = "workspace_archive"
     llm_review = "llm_review"
     run_log = "run_log"
+    run_config = "run_config"
+    commit_hash = "commit_hash"
 
 
 class ArtifactUploadedEvent(BaseModel):
-    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    artifact_type: ArtifactType
     filename: Annotated[str, Field(title="Filename")]
     file_size: Annotated[int, Field(title="File Size")]
     file_type: Annotated[str, Field(title="File Type")]
@@ -840,7 +837,7 @@ class MultipartUploadCompleteResponse(BaseModel):
 
 
 class MultipartUploadInitRequest(BaseModel):
-    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    artifact_type: ArtifactType
     filename: Annotated[str, Field(title="Filename")]
     content_type: Annotated[str, Field(title="Content Type")]
     file_size: Annotated[int, Field(title="File Size")]
@@ -971,7 +968,7 @@ class PendingReviewsResponse(BaseModel):
 
 
 class PresignedUploadUrlRequest(BaseModel):
-    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    artifact_type: ArtifactType
     filename: Annotated[str, Field(title="Filename")]
     content_type: Annotated[str, Field(title="Content Type")]
     file_size: Annotated[int, Field(title="File Size")]
@@ -1902,6 +1899,11 @@ class ActiveNode(BaseModel):
     ] = "main_execution"
 
 
+class ArtifactExistsRequest(BaseModel):
+    artifact_type: ArtifactType
+    filename: Annotated[str, Field(title="Filename")]
+
+
 class AuthStatus(BaseModel):
     authenticated: Annotated[
         bool,
@@ -2148,7 +2150,7 @@ class MultipartUploadCompleteRequest(BaseModel):
     upload_id: Annotated[str, Field(title="Upload Id")]
     s3_key: Annotated[str, Field(title="S3 Key")]
     parts: Annotated[list[MultipartUploadPart], Field(title="Parts")]
-    artifact_type: Annotated[str, Field(title="Artifact Type")]
+    artifact_type: ArtifactType
     filename: Annotated[str, Field(title="Filename")]
     file_size: Annotated[int, Field(title="File Size")]
     content_type: Annotated[str, Field(title="Content Type")]

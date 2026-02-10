@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.artifact_types import ArtifactType
 from app.models.timeline_events import ExperimentalStageId, StageId
 
 # Import narrator event types - these are the source of truth for event schemas
@@ -92,7 +93,7 @@ class PaperGenerationProgressPayload(BaseModel):
 
 
 class ArtifactUploadedEvent(BaseModel):
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     file_size: int
     file_type: str
@@ -222,7 +223,7 @@ class FigureReviewsPayload(BaseModel):
 
 
 class PresignedUploadUrlRequest(BaseModel):
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     content_type: str
     file_size: int
@@ -238,7 +239,7 @@ class PresignedUploadUrlResponse(BaseModel):
 class MultipartUploadInitRequest(BaseModel):
     """Request to initiate a multipart upload."""
 
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     content_type: str
     file_size: int
@@ -279,7 +280,7 @@ class MultipartUploadCompleteRequest(BaseModel):
     upload_id: str
     s3_key: str
     parts: List[MultipartUploadPart]
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     file_size: int
     content_type: str
@@ -345,7 +346,7 @@ class DatasetUploadUrlResponse(BaseModel):
 
 
 class ArtifactExistsRequest(BaseModel):
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
 
 

@@ -2,7 +2,7 @@ export { AutoEvaluationCard } from "./AutoEvaluationCard";
 export { FinalPdfBanner } from "./final-pdf-banner";
 export { InitializationStatusBanner } from "./initialization-status-banner";
 export { PaperGenerationProgress } from "./paper-generation-progress";
-export { ResearchArtifactsList, ARTIFACT_TYPES } from "./research-artifacts-list";
+export { ResearchArtifactsList } from "./research-artifacts-list";
 export { ResearchPipelineStages } from "./research-pipeline-stages";
 export { ResearchRunDetailsGrid } from "./research-run-details-grid";
 export { ResearchRunError } from "./research-run-error";

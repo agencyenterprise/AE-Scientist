@@ -1954,8 +1954,7 @@ export interface components {
         };
         /** ArtifactExistsRequest */
         ArtifactExistsRequest: {
-            /** Artifact Type */
-            artifact_type: string;
+            artifact_type: components["schemas"]["ArtifactType"];
             /** Filename */
             filename: string;
         };
@@ -1999,11 +1998,10 @@ export interface components {
          * @description Supported artifact types for research pipeline runs.
          * @enum {string}
          */
-        ArtifactType: "plot" | "paper_pdf" | "latex_archive" | "workspace_archive" | "llm_review" | "run_log";
+        ArtifactType: "plot" | "paper_pdf" | "latex_archive" | "workspace_archive" | "llm_review" | "run_log" | "run_config" | "commit_hash";
         /** ArtifactUploadedEvent */
         ArtifactUploadedEvent: {
-            /** Artifact Type */
-            artifact_type: string;
+            artifact_type: components["schemas"]["ArtifactType"];
             /** Filename */
             filename: string;
             /** File Size */
@@ -3597,8 +3595,7 @@ export interface components {
             s3_key: string;
             /** Parts */
             parts: components["schemas"]["MultipartUploadPart"][];
-            /** Artifact Type */
-            artifact_type: string;
+            artifact_type: components["schemas"]["ArtifactType"];
             /** Filename */
             filename: string;
             /** File Size */
@@ -3621,8 +3618,7 @@ export interface components {
          * @description Request to initiate a multipart upload.
          */
         MultipartUploadInitRequest: {
-            /** Artifact Type */
-            artifact_type: string;
+            artifact_type: components["schemas"]["ArtifactType"];
             /** Filename */
             filename: string;
             /** Content Type */
@@ -4238,8 +4234,7 @@ export interface components {
         };
         /** PresignedUploadUrlRequest */
         PresignedUploadUrlRequest: {
-            /** Artifact Type */
-            artifact_type: string;
+            artifact_type: components["schemas"]["ArtifactType"];
             /** Filename */
             filename: string;
             /** Content Type */

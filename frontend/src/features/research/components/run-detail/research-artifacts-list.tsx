@@ -12,55 +12,55 @@ import {
   Package,
   ScrollText,
 } from "lucide-react";
-import type { ArtifactMetadata, ArtifactType } from "@/types/research";
+import { ARTIFACT_TYPE, type ArtifactMetadata, type ArtifactType } from "@/types/research";
 import { formatRelativeTime } from "@/shared/lib/date-utils";
 import { formatFileSize } from "@/shared/lib/fileUtils";
 import { useArtifactDownload } from "@/features/research/hooks/useArtifactDownload";
-
-// Artifact type constants (must match generated ArtifactType)
-export const ARTIFACT_TYPES = {
-  PLOT: "plot",
-  PAPER_PDF: "paper_pdf",
-  LATEX_ARCHIVE: "latex_archive",
-  WORKSPACE_ARCHIVE: "workspace_archive",
-  LLM_REVIEW: "llm_review",
-  RUN_LOG: "run_log",
-} as const satisfies Record<string, ArtifactType>;
 
 // Artifact type configuration with labels and icons
 const ARTIFACT_TYPE_CONFIG: Record<
   ArtifactType,
   { label: string; icon: ReactNode; iconColor: string }
 > = {
-  [ARTIFACT_TYPES.PAPER_PDF]: {
+  [ARTIFACT_TYPE.PAPER_PDF]: {
     label: "Research Paper",
     icon: <FileText className="h-5 w-5" />,
     iconColor: "text-amber-400",
   },
-  [ARTIFACT_TYPES.LATEX_ARCHIVE]: {
+  [ARTIFACT_TYPE.LATEX_ARCHIVE]: {
     label: "LaTeX Source",
     icon: <FileCode className="h-5 w-5" />,
     iconColor: "text-blue-400",
   },
-  [ARTIFACT_TYPES.WORKSPACE_ARCHIVE]: {
+  [ARTIFACT_TYPE.WORKSPACE_ARCHIVE]: {
     label: "Workspace Archive",
     icon: <FolderArchive className="h-5 w-5" />,
     iconColor: "text-purple-400",
   },
-  [ARTIFACT_TYPES.LLM_REVIEW]: {
+  [ARTIFACT_TYPE.LLM_REVIEW]: {
     label: "AI Review",
     icon: <MessageSquareText className="h-5 w-5" />,
     iconColor: "text-green-400",
   },
-  [ARTIFACT_TYPES.RUN_LOG]: {
+  [ARTIFACT_TYPE.RUN_LOG]: {
     label: "Run Log",
     icon: <ScrollText className="h-5 w-5" />,
     iconColor: "text-slate-400",
   },
-  [ARTIFACT_TYPES.PLOT]: {
+  [ARTIFACT_TYPE.PLOT]: {
     label: "Plot",
     icon: <FileText className="h-5 w-5" />,
     iconColor: "text-slate-400",
+  },
+  [ARTIFACT_TYPE.RUN_CONFIG]: {
+    label: "Run Config",
+    icon: <FileCode className="h-5 w-5" />,
+    iconColor: "text-cyan-400",
+  },
+  [ARTIFACT_TYPE.COMMIT_HASH]: {
+    label: "Commit Hash",
+    icon: <FileText className="h-5 w-5" />,
+    iconColor: "text-gray-400",
   },
 };
 
@@ -257,8 +257,8 @@ export function ResearchArtifactsList({
   });
 
   // Separate PDFs from other artifacts (plot artifacts are already filtered out by backend)
-  const pdfArtifacts = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF);
-  const otherArtifacts = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF);
+  const pdfArtifacts = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPE.PAPER_PDF);
+  const otherArtifacts = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPE.PAPER_PDF);
 
   if (artifacts.length === 0) {
     return null;

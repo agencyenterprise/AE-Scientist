@@ -4753,8 +4753,7 @@
       "ArtifactExistsRequest": {
         "properties": {
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type"
+            "$ref": "#/components/schemas/ArtifactType"
           },
           "filename": {
             "type": "string",
@@ -4838,7 +4837,9 @@
           "latex_archive",
           "workspace_archive",
           "llm_review",
-          "run_log"
+          "run_log",
+          "run_config",
+          "commit_hash"
         ],
         "title": "ArtifactType",
         "description": "Supported artifact types for research pipeline runs."
@@ -4846,8 +4847,7 @@
       "ArtifactUploadedEvent": {
         "properties": {
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type"
+            "$ref": "#/components/schemas/ArtifactType"
           },
           "filename": {
             "type": "string",
@@ -7819,8 +7819,7 @@
             "title": "Parts"
           },
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type"
+            "$ref": "#/components/schemas/ArtifactType"
           },
           "filename": {
             "type": "string",
@@ -7870,8 +7869,7 @@
       "MultipartUploadInitRequest": {
         "properties": {
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type"
+            "$ref": "#/components/schemas/ArtifactType"
           },
           "filename": {
             "type": "string",
@@ -9031,8 +9029,7 @@
       "PresignedUploadUrlRequest": {
         "properties": {
           "artifact_type": {
-            "type": "string",
-            "title": "Artifact Type"
+            "$ref": "#/components/schemas/ArtifactType"
           },
           "filename": {
             "type": "string",

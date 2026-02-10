@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 # fmt: off
 # isort: off
 from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-not-found]
+    ArtifactType,
     ExperimentalStageId,
     TreeVizStoredEvent,
 )
@@ -58,7 +59,7 @@ class ArtifactsMixin:
             webhook_client=self._webhook_client,
         )
         spec = ArtifactSpec(
-            artifact_type="workspace_archive",
+            artifact_type=ArtifactType.workspace_archive,
             path=artifact_path,
             packaging="file",
             archive_name=None,

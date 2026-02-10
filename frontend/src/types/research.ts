@@ -28,6 +28,22 @@ export type PaperGenerationEventApi = components["schemas"]["ResearchRunPaperGen
 // Artifacts and selections
 export type ArtifactMetadataApi = components["schemas"]["ResearchRunArtifactMetadata"];
 export type ArtifactType = components["schemas"]["ArtifactType"];
+
+/**
+ * Type-safe artifact type constants validated against the generated ArtifactType.
+ * Use these instead of hardcoded strings to ensure type safety.
+ */
+export const ARTIFACT_TYPE = {
+  PLOT: "plot",
+  PAPER_PDF: "paper_pdf",
+  LATEX_ARCHIVE: "latex_archive",
+  WORKSPACE_ARCHIVE: "workspace_archive",
+  LLM_REVIEW: "llm_review",
+  RUN_LOG: "run_log",
+  RUN_CONFIG: "run_config",
+  COMMIT_HASH: "commit_hash",
+} as const satisfies Record<string, ArtifactType>;
+
 export type StageSkipWindowApi = components["schemas"]["ResearchRunStageSkipWindow"];
 export type StageSkipWindowUpdate = components["schemas"]["ResearchRunStageSkipWindowUpdate"];
 

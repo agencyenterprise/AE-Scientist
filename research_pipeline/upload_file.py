@@ -1,12 +1,21 @@
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+from ai_scientist.api_types import ArtifactType
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.telemetry.event_persistence import WebhookClient
+
+# Configure logging to output to stderr so errors are visible in upload logs
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
 
 PROJECT_DIR = Path(__file__).resolve().parent
 load_dotenv(PROJECT_DIR / ".env")
@@ -19,7 +28,7 @@ def _require_env(name: str) -> str:
     return value
 
 
-def upload_file(*, file_path: Path, artifact_type: str) -> None:
+def upload_file(*, file_path: Path, artifact_type: ArtifactType) -> None:
     if not file_path.exists():
         print(f"[file] File {file_path} not found; skipping upload.")
         return
@@ -70,7 +79,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     try:
-        upload_file(file_path=args.file_path, artifact_type=args.artifact_type)
+        upload_file(file_path=args.file_path, artifact_type=ArtifactType(args.artifact_type))
     except SystemExit as exc:
         print(f"[file] {exc}")
         sys.exit(exc.code if isinstance(exc.code, int) else 1)

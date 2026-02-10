@@ -10,7 +10,6 @@ import {
   ArtifactsTab,
   EvaluationTab,
   RunCostTab,
-  ARTIFACT_TYPES,
 } from "@/features/research/components/run-detail";
 import { useResearchRunDetails } from "@/features/research/hooks/useResearchRunDetails";
 import { useReviewData } from "@/features/research/hooks/useReviewData";
@@ -19,6 +18,7 @@ import { PageCard } from "@/shared/components/PageCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { api } from "@/shared/lib/api-client-typed";
 import type { ResearchRunCostResponse } from "@/types";
+import { ARTIFACT_TYPE } from "@/types/research";
 import type { ResearchRunListItemApi } from "@/types/research";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -133,8 +133,8 @@ export default function ResearchRunDetailPage() {
   // Must be before early returns to comply with Rules of Hooks
   const displayedArtifactCount = useMemo(() => {
     const artifacts = details?.artifacts ?? [];
-    const pdfCount = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPES.PAPER_PDF).length;
-    const otherCount = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPES.PAPER_PDF).length;
+    const pdfCount = artifacts.filter(a => a.artifact_type === ARTIFACT_TYPE.PAPER_PDF).length;
+    const otherCount = artifacts.filter(a => a.artifact_type !== ARTIFACT_TYPE.PAPER_PDF).length;
     // PDFs are grouped, so count them as 1 if any exist
     return otherCount + (pdfCount > 0 ? 1 : 0);
   }, [details?.artifacts]);

@@ -6,6 +6,7 @@ from typing import Sequence
 
 from dotenv import load_dotenv
 
+from ai_scientist.api_types import ArtifactType
 from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.telemetry.event_persistence import WebhookClient
 
@@ -34,7 +35,7 @@ def _require_env(name: str) -> str:
 def upload_folder(
     *,
     folder_path: Path,
-    artifact_type: str,
+    artifact_type: ArtifactType,
     archive_name: str,
     exclude: Sequence[str],
 ) -> None:
@@ -105,7 +106,7 @@ def main() -> None:
     try:
         upload_folder(
             folder_path=args.folder_path,
-            artifact_type=args.artifact_type,
+            artifact_type=ArtifactType(args.artifact_type),
             archive_name=args.archive_name,
             exclude=args.exclude,
         )

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.artifact_types import ArtifactType
 from app.models.conversations import ResearchRunSummary
 from app.models.timeline_events import ExperimentalStageId, StageId
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
@@ -31,17 +32,6 @@ class RunType(str, Enum):
 
     CODEX_EXECUTION = "codex_execution"
     RUNFILE_EXECUTION = "runfile_execution"
-
-
-class ArtifactType(str, Enum):
-    """Supported artifact types for research pipeline runs."""
-
-    PLOT = "plot"
-    PAPER_PDF = "paper_pdf"
-    LATEX_ARCHIVE = "latex_archive"
-    WORKSPACE_ARCHIVE = "workspace_archive"
-    LLM_REVIEW = "llm_review"
-    RUN_LOG = "run_log"
 
 
 class ExecutionType(str, Enum):

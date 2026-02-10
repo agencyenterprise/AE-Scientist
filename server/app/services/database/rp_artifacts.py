@@ -7,13 +7,15 @@ from typing import List, NamedTuple, Optional
 
 from psycopg.rows import dict_row
 
+from app.models.artifact_types import ArtifactType
+
 from .base import ConnectionProvider
 
 
 class ResearchPipelineArtifact(NamedTuple):
     id: int
     run_id: str
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     file_size: int
     file_type: str
@@ -29,7 +31,7 @@ class ResearchPipelineArtifactsMixin(ConnectionProvider):
         self,
         *,
         run_id: str,
-        artifact_type: str,
+        artifact_type: ArtifactType,
         filename: str,
         file_size: int,
         file_type: str,
@@ -85,7 +87,10 @@ class ResearchPipelineArtifactsMixin(ConnectionProvider):
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(query, (run_id,))
                 rows = await cursor.fetchall() or []
-        return [ResearchPipelineArtifact(**row) for row in rows]
+        return [
+            ResearchPipelineArtifact(**{**row, "artifact_type": ArtifactType(row["artifact_type"])})
+            for row in rows
+        ]
 
     async def get_run_artifact(self, artifact_id: int) -> Optional[ResearchPipelineArtifact]:
         query = """
@@ -100,4 +105,6 @@ class ResearchPipelineArtifactsMixin(ConnectionProvider):
                 row = await cursor.fetchone()
         if not row:
             return None
-        return ResearchPipelineArtifact(**row)
+        return ResearchPipelineArtifact(
+            **{**row, "artifact_type": ArtifactType(row["artifact_type"])}
+        )

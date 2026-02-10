@@ -26,6 +26,7 @@ from tenacity import (
 from ai_scientist.api_types import (
     ArtifactExistsRequest,
     ArtifactExistsResponse,
+    ArtifactType,
     ArtifactUploadedEvent,
     MultipartUploadCompleteRequest,
     MultipartUploadInitRequest,
@@ -50,7 +51,7 @@ MULTIPART_PART_SIZE_BYTES = 100 * 1024 * 1024
 class ArtifactUploadRequest:
     """Concrete upload payload."""
 
-    artifact_type: str
+    artifact_type: ArtifactType
     filename: str
     local_path: Path
     source_path: Path
@@ -60,7 +61,7 @@ class ArtifactUploadRequest:
 class ArtifactSpec:
     """Declarative description of an artifact to publish."""
 
-    artifact_type: str
+    artifact_type: ArtifactType
     path: Path
     packaging: Literal["file", "zip"]
     archive_name: str | None
@@ -232,7 +233,7 @@ class PresignedUrlUploader:
     def _init_multipart_upload(
         self,
         *,
-        artifact_type: str,
+        artifact_type: ArtifactType,
         filename: str,
         content_type: str,
         file_size: int,
@@ -306,7 +307,7 @@ class PresignedUrlUploader:
         upload_id: str,
         s3_key: str,
         parts: list[MultipartUploadPart],
-        artifact_type: str,
+        artifact_type: ArtifactType,
         filename: str,
         file_size: int,
         content_type: str,
@@ -357,7 +358,7 @@ class PresignedUrlUploader:
     def check_artifact_exists(
         self,
         *,
-        artifact_type: str,
+        artifact_type: ArtifactType,
         filename: str,
     ) -> ArtifactExistsResponse:
         """Check if an artifact already exists in S3.
@@ -389,7 +390,7 @@ class PresignedUrlUploader:
     def _request_presigned_url(
         self,
         *,
-        artifact_type: str,
+        artifact_type: ArtifactType,
         filename: str,
         content_type: str,
         file_size: int,
