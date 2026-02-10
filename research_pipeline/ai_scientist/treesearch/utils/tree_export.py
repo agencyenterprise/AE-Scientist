@@ -112,7 +112,7 @@ def get_completed_stages(log_dir: Path) -> list[str]:
     return completed_stages
 
 
-def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
+def cfg_to_tree_struct(jou: Journal) -> dict:
     edges = list(get_edges(jou))
     logger.debug("Edges: %r", edges)
     if not jou.nodes:
@@ -199,15 +199,6 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         raise
 
     try:
-        tmp["term_out"] = [
-            textwrap.fill(str(n._term_out) if n._term_out is not None else "", width=80)
-            for n in jou.nodes
-        ]
-    except Exception as e:
-        logger.error(f"Error setting term_out: {e}")
-        raise
-
-    try:
         tmp["analysis"] = [str(n.analysis) if n.analysis is not None else "" for n in jou.nodes]
     except Exception as e:
         logger.error(f"Error setting analysis: {e}")
@@ -229,12 +220,6 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         tmp["exc_stack"] = [n.exc_stack for n in jou.nodes]
     except Exception as e:
         logger.error(f"Error setting exc_stack: {e}")
-        raise
-
-    try:
-        tmp["exp_name"] = exp_name
-    except Exception as e:
-        logger.error(f"Error setting exp_name: {e}")
         raise
 
     try:
@@ -342,55 +327,6 @@ def cfg_to_tree_struct(exp_name: str, jou: Journal, out_path: Path) -> dict:
         logger.error(f"Error setting is_seed_agg_node: {e}")
         raise
 
-    try:
-        tmp["parse_metrics_plan"] = [
-            textwrap.fill(
-                str(n.parse_metrics_plan) if n.parse_metrics_plan is not None else "",
-                width=80,
-            )
-            for n in jou.nodes
-        ]
-    except Exception as e:
-        logger.error(f"Error setting parse_metrics_plan: {e}")
-        raise
-
-    try:
-        tmp["parse_metrics_code"] = [n.parse_metrics_code for n in jou.nodes]
-    except Exception as e:
-        logger.error(f"Error setting parse_metrics_code: {e}")
-        raise
-
-    try:
-        tmp["parse_term_out"] = [
-            textwrap.fill(str(n.parse_term_out) if n.parse_term_out is not None else "", width=80)
-            for n in jou.nodes
-        ]
-    except Exception as e:
-        logger.error(f"Error setting parse_term_out: {e}")
-        raise
-
-    try:
-        tmp["parse_exc_type"] = [n.parse_exc_type for n in jou.nodes]
-    except Exception as e:
-        logger.error(f"Error setting parse_exc_type: {e}")
-        raise
-
-    try:
-        tmp["parse_exc_info"] = [n.parse_exc_info for n in jou.nodes]
-    except Exception as e:
-        logger.error(f"Error setting parse_exc_info: {e}")
-        raise
-
-    try:
-        tmp["parse_exc_stack"] = [n.parse_exc_stack for n in jou.nodes]
-    except Exception as e:
-        logger.error(f"Error setting parse_exc_stack: {e}")
-        raise
-
-    # Add the list of completed stages by checking directories
-    log_dir = out_path.parent.parent
-    tmp["completed_stages"] = get_completed_stages(log_dir)
-
     return tmp
 
 
@@ -418,7 +354,7 @@ def generate(
 ) -> None:
     logger.debug("Checking Journal")
     try:
-        tree_struct = cfg_to_tree_struct(exp_name=exp_name, jou=jou, out_path=out_path)
+        tree_struct = cfg_to_tree_struct(jou=jou)
     except Exception as e:
         logger.exception(f"Error in cfg_to_tree_struct: {e}")
         raise
