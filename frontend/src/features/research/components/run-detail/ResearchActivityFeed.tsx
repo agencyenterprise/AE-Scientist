@@ -1830,7 +1830,7 @@ export function ResearchActivityFeed({
     <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Research Activity</h3>
-        {isConnected ? (
+        {isConnected && !isRunFinished ? (
           <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1.5 sm:px-4 sm:py-2 self-start sm:self-auto">
             <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />

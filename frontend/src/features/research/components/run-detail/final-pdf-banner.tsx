@@ -9,13 +9,14 @@ interface FinalPdfBannerProps {
   artifacts: ArtifactMetadata[];
   conversationId: number;
   runId: string;
+  status: string;
 }
 
 /**
  * Prominent banner for downloading final research results.
  * Shows final PDF paper and workspace archive when available.
  */
-export function FinalPdfBanner({ artifacts, conversationId, runId }: FinalPdfBannerProps) {
+export function FinalPdfBanner({ artifacts, conversationId, runId, status }: FinalPdfBannerProps) {
   const { downloadArtifact, isDownloading, downloadingArtifactId, error } = useArtifactDownload({
     conversationId,
     runId,
@@ -46,6 +47,11 @@ export function FinalPdfBanner({ artifacts, conversationId, runId }: FinalPdfBan
 
   // Find the workspace archive artifact
   const workspaceArchive = artifacts.find(a => a.artifact_type === ARTIFACT_TYPE.WORKSPACE_ARCHIVE);
+
+  // Don't render for failed/cancelled runs - artifacts are still available but shouldn't show success banner
+  if (status === "failed" || status === "cancelled") {
+    return null;
+  }
 
   // Don't render if no final PDF and no workspace archive
   if (!finalPdf && !workspaceArchive) {

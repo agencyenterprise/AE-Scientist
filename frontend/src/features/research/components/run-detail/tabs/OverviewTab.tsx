@@ -49,7 +49,7 @@ export function OverviewTab({
   skipPendingStage,
   onSkipStage,
 }: OverviewTabProps) {
-  const isCompleted = run.status === "completed" || run.status === "failed";
+  const isSuccessfullyCompleted = run.status === "completed";
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
@@ -61,10 +61,15 @@ export function OverviewTab({
       {run.error_message && <ResearchRunError message={run.error_message} />}
 
       {conversationId !== null && (
-        <FinalPdfBanner artifacts={artifacts} conversationId={conversationId} runId={runId} />
+        <FinalPdfBanner
+          artifacts={artifacts}
+          conversationId={conversationId}
+          runId={runId}
+          status={run.status}
+        />
       )}
 
-      {isCompleted && (
+      {isSuccessfullyCompleted && (
         <EvaluationSummary
           review={review}
           loading={reviewLoading}

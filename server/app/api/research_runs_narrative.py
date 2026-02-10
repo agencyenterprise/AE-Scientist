@@ -128,6 +128,10 @@ async def narrative_stream(
         queue = register_narrator_queue(run_id)
 
         try:
+            # Always send an immediate event to ensure Firefox resolves the fetch promise
+            # (Firefox may wait for body data before resolving, unlike Chrome)
+            yield _format_sse_event("connected", json.dumps({"run_id": run_id}))
+
             # Send initial state snapshot (without timeline - we'll send events separately)
             if initial_state:
                 # Extract timeline events before sending state
