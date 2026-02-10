@@ -12,7 +12,6 @@ Pattern:
 - Type-safe: handlers receive typed Pydantic models, not dicts
 """
 
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -81,7 +80,7 @@ def handle_stage_progress_event(
         stage_display_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
         events.append(
             StageStartedEvent(
-                id=str(uuid.uuid4()),
+                id=f"stage_started_{event.stage}",
                 timestamp=now + timedelta(milliseconds=offset_ms),
                 stage=event.stage,
                 node_id=None,
@@ -125,7 +124,7 @@ def handle_stage_progress_event(
 
     events.append(
         ProgressUpdateEvent(
-            id=str(uuid.uuid4()),
+            id=f"progress_{event.stage}_{event.iteration}",
             timestamp=now + timedelta(milliseconds=offset_ms),
             stage=event.stage,
             node_id=None,
@@ -171,7 +170,7 @@ def handle_stage_completed_event(
 
     return [
         StageCompletedEvent(
-            id=str(uuid.uuid4()),
+            id=f"stage_completed_{event.stage}",
             timestamp=now,
             stage=event.stage,
             node_id=None,
@@ -204,7 +203,7 @@ def handle_stage_summary_event(
 
     return [
         StageTransitionEvent(
-            id=str(uuid.uuid4()),
+            id=f"stage_transition_{stage}",
             timestamp=now,
             stage=stage,
             node_id=None,
@@ -240,7 +239,7 @@ def handle_running_code_event(
         stage_display_name = STAGE_NAMES.get(event.stage, event.stage) or event.stage
         events.append(
             StageStartedEvent(
-                id=str(uuid.uuid4()),
+                id=f"stage_started_{event.stage}",
                 timestamp=started_at + timedelta(milliseconds=offset_ms),
                 stage=event.stage,
                 node_id=None,
@@ -253,7 +252,7 @@ def handle_running_code_event(
     # Then emit node execution started event
     events.append(
         NodeExecutionStartedEvent(
-            id=str(uuid.uuid4()),
+            id=f"exec_started_{event.execution_id}_{event.run_type.value}",
             timestamp=started_at + timedelta(milliseconds=offset_ms),
             stage=event.stage,
             node_id=event.execution_id,
@@ -285,7 +284,7 @@ def handle_run_completed_event(
 
     return [
         NodeExecutionCompletedEvent(
-            id=str(uuid.uuid4()),
+            id=f"exec_completed_{event.execution_id}_{event.run_type.value}",
             timestamp=completed_at,
             stage=event.stage,
             node_id=event.execution_id,
@@ -320,7 +319,7 @@ def handle_paper_generation_progress_event(
     if state and not is_stage_started(state, StageId.paper_generation):
         events.append(
             StageStartedEvent(
-                id=str(uuid.uuid4()),
+                id=f"stage_started_{StageId.paper_generation}",
                 timestamp=now + timedelta(milliseconds=offset_ms),
                 stage=StageId.paper_generation,
                 node_id=None,
@@ -336,9 +335,11 @@ def handle_paper_generation_progress_event(
         headline += f" - {event.substep}"
 
     # Add the paper generation step event
+    # Use step + substep as deterministic ID to prevent duplicates
+    substep_key = (event.substep or "main").replace(" ", "_")
     events.append(
         PaperGenerationStepEvent(
-            id=str(uuid.uuid4()),
+            id=f"paper_{event.step}_{substep_key}",
             timestamp=now + timedelta(milliseconds=offset_ms),
             stage=StageId.paper_generation,
             node_id=None,
@@ -357,7 +358,7 @@ def handle_paper_generation_progress_event(
     if event.progress >= 1.0:
         events.append(
             StageCompletedEvent(
-                id=str(uuid.uuid4()),
+                id=f"stage_completed_{StageId.paper_generation}",
                 timestamp=now + timedelta(milliseconds=offset_ms),
                 stage=StageId.paper_generation,
                 node_id=None,
@@ -388,7 +389,7 @@ def handle_run_started_event(
 
     return [
         RunStartedEvent(
-            id=str(uuid.uuid4()),
+            id="run_started",
             timestamp=timestamp,
             stage=StageId.initial_implementation,  # Default to first stage
             node_id=None,
@@ -451,7 +452,7 @@ def handle_run_finished_event(
     )
     return [
         RunFinishedEvent(
-            id=str(uuid.uuid4()),
+            id="run_finished",
             timestamp=datetime.now(timezone.utc),
             stage=current_stage,
             node_id=None,
