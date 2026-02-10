@@ -103,7 +103,7 @@ export function ResearchRunHeader({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push(`/conversations/${conversationId}`)}
+              onClick={() => window.open(`/conversations/${conversationId}`, "_blank")}
             >
               <ExternalLink className="h-4 w-4" />
               <span className="hidden sm:inline">View Idea</span>

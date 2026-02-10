@@ -165,20 +165,6 @@ export function TreeVizCard({ treeViz, conversationId, runId, artifacts }: Props
               This visualization shows how the AI explores different approaches during research.
               Each node represents an experiment, and branches show the exploration path.
             </p>
-            <ul className="text-xs text-slate-300 space-y-1">
-              <li className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span>Best performing approach (highlighted)</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-                <span>Successful experiments</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-slate-500" />
-                <span>Explored alternatives</span>
-              </li>
-            </ul>
           </TooltipContent>
         </Tooltip>
       </div>

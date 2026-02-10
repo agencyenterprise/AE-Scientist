@@ -1,6 +1,7 @@
 import type { Idea, IdeaVersion } from "@/types";
 import React from "react";
 import { isIdeaGenerating } from "../utils/versionUtils";
+import { useConversationContext } from "@/features/conversation/context/ConversationContext";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -19,7 +20,20 @@ export function ProjectDraftFooter({
   nextVersion,
   onCreateProject,
 }: ProjectDraftFooterProps): React.JSX.Element {
+  const { isStreaming, isPollingEmptyMessage } = useConversationContext();
   const isGenerating = isIdeaGenerating(projectDraft);
+
+  // Check if user is viewing a historical version (not the current active version)
+  const isViewingHistoricalVersion = Boolean(
+    showDiffs &&
+      nextVersion &&
+      projectDraft.active_version &&
+      nextVersion.version_number !== projectDraft.active_version.version_number
+  );
+
+  // Disable when: generating idea, streaming response, polling for response (after refresh), or viewing old version
+  const isAwaitingResponse = isStreaming || isPollingEmptyMessage;
+  const isDisabled = isGenerating || isAwaitingResponse || isViewingHistoricalVersion;
 
   return (
     <>
@@ -52,9 +66,14 @@ export function ProjectDraftFooter({
       <div className="flex-shrink-0 py-3 border-border">
         <button
           onClick={onCreateProject}
-          disabled={isGenerating}
+          disabled={isDisabled}
+          title={
+            isViewingHistoricalVersion
+              ? "Navigate to the latest version or revert to this version before launching research"
+              : undefined
+          }
           className={cn("btn-primary-gradient w-full text-xs py-3 px-2", {
-            "opacity-50 cursor-not-allowed": isGenerating,
+            "opacity-50 cursor-not-allowed": isDisabled,
           })}
         >
           <span>Launch Research</span>

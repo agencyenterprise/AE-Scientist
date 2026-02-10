@@ -31,6 +31,8 @@ export interface ConversationContextValue {
   setEffectiveCapabilities: (caps: EffectiveCapabilities) => void;
   isStreaming: boolean;
   setIsStreaming: (streaming: boolean) => void;
+  isPollingEmptyMessage: boolean;
+  setIsPollingEmptyMessage: (polling: boolean) => void;
   isReadOnly: boolean;
   setIsReadOnly: (readOnly: boolean) => void;
 
@@ -69,6 +71,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   // Dynamic state that children can set
   const [effectiveCapabilities, setEffectiveCapabilities] = useState<EffectiveCapabilities>({});
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isPollingEmptyMessage, setIsPollingEmptyMessage] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [onOpenPromptModal, setOnOpenPromptModal] = useState<(() => void) | undefined>(undefined);
 
@@ -91,6 +94,8 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       setEffectiveCapabilities,
       isStreaming,
       setIsStreaming,
+      isPollingEmptyMessage,
+      setIsPollingEmptyMessage,
       isReadOnly,
       setIsReadOnly,
       onOpenPromptModal,
@@ -107,6 +112,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       handleModelCapabilities,
       effectiveCapabilities,
       isStreaming,
+      isPollingEmptyMessage,
       isReadOnly,
       onOpenPromptModal,
       setOnOpenPromptModalWrapper,
