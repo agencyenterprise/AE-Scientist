@@ -305,7 +305,6 @@ def save_run(cfg: Config, journal: Journal, stage_name: str) -> None:
     # create the tree + code visualization
     try:
         tree_export.generate(
-            exp_name=cfg.exp_name,
             jou=journal,
             out_path=save_dir / "tree_plot.html",
             stage_name=stage_name,

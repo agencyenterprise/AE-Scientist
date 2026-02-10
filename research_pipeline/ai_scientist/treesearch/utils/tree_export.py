@@ -346,7 +346,6 @@ def generate_html(tree_graph_str: str) -> str:
 
 def generate(
     *,
-    exp_name: str,
     jou: Journal,
     out_path: Path,
     stage_name: str,
