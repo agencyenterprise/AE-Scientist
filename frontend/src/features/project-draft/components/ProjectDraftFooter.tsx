@@ -20,7 +20,7 @@ export function ProjectDraftFooter({
   nextVersion,
   onCreateProject,
 }: ProjectDraftFooterProps): React.JSX.Element {
-  const { isStreaming } = useConversationContext();
+  const { isStreaming, isPollingEmptyMessage } = useConversationContext();
   const isGenerating = isIdeaGenerating(projectDraft);
 
   // Check if user is viewing a historical version (not the current active version)
@@ -31,7 +31,9 @@ export function ProjectDraftFooter({
       nextVersion.version_number !== projectDraft.active_version.version_number
   );
 
-  const isDisabled = isGenerating || isStreaming || isViewingHistoricalVersion;
+  // Disable when: generating idea, streaming response, polling for response (after refresh), or viewing old version
+  const isAwaitingResponse = isStreaming || isPollingEmptyMessage;
+  const isDisabled = isGenerating || isAwaitingResponse || isViewingHistoricalVersion;
 
   return (
     <>

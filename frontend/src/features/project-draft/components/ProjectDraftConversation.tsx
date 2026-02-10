@@ -62,6 +62,7 @@ export function ProjectDraftConversation({
     modelCapabilities,
     setEffectiveCapabilities,
     setIsStreaming,
+    setIsPollingEmptyMessage,
     setIsReadOnly,
     setOnOpenPromptModal,
   } = useConversationContext();
@@ -118,10 +119,14 @@ export function ProjectDraftConversation({
     onStreamEnd: onAnswerFinish,
   });
 
-  // Sync isStreaming to context
+  // Sync isStreaming and isPollingEmptyMessage to context
   useEffect(() => {
     setIsStreaming(isStreaming);
   }, [isStreaming, setIsStreaming]);
+
+  useEffect(() => {
+    setIsPollingEmptyMessage(isPollingEmptyMessage);
+  }, [isPollingEmptyMessage, setIsPollingEmptyMessage]);
 
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage.trim() && pendingFiles.length === 0) return;
