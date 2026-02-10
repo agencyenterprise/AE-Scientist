@@ -37,9 +37,9 @@ class TransitionSummaryResponse(BaseModel):
 
     summary: str = Field(
         ...,
-        description="A 2-3 sentence summary of what was achieved and what comes next.",
+        description="A 2-3 sentence summary of what was achieved and what comes next. MUST be under 600 characters.",
         min_length=20,
-        max_length=500,
+        max_length=800,
     )
 
 
