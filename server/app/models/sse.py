@@ -234,7 +234,6 @@ class ResearchRunInitialEventData(BaseModel):
     stage_summaries: List[ResearchRunStageSummary]
     artifacts: List[ResearchRunArtifactMetadata]
     tree_viz: List[TreeVizItem]
-    events: List[ResearchRunEvent]
     paper_generation_progress: List[ResearchRunPaperGenerationProgress]
     stage_skip_windows: List[ResearchRunStageSkipWindow] = Field(
         default_factory=list,

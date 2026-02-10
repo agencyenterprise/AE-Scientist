@@ -4826,8 +4826,6 @@ export interface components {
             artifacts: components["schemas"]["ResearchRunArtifactMetadata"][];
             /** Tree Viz */
             tree_viz: components["schemas"]["TreeVizItem"][];
-            /** Events */
-            events: components["schemas"]["ResearchRunEvent"][];
             /** Paper Generation Progress */
             paper_generation_progress: components["schemas"]["ResearchRunPaperGenerationProgress"][];
             /**
@@ -5264,12 +5262,9 @@ export interface components {
             conversation_id: number;
             /** Idea Title */
             idea_title?: string | null;
-            /** Idea Markdown */
-            idea_markdown?: string | null;
             /** Stages */
             stages?: components["schemas"]["StageGoal"][];
             current_stage?: components["schemas"]["StageId"] | null;
-            current_stage_goal?: components["schemas"]["StageGoal"] | null;
             /** Timeline */
             timeline?: (components["schemas"]["RunStartedEvent"] | components["schemas"]["StageStartedEvent"] | components["schemas"]["NodeResultEvent"] | components["schemas"]["StageCompletedEvent-Output"] | components["schemas"]["StageTransitionEvent"] | components["schemas"]["ProgressUpdateEvent"] | components["schemas"]["PaperGenerationStepEvent"] | components["schemas"]["NodeExecutionStartedEvent"] | components["schemas"]["NodeExecutionCompletedEvent"] | components["schemas"]["RunFinishedEvent"])[];
             /** Current Focus */
@@ -5281,28 +5276,6 @@ export interface components {
              * @default 0
              */
             overall_progress: number;
-            /**
-             * Current Stage Progress
-             * @default 0
-             */
-            current_stage_progress: number;
-            /** Best Node Id */
-            best_node_id?: string | null;
-            best_metrics?: components["schemas"]["MetricCollection"] | null;
-            /** Artifact Ids */
-            artifact_ids?: number[];
-            /** Tree Viz */
-            tree_viz?: Record<string, never>;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
             /** Started Running At */
             started_running_at?: string | null;
             /** Completed At */
@@ -5841,16 +5814,6 @@ export interface components {
              */
             goal?: string | null;
             /**
-             * Approach
-             * @description How we're approaching it
-             */
-            approach?: string | null;
-            /**
-             * Success Criteria
-             * @description How we know we're done
-             */
-            success_criteria?: string | null;
-            /**
              * Status
              * @description Current status
              * @default pending
@@ -5858,48 +5821,10 @@ export interface components {
              */
             status: "pending" | "in_progress" | "completed" | "skipped";
             /**
-             * Started At
-             * @description When stage started
-             */
-            started_at?: string | null;
-            /**
-             * Completed At
-             * @description When stage completed
-             */
-            completed_at?: string | null;
-            /**
-             * Current Iteration
-             * @description Current iteration
-             */
-            current_iteration?: number | null;
-            /**
-             * Max Iterations
-             * @description Maximum iterations
-             */
-            max_iterations?: number | null;
-            /**
              * Progress
              * @description Progress 0.0-1.0
              */
             progress?: number | null;
-            /**
-             * Total Nodes
-             * @description Total nodes in this stage
-             * @default 0
-             */
-            total_nodes: number;
-            /**
-             * Buggy Nodes
-             * @description Number of buggy nodes
-             * @default 0
-             */
-            buggy_nodes: number;
-            /**
-             * Good Nodes
-             * @description Number of good nodes
-             * @default 0
-             */
-            good_nodes: number;
         };
         /**
          * StageId

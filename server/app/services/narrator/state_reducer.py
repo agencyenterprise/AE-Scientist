@@ -5,7 +5,6 @@ Pure functions that compute ResearchRunState from timeline events.
 Pattern: Dispatcher (event_type → handler_fn), handlers return partial changes.
 """
 
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, cast
 
 from app.models.narrator_state import ActiveNode, ResearchRunState, StateUpdateResult
@@ -28,7 +27,6 @@ def handle_stage_started(state: ResearchRunState, event: StageStartedEvent) -> S
     changes: Dict[str, Any] = {
         "current_stage": event.stage,
         "current_focus": event.headline,
-        "updated_at": datetime.now(timezone.utc),
         "timeline": state.timeline + [event],
     }
 
@@ -36,8 +34,6 @@ def handle_stage_started(state: ResearchRunState, event: StageStartedEvent) -> S
     for stage in updated_stages:
         if stage.stage == event.stage:
             stage.status = "in_progress"
-            stage.started_at = event.timestamp
-            changes["current_stage_goal"] = stage
             break
     changes["stages"] = updated_stages
 
@@ -48,12 +44,7 @@ def handle_node_result(state: ResearchRunState, event: NodeResultEvent) -> State
     """Handle node_result event."""
     changes: Dict[str, Any] = {
         "timeline": state.timeline + [event],
-        "updated_at": datetime.now(timezone.utc),
     }
-
-    if event.outcome == "success" and event.metrics and state.best_metrics is None:
-        changes["best_metrics"] = event.metrics
-        changes["best_node_id"] = event.node_id
 
     return StateUpdateResult(changes=changes)
 
@@ -66,7 +57,6 @@ def handle_stage_completed(
     for stage in updated_stages:
         if stage.stage == event.stage:
             stage.status = "completed"
-            stage.completed_at = event.timestamp
             stage.progress = 1.0
             break
 
@@ -78,11 +68,7 @@ def handle_stage_completed(
         "timeline": state.timeline + [event],
         "overall_progress": completed_count / total_count if total_count > 0 else 0.0,
         "current_focus": None,
-        "updated_at": datetime.now(timezone.utc),
     }
-
-    if event.best_metrics:
-        changes["best_metrics"] = event.best_metrics
 
     return StateUpdateResult(changes=changes)
 
@@ -92,28 +78,20 @@ def handle_progress_update(
 ) -> StateUpdateResult:
     """Handle progress_update event."""
     updated_stages = [s.model_copy() for s in state.stages]
-    stage_progress = 0.0
     for stage in updated_stages:
         if stage.stage == event.stage:
-            stage.current_iteration = event.iteration
-            stage.max_iterations = event.max_iterations
             stage.progress = (
                 event.iteration / event.max_iterations if event.max_iterations > 0 else 0.0
             )
-            stage_progress = stage.progress
             break
 
     changes: Dict[str, Any] = {
         "stages": updated_stages,
         "timeline": state.timeline + [event],
-        "current_stage_progress": stage_progress,
-        "updated_at": datetime.now(timezone.utc),
     }
 
     if event.current_focus:
         changes["current_focus"] = event.current_focus
-    if event.current_best:
-        changes["best_metrics"] = event.current_best
 
     return StateUpdateResult(changes=changes)
 
@@ -128,8 +106,6 @@ def handle_node_execution_started(
         status="running",
         started_at=event.timestamp,
         run_type=event.run_type,
-        completed_at=None,  # TODO: fill in
-        exec_time=None,  # TODO: fill in
     )
 
     updated_active_nodes = state.active_nodes + [new_active_node]
@@ -137,7 +113,6 @@ def handle_node_execution_started(
     changes: Dict[str, Any] = {
         "active_nodes": updated_active_nodes,
         "timeline": state.timeline + [event],
-        "updated_at": datetime.now(timezone.utc),
     }
 
     return StateUpdateResult(changes=changes)
@@ -157,7 +132,6 @@ def handle_node_execution_completed(
     changes: Dict[str, Any] = {
         "active_nodes": updated_active_nodes,
         "timeline": state.timeline + [event],
-        "updated_at": datetime.now(timezone.utc),
     }
 
     return StateUpdateResult(changes=changes)
@@ -175,7 +149,6 @@ def handle_paper_generation_step(
         "current_focus": focus_text,
         "overall_progress": 0.8 + (0.2 * event.progress),
         "timeline": state.timeline + [event],
-        "updated_at": datetime.now(timezone.utc),
     }
 
     # update stage progress
@@ -204,7 +177,6 @@ def handle_run_started(state: ResearchRunState, event: RunStartedEvent) -> State
         "timeline": state.timeline + [event],
         "status": "running",
         "started_running_at": event.timestamp,
-        "updated_at": event.timestamp,
     }
 
     # Set GPU type and cost
@@ -230,7 +202,6 @@ def handle_run_finished(state: ResearchRunState, event: RunFinishedEvent) -> Sta
         "timeline": state.timeline + [event],
         "status": event.status,
         "completed_at": event.timestamp,
-        "updated_at": event.timestamp,
     }
 
     # Set error message if failed

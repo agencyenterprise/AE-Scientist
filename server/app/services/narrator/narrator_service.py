@@ -366,7 +366,6 @@ async def _get_or_create_state_locked(
 
         conversation_id = run_idea_data["conversation_id"]
         idea_title = run_idea_data["title"]
-        idea_markdown = run_idea_data["idea_markdown"]
         gpu_type = run_idea_data["gpu_type"]
 
         current_state = create_initial_state(
@@ -374,7 +373,6 @@ async def _get_or_create_state_locked(
             conversation_id=conversation_id,
             gpu_type=gpu_type,
             status="running",
-            idea_markdown=idea_markdown,
             idea_title=idea_title,
         )
 
@@ -394,7 +392,6 @@ async def initialize_run_state(
     *,
     run_id: str,
     conversation_id: int,
-    idea_markdown: Optional[str] = None,
     idea_title: Optional[str] = None,
     gpu_type: str,
     cost_per_hour_cents: Optional[int] = None,
@@ -408,7 +405,6 @@ async def initialize_run_state(
         db: Database manager
         run_id: Research run ID
         conversation_id: Associated conversation ID
-        idea_markdown: Optional research idea content
         idea_title: Optional research idea title
         gpu_type: GPU type used for the run
         cost_per_hour_cents: Optional cost per hour in cents
@@ -422,7 +418,6 @@ async def initialize_run_state(
         conversation_id=conversation_id,
         gpu_type=gpu_type,
         status="pending",
-        idea_markdown=idea_markdown,
         idea_title=idea_title,
     )
 

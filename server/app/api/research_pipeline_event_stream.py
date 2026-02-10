@@ -14,7 +14,6 @@ from app.models import (
     ChildConversationInfo,
     ResearchRunArtifactMetadata,
     ResearchRunCodeExecution,
-    ResearchRunEvent,
     ResearchRunInfo,
     ResearchRunPaperGenerationProgress,
     ResearchRunStageEvent,
@@ -336,7 +335,6 @@ async def _build_initial_stream_payload(
         ResearchRunPaperGenerationProgress.from_db_record(event).model_dump()
         for event in await db.list_paper_generation_events(run_id=run_id)
     ]
-    run_events = [ResearchRunEvent.from_db_record(event).model_dump() for event in raw_run_events]
     latest_code_executions_by_type = await db.list_latest_code_execution_events_by_run_type(
         run_id=run_id
     )
@@ -377,7 +375,6 @@ async def _build_initial_stream_payload(
         "stage_summaries": stage_summaries,
         "artifacts": artifacts,
         "tree_viz": tree_viz,
-        "events": run_events,
         "paper_generation_progress": paper_gen_events,
         "code_executions": code_executions_snapshot,
         "stage_skip_windows": stage_skip_windows,

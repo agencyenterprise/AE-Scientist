@@ -430,26 +430,17 @@ def handle_run_finished_event(
 
     # Extract summary info from state if available
     stages_completed = 0
-    total_nodes_executed = 0
     total_duration_seconds = None
-    best_result = None
     summary = None
 
     if state:
         stages_completed = sum(1 for stage in state.stages if stage.status == "completed")
-        total_nodes_executed = sum(
-            stage.total_nodes for stage in state.stages if stage.total_nodes > 0
-        )
 
         if state.started_running_at and state.completed_at:
             total_duration_seconds = (state.completed_at - state.started_running_at).total_seconds()
 
-        best_result = state.best_metrics
-
         if event.success:
-            summary = (
-                f"Completed {stages_completed} stages with {total_nodes_executed} nodes executed."
-            )
+            summary = f"Completed {stages_completed} stages."
         else:
             summary = (
                 f"Run stopped after {stages_completed} stages. {event.message or 'Unknown error'}"
@@ -472,8 +463,8 @@ def handle_run_finished_event(
             summary=summary,
             total_duration_seconds=total_duration_seconds,
             stages_completed=stages_completed,
-            total_nodes_executed=total_nodes_executed,
-            best_result=best_result,
+            total_nodes_executed=0,
+            best_result=None,
         )
     ]
 

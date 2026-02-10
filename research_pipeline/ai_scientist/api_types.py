@@ -2806,42 +2806,12 @@ class StageGoal(BaseModel):
     goal: Annotated[
         str | None, Field(description="What we're trying to achieve", title="Goal")
     ] = None
-    approach: Annotated[
-        str | None, Field(description="How we're approaching it", title="Approach")
-    ] = None
-    success_criteria: Annotated[
-        str | None,
-        Field(description="How we know we're done", title="Success Criteria"),
-    ] = None
     status: Annotated[
         Status8 | None, Field(description="Current status", title="Status")
     ] = "pending"
-    started_at: Annotated[
-        AwareDatetime | None,
-        Field(description="When stage started", title="Started At"),
-    ] = None
-    completed_at: Annotated[
-        AwareDatetime | None,
-        Field(description="When stage completed", title="Completed At"),
-    ] = None
-    current_iteration: Annotated[
-        int | None, Field(description="Current iteration", title="Current Iteration")
-    ] = None
-    max_iterations: Annotated[
-        int | None, Field(description="Maximum iterations", title="Max Iterations")
-    ] = None
     progress: Annotated[
         float | None, Field(description="Progress 0.0-1.0", title="Progress")
     ] = None
-    total_nodes: Annotated[
-        int | None, Field(description="Total nodes in this stage", title="Total Nodes")
-    ] = 0
-    buggy_nodes: Annotated[
-        int | None, Field(description="Number of buggy nodes", title="Buggy Nodes")
-    ] = 0
-    good_nodes: Annotated[
-        int | None, Field(description="Number of good nodes", title="Good Nodes")
-    ] = 0
 
 
 class ChatHistoryResponse(BaseModel):
@@ -2959,7 +2929,6 @@ class ResearchRunInitialEventData(BaseModel):
     ]
     artifacts: Annotated[list[ResearchRunArtifactMetadata], Field(title="Artifacts")]
     tree_viz: Annotated[list[TreeVizItem], Field(title="Tree Viz")]
-    events: Annotated[list[ResearchRunEvent], Field(title="Events")]
     paper_generation_progress: Annotated[
         list[ResearchRunPaperGenerationProgress],
         Field(title="Paper Generation Progress"),
@@ -3012,10 +2981,8 @@ class ResearchRunState(BaseModel):
     status: Annotated[Status3, Field(title="Status")]
     conversation_id: Annotated[int, Field(title="Conversation Id")]
     idea_title: Annotated[str | None, Field(title="Idea Title")] = None
-    idea_markdown: Annotated[str | None, Field(title="Idea Markdown")] = None
     stages: Annotated[list[StageGoal] | None, Field(title="Stages")] = None
     current_stage: StageId | None = None
-    current_stage_goal: StageGoal | None = None
     timeline: Annotated[
         list[
             Annotated[
@@ -3038,15 +3005,6 @@ class ResearchRunState(BaseModel):
     current_focus: Annotated[str | None, Field(title="Current Focus")] = None
     active_nodes: Annotated[list[ActiveNode] | None, Field(title="Active Nodes")] = None
     overall_progress: Annotated[float | None, Field(title="Overall Progress")] = 0.0
-    current_stage_progress: Annotated[
-        float | None, Field(title="Current Stage Progress")
-    ] = 0.0
-    best_node_id: Annotated[str | None, Field(title="Best Node Id")] = None
-    best_metrics: MetricCollection | None = None
-    artifact_ids: Annotated[list[int] | None, Field(title="Artifact Ids")] = None
-    tree_viz: Annotated[dict[str, Any] | None, Field(title="Tree Viz")] = None
-    created_at: Annotated[AwareDatetime, Field(title="Created At")]
-    updated_at: Annotated[AwareDatetime, Field(title="Updated At")]
     started_running_at: Annotated[
         AwareDatetime | None, Field(title="Started Running At")
     ] = None

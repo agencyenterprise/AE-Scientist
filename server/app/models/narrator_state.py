@@ -5,12 +5,12 @@ Single source of truth for the frontend.
 Pattern: Simple, flat structure. Everything easily accessible.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from .timeline_events import MetricCollection, StageId, TimelineEvent
+from .timeline_events import StageId, TimelineEvent
 
 
 class ActiveNode(BaseModel):
@@ -22,8 +22,8 @@ class ActiveNode(BaseModel):
         default="running", description="Current execution status"
     )
     started_at: datetime = Field(..., description="When execution started")
-    completed_at: Optional[datetime] = Field(None, description="When execution completed")
-    exec_time: Optional[float] = Field(None, description="Execution time in seconds")
+    completed_at: Optional[datetime] = Field(default=None, description="When execution completed")
+    exec_time: Optional[float] = Field(default=None, description="Execution time in seconds")
     run_type: str = Field(default="main_execution", description="Type of run")
 
 
@@ -32,20 +32,11 @@ class StageGoal(BaseModel):
 
     stage: StageId = Field(..., description="Stage identifier")
     title: str = Field(..., description="Display title")
-    goal: Optional[str] = Field(None, description="What we're trying to achieve")
-    approach: Optional[str] = Field(None, description="How we're approaching it")
-    success_criteria: Optional[str] = Field(None, description="How we know we're done")
+    goal: Optional[str] = Field(default=None, description="What we're trying to achieve")
     status: Literal["pending", "in_progress", "completed", "skipped"] = Field(
         default="pending", description="Current status"
     )
-    started_at: Optional[datetime] = Field(None, description="When stage started")
-    completed_at: Optional[datetime] = Field(None, description="When stage completed")
-    current_iteration: Optional[int] = Field(None, description="Current iteration")
-    max_iterations: Optional[int] = Field(None, description="Maximum iterations")
-    progress: Optional[float] = Field(None, description="Progress 0.0-1.0")
-    total_nodes: int = Field(default=0, description="Total nodes in this stage")
-    buggy_nodes: int = Field(default=0, description="Number of buggy nodes")
-    good_nodes: int = Field(default=0, description="Number of good nodes")
+    progress: Optional[float] = Field(default=None, description="Progress 0.0-1.0")
 
 
 ResearchRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
@@ -58,22 +49,12 @@ class ResearchRunState(BaseModel):
     status: ResearchRunStatus
     conversation_id: int
     idea_title: Optional[str] = None
-    idea_markdown: Optional[str] = None
     stages: List[StageGoal] = Field(default_factory=list)
     current_stage: Optional[StageId] = None
-    current_stage_goal: Optional[StageGoal] = None
     timeline: List[TimelineEvent] = Field(default_factory=list)
     current_focus: Optional[str] = None
     active_nodes: List[ActiveNode] = Field(default_factory=list)
     overall_progress: float = 0.0
-    current_stage_progress: float = 0.0
-    best_node_id: Optional[str] = None
-    best_metrics: Optional[MetricCollection] = None
-    artifact_ids: List[int] = Field(default_factory=list)
-    # stage_id -> tree_viz_data
-    tree_viz: Dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime
-    updated_at: datetime
     started_running_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     gpu_type: str
@@ -97,77 +78,34 @@ def create_initial_state(
     conversation_id: int,
     gpu_type: str,
     status: Literal["pending", "running", "completed", "failed", "cancelled"] = "pending",
-    idea_markdown: Optional[str] = None,
     idea_title: Optional[str] = None,
 ) -> ResearchRunState:
     """Create initial state for a new research run."""
-    now = datetime.now(timezone.utc)
-
     standard_stages = [
         StageGoal(
             stage=StageId.initial_implementation,
             title="Initial Implementation",
             status="pending",
-            goal=None,  # TODO: fill in
-            approach=None,  # TODO: fill in
-            success_criteria=None,  # TODO: fill in
-            started_at=None,  # TODO: fill in
-            completed_at=None,  # TODO: fill in
-            current_iteration=None,  # TODO: fill in
-            max_iterations=None,  # TODO: fill in
-            progress=None,  # TODO: fill in
         ),
         StageGoal(
             stage=StageId.baseline_tuning,
             title="Baseline Tuning",
             status="pending",
-            goal=None,
-            approach=None,
-            success_criteria=None,
-            started_at=None,
-            completed_at=None,
-            current_iteration=None,
-            max_iterations=None,
-            progress=None,
         ),
         StageGoal(
             stage=StageId.creative_research,
             title="Creative Research",
             status="pending",
-            goal=None,
-            approach=None,
-            success_criteria=None,
-            started_at=None,
-            completed_at=None,
-            current_iteration=None,
-            max_iterations=None,
-            progress=None,
         ),
         StageGoal(
             stage=StageId.ablation_studies,
             title="Ablation Studies",
             status="pending",
-            goal=None,
-            approach=None,
-            success_criteria=None,
-            started_at=None,
-            completed_at=None,
-            current_iteration=None,
-            max_iterations=None,
-            progress=None,
         ),
         StageGoal(
             stage=StageId.paper_generation,
             title="Paper Generation",
             status="pending",
-            goal=None,
-            approach=None,
-            success_criteria=None,
-            started_at=None,
-            completed_at=None,
-            current_iteration=None,
-            max_iterations=None,
-            progress=None,
         ),
     ]
 
@@ -175,10 +113,7 @@ def create_initial_state(
         run_id=run_id,
         status=status,
         conversation_id=conversation_id,
-        idea_markdown=idea_markdown,
         idea_title=idea_title,
         stages=standard_stages,
         gpu_type=gpu_type,
-        created_at=now,
-        updated_at=now,
     )

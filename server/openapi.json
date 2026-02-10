@@ -10179,13 +10179,6 @@
             "type": "array",
             "title": "Tree Viz"
           },
-          "events": {
-            "items": {
-              "$ref": "#/components/schemas/ResearchRunEvent"
-            },
-            "type": "array",
-            "title": "Events"
-          },
           "paper_generation_progress": {
             "items": {
               "$ref": "#/components/schemas/ResearchRunPaperGenerationProgress"
@@ -10248,7 +10241,6 @@
           "stage_summaries",
           "artifacts",
           "tree_viz",
-          "events",
           "paper_generation_progress"
         ],
         "title": "ResearchRunInitialEventData"
@@ -11008,17 +11000,6 @@
             ],
             "title": "Idea Title"
           },
-          "idea_markdown": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Idea Markdown"
-          },
           "stages": {
             "items": {
               "$ref": "#/components/schemas/StageGoal"
@@ -11030,16 +11011,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/StageId"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "current_stage_goal": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StageGoal"
               },
               {
                 "type": "null"
@@ -11121,53 +11092,6 @@
             "type": "number",
             "title": "Overall Progress",
             "default": 0.0
-          },
-          "current_stage_progress": {
-            "type": "number",
-            "title": "Current Stage Progress",
-            "default": 0.0
-          },
-          "best_node_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Best Node Id"
-          },
-          "best_metrics": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MetricCollection"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "artifact_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "title": "Artifact Ids"
-          },
-          "tree_viz": {
-            "type": "object",
-            "title": "Tree Viz"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
           },
           "started_running_at": {
             "anyOf": [
@@ -11252,8 +11176,6 @@
           "run_id",
           "status",
           "conversation_id",
-          "created_at",
-          "updated_at",
           "gpu_type"
         ],
         "title": "ResearchRunState",
@@ -12376,30 +12298,6 @@
             "title": "Goal",
             "description": "What we're trying to achieve"
           },
-          "approach": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approach",
-            "description": "How we're approaching it"
-          },
-          "success_criteria": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Success Criteria",
-            "description": "How we know we're done"
-          },
           "status": {
             "type": "string",
             "enum": [
@@ -12412,56 +12310,6 @@
             "description": "Current status",
             "default": "pending"
           },
-          "started_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started At",
-            "description": "When stage started"
-          },
-          "completed_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Completed At",
-            "description": "When stage completed"
-          },
-          "current_iteration": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Current Iteration",
-            "description": "Current iteration"
-          },
-          "max_iterations": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Iterations",
-            "description": "Maximum iterations"
-          },
           "progress": {
             "anyOf": [
               {
@@ -12473,24 +12321,6 @@
             ],
             "title": "Progress",
             "description": "Progress 0.0-1.0"
-          },
-          "total_nodes": {
-            "type": "integer",
-            "title": "Total Nodes",
-            "description": "Total nodes in this stage",
-            "default": 0
-          },
-          "buggy_nodes": {
-            "type": "integer",
-            "title": "Buggy Nodes",
-            "description": "Number of buggy nodes",
-            "default": 0
-          },
-          "good_nodes": {
-            "type": "integer",
-            "title": "Good Nodes",
-            "description": "Number of good nodes",
-            "default": 0
           }
         },
         "type": "object",

@@ -398,7 +398,6 @@ async def create_and_launch_research_run(
         db=db,
         run_id=run_id,
         conversation_id=conversation_id,
-        idea_markdown=idea_data.idea_markdown,
         idea_title=idea_data.title,
         gpu_type=pod_info.gpu_type,
         cost_per_hour_cents=int(pod_info.cost * 100) if pod_info.cost else None,
