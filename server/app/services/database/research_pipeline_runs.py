@@ -54,7 +54,7 @@ _PROGRESS_CTE_SQL = SQL(
     artifact_counts AS (
         SELECT run_id, COUNT(*) as count
         FROM rp_artifacts
-        WHERE artifact_type != 'plot'
+        WHERE artifact_type NOT IN ('plot', 'commit_hash')
         GROUP BY run_id
     )
 """

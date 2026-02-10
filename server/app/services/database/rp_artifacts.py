@@ -80,7 +80,7 @@ class ResearchPipelineArtifactsMixin(ConnectionProvider):
             SELECT id, run_id, artifact_type, filename, file_size, file_type, s3_key,
                    source_path, created_at
             FROM rp_artifacts
-            WHERE run_id = %s AND artifact_type != 'plot'
+            WHERE run_id = %s AND artifact_type NOT IN ('plot', 'commit_hash')
             ORDER BY created_at ASC
         """
         async with self.aget_connection() as conn:
