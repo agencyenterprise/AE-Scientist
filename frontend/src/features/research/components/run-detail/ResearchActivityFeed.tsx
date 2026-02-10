@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Button } from "@/shared/components/ui/button";
@@ -1702,6 +1703,7 @@ export function ResearchActivityFeed({
       const response = await fetch(`${config.apiUrl}/research-runs/${runId}/narrative-stream`, {
         headers: withAuthHeaders(new Headers({ Accept: "text/event-stream" })),
         signal: abortControllerRef.current.signal,
+        credentials: "include", // Required for Firefox CORS with streaming
       });
 
       if (!response.ok) {
@@ -1746,7 +1748,12 @@ export function ResearchActivityFeed({
                 return [...prev, event];
               });
             }
-          } catch {}
+          } catch (parseError) {
+            Sentry.captureException(parseError, {
+              extra: { frame, runId },
+              tags: { component: "ResearchActivityFeed" },
+            });
+          }
         }
       }
 

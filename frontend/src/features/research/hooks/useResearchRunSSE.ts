@@ -332,6 +332,7 @@ export function useResearchRunSSE({
         {
           headers: withAuthHeaders(new Headers({ Accept: "text/event-stream" })),
           signal: controller.signal,
+          credentials: "include", // Required for Firefox CORS with streaming
         }
       );
 

@@ -139,6 +139,7 @@ export const sseStreamResource = defineResource({
           const response = await fetch(`${config.apiUrl}/research-runs/${runId}/narrative-stream`, {
             headers: withAuthHeaders(new Headers({ Accept: "text/event-stream" })),
             signal: state.currentAbortController?.signal,
+            credentials: "include", // Required for Firefox CORS with streaming
           });
 
           // HTTP error handling

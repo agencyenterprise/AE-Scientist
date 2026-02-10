@@ -155,6 +155,7 @@ export function useChatStreaming({
               skip_user_message_creation: isAutoTrigger,
             } as ChatRequest),
             signal: controller.signal,
+            credentials: "include", // Required for Firefox CORS with streaming
           }
         );
 
