@@ -15,6 +15,18 @@ export function Footer() {
             AE Studio
           </a>
         </span>
+        <span className="mx-2">·</span>
+        <span>
+          Funded by{" "}
+          <a
+            href="https://www.flourishingfuturefoundation.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-slate-400 hover:text-white hover:underline transition-colors"
+          >
+            FFF
+          </a>
+        </span>
       </div>
     </footer>
   );
