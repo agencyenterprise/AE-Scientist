@@ -289,12 +289,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                   )}
                 </div>
                 {isRestricted ? (
-                  <p className="mt-1 text-sm text-amber-400/70">
-                    Add credits to view this review.{" "}
-                    <Link href="/billing" className="underline hover:text-amber-300">
-                      Add Credits
-                    </Link>
-                  </p>
+                  <p className="mt-1 text-sm text-amber-400/70">Add credits to view this review.</p>
                 ) : review.status === "completed" && review.summary ? (
                   <p className="mt-1 line-clamp-1 text-sm text-slate-400">{review.summary}</p>
                 ) : review.status === "failed" ? (
