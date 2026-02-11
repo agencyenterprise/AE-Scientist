@@ -264,13 +264,6 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
                 if wallet_row is None:
                     raise RuntimeError(f"Failed to update wallet balance for user {user_id}")
 
-                # Notify listeners of balance change
-                new_balance = wallet_row["balance"]
-                await cursor.execute(
-                    "SELECT pg_notify('wallet_balance_changed', %s)",
-                    (f"{user_id}:{new_balance}",),
-                )
-
         return CreditTransaction(**transaction_row)
 
     async def create_stripe_checkout_session_record(
